@@ -1,41 +1,30 @@
 # Airi-PC Coding Agent
 
-Airi-PC now exposes a local coding-agent runtime on top of the verified Computer Mode. The model remains the planner/reasoner; Airi-PC provides project inspection, file edits, terminal/test/build/lint execution, Git inspection, skills and project memory.
+Airi-PC provides a local coding-agent runtime on top of the verified Computer Mode.
 
-## Core workflow
+## Mandatory workflow
+`context -> plan/todo -> analyze/search -> scoped edit -> test -> fix/rollback -> diff summary -> guardrails -> atomic commit -> persistent session log -> remote persistence verification`
 
-`analyze -> read -> patch/write -> test -> verify -> diff -> commit`
+Before any coding change, the agent reads the nearest `AGENTS.md` (or `CLAUDE.md`) automatically. Autonomous changes require an explicit declared scope.
 
-Failed verification should trigger rollback before another attempt. Risky shell commands require `allow_shell=true`.
+## Existing systems to extend
+- Skills: `/home/user/airi/skills/*/SKILL.md`; `coding-task` contains the structured todo workflow.
+- Project Memory: `.ai/PROJECT_MEMORY.md`; session events are appended here.
+- Coding engine: `computer/coding.py`.
+- Orchestrator: `computer/code_agent.py`.
 
-## Project tools
+## Coding guarantees
+- Structured search returns path, line number and matching text.
+- Every autonomous change is snapshotted and may run at most 5 repair attempts.
+- Failed verification restores the task snapshot automatically.
+- Diff summaries and guardrail checks run before commit.
+- Git commits stage only declared logical paths; unrelated files are not staged.
+- Test/self-test removal or weakening is blocked by default.
+- `computer/security.py` and `computer/cleanup.py` changes require explicit opt-in.
+- Browser/GUI security controls must not be removed to make tests pass.
 
-- `computer_project_analyze`
-- `computer_project_tree`
-- `computer_file_read`
-- `computer_file_search`
-- `computer_file_write`
-- `computer_file_patch`
-- `computer_terminal_run`
-- `computer_test_run`
-- `computer_build_run`
-- `computer_lint`
-- `computer_git_status`
-- `computer_git_diff`
-- `computer_git_log`
-- `computer_git_commit`
-- `computer_code_apply_fix`
-- `computer_code_verify_change`
-- `computer_code_agent`
+## Persistence
+A task is not complete until intended changes are saved to `arancione3000/airi-pc-bootstrap:main`, the resulting commit SHA is known, remote HEAD matches it, and important changed paths are readable from that commit.
 
-## Skills
-
-Skills are stored under `/home/user/airi/skills/<name>/SKILL.md` and can be listed, loaded, created, updated, tested and deleted. Deletions are backed up under `.ai/skill-trash`.
-
-## Project memory
-
-Long-lived project notes are stored in `.ai/PROJECT_MEMORY.md`.
-
-## Safety
-
-The coding layer is intentionally conservative: workspace paths are sandboxed to Airi-PC, risky shell patterns are blocked unless explicitly allowed, and failed verified patches roll back to the previous file content.
+## Scope
+Never modify paths outside the declared task scope. Never commit secrets, runtime cache, logs or virtual environments.

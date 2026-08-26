@@ -1,15 +1,13 @@
 # Airi-PC Persistence Rule
 
-**Mandatory:** never declare an Airi-PC task complete merely because a temporary runtime passes tests.
+**Mandatory:** never declare an Airi-PC coding/fix task complete merely because a temporary runtime passes tests.
 
 Before completion:
-1. Save intended source, script and documentation changes to the canonical Git repository.
-2. Record the resulting commit SHA.
-3. Re-read the branch HEAD from GitHub and verify it equals the saved commit.
-4. Verify every important changed path exists at that commit.
-5. For runtime/browser changes, recreate from the persisted source and rerun the relevant self-test when practical.
+1. Save intended source, script and documentation changes to `arancione3000/airi-pc-bootstrap:main`.
+2. Record the exact commit SHA returned by the GitHub write operation.
+3. Re-read remote `main` and verify its HEAD equals that SHA.
+4. Re-read every important changed path at that commit.
+5. Rebuild from the persisted source and rerun relevant tests when practical.
+6. Record the result in `.ai/PROJECT_MEMORY.md`.
 
-No GitHub commit verification = **not persistently completed**.
-
-Canonical target: `arancione3000/airi-pc-bootstrap:main`.
-Canonical runtime: `/home/user/airi`.
+If the commit cannot be verified, report **NOT PERSISTENTLY COMPLETE**.

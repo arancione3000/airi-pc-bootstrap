@@ -3,23 +3,27 @@
 Canonical repository: `arancione3000/airi-pc-bootstrap`
 Branch: `main`
 Runtime root: `/home/user/airi`
-Server: `http://127.0.0.1:9010`
-GUI: `DISPLAY=:99`, expected `1280x800`
 Control: `/home/user/airi/scripts/airi-control`
 Bootstrap: `/home/user/airi/scripts/airi-chat-bootstrap`
 One-shot: `/home/user/airi/scripts/airi-next-session`
 Self-test: `/home/user/airi/scripts/airi-selftest`
 
-## Required sequence
-1. Run `scripts/airi-next-session`; it bootstraps from the canonical GitHub archive when the runtime is missing.
-2. It repairs stale root-owned runtime/cache state when passwordless sudo permits it.
-3. Require status and browser-state to succeed before a user task.
-4. Run `scripts/airi-selftest`; require `ALL=True` and exit code 0.
-5. Execute the requested task only after verification.
-6. Before declaring the task complete, persist intended changes to `main`, record the commit SHA, re-read remote HEAD, and verify the changed paths.
+## Cold-session sequence
+1. Run `scripts/airi-next-session`.
+2. It restores the public `main` archive when the runtime is missing.
+3. It hydrates local Git metadata and points `origin` at the canonical repository when `.git` is absent.
+4. It starts Computer Mode and requires healthy GUI/browser state.
+5. It runs the complete self-test and requires `ALL=True` with exit code 0.
+6. Only then begin the user task.
 
-## Browser guarantee
-All Playwright sync API objects are owned by one dedicated browser worker thread. FastAPI request threads never directly reuse Playwright objects. Browser failures are bounded, recoverable, and returned as structured results rather than causing unhandled HTTP 500 failures.
+## Coding sequence
+Before edits, automatically read `AGENTS.md` or `CLAUDE.md`. Create an explicit task/todo and declared scope. Use structured search, snapshot files, edit/test/fix with a maximum of five attempts, review diff/guardrails, then make atomic commits. Record the session in `.ai/PROJECT_MEMORY.md`.
+
+## Browser recovery
+All Playwright sync objects belong to one dedicated browser worker thread. Browser launch is retried and bounded by timeouts; dead pages are recreated; browser failures return structured errors instead of uncaught HTTP 500s. Runtime-owned state and Playwright cache permissions are repaired during bootstrap when passwordless sudo permits it.
+
+## Persistence rule
+Never declare a coding task complete from a temporary sandbox alone. Persist intended changes to GitHub and verify the resulting remote HEAD and changed paths.
 
 ## Never substitute another computer
-Airi-PC tasks must use this runtime. Do not replace it with Orgo, Daytona, Freestyle or another computer backend.
+Do not use Orgo, Daytona, Freestyle or another computer backend as a replacement for Airi-PC.

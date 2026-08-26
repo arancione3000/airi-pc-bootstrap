@@ -27,3 +27,6 @@ The public bootstrap contains no credentials, tokens, personal task history, or 
 ## Coding agent
 
 Airi-PC includes a coding-agent runtime with project analysis, file search/read/write/patch, terminal execution, test/build/lint, Git inspection/commit, persistent project memory and a skill system. See `AIRI_CODING_AGENT.md`.
+## Advanced coding agent
+
+Airi-PC includes a scoped coding-agent workflow with project context loading (`AGENTS.md`), structured search, explicit task/todo state, snapshot rollback with a five-attempt ceiling, human-readable diff review, guardrails, atomic commits, and persistent session evidence in `.ai/PROJECT_MEMORY.md`. Run `scripts/airi-coding-selftest` for the coding regression suite.
