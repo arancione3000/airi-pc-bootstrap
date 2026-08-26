@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import json, os, subprocess, time, urllib.request
+from pathlib import Path
+BASE=os.environ.get('AIRIPC_STATUS_URL','http://127.0.0.1:9010/status').rsplit('/status',1)[0]
+ROOT=Path(os.environ.get('AIRIPC_WORKSPACE_ROOT','/home/user/airi')).expanduser()
+ENV={**os.environ,'DISPLAY':os.environ.get('DISPLAY',':99')}
+def get(path):
+    with urllib.request.urlopen(BASE+path,timeout=20) as r:return json.loads(r.read())
+def post(path,payload):
+    req=urllib.request.Request(BASE+path,data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'},method='POST')
+    with urllib.request.urlopen(req,timeout=30) as r:return json.loads(r.read())
+def ctl(*args):
+    p=subprocess.run(['/bin/sh',str(ROOT/'scripts/airi-control'),*args],env=ENV,text=True,capture_output=True,timeout=45)
+    return p.returncode,p.stdout.strip(),p.stderr.strip()
+def ensure_browser():
+    cache=Path.home()/'.cache'/'ms-playwright'
+    if any(cache.glob('chromium-*/chrome-linux*/chrome')): return True
+    py=ROOT/'.venv/bin/python'
+    try:
+        p=subprocess.run([str(py),'-m','playwright','install','chromium'],cwd=str(ROOT),env=ENV,text=True,capture_output=True,timeout=170)
+        return p.returncode==0
+    except subprocess.TimeoutExpired:return False
+def main():
+    R={}
+    st=get('/status'); R['status']=st.get('gui_available') is True and st.get('resolution')=='1280x800'
+    obs=get('/observe'); R['observe']=obs.get('ok') is True and len(obs.get('ocr',[]))>0
+    ss=get('/screenshot'); R['screenshot']=ss.get('width')==1280 and len(ss.get('data_base64',''))>100
+    R['windows']=isinstance(get('/windows').get('windows'),list)
+    c,_,_=ctl('move','333','222'); pos=get('/mouse/position'); R['mouse_move']=c==0 and pos=={'x':333,'y':222}
+    R['browser_preflight']=ensure_browser();
+    if not R['browser_preflight']:
+        print(json.dumps(R,indent=2)); print('ALL=',False); return 1
+    c,_,_=ctl('browser-open',BASE+'/self-test'); R['browser_navigation']=c==0
+    bstate=post('/action',{'action':'browser_state','payload':{}}); R['browser_state']=bstate.get('url')==BASE+'/self-test'
+    bst=post('/action',{'action':'browser_status','payload':{}}); R['browser']=bst.get('open') is True
+    bss=post('/action',{'action':'browser_screenshot','payload':{}}); R['browser_screenshot']=bss.get('format')=='png' and len(bss.get('data_base64',''))>100
+    c,_,_=ctl('click-element','AIRI_CLICK_TARGET'); bstate=post('/action',{'action':'browser_state','payload':{}}); R['click']=c==0 and bstate.get('status')=='AIRI_CLICK_OK'
+    c,_,_=ctl('click-element','AIRI_INPUT_FIELD'); c2,_,_=ctl('type','AIRI_TYPE_OK'); bstate=post('/action',{'action':'browser_state','payload':{}}); R['typing']=c==0 and c2==0 and bstate.get('field')=='AIRI_TYPE_OK'
+    c,_,_=ctl('key','enter'); time.sleep(.3); bstate=post('/action',{'action':'browser_state','payload':{}}); R['keyboard']=c==0 and bstate.get('status')=='AIRI_ENTER_OK'
+    c,_,_=ctl('hotkey','ctrl','shift','a'); bstate=post('/action',{'action':'browser_state','payload':{}}); R['hotkey']=c==0 and bstate.get('status')=='AIRI_HOTKEY_OK'
+    ctl('browser-open',BASE+'/self-test'); bstate=post('/action',{'action':'browser_state','payload':{}}); obs=get('/observe')
+    cb=bstate.get('click_box'); db=bstate.get('drag_box'); ocr_click=next(i for i in obs.get('ocr',[]) if 'AIRI_CLICK_TARGET' in i.get('text',''))
+    offx=ocr_click['x']-(cb['x']+cb['width']/2); offy=ocr_click['y']-(cb['y']+cb['height']/2)
+    x=int(db['x']+db['width']/2+offx); y=int(db['y']+db['height']/2+offy)
+    c,_,_=ctl('drag',str(x),str(y),str(x+180),str(y),'0.8'); time.sleep(.3); bstate=post('/action',{'action':'browser_state','payload':{}}); R['drag']=c==0 and bstate.get('status')=='AIRI_DRAG_OK'
+    ctl('key','home'); time.sleep(.2); c,_,_=ctl('scroll','-5'); bstate=post('/action',{'action':'browser_state','payload':{}}); R['scroll']=c==0 and (bstate.get('scroll_y',0)>50 or bstate.get('status')=='AIRI_SCROLL_OK')
+    ctl('browser-open',BASE+'/self-test'); av=post('/act-verify',{'action':'click_element','payload':{'text':'AIRI_CLICK_TARGET'}}); bstate=post('/action',{'action':'browser_state','payload':{}}); R['act_verify']=av.get('ok') is True and av.get('changed_ratio',0)>0 and bstate.get('status')=='AIRI_CLICK_OK'
+    init=post('/mcp',{'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2024-11-05','capabilities':{},'clientInfo':{'name':'airi-selftest','version':'1'}}}); ml=post('/mcp',{'jsonrpc':'2.0','id':2,'method':'tools/list','params':{}}); names=[x['name'] for x in ml.get('result',{}).get('tools',[])]
+    R['mcp_list']=len(names)>=20 and 'computer_mouse_position' in names and 'computer_browser_state' in names
+    mc=post('/mcp',{'jsonrpc':'2.0','id':3,'method':'tools/call','params':{'name':'computer_status','arguments':{}}}); R['mcp_call']=mc.get('result',{}).get('structuredContent',{}).get('ok') is True
+    print(json.dumps(R,indent=2)); print('ALL=',all(R.values())); return 0 if all(R.values()) else 1
+if __name__=='__main__': raise SystemExit(main())

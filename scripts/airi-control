@@ -1,0 +1,61 @@
+#!/bin/sh
+set -eu
+API_URL="${AIRI_PC_URL:-http://127.0.0.1:9010}"
+usage(){ echo "usage: airi-control {status|observe|screenshot|windows|mouse-position|move|click|double-click|drag|scroll|key|hotkey|type|wait|find-text|click-element|act-verify|browser-open|browser-status|browser-state|browser-screenshot} ..." >&2; exit 2; }
+post(){
+  action="$1"; shift
+  python3 - "$API_URL" "$action" "$@" <<'PY'
+import json,sys,urllib.request
+base,action,*raw=sys.argv[1:]
+vals=[]
+for x in raw:
+    try: vals.append(json.loads(x))
+    except Exception: vals.append(x)
+keys={'move':['x','y'],'click':['x','y','button','clicks'],'double-click':['button'],'drag':['x1','y1','x2','y2','duration'],'scroll':['amount'],'key':['key'],'type':['text','interval'],'wait':['seconds'],'find-text':['text','click'],'click-element':['text'],'act-verify':['action','payload','confirmation'],'browser-open':['url','wait_until']}
+payload={}
+if action=='hotkey':
+    payload={'keys':vals}
+elif action in keys:
+    ks=keys[action]
+    if len(vals)>len(ks): raise SystemExit('too many arguments')
+    for k,v in zip(ks,vals):
+        if v!='': payload[k]=v
+path={'double-click':'double_click','find-text':'find-text','click-element':'click_element','act-verify':'act-verify','browser-open':'browser_open','browser-status':'browser_status','browser-state':'browser_state','browser-screenshot':'browser_screenshot'}.get(action,action)
+req=json.dumps({'action':path,'payload':payload}).encode()
+r=urllib.request.urlopen(urllib.request.Request(base+'/action',data=req,headers={'Content-Type':'application/json'},method='POST'),timeout=30)
+print(r.read().decode())
+PY
+}
+[ $# -ge 1 ] || usage
+cmd=$1; shift
+case "$cmd" in
+ status) curl -fsS "$API_URL/status";;
+ observe) curl -fsS "$API_URL/observe";;
+ screenshot) out="${1:-/tmp/airi-pc-screen-$(date +%s).png}"; python3 - "$API_URL" "$out" <<'PY'
+import base64,json,sys,urllib.request
+base,out=sys.argv[1:]
+r=json.load(urllib.request.urlopen(base+'/screenshot',timeout=30))
+open(out,'wb').write(base64.b64decode(r['data_base64']))
+print(json.dumps({'ok':True,'path':out,'width':r['width'],'height':r['height']}))
+PY
+;;
+ mouse-position) curl -fsS "$API_URL/mouse/position";;
+ windows) curl -fsS "$API_URL/windows";;
+ move) [ $# -ge 2 ] || usage; post move "$1" "$2";;
+ click) [ $# -ge 2 ] || usage; post click "$1" "$2" "${3:-left}" "${4:-1}";;
+ double-click) post double-click "${1:-left}";;
+ drag) [ $# -ge 4 ] || usage; post drag "$1" "$2" "$3" "$4" "${5:-0.25}";;
+ scroll) [ $# -ge 1 ] || usage; post scroll "$1";;
+ key) [ $# -ge 1 ] || usage; post key "$1";;
+ hotkey) [ $# -ge 1 ] || usage; post hotkey "$@";;
+ type) [ $# -ge 1 ] || usage; post type "$1" "${2:-0.02}";;
+ wait) [ $# -ge 1 ] || usage; post wait "$1";;
+ find-text) [ $# -ge 1 ] || usage; post find-text "$1" "${2:-false}";;
+ click-element) [ $# -ge 1 ] || usage; post click-element "$1";;
+ act-verify) [ $# -ge 1 ] || usage; action=$1; shift; post act-verify "$action" "${1:-{}}" "${2:-ALLOW}";;
+ browser-open) [ $# -ge 1 ] || usage; post browser-open "$1" "${2:-domcontentloaded}";;
+ browser-status) post browser-status;;
+ browser-state) post browser-state;;
+ browser-screenshot) post browser-screenshot;;
+ *) usage;;
+esac
