@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+BASE=/home/user/airi
+REPO=https://github.com/arancione3000/airi-pc-bootstrap/archive/refs/heads/main.tar.gz
+mkdir -p /home/user
+if [ ! -f "$BASE/computer/start.sh" ]; then
+  rm -rf "$BASE" /tmp/airi-bootstrap
+  mkdir -p /tmp/airi-bootstrap
+  curl -fsSL "$REPO" -o /tmp/airi-bootstrap/a.tar.gz
+  tar -xzf /tmp/airi-bootstrap/a.tar.gz -C /tmp/airi-bootstrap
+  TOP=$(find /tmp/airi-bootstrap -mindepth 1 -maxdepth 1 -type d | head -n1)
+  mv "$TOP" "$BASE"
+fi
+chmod +x "$BASE"/scripts/airi-* "$BASE"/computer/start.sh 2>/dev/null || true
+sh "$BASE/computer/start.sh"
+python3 "$BASE/scripts/airi-agent.py" 2>/dev/null || true
+curl -fsS http://127.0.0.1:9010/status
