@@ -3,7 +3,6 @@ set -eu
 BASE=/home/user/airi
 REPO=https://github.com/arancione3000/airi-pc-bootstrap/archive/refs/heads/main.tar.gz
 mkdir -p /home/user
-# Rebuild when missing or when the local runtime is stale.
 if [ ! -f "$BASE/computer/start.sh" ]; then
   rm -rf "$BASE" /tmp/airi-bootstrap
   mkdir -p /tmp/airi-bootstrap
@@ -13,10 +12,9 @@ if [ ! -f "$BASE/computer/start.sh" ]; then
   mv "$TOP" "$BASE"
 fi
 chmod +x "$BASE"/scripts/airi-* "$BASE"/computer/start.sh 2>/dev/null || true
-# A local session must not inherit an old remote-authenticated Airi process.
-pkill -f '/home/user/airi/.venv/bin/uvicorn server:app --host 127.0.0.1 --port 9010' 2>/dev/null || true
+# Replace any stale Airi Computer process, including one launched from an older workspace.
+PIDS=$(ps -eo pid=,args= | awk '/uvicorn server:app --host 127\.0\.0\.1 --port 9010/ {print $1}')
+for PID in $PIDS; do kill "$PID" 2>/dev/null || true; done
 rm -f "$BASE/.mcp_token"
 sh "$BASE/computer/start.sh"
-# Verify locally; agent.py should see unauthenticated local MCP.
-python3 "$BASE/scripts/airi-agent.py" 2>/dev/null || true
-curl -fsS http://127.0.0.1:9010/status
+python3 "$BASE/scripts/airi-agent.py"
