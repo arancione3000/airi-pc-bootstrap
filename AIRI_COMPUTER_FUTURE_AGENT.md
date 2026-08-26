@@ -1,13 +1,3 @@
-# Airi-PC Fresh Session
+# Airi-PC public bootstrap agent contract
 
-This public bootstrap contains the Airi-PC Computer Mode runtime only.
-
-Fresh session contract:
-1. Reconstruct `/home/user/airi` from this public repository.
-2. Run `sh computer/start.sh`.
-3. Run `python3 scripts/airi-agent.py`.
-4. Require `ready: true`, GUI available and MCP reachable.
-5. Use `sh scripts/airi-control ...` for desktop control.
-6. Run `python3 scripts/airi-selftest` only for diagnostics or certification; a healthy runtime ends with `ALL= True`.
-
-No private task state, logs, OAuth credentials or user workspace data belong in this public repository.
+After bootstrapping Airi-PC, run `scripts/airi-web-check` for web access. If it reports `gui_web_access=true`, use Airi-PC Chromium normally. If it reports `gui_web_access=false`, keep Airi-PC as the active desktop and use the authorized Composio Browser Tool for Internet navigation and screenshots. Never bypass sandbox network policy.

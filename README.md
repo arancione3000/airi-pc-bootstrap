@@ -1,17 +1,22 @@
-# Airi-PC Bootstrap
+# Airi-PC Public Bootstrap
 
-Public bootstrap/runtime for Airi-PC Computer Mode. This repository contains only the control runtime and deterministic self-test; private logs, task state, OAuth credentials and private workspace data are intentionally excluded.
+Minimal public bootstrap/runtime for Airi-PC Computer Mode.
+
+It provides the verified desktop runtime, GUI control, screenshots, OCR/observe, mouse/keyboard actions, browser state, MCP and deterministic self-test.
 
 ## Fresh-session bootstrap
-```bash
+
+```sh
 mkdir -p /home/user/airi
-cd /home/user/airi
-# download/extract this repository into /home/user/airi, then:
-sh computer/start.sh
-python3 scripts/airi-agent.py
+# extract this repository into /home/user/airi
+sh /home/user/airi/computer/start.sh
+python3 /home/user/airi/scripts/airi-agent.py
 ```
 
-The runtime listens on `127.0.0.1:9010` and exposes the Airi Computer MCP plus the `scripts/airi-control` CLI.
+A healthy runtime reports `ready: true` and `gui_available: true`; the full self-test ends with `ALL= True`.
 
-## Verification
-Run `python3 scripts/airi-selftest`. A healthy session must end with `ALL= True`.
+## Internet access
+
+Run `sh scripts/airi-web-check`. If it reports `gui_web_access=true`, use the Airi-PC GUI browser. If it reports `gui_web_access=false`, keep Airi-PC as the desktop runtime and use the authorized Composio Browser Tool for public web navigation and page screenshots. See `AIRI_WEB_ACCESS.md`. Never bypass network administration with proxies, DNS tricks, VPNs or tunnels.
+
+The public bootstrap contains no credentials, tokens, personal task history, or private repository state.

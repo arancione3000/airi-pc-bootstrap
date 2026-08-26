@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+import json, os, subprocess, urllib.request
+BASE=os.environ.get('AIRI_PC_URL','http://127.0.0.1:9010')
+TEST_URL=os.environ.get('AIRI_WEB_TEST_URL','https://example.com')
+
+def post(path,payload):
+    req=urllib.request.Request(BASE+path,data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'},method='POST')
+    try:
+        with urllib.request.urlopen(req,timeout=20) as r:
+            return r.getcode(), json.loads(r.read())
+    except Exception as e:
+        return 0, {'error': str(e)}
+
+p=subprocess.run(['sh','-lc','cd /home/user/airi && ./scripts/airi-control browser-open '+repr(TEST_URL)],text=True,capture_output=True,timeout=45)
+out={'test_url':TEST_URL,'gui_web_access':False,'gui_block_reason':None,'fallback_browser_tool':True}
+if p.returncode==0:
+    code,state=post('/action',{'action':'browser_state','payload':{}})
+    if code==200 and isinstance(state,dict) and state.get('url'):
+        out.update(gui_web_access=True,url=state.get('url'),title=state.get('title'))
+    else:
+        out['gui_block_reason']=str(state.get('error') or 'browser_state_unavailable') if isinstance(state,dict) else 'browser_state_unavailable'
+else:
+    out['gui_block_reason']=p.stderr or p.stdout or 'browser-open-failed'
+print(json.dumps(out,ensure_ascii=False))
