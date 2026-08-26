@@ -579,3 +579,56 @@ Steps: 2
 
 ### 2026-08-26 23:20:25 UTC — COMPLETED — coding-agent upgrade
 Phase 0 baseline: Airi-PC selftest ALL=True before changes; GitHub main pinned at 3fc6c56cb3a426250e3ee44d227d4d626f458ab9; rollback branch pre-upgrade-coding-v1 points to that SHA. Implemented AGENTS.md context loading, coding-task todo state, structured regex search with file/line, scoped edits, snapshots and automatic rollback (max 5), human-readable diff summaries, atomic scoped Git commits, persistent session events in Project Memory, and stricter test/security guardrails. Added coding regression suite and integrated it into airi-selftest. Hardened cold-session Git hydration. Browser worker fix from prior release remains intact. Phase 3 current full selftest: ALL=True, exit 0. Coding regression: ALL=True. Runtime: DISPLAY=:99, 1280x800. Next step: persist to GitHub and verify remote HEAD.
+
+### 2026-08-26 23:23:14 UTC — STARTED — task-start
+Goal: todo proof
+Steps: 3
+
+### 2026-08-26 23:23:14 UTC — PROGRESS — task-step
+Step 1/3: done. step one
+
+### 2026-08-26 23:23:14 UTC — PROGRESS — task-step
+Step 2/3: done. step two
+
+### 2026-08-26 23:23:14 UTC — PROGRESS — task-step
+Step 3/3: done. step three
+
+### 2026-08-26 23:23:14 UTC — DONE — task-finish
+todo proof complete
+
+### 2026-08-26 23:23:14 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-26 23:23:14 UTC — PROGRESS — task-step
+Step 1/4: done. passed on attempt 1
+
+### 2026-08-26 23:23:14 UTC — PROGRESS — task-step
+Step 2/4: done. full verification passed
+
+### 2026-08-26 23:23:14 UTC — PROGRESS — task-step
+Step 3/4: done. diff and guardrails passed
+
+### 2026-08-26 23:23:14 UTC — DONE — task-finish
+autonomous coding cycle complete; ready for explicit persistence step
+
+### 2026-08-26 23:23:14 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-26 23:23:14 UTC — PROGRESS — task-step
+Step 1/4: failed. max attempts reached; snapshot restored
+
+### 2026-08-26 23:23:14 UTC — FAILED — task-finish
+rollback for /home/user/airi/.ai/coding-selftest-project/bad.py
+
+### 2026-08-26 23:23:15 UTC — COMMITTED — git-commit
+1 file(s) changed; 1 additions; 1 deletions. Paths: M	app.py
+Commit: `b66ca243fb1d333e83df702d813df8f2e07551b0`
+
+### 2026-08-26 23:23:15 UTC — STARTED — task-start
+Goal: prove context auto-load
+Steps: 2
+
+### 2026-08-26 23:23:31 UTC — VERIFIED — final cross-session verification
+Cold rebuild from GitHub main succeeded. Fresh archive restored runtime at /home/user/airi, hydrated local Git metadata, started Computer Mode, browser status/state were healthy, full self-test returned ALL=True and SELFTEST_RC=0, and Airi-PC terminal/MCP/coding-agent regression features remained available. Final remote HEAD before this memory-only commit: 04832efe78546ce4c31c5773cd100650058522b8.
