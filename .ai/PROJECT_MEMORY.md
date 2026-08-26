@@ -632,3 +632,56 @@ Steps: 2
 
 ### 2026-08-26 23:23:31 UTC — VERIFIED — final cross-session verification
 Cold rebuild from GitHub main succeeded. Fresh archive restored runtime at /home/user/airi, hydrated local Git metadata, started Computer Mode, browser status/state were healthy, full self-test returned ALL=True and SELFTEST_RC=0, and Airi-PC terminal/MCP/coding-agent regression features remained available. Final remote HEAD before this memory-only commit: 04832efe78546ce4c31c5773cd100650058522b8.
+
+### 2026-08-26 23:24:23 UTC — STARTED — task-start
+Goal: todo proof
+Steps: 3
+
+### 2026-08-26 23:24:23 UTC — PROGRESS — task-step
+Step 1/3: done. step one
+
+### 2026-08-26 23:24:23 UTC — PROGRESS — task-step
+Step 2/3: done. step two
+
+### 2026-08-26 23:24:23 UTC — PROGRESS — task-step
+Step 3/3: done. step three
+
+### 2026-08-26 23:24:23 UTC — DONE — task-finish
+todo proof complete
+
+### 2026-08-26 23:24:24 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-26 23:24:24 UTC — PROGRESS — task-step
+Step 1/4: done. passed on attempt 1
+
+### 2026-08-26 23:24:24 UTC — PROGRESS — task-step
+Step 2/4: done. full verification passed
+
+### 2026-08-26 23:24:24 UTC — PROGRESS — task-step
+Step 3/4: done. diff and guardrails passed
+
+### 2026-08-26 23:24:24 UTC — DONE — task-finish
+autonomous coding cycle complete; ready for explicit persistence step
+
+### 2026-08-26 23:24:24 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-26 23:24:24 UTC — PROGRESS — task-step
+Step 1/4: failed. max attempts reached; snapshot restored
+
+### 2026-08-26 23:24:24 UTC — FAILED — task-finish
+rollback for /home/user/airi/.ai/coding-selftest-project/bad.py
+
+### 2026-08-26 23:24:24 UTC — COMMITTED — git-commit
+1 file(s) changed; 1 additions; 1 deletions. Paths: M	app.py
+Commit: `c8054f2e81a7d95f5c84e4b588dfa09115afdc92`
+
+### 2026-08-26 23:24:24 UTC — STARTED — task-start
+Goal: prove context auto-load
+Steps: 2
+
+### 2026-08-26 23:24:31 UTC — VERIFIED — final persisted-head regression
+After resetting to GitHub main at 93899dc24f4b489dba53d0687ab50848ffb301bb, Airi-PC full self-test was rerun with canonical executable permissions applied by the bootstrap contract. Result: SELFTEST_RC=0 and ALL=True across GUI, browser concurrency/recovery, screenshots, mouse, keyboard, MCP, coding-agent context/todo/rollback/atomic-commit checks. The direct ./script permission issue is packaging metadata only; cold bootstrap explicitly chmods its scripts before execution.
