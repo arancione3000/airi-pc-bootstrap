@@ -58,5 +58,13 @@ def main():
     init=post('/mcp',{'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2024-11-05','capabilities':{},'clientInfo':{'name':'airi-selftest','version':'1'}}}); ml=post('/mcp',{'jsonrpc':'2.0','id':2,'method':'tools/list','params':{}}); names=[x['name'] for x in ml.get('result',{}).get('tools',[])]
     R['mcp_list']=len(names)>=20 and 'computer_mouse_position' in names and 'computer_browser_state' in names
     mc=post('/mcp',{'jsonrpc':'2.0','id':3,'method':'tools/call','params':{'name':'computer_status','arguments':{}}}); R['mcp_call']=mc.get('result',{}).get('structuredContent',{}).get('ok') is True
+    coding=subprocess.run([str(ROOT/'scripts'/'airi-coding-selftest')],cwd=str(ROOT),env=ENV,text=True,capture_output=True,timeout=170,check=False)
+    try: cr=json.loads(coding.stdout)
+    except Exception: cr={'ALL':False,'raw':coding.stdout[-5000:],'stderr':coding.stderr[-5000:]}
+    R['coding_agent']=coding.returncode==0 and cr.get('ALL') is True
+    R['coding_context']=cr.get('results',{}).get('context_read',False)
+    R['coding_todo']=cr.get('results',{}).get('task_todo',False) and cr.get('results',{}).get('task_closed',False)
+    R['coding_rollback']=cr.get('results',{}).get('rollback',False)
+    R['coding_atomic_commit']=cr.get('results',{}).get('atomic_commit',False)
     print(json.dumps(R,indent=2)); print('ALL=',all(R.values())); return 0 if all(R.values()) else 1
 if __name__=='__main__': raise SystemExit(main())

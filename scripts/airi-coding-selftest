@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import json, shutil, subprocess, tempfile
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path('/home/user/airi/computer')))
+from coding import ROOT, project_context, search, scope_check, write, patch, diff_summary, guardrail_check
+from code_agent import agent, autonomous_change_cycle, atomic_commit
+from skills import task_start, task_read, task_update, task_finish, memory_read
+
+TEST_ROOT = ROOT / '.ai' / 'coding-selftest-project'
+
+def run(cmd, cwd):
+    return subprocess.run(['/bin/bash','-lc',cmd],cwd=str(cwd),text=True,capture_output=True,check=False)
+
+def main():
+    if TEST_ROOT.exists(): shutil.rmtree(TEST_ROOT)
+    TEST_ROOT.mkdir(parents=True)
+    results={}
+    (TEST_ROOT/'AGENTS.md').write_text('# Test Context\nFollow the test scope.\n')
+    (TEST_ROOT/'.gitignore').write_text('__pycache__/\n*.pyc\n')
+    (TEST_ROOT/'app.py').write_text("VALUE = 1\n")
+    (TEST_ROOT/'other.py').write_text("OTHER = 2\n")
+    (TEST_ROOT/'mini_test.py').write_text("VALUE = 2\nassert VALUE == 2\n")
+    g=run('git init -q && git config user.name "Airi Selftest" && git config user.email "airi-selftest@users.noreply.github.com" && git add -A && git commit -qm "baseline"',TEST_ROOT)
+    results['context_read']=project_context(str(TEST_ROOT))['loaded'] and 'Test Context' in project_context(str(TEST_ROOT))['content']
+    results['structured_search']=search('VALUE',str(TEST_ROOT))['matches'][0]['line']==1 and search('VALUE',str(TEST_ROOT))['matches'][0]['path'].endswith('app.py')
+    task_start('todo proof',['one','two','three'],[str(TEST_ROOT.relative_to(ROOT))])
+    s1=task_read(); task_update(0,'done','step one'); s2=task_read(); task_update(1,'done','step two'); s3=task_read(); task_update(2,'done','step three'); task_finish('done','todo proof complete'); s4=task_read()
+    results['task_todo']=s1['steps'][0]['status']=='in_progress' and s2['steps'][1]['status']=='in_progress' and s3['steps'][2]['status']=='in_progress'
+    results['task_closed']=all(x['status']=='done' for x in s4['steps'])
+    try: scope_check([str(TEST_ROOT/'other.py')],[str(TEST_ROOT/'app.py')]); results['scope_guardrail']=False
+    except PermissionError: results['scope_guardrail']=True
+    write(str(TEST_ROOT/'app.py'),"VALUE = 2\n",declared_scope=[str(TEST_ROOT)])
+    results['diff_summary']=diff_summary(str(TEST_ROOT),[str(TEST_ROOT)] )['available'] and diff_summary(str(TEST_ROOT),[str(TEST_ROOT)])['additions']>0
+    results['guardrails']=guardrail_check(str(TEST_ROOT),[str(TEST_ROOT)])['ok']
+    write(str(TEST_ROOT/'mini_test.py'),"VALUE = 2\nassert VALUE == 2\n",declared_scope=[str(TEST_ROOT/'mini_test.py')])
+    weaken=patch(str(TEST_ROOT/'mini_test.py'),'assert VALUE == 2','pass',declared_scope=[str(TEST_ROOT/'mini_test.py')])
+    results['test_weakening_guard']=guardrail_check(str(TEST_ROOT),[str(TEST_ROOT)])['ok'] is False
+    run('git checkout -- mini_test.py',TEST_ROOT)
+    # Real edit -> test -> fix cycle: modify a production-like file and verify behavior.
+    cycle=autonomous_change_cycle([
+        {'path':str(TEST_ROOT/'app.py'),'old':'VALUE = 2','new':'VALUE = 3','test_command':'python -c "from app import VALUE; assert VALUE == 3"'}
+    ],str(TEST_ROOT),'python -c "from app import VALUE; assert VALUE == 3"',[str(TEST_ROOT/'app.py')],3)
+    results['edit_test_fix']=cycle['ok'] and not cycle['rolled_back'] and cycle['changes'][0]['attempts'][0]['returncode']==0
+    # Real rollback: five failing attempts restore the pre-change content.
+    (TEST_ROOT/'bad.py').write_text('VALUE = 3\n')
+    rollback=autonomous_change_cycle([
+        {'path':str(TEST_ROOT/'bad.py'),'old':'VALUE = 3','new':'VALUE =','test_command':'python -m py_compile bad.py'}
+    ],str(TEST_ROOT),'python -m py_compile bad.py',[str(TEST_ROOT/'bad.py')],5)
+    results['rollback']=rollback['rolled_back'] and (TEST_ROOT/'bad.py').read_text()=='VALUE = 3\n' and rollback['changes'][-1]['attempts'][-1]['attempt']==5
+    run('git checkout -- app.py',TEST_ROOT)
+    (TEST_ROOT/'bad.py').unlink(missing_ok=True)
+    write(str(TEST_ROOT/'app.py'),"VALUE = 4\n",declared_scope=[str(TEST_ROOT/'app.py')])
+    # Atomic commit: only app.py is in scope, other.py stays unstaged.
+    prepared=atomic_commit('test: atomic scoped coding commit',str(TEST_ROOT),[str(TEST_ROOT/'app.py')])
+    status=run('git status --short',TEST_ROOT)
+    log=run('git log -2 --oneline',TEST_ROOT)
+    results['atomic_commit']=prepared['ok'] and prepared['commit']['committed'] and 'test: atomic scoped coding commit' in log.stdout and ('other.py' not in prepared['commit']['staged'])
+    # Session log persisted in the existing Project Memory system.
+    mem=memory_read()['content']
+    results['session_log']= 'task-start' in mem and 'task-finish' in mem
+    # High-level plan must auto-load context before coding.
+    planned=agent('prove context auto-load',str(TEST_ROOT),5,['analyze','test'],[str(TEST_ROOT)])
+    results['agent_context']=planned['plan']['context']['loaded']
+    print(json.dumps({'results':results,'ALL':all(results.values()),'git_log':log.stdout.strip(),'git_status':status.stdout.strip()},indent=2))
+    shutil.rmtree(TEST_ROOT,ignore_errors=True)
+    return 0 if all(results.values()) else 1
+
+if __name__=='__main__': raise SystemExit(main())
