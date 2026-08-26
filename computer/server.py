@@ -1,4 +1,5 @@
-import base64, io, os, subprocess, time, difflib
+import base64, io, os, subprocess, time, difflib, threading, atexit
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
@@ -43,6 +44,128 @@ SAFE_ACTIONS = {
 RISKY_ACTIONS = {'run_shell', 'delete_file', 'upload_data', 'send_message'}
 _BROWSER = None
 _PAGE = None
+_BROWSER_ERROR = None
+
+class _BrowserManager:
+    """Own the Playwright sync API on one dedicated thread.
+
+    Playwright sync objects are thread-affine; every browser operation is routed
+    through this single worker so FastAPI request threads never touch them directly.
+    """
+    def __init__(self):
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='airi-playwright')
+        self._pw = None
+        self._browser = None
+        self._page = None
+        self._lock = threading.Lock()
+        self.last_error = None
+
+    def _run(self, fn, *args, **kwargs):
+        return self.executor.submit(fn, *args, **kwargs).result()
+
+    def _ensure(self):
+        global _BROWSER, _PAGE, _BROWSER_ERROR
+        from playwright.sync_api import sync_playwright
+        if self._page is not None:
+            try:
+                _ = self._page.url
+                return self._page
+            except Exception:
+                self._close_worker()
+        if self._pw is None:
+            self._pw = sync_playwright().start()
+        launch_args = ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+        last_error = None
+        modes = [False, True] if gui_available() else [True]
+        for headless in modes:
+            for _attempt in range(3):
+                try:
+                    self._browser = self._pw.chromium.launch(headless=headless, args=launch_args, timeout=15000)
+                    self._page = self._browser.new_page(viewport={'width':1280,'height':800})
+                    self.last_error = None
+                    _BROWSER, _PAGE, _BROWSER_ERROR = self._browser, self._page, None
+                    return self._page
+                except Exception as exc:
+                    last_error = exc
+                    self._close_worker()
+                    time.sleep(0.5)
+        self.last_error = str(last_error)
+        _BROWSER_ERROR = self.last_error
+        raise RuntimeError(f'Browser unavailable: {last_error}')
+
+    def _close_worker(self):
+        global _BROWSER, _PAGE
+        try:
+            if self._page is not None:
+                self._page.close()
+        except Exception:
+            pass
+        try:
+            if self._browser is not None:
+                self._browser.close()
+        except Exception:
+            pass
+        self._page = None
+        self._browser = None
+        _BROWSER, _PAGE = None, None
+
+    def call(self, fn, *args, **kwargs):
+        with self._lock:
+            return self._run(fn, *args, **kwargs)
+
+    def status(self):
+        def _status():
+            try:
+                page=self._ensure()
+                return {'available':True,'open':page is not None,'url':page.url,'error':None}
+            except Exception as exc:
+                return {'available':False,'open':False,'url':None,'error':str(exc)}
+        return self.call(_status)
+
+    def state(self):
+        def _state():
+            try:
+                page=self._ensure()
+                return {'ok':True,'url':page.url,'title':page.title(),'status':page.locator('#status').inner_text(timeout=3000) if page.locator('#status').count() else None,'field':page.locator('#field').input_value(timeout=3000) if page.locator('#field').count() else None,'scroll_y':page.evaluate('window.scrollY'),'drag_box':page.locator('#drag').bounding_box(timeout=3000) if page.locator('#drag').count() else None,'click_box':page.locator('#click').bounding_box(timeout=3000) if page.locator('#click').count() else None}
+            except Exception as exc:
+                self._close_worker()
+                return {'ok':False,'url':None,'title':'','error':str(exc),'browser_error':self.last_error}
+        return self.call(_state)
+
+    def open(self, url, wait_until='domcontentloaded'):
+        def _open():
+            try:
+                page=self._ensure(); page.goto(url, wait_until=wait_until, timeout=30000); return {'ok':True,'url':page.url,'title':page.title()}
+            except Exception as exc:
+                self._close_worker(); return {'ok':False,'error':str(exc),'url':None}
+        return self.call(_open)
+
+    def screenshot(self):
+        def _screenshot():
+            try:
+                page=self._ensure(); b=page.screenshot(type='png', timeout=10000); return {'ok':True,'format':'png','width':1280,'height':800,'data_base64':base64.b64encode(b).decode()}
+            except Exception as exc:
+                self._close_worker(); return {'ok':False,'error':str(exc)}
+        return self.call(_screenshot)
+
+    def text(self):
+        def _text():
+            page=self._ensure(); text=page.locator('body').inner_text(timeout=5000); paragraphs=page.locator('p'); first=paragraphs.first.inner_text().strip() if paragraphs.count() else next((x.strip() for x in text.split('\\n') if x.strip()), '')
+            return {'url':page.url,'title':page.title(),'text':text,'paragraphs':paragraphs.all_inner_texts() if paragraphs.count() else [],'first_paragraph':first}
+        return self.call(_text)
+
+    def close(self):
+        try:
+            self.call(self._close_worker)
+        except Exception:
+            pass
+        self.executor.shutdown(wait=False, cancel_futures=True)
+
+_browser_manager = _BrowserManager()
+atexit.register(_browser_manager.close)
+
+def browser():
+    return _browser_manager
 
 class Move(BaseModel):
     x:int
@@ -122,30 +245,6 @@ def windows_info() -> List[Dict[str, Any]]:
         out.append({'id': wid, 'name': name})
     return out
 
-def browser():
-    global _BROWSER, _PAGE
-    from playwright.sync_api import sync_playwright
-    if _PAGE is not None:
-        try:
-            _ = _PAGE.url
-            return _PAGE
-        except Exception:
-            _PAGE = None
-    if not hasattr(browser, '_pw'):
-        browser._pw = sync_playwright().start()
-    launch_args = ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-    last_error = None
-    for headless in (not gui_available(), True):
-        try:
-            _BROWSER = browser._pw.chromium.launch(headless=headless, args=launch_args)
-            _PAGE = _BROWSER.new_page(viewport={'width':1280,'height':800})
-            return _PAGE
-        except Exception as exc:
-            last_error = exc
-            _BROWSER = None
-            _PAGE = None
-    raise RuntimeError(f'Browser unavailable: {last_error}')
-
 def mouse_position() -> Dict[str, int]:
     pos = _pyautogui().position()
     return {'x': int(pos.x), 'y': int(pos.y)}
@@ -169,23 +268,23 @@ def perform(action: str, p: Dict[str, Any]) -> Any:
     if action == 'wait': time.sleep(p['seconds']); return {'ok':True}
     if action == 'windows': return {'windows':windows_info()}
     if action == 'mouse_position': return mouse_position()
-    if action == 'browser_status': return {'available': True, 'open': _PAGE is not None, 'url': _PAGE.url if _PAGE else None}
+    if action == 'browser_status':
+        return browser().status()
     if action == 'browser_state':
-        page=browser(); return {'url':page.url,'title':page.title(),'status':page.locator('#status').inner_text() if page.locator('#status').count() else None,'field':page.locator('#field').input_value() if page.locator('#field').count() else None,'scroll_y':page.evaluate('window.scrollY'),'drag_box':page.locator('#drag').bounding_box() if page.locator('#drag').count() else None,'click_box':page.locator('#click').bounding_box() if page.locator('#click').count() else None}
+        return browser().state()
     if action == 'browser_text':
-        page=browser(); text=page.locator('body').inner_text(); paragraphs=page.locator('p'); first=paragraphs.first.inner_text().strip() if paragraphs.count() else next((x.strip() for x in text.split('\\n') if x.strip()), '')
-        return {'url':page.url,'title':page.title(),'text':text,'paragraphs':paragraphs.all_inner_texts() if paragraphs.count() else [],'first_paragraph':first}
+        return browser().text()
     if action == 'browser_open':
-        page=browser(); page.goto(p['url'], wait_until=p.get('wait_until','domcontentloaded')); return {'ok':True,'url':page.url,'title':page.title()}
+        return browser().open(p['url'], p.get('wait_until','domcontentloaded'))
     if action == 'browser_screenshot':
-        page=browser(); b=page.screenshot(type='png'); return {'format':'png','width':1280,'height':800,'data_base64':base64.b64encode(b).decode()}
+        return browser().screenshot()
     raise ValueError(f'Unsupported action: {action}')
 
 def observe() -> Dict[str, Any]:
     img = screenshot_image()
     return {'ok':True,'display':DISPLAY,'resolution':f'{img.width}x{img.height}',
             'screenshot': image_b64(img),'ocr':ocr(img),'windows':windows_info(),
-            'browser': {'open': _PAGE is not None, 'url': _PAGE.url if _PAGE else None}}
+            'browser': _browser_manager.status()}
 
 @app.get('/status')
 def status():

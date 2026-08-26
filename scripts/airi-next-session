@@ -1,14 +1,27 @@
-#!/usr/bin/env bash
-set -euo pipefail
-ROOT=/home/user/airi
-if [ ! -x "$ROOT/computer/start.sh" ]; then echo "AIRI_PC_MISSING_ROOT" >&2; exit 2; fi
-for d in "$ROOT" "$ROOT/.cache" "$ROOT/logs" "$ROOT/.state"; do
-  if [ -e "$d" ]; then chmod -R u+rwX "$d" 2>/dev/null || true; fi
-done
-[ -x "$ROOT/scripts/airi-chat-bootstrap" ] && "$ROOT/scripts/airi-chat-bootstrap"
-if [ -x "$ROOT/scripts/airi-control" ]; then
-  "$ROOT/scripts/airi-control" status
-  "$ROOT/scripts/airi-control" browser-status || true
-  "$ROOT/scripts/airi-control" browser-state || true
+#!/bin/sh
+set -eu
+BASE=/home/user/airi
+BOOTSTRAP_URL=https://github.com/arancione3000/airi-pc-bootstrap/archive/refs/heads/main.tar.gz
+if [ ! -x "$BASE/computer/start.sh" ]; then
+  rm -rf "$BASE" /tmp/airi-bootstrap
+  mkdir -p /home/user /tmp/airi-bootstrap
+  if ! curl -fsSL "$BOOTSTRAP_URL" -o /tmp/airi-bootstrap/a.tar.gz; then
+    echo "AIRI_PC_BOOTSTRAP_DOWNLOAD_FAILED" >&2
+    exit 3
+  fi
+  tar -xzf /tmp/airi-bootstrap/a.tar.gz -C /tmp/airi-bootstrap
+  TOP=$(find /tmp/airi-bootstrap -mindepth 1 -maxdepth 1 -type d | head -n1)
+  [ -n "$TOP" ] || { echo "AIRI_PC_BOOTSTRAP_ARCHIVE_INVALID" >&2; exit 4; }
+  mv "$TOP" "$BASE"
 fi
-[ -x "$ROOT/scripts/airi-selftest" ] && "$ROOT/scripts/airi-selftest"
+# Recover state that may have been created by root in older sessions.
+if command -v sudo >/dev/null 2>&1; then
+  sudo -n chown -R "$(id -u):$(id -g)" "$BASE" 2>/dev/null || true
+  if [ -d "$HOME/.cache/ms-playwright" ]; then sudo -n chown -R "$(id -u):$(id -g)" "$HOME/.cache/ms-playwright" 2>/dev/null || true; fi
+fi
+chmod +x "$BASE"/scripts/airi-* "$BASE"/computer/start.sh 2>/dev/null || true
+"$BASE/computer/start.sh" >/tmp/airi-next-session-status.json
+cat /tmp/airi-next-session-status.json
+"$BASE/scripts/airi-control" status
+"$BASE/scripts/airi-control" browser-status
+"$BASE/scripts/airi-control" browser-state
