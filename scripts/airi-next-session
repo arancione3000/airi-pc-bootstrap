@@ -4,21 +4,26 @@ BASE=/home/user/airi
 BOOTSTRAP_URL=https://github.com/arancione3000/airi-pc-bootstrap/archive/refs/heads/main.tar.gz
 
 bootstrap_code() {
-  rm -rf "$BASE" /tmp/airi-bootstrap
-  mkdir -p /home/user /tmp/airi-bootstrap
-  curl -fsSL "$BOOTSTRAP_URL" -o /tmp/airi-bootstrap/a.tar.gz || { echo AIRI_PC_BOOTSTRAP_DOWNLOAD_FAILED >&2; exit 3; }
-  tar -xzf /tmp/airi-bootstrap/a.tar.gz -C /tmp/airi-bootstrap || { echo AIRI_PC_BOOTSTRAP_ARCHIVE_INVALID >&2; exit 4; }
-  TOP=$(find /tmp/airi-bootstrap -mindepth 1 -maxdepth 1 -type d | head -n1)
+  TMP_BOOTSTRAP=$(mktemp -d /tmp/airi-bootstrap.XXXXXX)
+  trap 'rm -rf "$TMP_BOOTSTRAP"' EXIT INT TERM
+  curl -fsSL "$BOOTSTRAP_URL" -o "$TMP_BOOTSTRAP/a.tar.gz" || { echo AIRI_PC_BOOTSTRAP_DOWNLOAD_FAILED >&2; exit 3; }
+  tar -xzf "$TMP_BOOTSTRAP/a.tar.gz" -C "$TMP_BOOTSTRAP" || { echo AIRI_PC_BOOTSTRAP_ARCHIVE_INVALID >&2; exit 4; }
+  TOP=$(find "$TMP_BOOTSTRAP" -mindepth 1 -maxdepth 1 -type d | head -n1)
   [ -n "$TOP" ] || { echo AIRI_PC_BOOTSTRAP_ARCHIVE_EMPTY >&2; exit 5; }
-  mv "$TOP" "$BASE"
+  [ -x "$TOP/computer/start.sh" ] || chmod +x "$TOP/computer/start.sh" 2>/dev/null || true
+  if [ -e "$BASE" ]; then
+    BACKUP_BASE="${BASE}.backup.$(date +%s)"
+    mv "$BASE" "$BACKUP_BASE" || { echo AIRI_PC_WORKSPACE_BACKUP_FAILED >&2; exit 7; }
+  fi
+  mv "$TOP" "$BASE" || { echo AIRI_PC_WORKSPACE_ACTIVATE_FAILED >&2; exit 8; }
 }
 
 if [ ! -x "$BASE/computer/start.sh" ]; then bootstrap_code; fi
 
 # Recreate local Git metadata if an archive-based bootstrap left no .git.
 if ! git -C "$BASE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  TMPG=/tmp/airi-git-hydrate
-  rm -rf "$TMPG"
+  TMPG=$(mktemp -d /tmp/airi-git-hydrate.XXXXXX)
+  trap 'rm -rf "$TMPG"' EXIT INT TERM
   git init -q "$TMPG"
   git -C "$TMPG" remote add origin https://github.com/arancione3000/airi-pc-bootstrap.git
   git -C "$TMPG" fetch -q --depth=1 origin main || { echo AIRI_PC_GIT_FETCH_FAILED >&2; exit 6; }
