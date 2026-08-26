@@ -11,6 +11,12 @@ try:
 except Exception:
     pytesseract = None
 
+try:
+    from cleanup import scan as cleanup_scan, cleanup_safe
+except Exception:
+    cleanup_scan = None
+    cleanup_safe = None
+
 app = FastAPI(title='Airi Computer', version='2.0')
 
 # Optional remote MCP authentication. Local requests remain unchanged when the
@@ -224,6 +230,16 @@ def windows(): return {'windows':windows_info()}
 @app.get('/mouse/position')
 def mouse_position_endpoint(): return mouse_position()
 
+@app.get('/cleanup/scan')
+def cleanup_scan_endpoint():
+    if cleanup_scan is None: raise HTTPException(503, 'Cleanup module unavailable')
+    return cleanup_scan()
+
+@app.post('/cleanup/clean-safe')
+def cleanup_safe_endpoint(req: Dict[str,Any] = {}):
+    if cleanup_safe is None: raise HTTPException(503, 'Cleanup module unavailable')
+    return cleanup_safe(req.get('max_bytes'))
+
 SELF_TEST_HTML='''<!doctype html><html><head><meta charset="utf-8"><title>Airi-PC Self Test</title><style>body{font-family:sans-serif;padding:40px;height:2400px}button,input{font-size:28px;margin:12px;padding:16px}.drag{display:inline-block;font-size:24px;margin:12px;padding:30px;border:4px dashed #333}.spacer{height:1000px}#status{font-size:32px;margin-top:24px;position:sticky;top:10px;background:#fff}</style></head><body><h1>Airi-PC Self Test</h1><button id="click" onclick="status.textContent='AIRI_CLICK_OK'">AIRI_CLICK_TARGET</button><button id="drag" class="drag">AIRI_DRAG_TARGET</button><input id="field" placeholder="AIRI_INPUT_FIELD"><button id="enter" onclick="status.textContent='AIRI_BUTTON_OK'">AIRI_BUTTON</button><div class="spacer"></div><div id="status">AIRI_READY</div><script>const status=document.getElementById('status');const field=document.getElementById('field');const drag=document.getElementById('drag');window.addEventListener('keydown',e=>{if(e.key==='Enter')status.textContent='AIRI_ENTER_OK';if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='a')status.textContent='AIRI_HOTKEY_OK'});field.addEventListener('input',()=>{status.textContent='AIRI_TYPE_OK'});let dragging=false;drag.addEventListener('mousedown',()=>{dragging=true;status.textContent='AIRI_DRAG_START'});window.addEventListener('mouseup',()=>{if(dragging){dragging=false;status.textContent='AIRI_DRAG_OK'}});window.addEventListener('scroll',()=>{if(window.scrollY>50)status.textContent='AIRI_SCROLL_OK'});</script></body></html>'''
 
 
@@ -232,7 +248,7 @@ def self_test(): return HTMLResponse(SELF_TEST_HTML)
 
 @app.get('/tools')
 def tools():
-    names=['computer_status','computer_observe','computer_screenshot','computer_find_text','computer_click_element','computer_click','computer_double_click','computer_move','computer_drag','computer_scroll','computer_key','computer_hotkey','computer_type','computer_wait','computer_windows','computer_mouse_position','computer_browser_open','computer_browser_status','computer_browser_screenshot','computer_browser_state','computer_act_verify']
+    names=['computer_status','computer_observe','computer_screenshot','computer_find_text','computer_click_element','computer_click','computer_double_click','computer_move','computer_drag','computer_scroll','computer_key','computer_hotkey','computer_type','computer_wait','computer_windows','computer_mouse_position','computer_browser_open','computer_browser_status','computer_browser_screenshot','computer_browser_state','computer_act_verify','computer_cleanup_scan','computer_cleanup_safe']
     return {'name':'Airi Computer','version':'2.0','tools':names}
 
 @app.post('/mcp')
@@ -250,7 +266,7 @@ def mcp(req: Dict[str,Any]):
           'computer_double_click':('action',{'action':'double_click','payload':args}),'computer_move':('action',{'action':'move','payload':args}), 'computer_drag':('action',{'action':'drag','payload':args}),
           'computer_scroll':('action',{'action':'scroll','payload':args}), 'computer_key':('action',{'action':'key','payload':args}), 'computer_hotkey':('action',{'action':'hotkey','payload':args}), 'computer_type':('action',{'action':'type','payload':args}),
           'computer_wait':('action',{'action':'wait','payload':args}), 'computer_windows':('windows',{}),'computer_mouse_position':('mouse_position',{}),'computer_browser_open':('action',{'action':'browser_open','payload':args}),
-          'computer_browser_status':('action',{'action':'browser_status','payload':args}),'computer_browser_screenshot':('action',{'action':'browser_screenshot','payload':args}),'computer_browser_state':('action',{'action':'browser_state','payload':args}), 'computer_act_verify':('act-verify',args)}
+          'computer_browser_status':('action',{'action':'browser_status','payload':args}),'computer_browser_screenshot':('action',{'action':'browser_screenshot','payload':args}),'computer_browser_state':('action',{'action':'browser_state','payload':args}), 'computer_act_verify':('act-verify',args),'computer_cleanup_scan':('cleanup_scan',{}),'computer_cleanup_safe':('cleanup_safe',args)}
         if name not in mapping: return {'jsonrpc':'2.0','id':rid,'error':{'code':-32601,'message':'Tool not found'}}
         path, payload=mapping[name]
         try:
@@ -260,6 +276,8 @@ def mcp(req: Dict[str,Any]):
             elif path=='windows': result=windows()
             elif path=='mouse_position': result=mouse_position()
             elif path=='find-text': result=find_text(FindText(**payload))
+            elif path=='cleanup_scan': result=cleanup_scan()
+            elif path=='cleanup_safe': result=cleanup_safe(payload.get('max_bytes'))
             elif path=='action': result=action(ActionRequest(**payload))
             else: result=act_verify(ActionRequest(**payload))
             return {'jsonrpc':'2.0','id':rid,'result':{'content':[{'type':'text','text':str(result)}],'structuredContent':result}}

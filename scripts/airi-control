@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 API_URL="${AIRI_PC_URL:-http://127.0.0.1:9010}"
-usage(){ echo "usage: airi-control {status|observe|screenshot|windows|mouse-position|move|click|double-click|drag|scroll|key|hotkey|type|wait|find-text|click-element|act-verify|browser-open|browser-status|browser-state|browser-screenshot} ..." >&2; exit 2; }
+usage(){ echo "usage: airi-control {status|observe|screenshot|windows|mouse-position|move|click|double-click|drag|scroll|key|hotkey|type|wait|find-text|click-element|act-verify|browser-open|browser-status|browser-state|browser-screenshot|cleanup-scan|cleanup-safe} ..." >&2; exit 2; }
 post(){
   action="$1"; shift
   python3 - "$API_URL" "$action" "$@" <<'PY'
@@ -57,5 +57,13 @@ PY
  browser-status) post browser-status;;
  browser-state) post browser-state;;
  browser-screenshot) post browser-screenshot;;
+ cleanup-scan) curl -fsS "$API_URL/cleanup/scan";;
+ cleanup-safe) python3 - "$API_URL" <<'PY2'
+import sys, urllib.request, json
+base=sys.argv[1]
+r=urllib.request.urlopen(urllib.request.Request(base+'/cleanup/clean-safe',data=b'{}',headers={'Content-Type':'application/json'},method='POST'),timeout=120)
+print(r.read().decode())
+PY2
+;;
  *) usage;;
 esac
