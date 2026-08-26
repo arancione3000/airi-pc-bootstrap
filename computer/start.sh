@@ -33,6 +33,17 @@ if ! DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then
   exit 3
 fi
 
+# Browser preflight: install Chromium once when missing. This is skipped when cached.
+if ! DISPLAY=:99 "$VENV/bin/python" - <<'PY' >/dev/null 2>&1
+from pathlib import Path
+root=Path.home()/'.cache'/'ms-playwright'
+paths=list(root.glob('chromium-*/chrome-linux*/chrome'))+list(root.glob('chromium-*/chrome'))+list(root.glob('chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell'))
+raise SystemExit(0 if any(p.exists() for p in paths) else 1)
+PY
+then
+  "$VENV/bin/python" -m playwright install chromium >/dev/null 2>&1
+fi
+
 if ! pgrep -f '[o]penbox.*:99' >/dev/null 2>&1; then
   DISPLAY=:99 openbox >"$ROOT/logs/openbox.log" 2>&1 &
   sleep 1

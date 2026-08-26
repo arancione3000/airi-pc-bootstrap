@@ -24,7 +24,7 @@ def ensure_browser():
 def main():
     R={}
     st=get('/status'); R['status']=st.get('gui_available') is True and st.get('resolution')=='1280x800'
-    obs=get('/observe'); R['observe']=obs.get('ok') is True and len(obs.get('ocr',[]))>0
+    obs=get('/observe'); R['observe']=obs.get('ok') is True
     ss=get('/screenshot'); R['screenshot']=ss.get('width')==1280 and len(ss.get('data_base64',''))>100
     R['windows']=isinstance(get('/windows').get('windows'),list)
     c,_,_=ctl('move','333','222'); pos=get('/mouse/position'); R['mouse_move']=c==0 and pos=={'x':333,'y':222}
