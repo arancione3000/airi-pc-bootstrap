@@ -29,8 +29,15 @@ if ! pgrep -f '[X]vfb :99 -screen 0 1280x800x24' >/dev/null 2>&1; then
 fi
 
 if ! DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then
-  echo 'Xvfb health check failed' >&2
-  exit 3
+  # Recover from stale/dead Xvfb processes instead of blocking a fresh session.
+  pkill -f '[X]vfb :99 ' >/dev/null 2>&1 || true
+  sleep 1
+  Xvfb :99 -screen 0 1280x800x24 -ac >"$ROOT/logs/xvfb.log" 2>&1 &
+  sleep 2
+  if ! DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then
+    echo 'Xvfb health check failed after recovery' >&2
+    exit 3
+  fi
 fi
 
 # Browser preflight: install Chromium once when missing. This is skipped when cached.
