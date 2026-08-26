@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT=/home/user/airi
+if [ ! -x "$ROOT/computer/start.sh" ]; then echo "AIRI_PC_MISSING_ROOT" >&2; exit 2; fi
+for d in "$ROOT" "$ROOT/.cache" "$ROOT/logs" "$ROOT/.state"; do
+  if [ -e "$d" ]; then chmod -R u+rwX "$d" 2>/dev/null || true; fi
+done
+[ -x "$ROOT/scripts/airi-chat-bootstrap" ] && "$ROOT/scripts/airi-chat-bootstrap"
+if [ -x "$ROOT/scripts/airi-control" ]; then
+  "$ROOT/scripts/airi-control" status
+  "$ROOT/scripts/airi-control" browser-status || true
+  "$ROOT/scripts/airi-control" browser-state || true
+fi
+[ -x "$ROOT/scripts/airi-selftest" ] && "$ROOT/scripts/airi-selftest"
