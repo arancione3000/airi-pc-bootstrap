@@ -23,3 +23,7 @@ See `AIRI_SMART_CLEANUP.md`.
 Run `sh scripts/airi-web-check`. If it reports `gui_web_access=true`, use the Airi-PC GUI browser. If it reports `gui_web_access=false`, keep Airi-PC as the desktop runtime and use the authorized Composio Browser Tool for public web navigation and page screenshots. Never bypass network administration with proxies, DNS tricks, VPNs or tunnels.
 
 The public bootstrap contains no credentials, tokens, personal task history, or private repository state.
+
+## Coding agent
+
+Airi-PC includes a coding-agent runtime with project analysis, file search/read/write/patch, terminal execution, test/build/lint, Git inspection/commit, persistent project memory and a skill system. See `AIRI_CODING_AGENT.md`.
