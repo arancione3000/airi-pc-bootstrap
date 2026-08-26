@@ -1,5 +1,6 @@
 import base64, io, os, subprocess, time, difflib
 from typing import Any, Dict, List, Optional
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field
@@ -11,6 +12,19 @@ except Exception:
     pytesseract = None
 
 app = FastAPI(title='Airi Computer', version='2.0')
+
+# Optional remote MCP authentication. Local requests remain unchanged when the
+# token is unset; public deployments should set AIRI_MCP_TOKEN.
+AIRI_MCP_TOKEN = os.environ.get('AIRI_MCP_TOKEN', '').strip() or Path('/home/user/airi/.mcp_token').read_text().strip() if Path('/home/user/airi/.mcp_token').exists() else ''
+
+@app.middleware('http')
+async def mcp_auth_middleware(request, call_next):
+    if AIRI_MCP_TOKEN and request.url.path == '/mcp':
+        auth = request.headers.get('authorization', '')
+        if auth != f'Bearer {AIRI_MCP_TOKEN}':
+            return JSONResponse(status_code=401, content={'error': 'unauthorized'})
+    return await call_next(request)
+
 DISPLAY = os.environ.get('DISPLAY', ':99')
 SAFE_ACTIONS = {
     'screenshot', 'observe', 'move', 'click', 'double_click', 'drag', 'scroll',
