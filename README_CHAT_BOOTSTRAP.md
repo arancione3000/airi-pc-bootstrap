@@ -1,13 +1,11 @@
 # Airi-PC chat bootstrap
 
-For a new Composio session, the agent can rebuild Airi-PC without a custom MCP or private GitHub access.
-
-Canonical one-shot bootstrap:
+For a fresh Composio session, rebuild Airi-PC with one shell command:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/arancione3000/airi-pc-bootstrap/main/scripts/airi-chat-bootstrap | sh
 ```
 
-Requirements: a session exposing Composio Remote Bash/Sandbox. Composio sessions include the sandbox by default unless disabled. The script downloads the public bootstrap, repairs executable permissions, starts Computer Mode, and checks `/status`.
+This needs a session exposing Composio Remote Bash/Sandbox. Composio documents that sessions include the sandbox by default unless it is disabled. The script downloads the public bootstrap, fixes executable permissions, clears a stale local Airi process, starts Computer Mode, and verifies the local runtime.
 
-This does not create a permanent computer; the desktop belongs to the current Composio session. Re-run the bootstrap in each fresh session.
+The runtime is recreated per fresh sandbox/session. This is intentionally separate from the optional authenticated remote MCP endpoint.
