@@ -17,4 +17,4 @@ PIDS=$(ps -eo pid=,args= | awk '/uvicorn server:app --host 127\.0\.0\.1 --port 9
 for PID in $PIDS; do kill "$PID" 2>/dev/null || true; done
 rm -f "$BASE/.mcp_token"
 sh "$BASE/computer/start.sh"
-python3 "$BASE/scripts/airi-agent.py"
+exec "$BASE/scripts/airi-next-session"

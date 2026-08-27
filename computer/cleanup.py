@@ -283,3 +283,28 @@ def cleanup_safe(max_bytes: int | None = None) -> dict[str, Any]:
         'note': 'Only low-risk disposable files were automatically removed. Old downloads and duplicates remain for review.',
         'after_scan': scan(),
     }
+
+
+def prune_backups(max_entries: int = 50, max_age_days: int = 30, dry_run: bool = True) -> dict[str, Any]:
+    """Prune old Airi snapshot directories without touching active runtime files."""
+    max_entries = max(1, int(max_entries)); max_age_days = max(1, int(max_age_days))
+    backup_root = HOME / 'airi' / '.ai' / 'backups'
+    if not backup_root.exists():
+        return {'ok': True, 'dry_run': dry_run, 'removed': [], 'candidate_count': 0}
+    dirs = [p for p in backup_root.iterdir() if p.is_dir() and (p / 'manifest.json').exists()]
+    dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    cutoff = _now() - max_age_days * 86400
+    keep = set(dirs[:max_entries])
+    candidates = [p for p in dirs if p not in keep and p.stat().st_mtime < cutoff]
+    removed = []
+    for p in candidates:
+        size = _size(p)
+        item = {'path': str(p), 'size_bytes': size}
+        if not dry_run:
+            shutil.rmtree(p, ignore_errors=False)
+        removed.append(item)
+    return {
+        'ok': True, 'dry_run': dry_run, 'candidate_count': len(candidates),
+        'removed': removed, 'reclaimable_bytes': sum(x['size_bytes'] for x in removed),
+        'policy': {'keep_newest': max_entries, 'remove_older_than_days': max_age_days},
+    }

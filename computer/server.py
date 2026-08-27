@@ -22,6 +22,8 @@ app = FastAPI(title='Airi Computer', version='2.0')
 from coding import analyze as code_analyze, read as code_read, search as code_search, write as code_write, patch as code_patch, test as code_test, build as code_build, lint as code_lint, shell as code_shell, git_status as code_git_status, git_diff as code_git_diff, git_log as code_git_log, git_commit as code_git_commit, project_context as code_project_context, load_project_context as code_load_project_context, scope_check as code_scope_check, diff_summary as code_diff_summary, guardrail_check as code_guardrail_check, snapshot as code_snapshot, restore_snapshot as code_restore_snapshot
 from skills import list_skills, load_skill, create_skill, update_skill, test_skill, delete_skill, memory_read, memory_update, task_start, task_read, task_update, task_finish, session_event
 from code_agent import apply_fix as code_apply_fix, verify_change as code_verify_change, plan as code_plan, agent as code_agent, autonomous_change_cycle as code_autonomous_change_cycle, prepare_commit as code_prepare_commit, atomic_commit as code_atomic_commit
+from advanced import (health_check, checkpoint, recovery_read, recovery_finish, record_decision, decisions,
+                    persistence_status, persist_current, research, scheduler_status, schedule_job, cancel_job)
 
 # Optional remote MCP authentication. Local requests remain unchanged when the
 # token is unset; public deployments should set AIRI_MCP_TOKEN.
@@ -360,12 +362,43 @@ def code_project_tree(req: Dict[str,Any] = {}): return code_analyze(req.get('pat
 def code_file_read(req: Dict[str,Any]): return code_read(req['path'])
 @app.post('/code/file-search')
 def code_file_search(req: Dict[str,Any]): return code_search(req['query'],req.get('path','.'),req.get('limit',100))
+def _direct_scope(req: Dict[str,Any]) -> list[str]:
+    scope = req.get('scope')
+    if not scope: raise HTTPException(403, 'declared scope is required for direct coding mutations')
+    return [str(x) for x in scope]
+
+def _guarded_file_change(req: Dict[str,Any], mode: str):
+    scope = _direct_scope(req); path = req['path']; snap = code_snapshot([path], label=f'direct-{mode}:{path}')
+    try:
+        if mode == 'write': result = code_write(path, req['content'], declared_scope=scope)
+        else: result = code_patch(path, req['old'], req['new'], req.get('replace_all',False), declared_scope=scope)
+        test_command = req.get('test_command','')
+        verification = code_test(test_command, req.get('cwd','.'), req.get('timeout',170)) if test_command else {'returncode':0,'stdout':'no test command','stderr':''}
+        if verification.get('returncode') != 0:
+            code_restore_snapshot(snap['snapshot']); raise HTTPException(409, {'error':'verification_failed','verification':verification,'rolled_back':True})
+        guard = code_guardrail_check(req.get('cwd','.'), scope)
+        if not guard.get('ok'):
+            code_restore_snapshot(snap['snapshot']); raise HTTPException(409, {'error':'guardrail_violation','guardrails':guard,'rolled_back':True})
+        checkpoint(req.get('goal',f'direct {mode}'), scope, int(req.get('step',0)), f'{mode} completed', [path])
+        return {'ok':True,'result':result,'verification':verification,'guardrails':guard,'snapshot':snap}
+    except HTTPException: raise
+    except Exception:
+        try: code_restore_snapshot(snap['snapshot'])
+        except Exception: pass
+        raise
+
 @app.post('/code/file-write')
-def code_file_write(req: Dict[str,Any]): return code_write(req['path'],req['content'])
+def code_file_write(req: Dict[str,Any]): return _guarded_file_change(req,'write')
 @app.post('/code/file-patch')
-def code_file_patch(req: Dict[str,Any]): return code_patch(req['path'],req['old'],req['new'],req.get('replace_all',False))
+def code_file_patch(req: Dict[str,Any]): return _guarded_file_change(req,'patch')
 @app.post('/code/terminal-run')
-def code_terminal_run(req: Dict[str,Any]): return code_shell(req['command'],req.get('cwd','.'),req.get('timeout',120),req.get('allow_shell',False))
+def code_terminal_run(req: Dict[str,Any]):
+    scope = _direct_scope(req); code_scope_check([req.get('cwd','.')], scope)
+    result = code_shell(req['command'],req.get('cwd','.'),req.get('timeout',120),req.get('allow_shell',False))
+    if result.get('returncode') != 0: return result
+    guard = code_guardrail_check(req.get('cwd','.'), scope)
+    if not guard.get('ok'): raise HTTPException(409, {'error':'guardrail_violation','guardrails':guard})
+    return {'result':result,'guardrails':guard}
 @app.post('/code/test-run')
 def code_test_run(req: Dict[str,Any] = {}): return code_test(req.get('command','pytest -q'),req.get('cwd','.'),req.get('timeout',170))
 @app.post('/code/build-run')
@@ -429,9 +462,38 @@ def code_commit_endpoint(req: Dict[str,Any]): return code_atomic_commit(req['mes
 @app.post('/code/autonomous-cycle')
 def code_autonomous_cycle_endpoint(req: Dict[str,Any]): return code_autonomous_change_cycle(req['changes'],req.get('project_path','.'),req.get('test_command',''),req.get('scope'),req.get('max_attempts',5))
 
+@app.get('/health')
+def health_endpoint(): return health_check()
+@app.get('/recovery')
+def recovery_endpoint(): return recovery_read()
+@app.post('/recovery/checkpoint')
+def recovery_checkpoint_endpoint(req: Dict[str,Any]): return checkpoint(req['goal'],req.get('scope',[]),req.get('step',0),req.get('note',''),req.get('artifacts'),req.get('status','active'))
+@app.post('/recovery/finish')
+def recovery_finish_endpoint(req: Dict[str,Any] = {}): return recovery_finish(req.get('status','done'),req.get('note',''))
+@app.post('/memory/decision')
+def decision_record_endpoint(req: Dict[str,Any]): return record_decision(req['decision'],req.get('reason',''),req.get('evidence'),req.get('files'),req.get('commit'),req.get('result',''))
+@app.get('/memory/decisions')
+def decisions_endpoint(limit: int = 50): return decisions(limit)
+@app.get('/persistence/status')
+def persistence_status_endpoint(): return persistence_status()
+@app.post('/persistence/persist')
+def persistence_persist_endpoint(req: Dict[str,Any]): return persist_current(req['message'],req.get('branch'),req.get('push',True),req.get('scope'))
+@app.post('/research')
+def research_endpoint(req: Dict[str,Any]): return research(req['topic'],req.get('urls'),req.get('max_sources',5))
+@app.post('/cleanup/prune-backups')
+def cleanup_prune_backups_endpoint(req: Dict[str,Any] = {}):
+    from cleanup import prune_backups
+    return prune_backups(req.get('max_entries',50), req.get('max_age_days',30), req.get('dry_run',True))
+@app.get('/scheduler')
+def scheduler_status_endpoint(): return scheduler_status()
+@app.post('/scheduler/schedule')
+def scheduler_schedule_endpoint(req: Dict[str,Any]): return schedule_job(req['name'],req['action'],req['interval_seconds'],req.get('run_now',False))
+@app.post('/scheduler/cancel')
+def scheduler_cancel_endpoint(req: Dict[str,Any]): return cancel_job(req['name'])
+
 @app.get('/tools')
 def tools():
-    names=['computer_status','computer_observe','computer_screenshot','computer_find_text','computer_click_element','computer_click','computer_double_click','computer_move','computer_drag','computer_scroll','computer_key','computer_hotkey','computer_type','computer_wait','computer_windows','computer_mouse_position','computer_browser_open','computer_browser_status','computer_browser_screenshot','computer_browser_state','computer_browser_text','computer_act_verify','computer_cleanup_scan','computer_cleanup_safe','computer_project_analyze','computer_project_tree','computer_file_read','computer_file_search','computer_file_write','computer_file_patch','computer_terminal_run','computer_test_run','computer_build_run','computer_lint','computer_git_status','computer_git_diff','computer_git_log','computer_git_commit','computer_skill_list','computer_skill_load','computer_skill_create','computer_skill_update','computer_skill_test','computer_skill_delete','computer_project_memory_read','computer_project_memory_update','computer_code_apply_fix','computer_code_verify_change','computer_code_agent','computer_project_context','computer_task_start','computer_task_read','computer_task_update','computer_task_finish','computer_scope_check','computer_diff_summary','computer_guardrails','computer_snapshot','computer_restore_snapshot','computer_prepare_commit','computer_code_commit','computer_autonomous_cycle']
+    names=['computer_status','computer_observe','computer_screenshot','computer_find_text','computer_click_element','computer_click','computer_double_click','computer_move','computer_drag','computer_scroll','computer_key','computer_hotkey','computer_type','computer_wait','computer_windows','computer_mouse_position','computer_browser_open','computer_browser_status','computer_browser_screenshot','computer_browser_state','computer_browser_text','computer_act_verify','computer_cleanup_scan','computer_cleanup_safe','computer_project_analyze','computer_project_tree','computer_file_read','computer_file_search','computer_file_write','computer_file_patch','computer_terminal_run','computer_test_run','computer_build_run','computer_lint','computer_git_status','computer_git_diff','computer_git_log','computer_git_commit','computer_skill_list','computer_skill_load','computer_skill_create','computer_skill_update','computer_skill_test','computer_skill_delete','computer_project_memory_read','computer_project_memory_update','computer_code_apply_fix','computer_code_verify_change','computer_code_agent','computer_project_context','computer_task_start','computer_task_read','computer_task_update','computer_task_finish','computer_scope_check','computer_diff_summary','computer_guardrails','computer_snapshot','computer_restore_snapshot','computer_prepare_commit','computer_code_commit','computer_autonomous_cycle','computer_health','computer_recovery_read','computer_recovery_checkpoint','computer_recovery_finish','computer_decision_record','computer_decisions','computer_persistence_status','computer_persist','computer_research','computer_backup_prune','computer_scheduler_status','computer_scheduler_schedule','computer_scheduler_cancel']
     return {'name':'Airi Computer','version':'2.0','tools':names}
 
 @app.post('/mcp')
@@ -449,7 +511,7 @@ def mcp(req: Dict[str,Any]):
           'computer_double_click':('action',{'action':'double_click','payload':args}),'computer_move':('action',{'action':'move','payload':args}), 'computer_drag':('action',{'action':'drag','payload':args}),
           'computer_scroll':('action',{'action':'scroll','payload':args}), 'computer_key':('action',{'action':'key','payload':args}), 'computer_hotkey':('action',{'action':'hotkey','payload':args}), 'computer_type':('action',{'action':'type','payload':args}),
           'computer_wait':('action',{'action':'wait','payload':args}), 'computer_windows':('windows',{}),'computer_mouse_position':('mouse_position',{}),'computer_browser_open':('action',{'action':'browser_open','payload':args}),
-          'computer_browser_status':('action',{'action':'browser_status','payload':args}),'computer_browser_screenshot':('action',{'action':'browser_screenshot','payload':args}),'computer_browser_state':('action',{'action':'browser_state','payload':args}),'computer_browser_text':('action',{'action':'browser_text','payload':args}), 'computer_act_verify':('act-verify',args),'computer_cleanup_scan':('cleanup_scan',{}),'computer_cleanup_safe':('cleanup_safe',args),'computer_project_analyze':('code_analyze',args),'computer_project_tree':('code_tree',args),'computer_file_read':('code_read',args),'computer_file_search':('code_search',args),'computer_file_write':('code_write',args),'computer_file_patch':('code_patch',args),'computer_terminal_run':('code_shell',args),'computer_test_run':('code_test',args),'computer_build_run':('code_build',args),'computer_lint':('code_lint',args),'computer_git_status':('code_git_status',args),'computer_git_diff':('code_git_diff',args),'computer_git_log':('code_git_log',args),'computer_git_commit':('code_git_commit',args),'computer_skill_list':('skill_list',{}),'computer_skill_load':('skill_load',args),'computer_skill_create':('skill_create',args),'computer_skill_update':('skill_update',args),'computer_skill_test':('skill_test',args),'computer_skill_delete':('skill_delete',args),'computer_project_memory_read':('memory_read',{}),'computer_project_memory_update':('memory_update',args),'computer_code_apply_fix':('code_apply_fix',args),'computer_code_verify_change':('code_verify_change',args),'computer_code_agent':('code_agent',args),'computer_project_context':('code_project_context',args),'computer_task_start':('task_start',args),'computer_task_read':('task_read',{}),'computer_task_update':('task_update',args),'computer_task_finish':('task_finish',args),'computer_scope_check':('scope_check',args),'computer_diff_summary':('diff_summary',args),'computer_guardrails':('guardrails',args),'computer_snapshot':('snapshot',args),'computer_restore_snapshot':('restore_snapshot',args),'computer_prepare_commit':('prepare_commit',args),'computer_code_commit':('code_commit',args),'computer_autonomous_cycle':('autonomous_cycle',args)}
+          'computer_browser_status':('action',{'action':'browser_status','payload':args}),'computer_browser_screenshot':('action',{'action':'browser_screenshot','payload':args}),'computer_browser_state':('action',{'action':'browser_state','payload':args}),'computer_browser_text':('action',{'action':'browser_text','payload':args}), 'computer_act_verify':('act-verify',args),'computer_cleanup_scan':('cleanup_scan',{}),'computer_cleanup_safe':('cleanup_safe',args),'computer_project_analyze':('code_analyze',args),'computer_project_tree':('code_tree',args),'computer_file_read':('code_read',args),'computer_file_search':('code_search',args),'computer_file_write':('code_write',args),'computer_file_patch':('code_patch',args),'computer_terminal_run':('code_shell',args),'computer_test_run':('code_test',args),'computer_build_run':('code_build',args),'computer_lint':('code_lint',args),'computer_git_status':('code_git_status',args),'computer_git_diff':('code_git_diff',args),'computer_git_log':('code_git_log',args),'computer_git_commit':('code_git_commit',args),'computer_skill_list':('skill_list',{}),'computer_skill_load':('skill_load',args),'computer_skill_create':('skill_create',args),'computer_skill_update':('skill_update',args),'computer_skill_test':('skill_test',args),'computer_skill_delete':('skill_delete',args),'computer_project_memory_read':('memory_read',{}),'computer_project_memory_update':('memory_update',args),'computer_code_apply_fix':('code_apply_fix',args),'computer_code_verify_change':('code_verify_change',args),'computer_code_agent':('code_agent',args),'computer_project_context':('code_project_context',args),'computer_task_start':('task_start',args),'computer_task_read':('task_read',{}),'computer_task_update':('task_update',args),'computer_task_finish':('task_finish',args),'computer_scope_check':('scope_check',args),'computer_diff_summary':('diff_summary',args),'computer_guardrails':('guardrails',args),'computer_snapshot':('snapshot',args),'computer_restore_snapshot':('restore_snapshot',args),'computer_prepare_commit':('prepare_commit',args),'computer_code_commit':('code_commit',args),'computer_autonomous_cycle':('autonomous_cycle',args),'computer_health':('health',{}),'computer_recovery_read':('recovery_read',{}),'computer_recovery_checkpoint':('recovery_checkpoint',args),'computer_recovery_finish':('recovery_finish',args),'computer_decision_record':('decision_record',args),'computer_decisions':('decisions',args),'computer_persistence_status':('persistence_status',{}),'computer_persist':('persist',args),'computer_research':('research',args),'computer_backup_prune':('backup_prune',args),'computer_scheduler_status':('scheduler_status',{}),'computer_scheduler_schedule':('scheduler_schedule',args),'computer_scheduler_cancel':('scheduler_cancel',args)}
         if name not in mapping: return {'jsonrpc':'2.0','id':rid,'error':{'code':-32601,'message':'Tool not found'}}
         path, payload=mapping[name]
         try:
@@ -499,6 +561,21 @@ def mcp(req: Dict[str,Any]):
             elif path=='prepare_commit': result=code_prepare_commit(payload.get('path','.'),payload.get('scope'))
             elif path=='code_commit': result=code_atomic_commit(payload['message'],payload.get('project_path','.'),payload.get('scope'),payload.get('allow_test_changes',False),payload.get('allow_security_changes',False))
             elif path=='autonomous_cycle': result=code_autonomous_change_cycle(payload['changes'],payload.get('project_path','.'),payload.get('test_command',''),payload.get('scope'),payload.get('max_attempts',5))
+            elif path=='health': result=health_check()
+            elif path=='recovery_read': result=recovery_read()
+            elif path=='recovery_checkpoint': result=checkpoint(payload['goal'],payload.get('scope',[]),payload.get('step',0),payload.get('note',''),payload.get('artifacts'),payload.get('status','active'))
+            elif path=='recovery_finish': result=recovery_finish(payload.get('status','done'),payload.get('note',''))
+            elif path=='decision_record': result=record_decision(payload['decision'],payload.get('reason',''),payload.get('evidence'),payload.get('files'),payload.get('commit'),payload.get('result',''))
+            elif path=='decisions': result=decisions(payload.get('limit',50))
+            elif path=='persistence_status': result=persistence_status()
+            elif path=='persist': result=persist_current(payload['message'],payload.get('branch'),payload.get('push',True))
+            elif path=='research': result=research(payload['topic'],payload.get('urls'),payload.get('max_sources',5))
+            elif path=='backup_prune':
+                from cleanup import prune_backups
+                result=prune_backups(payload.get('max_entries',50),payload.get('max_age_days',30),payload.get('dry_run',True))
+            elif path=='scheduler_status': result=scheduler_status()
+            elif path=='scheduler_schedule': result=schedule_job(payload['name'],payload['action'],payload['interval_seconds'],payload.get('run_now',False))
+            elif path=='scheduler_cancel': result=cancel_job(payload['name'])
             elif path=='action': result=action(ActionRequest(**payload))
             else: result=act_verify(ActionRequest(**payload))
             return {'jsonrpc':'2.0','id':rid,'result':{'content':[{'type':'text','text':str(result)}],'structuredContent':result}}

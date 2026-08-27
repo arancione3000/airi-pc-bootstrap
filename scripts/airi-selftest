@@ -66,5 +66,12 @@ def main():
     R['coding_todo']=cr.get('results',{}).get('task_todo',False) and cr.get('results',{}).get('task_closed',False)
     R['coding_rollback']=cr.get('results',{}).get('rollback',False)
     R['coding_atomic_commit']=cr.get('results',{}).get('atomic_commit',False)
+    # Advanced agent services: health/recovery/decisions/persistence/research/scheduler.
+    h=get('/health'); R['health_service']=all(k in h for k in ['gui','workspace','persistence','skills','disk','scheduler'])
+    rec=get('/recovery'); R['recovery_service']='checkpoint' in rec or rec.get('active') is False
+    dr=post('/memory/decision',{'decision':'selftest probe','reason':'advanced service check'}); ds=get('/memory/decisions'); R['decision_memory']=dr.get('decision')=='selftest probe' and ds.get('count',0)>=1
+    ps=get('/persistence/status'); R['persistence_service']=all(k in ps for k in ['persistent','repo','reason'])
+    rr=post('/research',{'topic':'Airi-PC selftest','urls':['https://example.com'],'max_sources':1}); R['research_service']=rr.get('ok') is True and rr.get('source_count')==1 and rr['sources'][0].get('url')
+    sj=post('/scheduler/schedule',{'name':'selftest-health','action':'health','interval_seconds':5}); ss=get('/scheduler'); R['scheduler_service']=sj.get('action')=='health' and any(j.get('name')=='selftest-health' for j in ss.get('jobs',[])); post('/scheduler/cancel',{'name':'selftest-health'})
     print(json.dumps(R,indent=2)); print('ALL=',all(R.values())); return 0 if all(R.values()) else 1
 if __name__=='__main__': raise SystemExit(main())

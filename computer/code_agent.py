@@ -9,6 +9,7 @@ from coding import (analyze, read, search, write, patch, test, build, lint, shel
 from skills import (list_skills, load_skill, create_skill, update_skill, test_skill,
                     delete_skill, memory_read, memory_update, session_event,
                     task_start, task_read, task_update, task_finish)
+from advanced import checkpoint, recovery_finish
 
 MAX_ATTEMPTS = 5
 
@@ -40,6 +41,7 @@ def verify_change(path, test_command):
 def plan(goal, project_path='.', steps: Optional[Iterable[str]]=None, scope: Optional[Iterable[str]]=None):
     ctx = load_project_context(project_path)
     todo = task_start(goal, steps or ['analyze context','inspect code','edit safely','test and verify','review diff','persist'], scope=scope)
+    checkpoint(goal, list(scope or []), 0, 'planning/context loaded')
     return {'goal':goal,'project':analyze(project_path),'context':ctx,'skills':list_skills(),
             'memory':memory_read(),'todo':todo,
             'policy':'context required; declared scope required for autonomous changes; max 5 repair attempts; failed verification restores snapshot; diff+guardrails precede commits; tests/security cannot be weakened.'}
@@ -75,9 +77,11 @@ def autonomous_change_cycle(changes: list[dict[str, Any]], project_path='.', tes
             task_finish('failed',f'rollback for {path}')
             return {'ok':False,'rolled_back':True,'context':ctx,'todo':task_read(),'changes':records+[{'path':path,'attempts':attempts}]}
         records.append({'path':path,'snapshot':snap['snapshot'],'attempts':attempts,'before':old_content})
+        checkpoint('autonomous coding change cycle', list(scope), idx + 1, f'change {idx + 1} verified', [path])
     verification=test(test_command,project_path) if test_command else {'returncode':0,'stdout':'no full test command','stderr':''}
     if verification.get('returncode') != 0:
         for rec in reversed(records): restore_snapshot(rec['snapshot'])
+        recovery_finish('failed', 'full verification failed; all task snapshots restored')
         task_finish('failed','full verification failed; all task snapshots restored')
         return {'ok':False,'rolled_back':True,'context':ctx,'todo':task_read(),'changes':records,'verification':verification}
     task_update(len(changes),'done','full verification passed')
@@ -85,10 +89,12 @@ def autonomous_change_cycle(changes: list[dict[str, Any]], project_path='.', tes
     guard=guardrail_check(project_path,scope)
     if not guard['ok']:
         for rec in reversed(records): restore_snapshot(rec['snapshot'])
+        recovery_finish('failed', 'guardrail violation; all task snapshots restored')
         task_finish('failed','guardrail violation; all task snapshots restored')
         return {'ok':False,'rolled_back':True,'context':ctx,'todo':task_read(),'changes':records,'verification':verification,'diff':review,'guardrails':guard}
     task_update(len(changes)+1,'done','diff and guardrails passed')
     finished=task_finish('done','autonomous coding cycle complete; ready for explicit persistence step')
+    recovery_finish('done', 'coding cycle locally verified; persistence still required')
     return {'ok':True,'rolled_back':False,'context':ctx,'todo':finished,'changes':records,'verification':verification,'diff':review,'guardrails':guard}
 
 def prepare_commit(project_path='.', declared_scope=None):
@@ -112,6 +118,7 @@ def agent(goal, project_path='.', max_attempts=5, steps=None, scope=None, change
                 'capabilities':['context','todo','structured-search','scoped-edit','snapshot-rollback','diff-summary','guardrails','atomic-commit'],
                 'note':'No concrete changes supplied; plan created and context loaded, no source was modified.'}
     ctx=load_project_context(project_path)
+    checkpoint(goal, list(scope or []), 0, 'coding cycle started', [c.get('path','') for c in (changes or [])])
     cycle=autonomous_change_cycle(changes,project_path,test_command,scope,attempts)
     return {'ok':cycle.get('ok',False),'mode':'coding-agent-orchestrator','max_attempts':attempts,
             'plan':{'goal':goal,'project':analyze(project_path),'context':ctx,'scope':list(scope or []),'steps':steps or [c['path'] for c in changes]},

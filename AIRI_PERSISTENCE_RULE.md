@@ -11,3 +11,7 @@ Before completion:
 6. Record the result in `.ai/PROJECT_MEMORY.md`.
 
 If the commit cannot be verified, report **NOT PERSISTENTLY COMPLETE**.
+
+## Runtime enforcement
+
+Direct file-write/patch/terminal mutation endpoints require a declared scope. Mutations create a snapshot and verification record. Remote persistence uses the canonical Git remote and fails closed when push or remote-HEAD verification cannot be completed.
