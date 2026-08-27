@@ -501,6 +501,7 @@ def _research_with_browser(req: Dict[str,Any]):
     for item in browser().links(max_sources*4):
         url=item.get('url','')
         if not url.startswith(('http://','https://')) or url in seen: continue
+        if urllib.parse.urlparse(url).netloc.lower().endswith('duckduckgo.com'): continue
         seen.add(url); discovered.append(url)
         if len(discovered)>=max_sources: break
     return research(topic, discovered, max_sources)
