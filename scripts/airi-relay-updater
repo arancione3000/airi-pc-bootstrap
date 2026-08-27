@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+BASE=/home/user/airi
+MANIFEST="$BASE/.ai/state/airi-endpoint.json"
+RELAY_URL="${AIRI_MCP_RELAY_URL:-https://airi-pc-mcp.arancione3333.workers.dev}"
+RELAY_ADMIN="${AIRI_MCP_RELAY_ADMIN:-/admin/airi-9b2d7f6c/set}"
+INTERVAL="${AIRI_RELAY_UPDATE_INTERVAL:-5}"
+LAST=""
+while :; do
+  if [ -s "$MANIFEST" ]; then
+    U=$(sed -n 's/.*"url":"\([^"]*\)".*/\1/p' "$MANIFEST" | head -n1)
+    case "$U" in
+      https://*.run.pinggy-free.link)
+        if [ "$U" != "$LAST" ]; then
+          curl -fsS --max-time 10 -H 'content-type: application/json' -X POST "$RELAY_URL$RELAY_ADMIN" --data "{\"url\":\"$U\"}" >/dev/null 2>&1 || true
+          LAST="$U"
+        fi
+        ;;
+    esac
+  fi
+  sleep "$INTERVAL"
+done
