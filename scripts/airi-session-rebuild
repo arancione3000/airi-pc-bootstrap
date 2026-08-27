@@ -1,0 +1,60 @@
+#!/bin/sh
+set -eu
+
+BASE="/home/user/airi"
+REPO_URL="https://github.com/arancione3000/airi-pc-bootstrap/archive/refs/heads/main.tar.gz"
+TMP="$(mktemp -d /tmp/airi-session-rebuild.XXXXXX)"
+BACKUP=""
+KEEP_STATE="${AIRI_PRESERVE_STATE:-1}"
+cleanup(){ rm -rf "$TMP"; }
+trap cleanup EXIT INT TERM
+
+mkdir -p /home/user
+
+printf '%s\n' '[1/8] Download canonical main'
+curl -fsSL "$REPO_URL" -o "$TMP/main.tar.gz"
+printf '%s\n' '[2/8] Extract canonical runtime'
+tar -xzf "$TMP/main.tar.gz" -C "$TMP"
+TOP="$(find "$TMP" -mindepth 1 -maxdepth 1 -type d ! -name state | head -n1)"
+[ -n "$TOP" ] || { echo 'AIRI_REBUILD_ARCHIVE_EMPTY' >&2; exit 5; }
+
+if [ -d "$BASE" ] && [ "$KEEP_STATE" = "1" ]; then
+  printf '%s\n' '[3/8] Preserve .ai and browser auth state'
+  mkdir -p "$TMP/state"
+  if [ -d "$BASE/.ai" ]; then cp -a "$BASE/.ai" "$TMP/state/.ai"; fi
+else
+  printf '%s\n' '[3/8] Fresh runtime requested'
+fi
+
+printf '%s\n' '[4/8] Replace runtime with canonical main'
+if [ -d "$BASE" ]; then BACKUP="${BASE}.previous.$(date +%s)"; mv "$BASE" "$BACKUP"; fi
+mv "$TOP" "$BASE"
+if [ -d "$TMP/state/.ai" ]; then cp -a "$TMP/state/.ai" "$BASE/.ai"; fi
+
+printf '%s\n' '[5/8] Install runtime dependencies'
+python3 -m venv "$BASE/.venv"
+"$BASE/.venv/bin/pip" install --disable-pip-version-check -r "$BASE/computer/requirements.txt"
+"$BASE/.venv/bin/python" -m playwright install chromium
+chmod +x "$BASE"/scripts/airi-* "$BASE/computer/start.sh" 2>/dev/null || true
+
+printf '%s\n' '[6/8] Start canonical runtime'
+mkdir -p "$BASE/logs"
+"$BASE/scripts/airi-connect" >"$BASE/logs/session-rebuild.log" 2>&1 &
+CONNECT_PID=$!
+
+printf '%s\n' '[7/8] Wait for readiness'
+READY=0
+for _ in $(seq 1 60); do
+  if curl -fsS --max-time 2 http://127.0.0.1:9010/ready >/dev/null 2>&1; then READY=1; break; fi
+  sleep 1
+done
+[ "$READY" = "1" ] || { echo 'AIRI_REBUILD_NOT_READY' >&2; tail -120 "$BASE/logs/session-rebuild.log" 2>/dev/null || true; exit 10; }
+
+printf '%s\n' '[8/8] Verify runtime'
+STATUS="$(curl -fsS --max-time 5 http://127.0.0.1:9010/status)"
+READY_JSON="$(curl -fsS --max-time 5 http://127.0.0.1:9010/ready)"
+printf '%s\n' "$STATUS"
+printf '%s\n' "$READY_JSON"
+"$BASE/scripts/airi-selftest"
+printf '%s\n' "AIRI_SESSION_REBUILD_OK pid=$CONNECT_PID"
+if [ -n "$BACKUP" ]; then printf '%s\n' "Previous runtime preserved at $BACKUP"; fi
