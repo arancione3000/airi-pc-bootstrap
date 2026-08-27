@@ -56,7 +56,6 @@ fi
 
 chmod +x "$BASE"/scripts/airi-* "$BASE"/computer/start.sh 2>/dev/null || true
 
-# Reuse only a runtime that is actually ready and running the current source revision.
 if curl -fsS --max-time 5 http://127.0.0.1:9010/ready >/dev/null 2>&1; then
   echo '{"status":"reused_existing_runtime","server":"127.0.0.1:9010"}' >/tmp/airi-next-session-status.json
 else
@@ -69,16 +68,19 @@ else
   if [ "$READY" -ne 1 ]; then echo AIRI_PC_RUNTIME_NOT_READY >&2; exit 10; fi
 fi
 
-# Start a detached watchdog once. It self-terminates only with the runtime.
 if [ -x "$BASE/scripts/airi-watchdog" ]; then
   "$BASE/scripts/airi-watchdog" >/dev/null 2>&1 &
 fi
 
-# Keep Pinggy under supervision across the current runtime. The hostname may
-# change, so the current endpoint is written to a machine-readable manifest.
 if [ -x "$BASE/scripts/airi-tunnel-supervisor" ]; then
   if ! pgrep -f '[a]iri-tunnel-supervisor' >/dev/null 2>&1; then
     "$BASE/scripts/airi-tunnel-supervisor" >/dev/null 2>&1 &
+  fi
+fi
+
+if [ -x "$BASE/scripts/airi-relay-updater" ]; then
+  if ! pgrep -f '[a]iri-relay-updater' >/dev/null 2>&1; then
+    "$BASE/scripts/airi-relay-updater" >/dev/null 2>&1 &
   fi
 fi
 
