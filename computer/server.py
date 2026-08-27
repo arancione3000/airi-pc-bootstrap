@@ -1,4 +1,4 @@
-import base64, io, os, subprocess, time, difflib, threading, atexit, urllib.parse
+import base64, io, os, re, subprocess, time, difflib, threading, atexit, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 from pathlib import Path
