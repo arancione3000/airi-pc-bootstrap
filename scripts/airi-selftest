@@ -73,5 +73,9 @@ def main():
     ps=get('/persistence/status'); R['persistence_service']=all(k in ps for k in ['persistent','repo','reason'])
     rr=post('/research',{'topic':'Airi-PC selftest','urls':['https://example.com'],'max_sources':1}); R['research_service']=rr.get('ok') is True and rr.get('source_count')==1 and rr['sources'][0].get('url')
     sj=post('/scheduler/schedule',{'name':'selftest-health','action':'health','interval_seconds':5}); ss=get('/scheduler'); R['scheduler_service']=sj.get('action')=='health' and any(j.get('name')=='selftest-health' for j in ss.get('jobs',[])); post('/scheduler/cancel',{'name':'selftest-health'})
+    challenge_url='data:text/html,<html><title>Human Check</title><body>CAPTCHA verify you are human</body></html>'
+    ctl('browser-open',challenge_url); hc=get('/browser/human/status'); hw=post('/browser/human/wait',{'timeout':1,'poll':0.25})
+    ctl('browser-open','https://example.com'); hr=post('/browser/human/wait',{'timeout':3,'poll':0.25})
+    R['human_challenge']=hc.get('detected') is True and hw.get('resumed') is False and hr.get('resumed') is True and hr.get('detected') is False
     print(json.dumps(R,indent=2)); print('ALL=',all(R.values())); return 0 if all(R.values()) else 1
 if __name__=='__main__': raise SystemExit(main())

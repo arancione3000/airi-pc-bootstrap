@@ -188,6 +188,45 @@ class _BrowserManager:
         path=AI/'auth'/f'{profile}.json'
         return {'ok':True,'profile':profile,'exists':path.exists(),'bytes':path.stat().st_size if path.exists() else 0,'current':self.auth_profile==profile}
 
+    def _human_challenge_info(self):
+        page = self._ensure()
+        title = (page.title() or '').strip()
+        try:
+            body = page.locator('body').inner_text(timeout=3000)[:12000]
+        except Exception:
+            body = ''
+        try:
+            frame_urls = [f.url for f in page.frames if f.url]
+        except Exception:
+            frame_urls = []
+        hay = ' '.join([title, body, ' '.join(frame_urls)]).lower()
+        markers = ['captcha','recaptcha','hcaptcha','turnstile','verify you are human','i am not a robot','checking your browser','performing security verification','security challenge','human verification','attention required']
+        matched = [m for m in markers if m in hay]
+        selectors = []
+        for sel in ['iframe[src*=\"captcha\"]','iframe[src*=\"recaptcha\"]','iframe[src*=\"hcaptcha\"]','iframe[src*=\"challenges.cloudflare.com\"]','[data-sitekey]','[class*=\"captcha\"]','[id*=\"captcha\"]','[class*=\"turnstile\"]','[id*=\"turnstile\"]']:
+            try:
+                if page.locator(sel).count(): selectors.append(sel)
+            except Exception:
+                pass
+        detected = bool(matched or selectors)
+        return {'detected':detected,'url':page.url,'title':title,'matched_markers':matched,'matched_selectors':selectors,'action_url':page.url if detected else None,'message':'Human verification detected; solve it in the Airi-PC browser, then resume.' if detected else 'No human verification detected.'}
+
+    def human_challenge_status(self):
+        def _status():
+            try: return {'ok':True,**self._human_challenge_info()}
+            except Exception as exc: return {'ok':False,'detected':False,'error':str(exc),'url':None}
+        return self.call(_status)
+
+    def wait_for_human(self, timeout=300, poll=1.0):
+        timeout=max(1,min(int(timeout),900)); poll=max(0.25,min(float(poll),5.0)); started=time.time(); last=None
+        while time.time()-started < timeout:
+            last=self.human_challenge_status()
+            if last.get('ok') and not last.get('detected'):
+                last['waited_seconds']=round(time.time()-started,2); last['resumed']=True; return last
+            time.sleep(poll)
+        if last is None: last=self.human_challenge_status()
+        last['waited_seconds']=round(time.time()-started,2); last['resumed']=False; last['timed_out']=True; return last
+
     def screenshot(self):
         def _screenshot():
             try:
@@ -560,6 +599,10 @@ def browser_auth_set_endpoint(req: Dict[str,Any]): return browser().auth_set(req
 def browser_auth_save_endpoint(req: Dict[str,Any]): return browser().auth_save(req.get('profile'))
 @app.get('/browser/auth/status')
 def browser_auth_status_endpoint(profile: str): return browser().auth_status(profile)
+@app.get('/browser/human/status')
+def browser_human_status_endpoint(): return browser().human_challenge_status()
+@app.post('/browser/human/wait')
+def browser_human_wait_endpoint(req: Dict[str,Any] = {}): return browser().wait_for_human(req.get('timeout',300), req.get('poll',1.0))
 @app.get('/permissions')
 def permission_endpoint(): return permission_check()
 @app.get('/runtime/preflight')
@@ -579,7 +622,7 @@ def scheduler_cancel_endpoint(req: Dict[str,Any]): return cancel_job(req['name']
 
 @app.get('/tools')
 def tools():
-    names=['computer_status','computer_observe','computer_screenshot','computer_find_text','computer_click_element','computer_click','computer_double_click','computer_move','computer_drag','computer_scroll','computer_key','computer_hotkey','computer_type','computer_wait','computer_windows','computer_mouse_position','computer_browser_open','computer_browser_status','computer_browser_screenshot','computer_browser_state','computer_browser_text','computer_act_verify','computer_cleanup_scan','computer_cleanup_safe','computer_project_analyze','computer_project_tree','computer_file_read','computer_file_search','computer_file_write','computer_file_patch','computer_terminal_run','computer_test_run','computer_build_run','computer_lint','computer_git_status','computer_git_diff','computer_git_log','computer_git_commit','computer_skill_list','computer_skill_load','computer_skill_create','computer_skill_update','computer_skill_test','computer_skill_delete','computer_project_memory_read','computer_project_memory_update','computer_code_apply_fix','computer_code_verify_change','computer_code_agent','computer_project_context','computer_task_start','computer_task_read','computer_task_update','computer_task_finish','computer_scope_check','computer_diff_summary','computer_guardrails','computer_snapshot','computer_restore_snapshot','computer_prepare_commit','computer_code_commit','computer_autonomous_cycle','computer_health','computer_recovery_read','computer_recovery_checkpoint','computer_recovery_finish','computer_decision_record','computer_decisions','computer_persistence_status','computer_persist','computer_research','computer_backup_prune','computer_scheduler_status','computer_scheduler_schedule','computer_scheduler_cancel','computer_browser_auth_set','computer_browser_auth_save','computer_browser_auth_status','computer_permission_check','computer_runtime_preflight','computer_integrations']
+    names=['computer_status','computer_observe','computer_screenshot','computer_find_text','computer_click_element','computer_click','computer_double_click','computer_move','computer_drag','computer_scroll','computer_key','computer_hotkey','computer_type','computer_wait','computer_windows','computer_mouse_position','computer_browser_open','computer_browser_status','computer_browser_screenshot','computer_browser_state','computer_browser_text','computer_act_verify','computer_cleanup_scan','computer_cleanup_safe','computer_project_analyze','computer_project_tree','computer_file_read','computer_file_search','computer_file_write','computer_file_patch','computer_terminal_run','computer_test_run','computer_build_run','computer_lint','computer_git_status','computer_git_diff','computer_git_log','computer_git_commit','computer_skill_list','computer_skill_load','computer_skill_create','computer_skill_update','computer_skill_test','computer_skill_delete','computer_project_memory_read','computer_project_memory_update','computer_code_apply_fix','computer_code_verify_change','computer_code_agent','computer_project_context','computer_task_start','computer_task_read','computer_task_update','computer_task_finish','computer_scope_check','computer_diff_summary','computer_guardrails','computer_snapshot','computer_restore_snapshot','computer_prepare_commit','computer_code_commit','computer_autonomous_cycle','computer_health','computer_recovery_read','computer_recovery_checkpoint','computer_recovery_finish','computer_decision_record','computer_decisions','computer_persistence_status','computer_persist','computer_research','computer_backup_prune','computer_scheduler_status','computer_scheduler_schedule','computer_scheduler_cancel','computer_browser_auth_set','computer_browser_auth_save','computer_browser_auth_status','computer_browser_human_status','computer_browser_human_wait','computer_permission_check','computer_runtime_preflight','computer_integrations']
     return {'name':'Airi Computer','version':'2.0','tools':names}
 
 @app.post('/mcp')
@@ -597,7 +640,7 @@ def mcp(req: Dict[str,Any]):
           'computer_double_click':('action',{'action':'double_click','payload':args}),'computer_move':('action',{'action':'move','payload':args}), 'computer_drag':('action',{'action':'drag','payload':args}),
           'computer_scroll':('action',{'action':'scroll','payload':args}), 'computer_key':('action',{'action':'key','payload':args}), 'computer_hotkey':('action',{'action':'hotkey','payload':args}), 'computer_type':('action',{'action':'type','payload':args}),
           'computer_wait':('action',{'action':'wait','payload':args}), 'computer_windows':('windows',{}),'computer_mouse_position':('mouse_position',{}),'computer_browser_open':('action',{'action':'browser_open','payload':args}),
-          'computer_browser_status':('action',{'action':'browser_status','payload':args}),'computer_browser_screenshot':('action',{'action':'browser_screenshot','payload':args}),'computer_browser_state':('action',{'action':'browser_state','payload':args}),'computer_browser_text':('action',{'action':'browser_text','payload':args}), 'computer_act_verify':('act-verify',args),'computer_cleanup_scan':('cleanup_scan',{}),'computer_cleanup_safe':('cleanup_safe',args),'computer_project_analyze':('code_analyze',args),'computer_project_tree':('code_tree',args),'computer_file_read':('code_read',args),'computer_file_search':('code_search',args),'computer_file_write':('code_write',args),'computer_file_patch':('code_patch',args),'computer_terminal_run':('code_shell',args),'computer_test_run':('code_test',args),'computer_build_run':('code_build',args),'computer_lint':('code_lint',args),'computer_git_status':('code_git_status',args),'computer_git_diff':('code_git_diff',args),'computer_git_log':('code_git_log',args),'computer_git_commit':('code_git_commit',args),'computer_skill_list':('skill_list',{}),'computer_skill_load':('skill_load',args),'computer_skill_create':('skill_create',args),'computer_skill_update':('skill_update',args),'computer_skill_test':('skill_test',args),'computer_skill_delete':('skill_delete',args),'computer_project_memory_read':('memory_read',{}),'computer_project_memory_update':('memory_update',args),'computer_code_apply_fix':('code_apply_fix',args),'computer_code_verify_change':('code_verify_change',args),'computer_code_agent':('code_agent',args),'computer_project_context':('code_project_context',args),'computer_task_start':('task_start',args),'computer_task_read':('task_read',{}),'computer_task_update':('task_update',args),'computer_task_finish':('task_finish',args),'computer_scope_check':('scope_check',args),'computer_diff_summary':('diff_summary',args),'computer_guardrails':('guardrails',args),'computer_snapshot':('snapshot',args),'computer_restore_snapshot':('restore_snapshot',args),'computer_prepare_commit':('prepare_commit',args),'computer_code_commit':('code_commit',args),'computer_autonomous_cycle':('autonomous_cycle',args),'computer_health':('health',{}),'computer_recovery_read':('recovery_read',{}),'computer_recovery_checkpoint':('recovery_checkpoint',args),'computer_recovery_finish':('recovery_finish',args),'computer_decision_record':('decision_record',args),'computer_decisions':('decisions',args),'computer_persistence_status':('persistence_status',{}),'computer_persist':('persist',args),'computer_research':('research',args),'computer_backup_prune':('backup_prune',args),'computer_scheduler_status':('scheduler_status',{}),'computer_scheduler_schedule':('scheduler_schedule',args),'computer_scheduler_cancel':('scheduler_cancel',args),'computer_browser_auth_set':('browser_auth_set',args),'computer_browser_auth_save':('browser_auth_save',args),'computer_browser_auth_status':('browser_auth_status',args),'computer_permission_check':('permission_check',{}),'computer_runtime_preflight':('runtime_preflight',{}),'computer_integrations':('integrations',{})}
+          'computer_browser_status':('action',{'action':'browser_status','payload':args}),'computer_browser_screenshot':('action',{'action':'browser_screenshot','payload':args}),'computer_browser_state':('action',{'action':'browser_state','payload':args}),'computer_browser_text':('action',{'action':'browser_text','payload':args}), 'computer_act_verify':('act-verify',args),'computer_cleanup_scan':('cleanup_scan',{}),'computer_cleanup_safe':('cleanup_safe',args),'computer_project_analyze':('code_analyze',args),'computer_project_tree':('code_tree',args),'computer_file_read':('code_read',args),'computer_file_search':('code_search',args),'computer_file_write':('code_write',args),'computer_file_patch':('code_patch',args),'computer_terminal_run':('code_shell',args),'computer_test_run':('code_test',args),'computer_build_run':('code_build',args),'computer_lint':('code_lint',args),'computer_git_status':('code_git_status',args),'computer_git_diff':('code_git_diff',args),'computer_git_log':('code_git_log',args),'computer_git_commit':('code_git_commit',args),'computer_skill_list':('skill_list',{}),'computer_skill_load':('skill_load',args),'computer_skill_create':('skill_create',args),'computer_skill_update':('skill_update',args),'computer_skill_test':('skill_test',args),'computer_skill_delete':('skill_delete',args),'computer_project_memory_read':('memory_read',{}),'computer_project_memory_update':('memory_update',args),'computer_code_apply_fix':('code_apply_fix',args),'computer_code_verify_change':('code_verify_change',args),'computer_code_agent':('code_agent',args),'computer_project_context':('code_project_context',args),'computer_task_start':('task_start',args),'computer_task_read':('task_read',{}),'computer_task_update':('task_update',args),'computer_task_finish':('task_finish',args),'computer_scope_check':('scope_check',args),'computer_diff_summary':('diff_summary',args),'computer_guardrails':('guardrails',args),'computer_snapshot':('snapshot',args),'computer_restore_snapshot':('restore_snapshot',args),'computer_prepare_commit':('prepare_commit',args),'computer_code_commit':('code_commit',args),'computer_autonomous_cycle':('autonomous_cycle',args),'computer_health':('health',{}),'computer_recovery_read':('recovery_read',{}),'computer_recovery_checkpoint':('recovery_checkpoint',args),'computer_recovery_finish':('recovery_finish',args),'computer_decision_record':('decision_record',args),'computer_decisions':('decisions',args),'computer_persistence_status':('persistence_status',{}),'computer_persist':('persist',args),'computer_research':('research',args),'computer_backup_prune':('backup_prune',args),'computer_scheduler_status':('scheduler_status',{}),'computer_scheduler_schedule':('scheduler_schedule',args),'computer_scheduler_cancel':('scheduler_cancel',args),'computer_browser_auth_set':('browser_auth_set',args),'computer_browser_auth_save':('browser_auth_save',args),'computer_browser_auth_status':('browser_auth_status',args),'computer_browser_human_status':('browser_human_status',args),'computer_browser_human_wait':('browser_human_wait',args),'computer_permission_check':('permission_check',{}),'computer_runtime_preflight':('runtime_preflight',{}),'computer_integrations':('integrations',{})}
         if name not in mapping: return {'jsonrpc':'2.0','id':rid,'error':{'code':-32601,'message':'Tool not found'}}
         path, payload=mapping[name]
         try:
@@ -665,6 +708,8 @@ def mcp(req: Dict[str,Any]):
             elif path=='browser_auth_set': result=browser().auth_set(payload['profile'])
             elif path=='browser_auth_save': result=browser().auth_save(payload.get('profile'))
             elif path=='browser_auth_status': result=browser().auth_status(payload['profile'])
+            elif path=='browser_human_status': result=browser().human_challenge_status()
+            elif path=='browser_human_wait': result=browser().wait_for_human(payload.get('timeout',300),payload.get('poll',1.0))
             elif path=='permission_check': result=permission_check()
             elif path=='runtime_preflight': result=runtime_preflight()
             elif path=='integrations': result=integration_status()
