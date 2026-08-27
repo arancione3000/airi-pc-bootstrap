@@ -13,7 +13,7 @@ stop_server() {
     [ -z "$PID" ] || kill "$PID" 2>/dev/null || true
     rm -f "$SERVER_PID_FILE"
   fi
-  pkill -f 'uvicorn server:app --host 127\.0\.0\.1 --port 9010' 2>/dev/null || true
+  pkill -f 'uvicorn (server|contract_server):app --host 127\.0\.0\.1 --port 9010' 2>/dev/null || true
 }
 
 if [ "${AIRI_FORCE_RESTART:-0}" = "1" ]; then
@@ -47,7 +47,6 @@ if ! pgrep -f '[X]vfb :99 -screen 0 1280x800x24' >/dev/null 2>&1; then
 fi
 
 if ! DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then
-  # Recover from stale/dead Xvfb processes instead of blocking a fresh session.
   pkill -f '[X]vfb :99 ' >/dev/null 2>&1 || true
   sleep 1
   Xvfb :99 -screen 0 1280x800x24 -ac >"$ROOT/logs/xvfb.log" 2>&1 &
@@ -58,7 +57,6 @@ if ! DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then
   fi
 fi
 
-# Browser preflight: install Chromium once when missing. This is skipped when cached.
 if ! DISPLAY=:99 "$VENV/bin/python" - <<'PY' >/dev/null 2>&1
 from pathlib import Path
 root=Path.home()/'.cache'/'ms-playwright'
@@ -81,9 +79,23 @@ fi
 
 if ! curl -fsS http://127.0.0.1:9010/status >/dev/null 2>&1; then
   cd "$ROOT/computer"
-  nohup "$VENV/bin/uvicorn" server:app --host 127.0.0.1 --port 9010 >"$ROOT/logs/computer-server.log" 2>&1 &
+  nohup "$VENV/bin/uvicorn" contract_server:app --host 127.0.0.1 --port 9010 >"$ROOT/logs/computer-server.log" 2>&1 &
   echo $! > "$SERVER_PID_FILE"
-  sleep 2
+fi
+
+READY=0
+for _ in $(seq 1 30); do
+  if curl -fsS --max-time 2 http://127.0.0.1:9010/ready >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
+  sleep 1
+done
+
+if [ "$READY" != "1" ]; then
+  echo 'AIRI_START_NOT_READY' >&2
+  cat "$ROOT/logs/computer-server.log" 2>/dev/null || true
+  exit 4
 fi
 
 curl -fsS http://127.0.0.1:9010/status

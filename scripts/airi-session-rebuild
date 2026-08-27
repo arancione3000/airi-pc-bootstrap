@@ -13,6 +13,7 @@ mkdir -p /home/user
 
 printf '%s\n' '[1/8] Download canonical main'
 curl -fsSL "$REPO_URL" -o "$TMP/main.tar.gz"
+
 printf '%s\n' '[2/8] Extract canonical runtime'
 tar -xzf "$TMP/main.tar.gz" -C "$TMP"
 TOP="$(find "$TMP" -mindepth 1 -maxdepth 1 -type d ! -name state | head -n1)"
@@ -42,19 +43,21 @@ mkdir -p "$BASE/logs"
 "$BASE/scripts/airi-connect" >"$BASE/logs/session-rebuild.log" 2>&1 &
 CONNECT_PID=$!
 
-printf '%s\n' '[7/8] Wait for readiness'
+printf '%s\n' '[7/8] Wait for strict readiness'
 READY=0
-for _ in $(seq 1 60); do
+for _ in $(seq 1 90); do
   if curl -fsS --max-time 2 http://127.0.0.1:9010/ready >/dev/null 2>&1; then READY=1; break; fi
   sleep 1
 done
 [ "$READY" = "1" ] || { echo 'AIRI_REBUILD_NOT_READY' >&2; tail -120 "$BASE/logs/session-rebuild.log" 2>/dev/null || true; exit 10; }
 
-printf '%s\n' '[8/8] Verify runtime'
+printf '%s\n' '[8/8] Verify canonical runtime'
 STATUS="$(curl -fsS --max-time 5 http://127.0.0.1:9010/status)"
 READY_JSON="$(curl -fsS --max-time 5 http://127.0.0.1:9010/ready)"
 printf '%s\n' "$STATUS"
 printf '%s\n' "$READY_JSON"
 "$BASE/scripts/airi-selftest"
+"$BASE/scripts/airi-coding-selftest"
+"$BASE/scripts/airi-runtime-verify"
 printf '%s\n' "AIRI_SESSION_REBUILD_OK pid=$CONNECT_PID"
 if [ -n "$BACKUP" ]; then printf '%s\n' "Previous runtime preserved at $BACKUP"; fi

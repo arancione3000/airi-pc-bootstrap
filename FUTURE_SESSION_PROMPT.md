@@ -1,25 +1,41 @@
-# FUTURE SESSION PROMPT — AIRI-PC FROM GITHUB
+# AIRI-PC — RICOSTRUZIONE CANONICA FUTURA
 
-Use the canonical repository only:
-`arancione3000/airi-pc-bootstrap`, branch `main`.
+Usa esclusivamente:
 
-Do not assume the previous Airi-PC machine or conversation still exists.
-Do not use Orgo, Daytona, Freestyle, Hyperbrowser, or another computer.
+`arancione3000/airi-pc-bootstrap`
 
-First execute:
+branch:
+
+`main`
+
+Non usare una vecchia macchina.
+Non usare una vecchia sessione.
+Non assumere che Airi-PC esista già.
+Non sostituire Airi-PC con un altro computer.
+
+Esegui:
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/arancione3000/airi-pc-bootstrap/main/scripts/airi-session-rebuild | sh
 ```
 
-Then verify:
-1. `/home/user/airi` exists.
-2. `http://127.0.0.1:9010/status` is healthy.
-3. `http://127.0.0.1:9010/ready` returns `ready:true` and all checks true.
-4. `airi-selftest` passes.
-5. MCP `initialize` and `tools/list` work.
-6. Execute the real `computer_status` tool if exposed.
+Il rebuild deve:
+ricreare `/home/user/airi`;
+installare tutte le dipendenze Python;
+installare Chromium/Playwright;
+creare `DISPLAY=:99`;
+usare 1280x800;
+avviare il server MCP su 127.0.0.1:9010;
+caricare `AIRI_TOOL_MANIFEST.json`;
+esporre esattamente 83 tool;
+fornire inputSchema per tutti i tool;
+eseguire `airi-selftest`;
+eseguire `airi-coding-selftest`;
+eseguire `airi-runtime-verify`;
+eseguire realmente `computer_status`.
 
-Keep OAuth/PKCE enabled for the remote MCP connection.
-If a previous tunnel is dead, do not reuse its old URL. Use the current runtime's transport state and the available Composio/ChatGPT MCP registration path.
+Non dichiarare Airi-PC pronto finché:
+`AIRI_RUNTIME_ALL= True`
 
-Do not say “Airi-PC connected” until a real computer-status call succeeds.
+NON inferire la readiness dai soli file.
+La Computer Mode deve essere realmente funzionante. Il browser deve essere realmente disponibile. MCP deve essere realmente operativo.

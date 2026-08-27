@@ -1,0 +1,36 @@
+name: Airi-PC runtime verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout canonical main
+        uses: actions/checkout@v4
+
+      - name: Recreate canonical workspace
+        run: |
+          sudo rm -rf /home/user/airi
+          sudo mkdir -p /home/user
+          sudo cp -a "$GITHUB_WORKSPACE" /home/user/airi
+          sudo chown -R "$USER":"$USER" /home/user/airi
+
+      - name: Start Airi-PC
+        working-directory: /home/user/airi
+        env:
+          AIRI_BOOTSTRAP_SHA: ${{ github.sha }}
+          AIRI_EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          ./scripts/airi-session-rebuild || {
+            cat /home/user/airi/logs/session-rebuild.log 2>/dev/null || true
+            exit 1
+          }
+
+      - name: Canonical runtime verifier
+        working-directory: /home/user/airi
+        run: ./scripts/airi-runtime-verify

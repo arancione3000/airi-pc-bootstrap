@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(os.environ.get("AIRIPC_WORKSPACE_ROOT", "/home/user/airi")).expanduser()
+BASE = os.environ.get("AIRIPC_BASE_URL", "http://127.0.0.1:9010")
+MANIFEST_PATH = ROOT / "AIRI_TOOL_MANIFEST.json"
+
+def req(path: str, payload: dict | None = None) -> dict:
+    url = BASE + path
+    if payload is None:
+        request = urllib.request.Request(url)
+    else:
+        request = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode())
+
+def run_script(path: Path) -> tuple[int, str, str]:
+    p = subprocess.run([str(path)], cwd=ROOT, text=True, capture_output=True, timeout=300)
+    return p.returncode, p.stdout, p.stderr
+
+def main() -> int:
+    results: dict[str, bool] = {}
+    errors: list[str] = []
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    names = manifest.get("tools", [])
+    results["manifest_count"] = manifest.get("tool_count") == 83 and len(names) == 83 and len(set(names)) == 83
+    if not results["manifest_count"]: errors.append("AIRI_TOOL_MANIFEST.json is not exactly 83 unique tools")
+    try:
+        status = req("/status")
+        results["status"] = status.get("ok") is True
+        results["gui"] = status.get("gui_available") is True and status.get("resolution") == "1280x800"
+    except Exception as exc:
+        errors.append(f"/status failed: {exc}")
+        results["status"] = results["gui"] = False
+    try:
+        ready = req("/ready")
+        checks = ready.get("checks", {})
+        results["ready"] = ready.get("ready") is True and all(checks.get(k) is True for k in ("status", "gui", "browser", "mcp", "source_match"))
+        if not results["ready"]: errors.append(f"/ready failed: {ready}")
+    except Exception as exc:
+        errors.append(f"/ready failed: {exc}")
+        results["ready"] = False
+    try:
+        tools_payload = req("/tools")
+        get_specs = tools_payload.get("tools", [])
+        get_names = [item.get("name") for item in get_specs]
+        get_schemas_ok = all(isinstance(item.get("inputSchema"), dict) and item["inputSchema"].get("type") == "object" for item in get_specs)
+        results["http_tools"] = tools_payload.get("tool_count") == 83 and get_names == names and get_schemas_ok
+        if not results["http_tools"]: errors.append("GET /tools does not exactly match the manifest or lacks schemas")
+    except Exception as exc:
+        errors.append(f"/tools failed: {exc}")
+        results["http_tools"] = False
+    try:
+        init = req("/mcp", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        results["mcp_initialize"] = init.get("result", {}).get("serverInfo", {}).get("version") == manifest.get("runtime_version")
+    except Exception as exc:
+        errors.append(f"MCP initialize failed: {exc}")
+        results["mcp_initialize"] = False
+    try:
+        listing = req("/mcp", {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+        mcp_specs = listing.get("result", {}).get("tools", [])
+        mcp_names = [item.get("name") for item in mcp_specs]
+        mcp_schemas_ok = all(isinstance(item.get("inputSchema"), dict) and item["inputSchema"].get("type") == "object" for item in mcp_specs)
+        results["mcp_tools_list"] = len(mcp_specs) == 83 and mcp_names == names and mcp_schemas_ok
+        if not results["mcp_tools_list"]: errors.append("MCP tools/list does not exactly match the manifest or lacks schemas")
+    except Exception as exc:
+        errors.append(f"MCP tools/list failed: {exc}")
+        results["mcp_tools_list"] = False
+    try:
+        call = req("/mcp", {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "computer_status", "arguments": {}}})
+        structured = call.get("result", {}).get("structuredContent", {})
+        results["mcp_computer_status"] = structured.get("ok") is True
+        if not results["mcp_computer_status"]: errors.append(f"MCP computer_status failed: {call}")
+    except Exception as exc:
+        errors.append(f"MCP computer_status failed: {exc}")
+        results["mcp_computer_status"] = False
+    for key, script in (("airi_selftest", ROOT / "scripts" / "airi-selftest"), ("coding_selftest", ROOT / "scripts" / "airi-coding-selftest")):
+        try:
+            code, stdout, stderr = run_script(script)
+            results[key] = code == 0
+            if not results[key]: errors.append(f"{script.name} failed\n{stdout[-3000:]}\n{stderr[-3000:]}")
+        except Exception as exc:
+            results[key] = False
+            errors.append(f"{script.name} failed: {exc}")
+    results["runtime_contract"] = all(results.values())
+    print(json.dumps({"results": results, "errors": errors}, indent=2, sort_keys=True))
+    print(f"AIRI_RUNTIME_ALL= {'True' if results['runtime_contract'] else 'False'}")
+    return 0 if results["runtime_contract"] else 1
+
+if __name__ == "__main__":
+    raise SystemExit(main())
