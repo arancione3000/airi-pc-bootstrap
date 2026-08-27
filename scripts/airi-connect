@@ -2,7 +2,6 @@
 set -eu
 BASE=/home/user/airi
 REPO=https://github.com/arancione3000/airi-pc-bootstrap/archive/refs/heads/main.tar.gz
-
 bootstrap_runtime() {
   mkdir -p /home/user
   rm -rf "$BASE" /tmp/airi-connect-bootstrap
@@ -17,9 +16,8 @@ bootstrap_runtime() {
 if [ ! -x "$BASE/computer/start.sh" ]; then
   bootstrap_runtime
 fi
-
 chmod +x "$BASE"/scripts/airi-* "$BASE"/computer/start.sh 2>/dev/null || true
 "$BASE/scripts/airi-next-session"
-if [ -x "$BASE/scripts/airi-tunnel-supervisor" ]; then
-  "$BASE/scripts/airi-tunnel-supervisor" >/dev/null 2>&1 &
+if [ -x "$BASE/scripts/airi-tailscale-supervisor" ]; then
+  "$BASE/scripts/airi-tailscale-supervisor" >/dev/null 2>&1 &
 fi

@@ -1,0 +1,90 @@
+#!/bin/sh
+set -eu
+
+BASE=/home/user/airi
+STATE="$BASE/.ai/state/tailscale"
+LOG="$BASE/logs/tailscale.log"
+STATUSFILE="$STATE/status.json"
+URLFILE="$STATE/url"
+PIDFILE="$STATE/pid"
+INTERVAL="${AIRI_TAILSCALE_INTERVAL:-15}"
+LOCAL="${AIRI_TAILSCALE_TARGET:-127.0.0.1:9010}"
+
+mkdir -p "$STATE" "$BASE/logs"
+
+write_status() {
+  status=$1
+  url=${2:-}
+  printf '{"status":"%s","url":"%s","updated_at":%s}\n' "$status" "$url" "$(date +%s)" >"$STATUSFILE"
+}
+
+pid_alive() {
+  [ -s "$PIDFILE" ] || return 1
+  pid=$(cat "$PIDFILE" 2>/dev/null || true)
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+get_dns_name() {
+  tailscale status --json 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); s=d.get("Self",{}); print((s.get("DNSName") or "").rstrip("."))' 2>/dev/null || true
+}
+
+funnel_configured() {
+  tailscale funnel status >/dev/null 2>&1
+}
+
+health_check() {
+  url=$(cat "$URLFILE" 2>/dev/null || true)
+  [ -n "$url" ] || return 1
+  curl -fsS --max-time 8 -H 'X-Airi-PC-Health: 1' "$url/status" >/dev/null 2>&1
+  curl -fsS --max-time 8 -H 'X-Airi-PC-Health: 1' "$url/mcp" >/dev/null 2>&1 || true
+}
+
+start_funnel() {
+  write_status "starting" ""
+  if ! command -v tailscale >/dev/null 2>&1; then
+    write_status "tailscale_missing" ""
+    echo AIRI_PC_TAILSCALE_MISSING >&2
+    return 1
+  fi
+  if ! tailscale status >/dev/null 2>&1; then
+    write_status "tailscale_not_authenticated" ""
+    echo AIRI_PC_TAILSCALE_LOGIN_REQUIRED >&2
+    return 1
+  fi
+  dns=$(get_dns_name)
+  [ -n "$dns" ] || { write_status "dns_unavailable" ""; return 1; }
+  if ! funnel_configured; then
+    tailscale funnel --bg "$LOCAL" >>"$LOG" 2>&1 || {
+      write_status "funnel_start_failed" ""
+      return 1
+    }
+  fi
+  url="https://$dns"
+  printf '%s\n' "$url" >"$URLFILE"
+  write_status "online" "$url"
+  echo "$url"
+}
+
+stop_supervisor() {
+  rm -f "$PIDFILE"
+}
+
+cleanup() { stop_supervisor; }
+trap cleanup EXIT INT TERM HUP
+
+if pid_alive; then
+  exit 0
+fi
+echo $$ >"$PIDFILE"
+
+while :; do
+  if health_check; then
+    write_status "online" "$(cat "$URLFILE" 2>/dev/null || true)"
+  else
+    if ! start_funnel >/dev/null 2>&1; then
+      write_status "degraded" "$(cat "$URLFILE" 2>/dev/null || true)"
+    fi
+  fi
+  sleep "$INTERVAL"
+done
