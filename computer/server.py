@@ -497,8 +497,13 @@ def _research_with_browser(req: Dict[str,Any]):
     opened=browser().open(search_url,'domcontentloaded')
     if not opened.get('ok'):
         return {'ok':False,'topic':topic,'sources':[],'errors':[{'url':search_url,'error':opened.get('error','browser search failed')}],'source_count':0}
-    discovered=[x['url'] for x in browser().links(max_sources*3)]
-    return research(topic, discovered[:max_sources], max_sources)
+    discovered=[]; seen=set()
+    for item in browser().links(max_sources*4):
+        url=item.get('url','')
+        if not url.startswith(('http://','https://')) or url in seen: continue
+        seen.add(url); discovered.append(url)
+        if len(discovered)>=max_sources: break
+    return research(topic, discovered, max_sources)
 
 @app.post('/research')
 def research_endpoint(req: Dict[str,Any]): return _research_with_browser(req)
