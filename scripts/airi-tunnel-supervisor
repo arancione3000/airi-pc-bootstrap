@@ -1,0 +1,100 @@
+#!/bin/sh
+set -eu
+
+BASE=/home/user/airi
+STATE="$BASE/.ai/state/tunnel"
+LOG="$BASE/logs/tunnel.log"
+PIDFILE="$STATE/pid"
+URLFILE="$STATE/url"
+STATUSFILE="$STATE/status.json"
+INTERVAL="${AIRI_TUNNEL_INTERVAL:-10}"
+FAILS=0
+
+mkdir -p "$STATE" "$BASE/logs"
+
+pid_alive() {
+  [ -s "$PIDFILE" ] || return 1
+  pid=$(cat "$PIDFILE" 2>/dev/null || true)
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+write_status() {
+  status=$1
+  url=${2:-}
+  printf '{"status":"%s","url":"%s","updated_at":%s}\n' "$status" "$url" "$(date +%s)" >"$STATUSFILE"
+}
+
+extract_url() {
+  grep -Eo 'https://[^[:space:]]+run\.pinggy-free\.link' "$LOG" 2>/dev/null | tail -n1 || true
+}
+
+start_tunnel() {
+  rm -f "$PIDFILE" "$URLFILE"
+  : >"$LOG"
+  write_status "starting" ""
+  if ! command -v ssh >/dev/null 2>&1; then
+    write_status "error" ""
+    echo AIRI_PC_TUNNEL_SSH_MISSING >&2
+    return 1
+  fi
+  ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      -o ServerAliveInterval=20 -o ServerAliveCountMax=3 \
+      -p 443 -R0:127.0.0.1:9010 free.pinggy.io \
+      >>"$LOG" 2>&1 &
+  echo $! >"$PIDFILE"
+  for _ in $(seq 1 20); do
+    url=$(extract_url)
+    if [ -n "$url" ]; then
+      printf '%s\n' "$url" >"$URLFILE"
+      write_status "online" "$url"
+      return 0
+    fi
+    if ! pid_alive; then
+      write_status "dead" ""
+      return 1
+    fi
+    sleep 1
+  done
+  write_status "online_unknown_url" ""
+  return 0
+}
+
+stop_tunnel() {
+  if [ -s "$PIDFILE" ]; then
+    pid=$(cat "$PIDFILE" 2>/dev/null || true)
+    [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+  fi
+  rm -f "$PIDFILE"
+}
+
+health_url() {
+  [ -s "$URLFILE" ] || return 1
+  url=$(cat "$URLFILE")
+  curl -fsS --max-time 8 -H 'X-Pinggy-No-Screen: 1' "$url/status" >/dev/null 2>&1
+}
+
+cleanup() {
+  rm -f "$PIDFILE"
+}
+trap cleanup EXIT INT TERM HUP
+
+if ! pid_alive; then
+  start_tunnel || true
+fi
+
+while :; do
+  if pid_alive && health_url; then
+    FAILS=0
+  else
+    FAILS=$((FAILS + 1))
+  fi
+
+  if [ "$FAILS" -ge 3 ]; then
+    write_status "recovering" "$(cat "$URLFILE" 2>/dev/null || true)"
+    stop_tunnel
+    start_tunnel || true
+    FAILS=0
+  fi
+  sleep "$INTERVAL"
+done
