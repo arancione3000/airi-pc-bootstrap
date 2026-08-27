@@ -74,7 +74,18 @@ if [ -x "$BASE/scripts/airi-watchdog" ]; then
   "$BASE/scripts/airi-watchdog" >/dev/null 2>&1 &
 fi
 
+# Keep Pinggy under supervision across the current runtime. The hostname may
+# change, so the current endpoint is written to a machine-readable manifest.
+if [ -x "$BASE/scripts/airi-tunnel-supervisor" ]; then
+  if ! pgrep -f '[a]iri-tunnel-supervisor' >/dev/null 2>&1; then
+    "$BASE/scripts/airi-tunnel-supervisor" >/dev/null 2>&1 &
+  fi
+fi
+
 cat /tmp/airi-next-session-status.json
+if [ -f "$BASE/.ai/state/airi-endpoint.json" ]; then
+  cat "$BASE/.ai/state/airi-endpoint.json"
+fi
 "$BASE/scripts/airi-control" status
 "$BASE/scripts/airi-control" browser-status
 "$BASE/scripts/airi-control" browser-state

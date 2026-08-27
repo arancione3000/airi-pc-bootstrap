@@ -1,0 +1,42 @@
+#!/bin/sh
+set -eu
+BASE=/home/user/airi
+
+"$BASE/scripts/airi-next-session"
+
+echo '=== AIRI-PC CONNECTION MANIFEST ==='
+if [ -f "$BASE/.ai/state/airi-endpoint.json" ]; then
+  cat "$BASE/.ai/state/airi-endpoint.json"
+else
+  echo '{"url":"","local":"http://127.0.0.1:9010","mcp":"","status":"no_endpoint_yet"}'
+fi
+
+echo '=== PUBLIC MCP CHECK ==='
+URL=$(python3 - <<'PY'
+import json
+from pathlib import Path
+p=Path('/home/user/airi/.ai/state/airi-endpoint.json')
+try:
+    print(json.loads(p.read_text()).get('mcp',''))
+except Exception:
+    print('')
+PY
+)
+if [ -n "$URL" ]; then
+  if curl -fsS --max-time 10 -H 'X-Pinggy-No-Screen: 1' -X POST "$URL" \
+      -H 'Content-Type: application/json' \
+      --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' >/tmp/airi-mcp-tools.json; then
+    python3 - <<'PY'
+import json
+p='/tmp/airi-mcp-tools.json'
+d=json.load(open(p))
+t=d.get('result',{}).get('tools',[])
+print('MCP_TOOLS=%d' % len(t))
+print('MCP_OK=%s' % bool(t))
+PY
+  else
+    echo 'MCP_OK=false'
+  fi
+else
+  echo 'MCP_OK=false'
+fi

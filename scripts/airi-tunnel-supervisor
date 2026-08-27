@@ -29,6 +29,12 @@ extract_url() {
   grep -Eo 'https://[^[:space:]]+run\.pinggy-free\.link' "$LOG" 2>/dev/null | tail -n1 || true
 }
 
+write_manifest() {
+  url=${1:-$(cat "$URLFILE" 2>/dev/null || true)}
+  mkdir -p "$BASE/.ai/state"
+  printf '{"url":"%s","local":"http://127.0.0.1:9010","mcp":"%s/mcp","updated_at":%s}\n' "$url" "$url" "$(date +%s)" > "$BASE/.ai/state/airi-endpoint.json"
+}
+
 start_tunnel() {
   rm -f "$PIDFILE" "$URLFILE"
   : >"$LOG"
@@ -48,6 +54,7 @@ start_tunnel() {
     if [ -n "$url" ]; then
       printf '%s\n' "$url" >"$URLFILE"
       write_status "online" "$url"
+      write_manifest "$url"
       return 0
     fi
     if ! pid_alive; then
@@ -57,6 +64,7 @@ start_tunnel() {
     sleep 1
   done
   write_status "online_unknown_url" ""
+  write_manifest ""
   return 0
 }
 
@@ -86,6 +94,7 @@ fi
 while :; do
   if pid_alive && health_url; then
     FAILS=0
+    write_manifest
   else
     FAILS=$((FAILS + 1))
   fi
