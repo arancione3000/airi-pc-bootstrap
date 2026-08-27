@@ -1,8 +1,8 @@
-import base64, io, os, re, subprocess, time, difflib, threading, atexit, urllib.parse
+import base64, io, os, re, subprocess, time, difflib, threading, atexit, urllib.parse, secrets, hashlib, json
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field
 from PIL import Image, ImageGrab, ImageChops
@@ -34,11 +34,113 @@ AIRI_MCP_TOKEN = _mcp_env_token or (_mcp_file.read_text().strip() if _mcp_file.e
 AIRI_BOOTSTRAP_SHA = os.environ.get('AIRI_BOOTSTRAP_SHA', '').strip()
 
 @app.middleware('http')
-async def mcp_auth_middleware(request, call_next):
+async def mcp_auth_middleware(request: Request, call_next):
     if AIRI_MCP_TOKEN and request.url.path == '/mcp':
         auth = request.headers.get('authorization', '')
         if auth != f'Bearer {AIRI_MCP_TOKEN}':
             return JSONResponse(status_code=401, content={'error': 'unauthorized'})
+    return await call_next(request)
+
+# Minimal OAuth 2.0 + PKCE for the remote MCP connector.
+OAUTH_STATE = AI / 'state' / 'oauth.json'
+OAUTH_LOCK = threading.RLock()
+
+def _oauth_load():
+    try:
+        return json.loads(OAUTH_STATE.read_text(encoding='utf-8'))
+    except Exception:
+        return {'clients': {}, 'codes': {}, 'tokens': {}}
+
+def _oauth_save(data):
+    OAUTH_STATE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = OAUTH_STATE.with_suffix('.tmp')
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding='utf-8')
+    tmp.replace(OAUTH_STATE)
+
+def _oauth_redirect_ok(uri):
+    try:
+        u=urllib.parse.urlparse(uri)
+        return u.scheme == 'https' and u.netloc == 'chatgpt.com' and u.path.startswith('/connector/oauth/')
+    except Exception:
+        return False
+
+def _pkce(verifier):
+    return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
+
+def _oauth_token_ok(token):
+    if not token:
+        return False
+    with OAUTH_LOCK:
+        data=_oauth_load(); row=data.get('tokens',{}).get(token)
+        if not row:
+            return False
+        if row.get('expires_at',0) <= time.time():
+            data['tokens'].pop(token,None); _oauth_save(data); return False
+        return True
+
+@app.get('/.well-known/oauth-authorization-server')
+async def oauth_metadata(request: Request):
+    base=str(request.base_url).rstrip('/')
+    return {'issuer':base,'authorization_endpoint':base+'/oauth/authorize','token_endpoint':base+'/oauth/token','registration_endpoint':base+'/oauth/register','response_types_supported':['code'],'grant_types_supported':['authorization_code'],'code_challenge_methods_supported':['S256'],'token_endpoint_auth_methods_supported':['none']}
+
+@app.get('/.well-known/oauth-protected-resource')
+async def oauth_resource_metadata(request: Request):
+    base=str(request.base_url).rstrip('/')
+    return {'resource':base+'/mcp','authorization_servers':[base]}
+
+@app.post('/oauth/register')
+async def oauth_register(request: Request):
+    body=await request.json(); uris=body.get('redirect_uris') or []
+    if not uris or not all(_oauth_redirect_ok(u) for u in uris):
+        return JSONResponse(status_code=400, content={'error':'invalid_redirect_uri'})
+    cid=body.get('client_id') or 'airi-'+secrets.token_urlsafe(18)
+    with OAUTH_LOCK:
+        data=_oauth_load(); data.setdefault('clients',{})[cid]={'redirect_uris':uris}; _oauth_save(data)
+    return {'client_id':cid,'redirect_uris':uris,'token_endpoint_auth_method':'none'}
+
+@app.get('/oauth/authorize')
+async def oauth_authorize(request: Request):
+    q=dict(request.query_params); cid=q.get('client_id',''); redirect_uri=q.get('redirect_uri',''); challenge=q.get('code_challenge','')
+    if q.get('response_type')!='code' or q.get('code_challenge_method')!='S256' or not challenge or not _oauth_redirect_ok(redirect_uri):
+        return JSONResponse(status_code=400, content={'error':'invalid_request'})
+    with OAUTH_LOCK:
+        data=_oauth_load(); client=data.setdefault('clients',{}).get(cid)
+        if client is None:
+            data['clients'][cid]={'redirect_uris':[redirect_uri]}
+        elif redirect_uri not in client.get('redirect_uris',[]):
+            return JSONResponse(status_code=400, content={'error':'redirect_uri_mismatch'})
+        ticket=secrets.token_urlsafe(24)
+        data.setdefault('codes',{})['approval:'+ticket]={'client_id':cid,'redirect_uri':redirect_uri,'code_challenge':challenge,'scope':q.get('scope','mcp'),'state':q.get('state',''),'created_at':time.time()}
+        _oauth_save(data)
+    approve_url=str(request.base_url).rstrip('/')+'/oauth/authorize/approve?ticket='+urllib.parse.quote(ticket,safe='')
+    html='<!doctype html><html><body style="font-family:sans-serif;max-width:640px;margin:10vh auto;padding:24px"><h2>Airi-PC authorization</h2><p>Allow ChatGPT to access this Airi-PC instance?</p><form method="post" action="'+approve_url+'"><button style="font-size:18px;padding:12px 24px">Approve</button></form></body></html>'
+    return HTMLResponse(html)
+
+@app.post('/oauth/authorize/approve')
+async def oauth_approve(request: Request):
+    q=urllib.parse.parse_qs(urllib.parse.urlparse(str(request.url)).query); ticket=(q.get('ticket') or [''])[0]
+    with OAUTH_LOCK:
+        data=_oauth_load(); pending=data.get('codes',{}).pop('approval:'+ticket,None)
+        if not pending: return JSONResponse(status_code=400, content={'error':'invalid_ticket'})
+        code=secrets.token_urlsafe(32); data.setdefault('codes',{})[code]=pending; _oauth_save(data)
+    sep='&' if '?' in pending['redirect_uri'] else '?'
+    red=pending['redirect_uri']+sep+'code='+urllib.parse.quote(code,safe='')+'&state='+urllib.parse.quote(pending.get('state',''),safe='')
+    return HTMLResponse('<html><body><script>location.replace('+json.dumps(red)+')</script><a href="'+red+'">Continue</a></body></html>')
+
+@app.post('/oauth/token')
+async def oauth_token(request: Request):
+    body=urllib.parse.parse_qs((await request.body()).decode('utf-8')); code=(body.get('code') or [''])[0]; verifier=(body.get('code_verifier') or [''])[0]; grant=(body.get('grant_type') or [''])[0]
+    with OAUTH_LOCK:
+        data=_oauth_load(); row=data.get('codes',{}).pop(code,None)
+        if not row or grant!='authorization_code' or time.time()-row.get('created_at',0)>600 or _pkce(verifier)!=row.get('code_challenge'):
+            return JSONResponse(status_code=400, content={'error':'invalid_grant'})
+        token=secrets.token_urlsafe(32); data.setdefault('tokens',{})[token]={'client_id':row['client_id'],'scope':row.get('scope','mcp'),'expires_at':time.time()+86400}; _oauth_save(data)
+    return {'access_token':token,'token_type':'Bearer','expires_in':86400,'scope':row.get('scope','mcp')}
+
+@app.middleware('http')
+async def mcp_auth_middleware(request: Request, call_next):
+    if request.url.path=='/mcp' and not _oauth_token_ok(request.headers.get('authorization','')[7:] if request.headers.get('authorization','').lower().startswith('bearer ') else ''):
+        return JSONResponse(status_code=401, content={'error':'unauthorized','authorization_uri':str(request.base_url).rstrip('/')+'/oauth/authorize'})
     return await call_next(request)
 
 DISPLAY = os.environ.get('DISPLAY', ':99')
