@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+BASE=/home/user/airi
+PIDFILE=/tmp/airi-pc-watchdog.pid
+INTERVAL="${AIRI_WATCHDOG_INTERVAL:-5}"
+
+is_running() {
+  [ -f "$PIDFILE" ] || return 1
+  pid=$(cat "$PIDFILE" 2>/dev/null || true)
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+if is_running; then
+  exit 0
+fi
+
+echo $$ > "$PIDFILE"
+trap 'rm -f "$PIDFILE"' EXIT INT TERM HUP
+mkdir -p "$BASE/logs"
+
+while :; do
+  healthy=0
+  if curl -fsS --max-time 3 http://127.0.0.1:9010/status >/dev/null 2>&1; then
+    healthy=1
+  fi
+  if [ "$healthy" -eq 0 ]; then
+    if [ -x "$BASE/computer/start.sh" ]; then
+      "$BASE/computer/start.sh" >>"$BASE/logs/watchdog.log" 2>&1 || true
+    fi
+  fi
+  sleep "$INTERVAL"
+done
