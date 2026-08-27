@@ -90,16 +90,21 @@ def persistence_status() -> dict[str, Any]:
     if head['returncode'] != 0 or remote['returncode'] != 0:
         return {'persistent': False, 'reason': 'git HEAD or origin unavailable', 'repo': str(repo)}
     remote_url = remote['stdout'].strip()
-    target_branch = branch['stdout'].strip() or 'main'
-    ls = _git("git ls-remote origin refs/heads/" + re.escape(target_branch), repo)
-    remote_sha = (ls['stdout'].split()[0] if ls['returncode'] == 0 and ls['stdout'].split() else None)
+    current_branch = branch['stdout'].strip() or 'main'
+    canonical_branch = os.environ.get('AIRI_CANONICAL_BRANCH', 'main').strip() or 'main'
+    ls = _git('git ls-remote origin refs/heads/' + canonical_branch, repo)
+    remote_sha = ls['stdout'].split()[0] if ls['returncode'] == 0 and ls['stdout'].split() else None
     local_sha = head['stdout'].strip()
-    return {
-        'persistent': bool(remote_sha and remote_sha == local_sha),
-        'repo': str(repo), 'branch': target_branch, 'local_sha': local_sha,
-        'remote_sha': remote_sha, 'origin': remote_url,
-        'reason': 'verified' if remote_sha == local_sha and remote_sha else ('remote verification failed' if remote_sha else ls['stderr'].strip() or 'remote unavailable'),
-    }
+    persistent = bool(current_branch == canonical_branch and remote_sha and remote_sha == local_sha)
+    if persistent:
+        reason = 'verified'
+    elif current_branch != canonical_branch:
+        reason = 'local branch is not canonical'
+    else:
+        reason = 'remote verification failed' if remote_sha else ls['stderr'].strip() or 'remote unavailable'
+    return {'persistent': persistent, 'repo': str(repo), 'branch': current_branch,
+            'canonical_branch': canonical_branch, 'local_sha': local_sha, 'remote_sha': remote_sha,
+            'origin': remote_url, 'reason': reason}
 
 
 def persist_current(message: str, branch: str | None = None, push: bool = True, scope: list[str] | None = None) -> dict[str, Any]:
@@ -158,16 +163,41 @@ def _fetch(url: str, timeout: int = 20) -> dict[str, Any]:
         return {'url': r.geturl(), 'title': ' '.join(parser.title_bits), 'text': body[:12000]}
 
 
+class _SearchParser(HTMLParser):
+    def __init__(self):
+        super().__init__(); self.items=[]; self._href=None; self._is_result=False; self._text=[]
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() != 'a': return
+        d=dict(attrs); href=d.get('href',''); cls=d.get('class','') or ''
+        if href and ('result__a' in cls or 'result-link' in cls):
+            self._href=href; self._is_result=True; self._text=[]
+    def handle_data(self, data):
+        if self._is_result: self._text.append(data)
+    def handle_endtag(self, tag):
+        if tag.lower() == 'a' and self._is_result:
+            href=urllib.parse.unquote(self._href or '')
+            m=re.search(r'uddg=([^&]+)', href)
+            if m: href=urllib.parse.unquote(m.group(1))
+            if href.startswith(('http://','https://')):
+                self.items.append({'url':href,'title':re.sub(r'\s+',' ',' '.join(self._text)).strip()})
+            self._href=None; self._is_result=False; self._text=[]
+
+
 def _search_web(query: str, limit: int) -> list[dict[str, str]]:
     q = urllib.parse.quote_plus(query)
     url = f'https://html.duckduckgo.com/html/?q={q}'
-    raw = _fetch(url, timeout=20)['text']
-    urls = []
-    for m in re.finditer(r'https?://[^\s<>\"\']+', raw):
-        u = m.group(0).rstrip(').,')
-        if 'duckduckgo.com' not in u and u not in urls: urls.append(u)
-        if len(urls) >= limit * 3: break
-    return [{'url': u} for u in urls[:limit]]
+    req=urllib.request.Request(url,headers={'User-Agent':'Airi-PC-Research/1.0'})
+    with urllib.request.urlopen(req,timeout=20) as r:
+        raw=r.read(2_000_000).decode(r.headers.get_content_charset() or 'utf-8',errors='replace')
+    parser=_SearchParser(); parser.feed(raw)
+    out=[]; seen=set()
+    for item in parser.items:
+        u=item['url']
+        if 'duckduckgo.com' in urllib.parse.urlparse(u).netloc: continue
+        if u in seen: continue
+        seen.add(u); out.append(item)
+        if len(out)>=limit: break
+    return out
 
 
 def research(topic: str, urls: list[str] | None = None, max_sources: int = 5) -> dict[str, Any]:

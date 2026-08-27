@@ -1,4 +1,4 @@
-import base64, io, os, subprocess, time, difflib, threading, atexit
+import base64, io, os, subprocess, time, difflib, threading, atexit, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 from pathlib import Path
@@ -155,6 +155,18 @@ class _BrowserManager:
             page=self._ensure(); text=page.locator('body').inner_text(timeout=5000); paragraphs=page.locator('p'); first=paragraphs.first.inner_text().strip() if paragraphs.count() else next((x.strip() for x in text.split('\\n') if x.strip()), '')
             return {'url':page.url,'title':page.title(),'text':text,'paragraphs':paragraphs.all_inner_texts() if paragraphs.count() else [],'first_paragraph':first}
         return self.call(_text)
+
+    def links(self, limit=20):
+        def _links():
+            page=self._ensure(); out=[]
+            for a in page.locator('a').all()[:100]:
+                try:
+                    href=a.get_attribute('href'); text=(a.inner_text() or '').strip()
+                    if href and href.startswith(('http://','https://')): out.append({'url':href,'title':text})
+                    if len(out)>=int(limit): break
+                except Exception: continue
+            return out
+        return self.call(_links)
 
     def close(self):
         try:
@@ -478,8 +490,18 @@ def decisions_endpoint(limit: int = 50): return decisions(limit)
 def persistence_status_endpoint(): return persistence_status()
 @app.post('/persistence/persist')
 def persistence_persist_endpoint(req: Dict[str,Any]): return persist_current(req['message'],req.get('branch'),req.get('push',True),req.get('scope'))
+def _research_with_browser(req: Dict[str,Any]):
+    topic=req['topic']; urls=req.get('urls'); max_sources=req.get('max_sources',5)
+    if urls: return research(topic, urls, max_sources)
+    search_url='https://html.duckduckgo.com/html/?q='+urllib.parse.quote_plus(topic)
+    opened=browser().open(search_url,'domcontentloaded')
+    if not opened.get('ok'):
+        return {'ok':False,'topic':topic,'sources':[],'errors':[{'url':search_url,'error':opened.get('error','browser search failed')}],'source_count':0}
+    discovered=[x['url'] for x in browser().links(max_sources*3)]
+    return research(topic, discovered[:max_sources], max_sources)
+
 @app.post('/research')
-def research_endpoint(req: Dict[str,Any]): return research(req['topic'],req.get('urls'),req.get('max_sources',5))
+def research_endpoint(req: Dict[str,Any]): return _research_with_browser(req)
 @app.post('/cleanup/prune-backups')
 def cleanup_prune_backups_endpoint(req: Dict[str,Any] = {}):
     from cleanup import prune_backups
@@ -569,7 +591,7 @@ def mcp(req: Dict[str,Any]):
             elif path=='decisions': result=decisions(payload.get('limit',50))
             elif path=='persistence_status': result=persistence_status()
             elif path=='persist': result=persist_current(payload['message'],payload.get('branch'),payload.get('push',True))
-            elif path=='research': result=research(payload['topic'],payload.get('urls'),payload.get('max_sources',5))
+            elif path=='research': result=_research_with_browser(payload)
             elif path=='backup_prune':
                 from cleanup import prune_backups
                 result=prune_backups(payload.get('max_entries',50),payload.get('max_age_days',30),payload.get('dry_run',True))
