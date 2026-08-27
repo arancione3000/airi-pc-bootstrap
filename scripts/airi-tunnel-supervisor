@@ -8,7 +8,11 @@ PIDFILE="$STATE/pid"
 URLFILE="$STATE/url"
 STATUSFILE="$STATE/status.json"
 LOCKDIR="$STATE/supervisor.lock"
-INTERVAL="${AIRI_TUNNEL_INTERVAL:-10}"
+# Pinggy Free advertises a 60-minute tunnel lifetime. Rotate proactively
+# before expiry. Override for testing or a different policy.
+ROTATE_SECONDS="${AIRI_TUNNEL_ROTATE_SECONDS:-3000}"
+CHECK_INTERVAL="${AIRI_TUNNEL_INTERVAL:-10}"
+GRACE_SECONDS="${AIRI_TUNNEL_GRACE_SECONDS:-15}"
 FAILS=0
 
 mkdir -p "$STATE" "$BASE/logs"
@@ -35,8 +39,9 @@ write_status() {
   printf '{"status":"%s","url":"%s","updated_at":%s}\n' "$status" "$url" "$(date +%s)" >"$STATUSFILE"
 }
 
-extract_url() {
-  grep -Eo 'https://[^[:space:]]+run\.pinggy-free\.link' "$LOG" 2>/dev/null | tail -n1 || true
+extract_url_from() {
+  file=$1
+  grep -Eo 'https://[^[:space:]]+run\.pinggy-free\.link' "$file" 2>/dev/null | tail -n1 || true
 }
 
 write_manifest() {
@@ -45,59 +50,96 @@ write_manifest() {
   printf '{"url":"%s","local":"http://127.0.0.1:9010","mcp":"%s/mcp","updated_at":%s}\n' "$url" "$url" "$(date +%s)" > "$BASE/.ai/state/airi-endpoint.json"
 }
 
-start_tunnel() {
-  if pid_alive && health_url; then
-    write_manifest
-    return 0
-  fi
-  if [ -s "$PIDFILE" ]; then
-    oldpid=$(cat "$PIDFILE" 2>/dev/null || true)
-    [ -z "$oldpid" ] || kill "$oldpid" 2>/dev/null || true
-  fi
-  rm -f "$PIDFILE" "$URLFILE"
-  : >"$LOG"
-  write_status "starting" ""
-  if ! command -v ssh >/dev/null 2>&1; then
-    write_status "error" ""
-    echo AIRI_PC_TUNNEL_SSH_MISSING >&2
-    return 1
-  fi
+health_url_value() {
+  url=$1
+  [ -n "$url" ] || return 1
+  curl -fsS --max-time 8 -H 'X-Pinggy-No-Screen: 1' "$url/status" >/dev/null 2>&1
+}
+
+start_candidate() {
+  out=$1
+  : >"$out"
   ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
       -o ServerAliveInterval=20 -o ServerAliveCountMax=3 \
       -p 443 -R0:127.0.0.1:9010 free.pinggy.io \
-      >>"$LOG" 2>&1 &
-  echo $! >"$PIDFILE"
+      >>"$out" 2>&1 &
+  echo $!
+}
+
+candidate_ready() {
+  file=$1
   for _ in $(seq 1 20); do
-    url=$(extract_url)
-    if [ -n "$url" ]; then
-      printf '%s\n' "$url" >"$URLFILE"
-      write_status "online" "$url"
-      write_manifest "$url"
+    url=$(extract_url_from "$file")
+    if [ -n "$url" ] && health_url_value "$url"; then
+      printf '%s\n' "$url"
       return 0
-    fi
-    if ! pid_alive; then
-      write_status "dead" ""
-      return 1
     fi
     sleep 1
   done
-  write_status "online_unknown_url" ""
-  write_manifest ""
-  return 0
+  return 1
 }
 
-stop_tunnel() {
-  if [ -s "$PIDFILE" ]; then
-    pid=$(cat "$PIDFILE" 2>/dev/null || true)
-    [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+kill_pid() {
+  pid=$1
+  [ -n "$pid" ] || return 0
+  kill "$pid" 2>/dev/null || true
+  for _ in $(seq 1 5); do
+    kill -0 "$pid" 2>/dev/null || return 0
+    sleep 1
+  done
+  kill -9 "$pid" 2>/dev/null || true
+}
+
+start_initial() {
+  write_status "starting" ""
+  tmp="$STATE/tunnel.$$.log"
+  pid=$(start_candidate "$tmp")
+  url=$(candidate_ready "$tmp" || true)
+  if [ -n "$url" ]; then
+    mv "$tmp" "$LOG"
+    printf '%s\n' "$pid" >"$PIDFILE"
+    printf '%s\n' "$url" >"$URLFILE"
+    write_status "online" "$url"
+    write_manifest "$url"
+    echo "$url" >"$STATE/last_start_url"
+    date +%s >"$STATE/started_at"
+    return 0
   fi
-  rm -f "$PIDFILE"
+  kill_pid "$pid"
+  rm -f "$tmp"
+  write_status "error" ""
+  return 1
 }
 
-health_url() {
-  [ -s "$URLFILE" ] || return 1
-  url=$(cat "$URLFILE")
-  curl -fsS --max-time 8 -H 'X-Pinggy-No-Screen: 1' "$url/status" >/dev/null 2>&1
+rotate_tunnel() {
+  oldpid=$(cat "$PIDFILE" 2>/dev/null || true)
+  oldurl=$(cat "$URLFILE" 2>/dev/null || true)
+  write_status "rotating" "$oldurl"
+  tmp="$STATE/tunnel.$$.next.log"
+  newpid=$(start_candidate "$tmp")
+  newurl=$(candidate_ready "$tmp" || true)
+  if [ -z "$newurl" ]; then
+    kill_pid "$newpid"
+    rm -f "$tmp"
+    write_status "online" "$oldurl"
+    write_manifest "$oldurl"
+    return 1
+  fi
+
+  # Publish the new endpoint only after it has passed a real HTTP health check.
+  printf '%s\n' "$newpid" >"$PIDFILE"
+  printf '%s\n' "$newurl" >"$URLFILE"
+  mv "$tmp" "$LOG"
+  write_manifest "$newurl"
+  write_status "online" "$newurl"
+  date +%s >"$STATE/started_at"
+
+  # Brief overlap prevents a hard cutover while callers pick up the new host.
+  sleep "$GRACE_SECONDS"
+  if [ "$oldpid" != "$newpid" ]; then
+    kill_pid "$oldpid"
+  fi
+  return 0
 }
 
 cleanup() {
@@ -106,23 +148,26 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM HUP
 
-if ! pid_alive; then
-  start_tunnel || true
+if ! pid_alive || ! health_url_value "$(cat "$URLFILE" 2>/dev/null || true)"; then
+  start_initial || true
 fi
 
 while :; do
-  if pid_alive && health_url; then
+  now=$(date +%s)
+  started=$(cat "$STATE/started_at" 2>/dev/null || echo "$now")
+  age=$((now - started))
+
+  if pid_alive && health_url_value "$(cat "$URLFILE" 2>/dev/null || true)"; then
     FAILS=0
-    write_manifest
   else
     FAILS=$((FAILS + 1))
   fi
 
-  if [ "$FAILS" -ge 3 ]; then
-    write_status "recovering" "$(cat "$URLFILE" 2>/dev/null || true)"
-    stop_tunnel
-    start_tunnel || true
+  if [ "$age" -ge "$ROTATE_SECONDS" ] || [ "$FAILS" -ge 3 ]; then
+    rotate_tunnel || true
     FAILS=0
+  else
+    write_manifest
   fi
-  sleep "$INTERVAL"
+  sleep "$CHECK_INTERVAL"
 done
