@@ -4,6 +4,24 @@ ROOT=/home/user/airi
 VENV="$ROOT/.venv"
 mkdir -p "$ROOT/logs"
 export DISPLAY=":${DISPLAY_NUM:-99}"
+SERVER_PID_FILE="$ROOT/logs/computer-server.pid"
+RUNTIME_SHA_FILE="$ROOT/.ai/.runtime_source_sha"
+
+stop_server() {
+  if [ -f "$SERVER_PID_FILE" ]; then
+    PID=$(cat "$SERVER_PID_FILE" 2>/dev/null || true)
+    [ -z "$PID" ] || kill "$PID" 2>/dev/null || true
+    rm -f "$SERVER_PID_FILE"
+  fi
+  pkill -f 'uvicorn server:app --host 127\.0\.0\.1 --port 9010' 2>/dev/null || true
+}
+
+if [ "${AIRI_FORCE_RESTART:-0}" = "1" ]; then
+  stop_server
+  sleep 1
+fi
+if [ -f "$RUNTIME_SHA_FILE" ]; then export AIRI_BOOTSTRAP_SHA="$(cat "$RUNTIME_SHA_FILE")"; fi
+export AIRI_EXPECTED_SHA="${AIRI_EXPECTED_SHA:-${AIRI_BOOTSTRAP_SHA:-}}"
 
 if ! command -v python3 >/dev/null 2>&1; then
   sudo -n apt-get update >/dev/null 2>&1
@@ -64,6 +82,7 @@ fi
 if ! curl -fsS http://127.0.0.1:9010/status >/dev/null 2>&1; then
   cd "$ROOT/computer"
   nohup "$VENV/bin/uvicorn" server:app --host 127.0.0.1 --port 9010 >"$ROOT/logs/computer-server.log" 2>&1 &
+  echo $! > "$SERVER_PID_FILE"
   sleep 2
 fi
 

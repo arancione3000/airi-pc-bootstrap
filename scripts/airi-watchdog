@@ -19,15 +19,18 @@ echo $$ > "$PIDFILE"
 trap 'rm -f "$PIDFILE"' EXIT INT TERM HUP
 mkdir -p "$BASE/logs"
 
+FAILS=0
 while :; do
-  healthy=0
-  if curl -fsS --max-time 3 http://127.0.0.1:9010/status >/dev/null 2>&1; then
-    healthy=1
+  if curl -fsS --max-time 5 http://127.0.0.1:9010/ready >/dev/null 2>&1; then
+    FAILS=0
+  else
+    FAILS=$((FAILS + 1))
   fi
-  if [ "$healthy" -eq 0 ]; then
+  if [ "$FAILS" -ge 3 ]; then
     if [ -x "$BASE/computer/start.sh" ]; then
-      "$BASE/computer/start.sh" >>"$BASE/logs/watchdog.log" 2>&1 || true
+      AIRI_FORCE_RESTART=1 "$BASE/computer/start.sh" >>"$BASE/logs/watchdog.log" 2>&1 || true
     fi
+    FAILS=0
   fi
   sleep "$INTERVAL"
 done

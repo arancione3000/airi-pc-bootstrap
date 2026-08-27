@@ -28,7 +28,10 @@ from advanced import (health_check, checkpoint, recovery_read, recovery_finish, 
 
 # Optional remote MCP authentication. Local requests remain unchanged when the
 # token is unset; public deployments should set AIRI_MCP_TOKEN.
-AIRI_MCP_TOKEN = os.environ.get('AIRI_MCP_TOKEN', '').strip() or Path('/home/user/airi/.mcp_token').read_text().strip() if Path('/home/user/airi/.mcp_token').exists() else ''
+_mcp_env_token = os.environ.get('AIRI_MCP_TOKEN', '').strip()
+_mcp_file = Path('/home/user/airi/.mcp_token')
+AIRI_MCP_TOKEN = _mcp_env_token or (_mcp_file.read_text().strip() if _mcp_file.exists() else '')
+AIRI_BOOTSTRAP_SHA = os.environ.get('AIRI_BOOTSTRAP_SHA', '').strip()
 
 @app.middleware('http')
 async def mcp_auth_middleware(request, call_next):
@@ -389,9 +392,34 @@ def observe() -> Dict[str, Any]:
 def status():
     if gui_available():
         try:
-            img=screenshot_image(); return {'ok':True,'display':DISPLAY,'gui_available':True,'resolution':f'{img.width}x{img.height}','version':'2.0'}
+            img=screenshot_image(); return {'ok':True,'display':DISPLAY,'gui_available':True,'resolution':f'{img.width}x{img.height}','version':'2.0','source_sha':AIRI_BOOTSTRAP_SHA or None}
         except Exception: pass
-    return {'ok':True,'display':DISPLAY if gui_available() else None,'gui_available':False,'resolution':None,'version':'2.0','mode':'headless'}
+    return {'ok':True,'display':DISPLAY if gui_available() else None,'gui_available':False,'resolution':None,'version':'2.0','mode':'headless','source_sha':AIRI_BOOTSTRAP_SHA or None}
+
+@app.get('/ready')
+def ready():
+    checks = {'status': False, 'gui': False, 'browser': False, 'mcp': False, 'source_match': True}
+    try:
+        st = status(); checks['status'] = bool(st.get('ok')); checks['gui'] = bool(st.get('gui_available')) and st.get('resolution') == '1280x800'
+    except Exception as exc:
+        return JSONResponse(status_code=503, content={'ready': False, 'checks': checks, 'error': str(exc)})
+    try:
+        bs = browser().status(); checks['browser'] = bool(bs.get('available')) and bool(bs.get('open')) and not bs.get('error')
+    except Exception:
+        checks['browser'] = False
+    try:
+        names = tools()['tools']; checks['mcp'] = len(names) >= 20 and 'computer_status' in names and 'computer_browser_state' in names
+    except Exception:
+        checks['mcp'] = False
+    expected_sha = os.environ.get('AIRI_EXPECTED_SHA', '').strip()
+    if expected_sha and AIRI_BOOTSTRAP_SHA:
+        checks['source_match'] = AIRI_BOOTSTRAP_SHA == expected_sha
+    elif expected_sha and not AIRI_BOOTSTRAP_SHA:
+        checks['source_match'] = False
+    ready_now = all(checks.values())
+    payload = {'ready': ready_now, 'checks': checks, 'source_sha': AIRI_BOOTSTRAP_SHA or None}
+    return JSONResponse(status_code=200 if ready_now else 503, content=payload)
+
 
 @app.get('/screenshot')
 def screenshot():

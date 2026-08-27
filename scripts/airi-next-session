@@ -45,6 +45,9 @@ trap cleanup_memory_tmp EXIT INT TERM
 
 git -C "$BASE" fetch -q origin main || { echo AIRI_PC_GIT_FETCH_FAILED >&2; exit 6; }
 git -C "$BASE" reset -q --hard origin/main || { echo AIRI_PC_SOURCE_SYNC_FAILED >&2; exit 9; }
+CURRENT_SHA=$(git -C "$BASE" rev-parse HEAD)
+mkdir -p "$BASE/.ai"
+printf '%s\n' "$CURRENT_SHA" > "$BASE/.ai/.runtime_source_sha"
 
 if [ -s "$MEMORY_TMP" ]; then
   mkdir -p "$BASE/.ai"
@@ -53,12 +56,17 @@ fi
 
 chmod +x "$BASE"/scripts/airi-* "$BASE"/computer/start.sh 2>/dev/null || true
 
-# IMPORTANT: do not restart a healthy 9010 server. The running server owns the
-# in-memory browser/session state. Restart only when health is actually bad.
-if ! curl -fsS --max-time 3 http://127.0.0.1:9010/status >/dev/null 2>&1; then
-  "$BASE/computer/start.sh" >/tmp/airi-next-session-status.json 2>&1 || true
-else
+# Reuse only a runtime that is actually ready and running the current source revision.
+if curl -fsS --max-time 5 http://127.0.0.1:9010/ready >/dev/null 2>&1; then
   echo '{"status":"reused_existing_runtime","server":"127.0.0.1:9010"}' >/tmp/airi-next-session-status.json
+else
+  AIRI_FORCE_RESTART=1 AIRI_EXPECTED_SHA="$CURRENT_SHA" "$BASE/computer/start.sh" >/tmp/airi-next-session-status.json 2>&1 || true
+  READY=0
+  for _ in $(seq 1 20); do
+    if curl -fsS --max-time 3 http://127.0.0.1:9010/ready >/dev/null 2>&1; then READY=1; break; fi
+    sleep 1
+  done
+  if [ "$READY" -ne 1 ]; then echo AIRI_PC_RUNTIME_NOT_READY >&2; exit 10; fi
 fi
 
 # Start a detached watchdog once. It self-terminates only with the runtime.
