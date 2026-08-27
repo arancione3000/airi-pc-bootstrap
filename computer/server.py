@@ -82,6 +82,8 @@ def _oauth_token_ok(token):
 async def oauth_metadata(request: Request):
     proto=request.headers.get('x-forwarded-proto') or request.url.scheme
     host=request.headers.get('x-forwarded-host') or request.headers.get('host')
+    if host and host not in {'127.0.0.1:9010','localhost:9010'} and proto == 'http':
+        proto='https'
     base=f'{proto}://{host}'.rstrip('/')
     return {'issuer':base,'authorization_endpoint':base+'/oauth/authorize','token_endpoint':base+'/oauth/token','registration_endpoint':base+'/oauth/register','response_types_supported':['code'],'grant_types_supported':['authorization_code'],'code_challenge_methods_supported':['S256'],'token_endpoint_auth_methods_supported':['none']}
 
@@ -89,6 +91,8 @@ async def oauth_metadata(request: Request):
 async def oauth_resource_metadata(request: Request):
     proto=request.headers.get('x-forwarded-proto') or request.url.scheme
     host=request.headers.get('x-forwarded-host') or request.headers.get('host')
+    if host and host not in {'127.0.0.1:9010','localhost:9010'} and proto == 'http':
+        proto='https'
     base=f'{proto}://{host}'.rstrip('/')
     return {'resource':base+'/mcp','authorization_servers':[base]}
 
