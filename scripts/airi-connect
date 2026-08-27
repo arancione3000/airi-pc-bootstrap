@@ -19,4 +19,7 @@ if [ ! -x "$BASE/computer/start.sh" ]; then
 fi
 
 chmod +x "$BASE"/scripts/airi-* "$BASE"/computer/start.sh 2>/dev/null || true
-exec "$BASE/scripts/airi-next-session"
+"$BASE/scripts/airi-next-session"
+if [ -x "$BASE/scripts/airi-tunnel-supervisor" ]; then
+  "$BASE/scripts/airi-tunnel-supervisor" >/dev/null 2>&1 &
+fi

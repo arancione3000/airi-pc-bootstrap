@@ -12,7 +12,4 @@ if [ ! -f "$BASE/computer/start.sh" ]; then
   mv "$TOP" "$BASE"
 fi
 chmod +x "$BASE"/scripts/airi-* "$BASE"/computer/start.sh 2>/dev/null || true
-"$BASE/scripts/airi-connect"
-if [ -x "$BASE/scripts/airi-tunnel-supervisor" ]; then
-  "$BASE/scripts/airi-tunnel-supervisor" >/dev/null 2>&1 &
-fi
+exec "$BASE/scripts/airi-connect"
