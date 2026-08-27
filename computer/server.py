@@ -58,12 +58,22 @@ class _BrowserManager:
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='airi-playwright')
         self._pw = None
         self._browser = None
+        self._context = None
         self._page = None
         self._lock = threading.Lock()
         self.last_error = None
+        self.auth_profile = None
 
     def _run(self, fn, *args, **kwargs):
         return self.executor.submit(fn, *args, **kwargs).result()
+
+    def _auth_path(self):
+        if not self.auth_profile: return None
+        if not re.fullmatch(r'[A-Za-z0-9._-]{1,80}', self.auth_profile): raise ValueError('invalid auth profile name')
+        path=AI/'auth'/f'{self.auth_profile}.json'; path.parent.mkdir(parents=True,exist_ok=True)
+        try: path.parent.chmod(0o700)
+        except OSError: pass
+        return path
 
     def _ensure(self):
         global _BROWSER, _PAGE, _BROWSER_ERROR
@@ -83,7 +93,9 @@ class _BrowserManager:
             for _attempt in range(3):
                 try:
                     self._browser = self._pw.chromium.launch(headless=headless, args=launch_args, timeout=15000)
-                    self._page = self._browser.new_page(viewport={'width':1280,'height':800})
+                    auth_file = self._auth_path() if self.auth_profile else None
+                    self._context = self._browser.new_context(viewport={'width':1280,'height':800}, storage_state=str(auth_file) if auth_file and auth_file.exists() else None)
+                    self._page = self._context.new_page()
                     self.last_error = None
                     _BROWSER, _PAGE, _BROWSER_ERROR = self._browser, self._page, None
                     return self._page
@@ -98,16 +110,16 @@ class _BrowserManager:
     def _close_worker(self):
         global _BROWSER, _PAGE
         try:
-            if self._page is not None:
-                self._page.close()
-        except Exception:
-            pass
+            if self._page is not None: self._page.close()
+        except Exception: pass
         try:
-            if self._browser is not None:
-                self._browser.close()
-        except Exception:
-            pass
+            if self._context is not None: self._context.close()
+        except Exception: pass
+        try:
+            if self._browser is not None: self._browser.close()
+        except Exception: pass
         self._page = None
+        self._context = None
         self._browser = None
         _BROWSER, _PAGE = None, None
 
@@ -137,10 +149,43 @@ class _BrowserManager:
     def open(self, url, wait_until='domcontentloaded'):
         def _open():
             try:
-                page=self._ensure(); page.goto(url, wait_until=wait_until, timeout=30000); return {'ok':True,'url':page.url,'title':page.title()}
+                page=self._ensure(); response=page.goto(url, wait_until=wait_until, timeout=30000)
+                status=response.status if response is not None else None
+                classification='auth_or_permission' if status in {401,403} else 'ok'
+                return {'ok':True,'url':page.url,'title':page.title(),'status':status,'classification':classification,'auth_profile':self.auth_profile}
             except Exception as exc:
-                self._close_worker(); return {'ok':False,'error':str(exc),'url':None}
+                message=str(exc); low=message.lower()
+                if 'err_blocked_by_administrator' in low: cls='policy_block'
+                elif 'timeout' in low: cls='timeout'
+                elif 'net::' in low or 'connection' in low: cls='network_error'
+                elif 'certificate' in low or 'ssl' in low: cls='tls_error'
+                else: cls='browser_error'
+                self._close_worker(); return {'ok':False,'error':message,'url':None,'status':None,'classification':cls,'auth_profile':self.auth_profile}
         return self.call(_open)
+
+    def auth_set(self, name):
+        def _set():
+            if not re.fullmatch(r'[A-Za-z0-9._-]{1,80}', str(name)): raise ValueError('invalid auth profile name')
+            path=AI/'auth'/f'{name}.json'; path.parent.mkdir(parents=True,exist_ok=True); path.parent.chmod(0o700)
+            self.auth_profile=str(name); self._close_worker()
+            return {'ok':True,'profile':self.auth_profile,'exists':path.exists()}
+        return self.call(_set)
+
+    def auth_save(self, name=None):
+        def _save():
+            profile=str(name or self.auth_profile or '').strip()
+            if not profile or not re.fullmatch(r'[A-Za-z0-9._-]{1,80}', profile): raise ValueError('valid auth profile name required')
+            self.auth_profile=profile; self._ensure(); path=self._auth_path(); self._context.storage_state(path=str(path))
+            try: path.chmod(0o600)
+            except OSError: pass
+            return {'ok':True,'profile':profile,'path':str(path.relative_to(ROOT)),'bytes':path.stat().st_size,'sensitive':True}
+        return self.call(_save)
+
+    def auth_status(self, name):
+        profile=str(name or '').strip()
+        if not re.fullmatch(r'[A-Za-z0-9._-]{1,80}', profile): raise ValueError('invalid auth profile name')
+        path=AI/'auth'/f'{profile}.json'
+        return {'ok':True,'profile':profile,'exists':path.exists(),'bytes':path.stat().st_size if path.exists() else 0,'current':self.auth_profile==profile}
 
     def screenshot(self):
         def _screenshot():
@@ -508,6 +553,18 @@ def _research_with_browser(req: Dict[str,Any]):
 
 @app.post('/research')
 def research_endpoint(req: Dict[str,Any]): return _research_with_browser(req)
+@app.post('/browser/auth/set')
+def browser_auth_set_endpoint(req: Dict[str,Any]): return browser().auth_set(req['profile'])
+@app.post('/browser/auth/save')
+def browser_auth_save_endpoint(req: Dict[str,Any]): return browser().auth_save(req.get('profile'))
+@app.get('/browser/auth/status')
+def browser_auth_status_endpoint(profile: str): return browser().auth_status(profile)
+@app.get('/permissions')
+def permission_endpoint(): return permission_check()
+@app.get('/runtime/preflight')
+def runtime_preflight_endpoint(): return runtime_preflight()
+@app.get('/integrations')
+def integrations_endpoint(): return integration_status()
 @app.post('/cleanup/prune-backups')
 def cleanup_prune_backups_endpoint(req: Dict[str,Any] = {}):
     from cleanup import prune_backups
@@ -521,7 +578,7 @@ def scheduler_cancel_endpoint(req: Dict[str,Any]): return cancel_job(req['name']
 
 @app.get('/tools')
 def tools():
-    names=['computer_status','computer_observe','computer_screenshot','computer_find_text','computer_click_element','computer_click','computer_double_click','computer_move','computer_drag','computer_scroll','computer_key','computer_hotkey','computer_type','computer_wait','computer_windows','computer_mouse_position','computer_browser_open','computer_browser_status','computer_browser_screenshot','computer_browser_state','computer_browser_text','computer_act_verify','computer_cleanup_scan','computer_cleanup_safe','computer_project_analyze','computer_project_tree','computer_file_read','computer_file_search','computer_file_write','computer_file_patch','computer_terminal_run','computer_test_run','computer_build_run','computer_lint','computer_git_status','computer_git_diff','computer_git_log','computer_git_commit','computer_skill_list','computer_skill_load','computer_skill_create','computer_skill_update','computer_skill_test','computer_skill_delete','computer_project_memory_read','computer_project_memory_update','computer_code_apply_fix','computer_code_verify_change','computer_code_agent','computer_project_context','computer_task_start','computer_task_read','computer_task_update','computer_task_finish','computer_scope_check','computer_diff_summary','computer_guardrails','computer_snapshot','computer_restore_snapshot','computer_prepare_commit','computer_code_commit','computer_autonomous_cycle','computer_health','computer_recovery_read','computer_recovery_checkpoint','computer_recovery_finish','computer_decision_record','computer_decisions','computer_persistence_status','computer_persist','computer_research','computer_backup_prune','computer_scheduler_status','computer_scheduler_schedule','computer_scheduler_cancel']
+    names=['computer_status','computer_observe','computer_screenshot','computer_find_text','computer_click_element','computer_click','computer_double_click','computer_move','computer_drag','computer_scroll','computer_key','computer_hotkey','computer_type','computer_wait','computer_windows','computer_mouse_position','computer_browser_open','computer_browser_status','computer_browser_screenshot','computer_browser_state','computer_browser_text','computer_act_verify','computer_cleanup_scan','computer_cleanup_safe','computer_project_analyze','computer_project_tree','computer_file_read','computer_file_search','computer_file_write','computer_file_patch','computer_terminal_run','computer_test_run','computer_build_run','computer_lint','computer_git_status','computer_git_diff','computer_git_log','computer_git_commit','computer_skill_list','computer_skill_load','computer_skill_create','computer_skill_update','computer_skill_test','computer_skill_delete','computer_project_memory_read','computer_project_memory_update','computer_code_apply_fix','computer_code_verify_change','computer_code_agent','computer_project_context','computer_task_start','computer_task_read','computer_task_update','computer_task_finish','computer_scope_check','computer_diff_summary','computer_guardrails','computer_snapshot','computer_restore_snapshot','computer_prepare_commit','computer_code_commit','computer_autonomous_cycle','computer_health','computer_recovery_read','computer_recovery_checkpoint','computer_recovery_finish','computer_decision_record','computer_decisions','computer_persistence_status','computer_persist','computer_research','computer_backup_prune','computer_scheduler_status','computer_scheduler_schedule','computer_scheduler_cancel','computer_browser_auth_set','computer_browser_auth_save','computer_browser_auth_status','computer_permission_check','computer_runtime_preflight','computer_integrations']
     return {'name':'Airi Computer','version':'2.0','tools':names}
 
 @app.post('/mcp')
@@ -539,7 +596,7 @@ def mcp(req: Dict[str,Any]):
           'computer_double_click':('action',{'action':'double_click','payload':args}),'computer_move':('action',{'action':'move','payload':args}), 'computer_drag':('action',{'action':'drag','payload':args}),
           'computer_scroll':('action',{'action':'scroll','payload':args}), 'computer_key':('action',{'action':'key','payload':args}), 'computer_hotkey':('action',{'action':'hotkey','payload':args}), 'computer_type':('action',{'action':'type','payload':args}),
           'computer_wait':('action',{'action':'wait','payload':args}), 'computer_windows':('windows',{}),'computer_mouse_position':('mouse_position',{}),'computer_browser_open':('action',{'action':'browser_open','payload':args}),
-          'computer_browser_status':('action',{'action':'browser_status','payload':args}),'computer_browser_screenshot':('action',{'action':'browser_screenshot','payload':args}),'computer_browser_state':('action',{'action':'browser_state','payload':args}),'computer_browser_text':('action',{'action':'browser_text','payload':args}), 'computer_act_verify':('act-verify',args),'computer_cleanup_scan':('cleanup_scan',{}),'computer_cleanup_safe':('cleanup_safe',args),'computer_project_analyze':('code_analyze',args),'computer_project_tree':('code_tree',args),'computer_file_read':('code_read',args),'computer_file_search':('code_search',args),'computer_file_write':('code_write',args),'computer_file_patch':('code_patch',args),'computer_terminal_run':('code_shell',args),'computer_test_run':('code_test',args),'computer_build_run':('code_build',args),'computer_lint':('code_lint',args),'computer_git_status':('code_git_status',args),'computer_git_diff':('code_git_diff',args),'computer_git_log':('code_git_log',args),'computer_git_commit':('code_git_commit',args),'computer_skill_list':('skill_list',{}),'computer_skill_load':('skill_load',args),'computer_skill_create':('skill_create',args),'computer_skill_update':('skill_update',args),'computer_skill_test':('skill_test',args),'computer_skill_delete':('skill_delete',args),'computer_project_memory_read':('memory_read',{}),'computer_project_memory_update':('memory_update',args),'computer_code_apply_fix':('code_apply_fix',args),'computer_code_verify_change':('code_verify_change',args),'computer_code_agent':('code_agent',args),'computer_project_context':('code_project_context',args),'computer_task_start':('task_start',args),'computer_task_read':('task_read',{}),'computer_task_update':('task_update',args),'computer_task_finish':('task_finish',args),'computer_scope_check':('scope_check',args),'computer_diff_summary':('diff_summary',args),'computer_guardrails':('guardrails',args),'computer_snapshot':('snapshot',args),'computer_restore_snapshot':('restore_snapshot',args),'computer_prepare_commit':('prepare_commit',args),'computer_code_commit':('code_commit',args),'computer_autonomous_cycle':('autonomous_cycle',args),'computer_health':('health',{}),'computer_recovery_read':('recovery_read',{}),'computer_recovery_checkpoint':('recovery_checkpoint',args),'computer_recovery_finish':('recovery_finish',args),'computer_decision_record':('decision_record',args),'computer_decisions':('decisions',args),'computer_persistence_status':('persistence_status',{}),'computer_persist':('persist',args),'computer_research':('research',args),'computer_backup_prune':('backup_prune',args),'computer_scheduler_status':('scheduler_status',{}),'computer_scheduler_schedule':('scheduler_schedule',args),'computer_scheduler_cancel':('scheduler_cancel',args)}
+          'computer_browser_status':('action',{'action':'browser_status','payload':args}),'computer_browser_screenshot':('action',{'action':'browser_screenshot','payload':args}),'computer_browser_state':('action',{'action':'browser_state','payload':args}),'computer_browser_text':('action',{'action':'browser_text','payload':args}), 'computer_act_verify':('act-verify',args),'computer_cleanup_scan':('cleanup_scan',{}),'computer_cleanup_safe':('cleanup_safe',args),'computer_project_analyze':('code_analyze',args),'computer_project_tree':('code_tree',args),'computer_file_read':('code_read',args),'computer_file_search':('code_search',args),'computer_file_write':('code_write',args),'computer_file_patch':('code_patch',args),'computer_terminal_run':('code_shell',args),'computer_test_run':('code_test',args),'computer_build_run':('code_build',args),'computer_lint':('code_lint',args),'computer_git_status':('code_git_status',args),'computer_git_diff':('code_git_diff',args),'computer_git_log':('code_git_log',args),'computer_git_commit':('code_git_commit',args),'computer_skill_list':('skill_list',{}),'computer_skill_load':('skill_load',args),'computer_skill_create':('skill_create',args),'computer_skill_update':('skill_update',args),'computer_skill_test':('skill_test',args),'computer_skill_delete':('skill_delete',args),'computer_project_memory_read':('memory_read',{}),'computer_project_memory_update':('memory_update',args),'computer_code_apply_fix':('code_apply_fix',args),'computer_code_verify_change':('code_verify_change',args),'computer_code_agent':('code_agent',args),'computer_project_context':('code_project_context',args),'computer_task_start':('task_start',args),'computer_task_read':('task_read',{}),'computer_task_update':('task_update',args),'computer_task_finish':('task_finish',args),'computer_scope_check':('scope_check',args),'computer_diff_summary':('diff_summary',args),'computer_guardrails':('guardrails',args),'computer_snapshot':('snapshot',args),'computer_restore_snapshot':('restore_snapshot',args),'computer_prepare_commit':('prepare_commit',args),'computer_code_commit':('code_commit',args),'computer_autonomous_cycle':('autonomous_cycle',args),'computer_health':('health',{}),'computer_recovery_read':('recovery_read',{}),'computer_recovery_checkpoint':('recovery_checkpoint',args),'computer_recovery_finish':('recovery_finish',args),'computer_decision_record':('decision_record',args),'computer_decisions':('decisions',args),'computer_persistence_status':('persistence_status',{}),'computer_persist':('persist',args),'computer_research':('research',args),'computer_backup_prune':('backup_prune',args),'computer_scheduler_status':('scheduler_status',{}),'computer_scheduler_schedule':('scheduler_schedule',args),'computer_scheduler_cancel':('scheduler_cancel',args),'computer_browser_auth_set':('browser_auth_set',args),'computer_browser_auth_save':('browser_auth_save',args),'computer_browser_auth_status':('browser_auth_status',args),'computer_permission_check':('permission_check',{}),'computer_runtime_preflight':('runtime_preflight',{}),'computer_integrations':('integrations',{})}
         if name not in mapping: return {'jsonrpc':'2.0','id':rid,'error':{'code':-32601,'message':'Tool not found'}}
         path, payload=mapping[name]
         try:
@@ -604,6 +661,12 @@ def mcp(req: Dict[str,Any]):
             elif path=='scheduler_status': result=scheduler_status()
             elif path=='scheduler_schedule': result=schedule_job(payload['name'],payload['action'],payload['interval_seconds'],payload.get('run_now',False))
             elif path=='scheduler_cancel': result=cancel_job(payload['name'])
+            elif path=='browser_auth_set': result=browser().auth_set(payload['profile'])
+            elif path=='browser_auth_save': result=browser().auth_save(payload.get('profile'))
+            elif path=='browser_auth_status': result=browser().auth_status(payload['profile'])
+            elif path=='permission_check': result=permission_check()
+            elif path=='runtime_preflight': result=runtime_preflight()
+            elif path=='integrations': result=integration_status()
             elif path=='action': result=action(ActionRequest(**payload))
             else: result=act_verify(ActionRequest(**payload))
             return {'jsonrpc':'2.0','id':rid,'result':{'content':[{'type':'text','text':str(result)}],'structuredContent':result}}

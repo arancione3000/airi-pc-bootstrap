@@ -324,3 +324,37 @@ def health_check() -> dict[str, Any]:
 
 # Start the scheduler only when the module is imported by the live Airi server.
 scheduler_start()
+
+
+
+def permission_check() -> dict[str, Any]:
+    checks=[]
+    for path in [ROOT, AI, STATE]:
+        try:
+            path.mkdir(parents=True, exist_ok=True); probe=path/'.airi-permission-probe'; probe.write_text('ok', encoding='utf-8'); probe.unlink()
+            checks.append({'path':str(path),'writable':True})
+        except Exception as exc: checks.append({'path':str(path),'writable':False,'error':str(exc)})
+    env={'display_set':bool(os.environ.get('DISPLAY')),'cwd_accessible':os.access(str(ROOT),os.R_OK|os.X_OK)}
+    return {'ok':all(x['writable'] for x in checks) and all(env.values()),'paths':checks,'environment':env,'note':'Diagnostics only; Airi-PC never self-grants OS privileges.'}
+
+
+def runtime_preflight() -> dict[str, Any]:
+    display=os.environ.get('DISPLAY',':99'); checks={}
+    checks['display_env']={'ok':bool(display),'display':display}
+    try: rc=subprocess.run(['/bin/bash','-lc',f'DISPLAY={__import__("shlex").quote(display)} xdpyinfo >/dev/null 2>&1'],timeout=10).returncode; checks['x_display']={'ok':rc==0,'display':display}
+    except Exception as exc: checks['x_display']={'ok':False,'error':str(exc)}
+    try:
+        with urllib.request.urlopen('http://127.0.0.1:9010/status',timeout=5) as r: payload=json.load(r)
+        checks['computer_server']={'ok':payload.get('ok') is True,'gui_available':payload.get('gui_available'),'resolution':payload.get('resolution')}
+    except Exception as exc: checks['computer_server']={'ok':False,'error':str(exc)}
+    cache=Path.home()/'.cache'/'ms-playwright'; checks['chromium']={'ok':any(cache.glob('chromium-*/chrome-linux*/chrome'))}
+    checks['permissions']=permission_check(); repairable=[]
+    if not checks['chromium']['ok']: repairable.append('missing_runtime_dependencies')
+    if not checks['x_display']['ok']: repairable.append('display_unavailable')
+    return {'ok':all(bool(x.get('ok')) for x in checks.values()),'checks':checks,'repairable':repairable}
+
+
+def integration_status() -> dict[str, Any]:
+    p=persistence_status()
+    items={'github_persistence':{'ok':p.get('persistent') is True,'origin':p.get('origin'),'branch':p.get('canonical_branch',p.get('branch'))},'browser':{'ok':True,'mode':'Airi-PC Playwright'},'research':{'ok':True,'mode':'browser discovery + evidence fetch'},'scheduler':{'ok':scheduler_status().get('running') is True},'memory':{'ok':DECISIONS.parent.exists()}}
+    return {'ok':all(x.get('ok') for x in items.values()),'integrations':items,'note':'External authentication, anti-bot and network policies remain authoritative.'}
