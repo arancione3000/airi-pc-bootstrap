@@ -23,7 +23,8 @@ from coding import analyze as code_analyze, read as code_read, search as code_se
 from skills import list_skills, load_skill, create_skill, update_skill, test_skill, delete_skill, memory_read, memory_update, task_start, task_read, task_update, task_finish, session_event
 from code_agent import apply_fix as code_apply_fix, verify_change as code_verify_change, plan as code_plan, agent as code_agent, autonomous_change_cycle as code_autonomous_change_cycle, prepare_commit as code_prepare_commit, atomic_commit as code_atomic_commit
 from advanced import (health_check, checkpoint, recovery_read, recovery_finish, record_decision, decisions,
-                    persistence_status, persist_current, research, scheduler_status, schedule_job, cancel_job)
+                    persistence_status, persist_current, research, scheduler_status, schedule_job, cancel_job,
+                    permission_check, runtime_preflight, integration_status)
 
 # Optional remote MCP authentication. Local requests remain unchanged when the
 # token is unset; public deployments should set AIRI_MCP_TOKEN.
