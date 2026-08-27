@@ -47,6 +47,12 @@ cleanup_memory_tmp() { rm -f "$MEMORY_TMP"; }
 trap cleanup_memory_tmp EXIT INT TERM
 git -C "$BASE" fetch -q origin main || { echo AIRI_PC_GIT_FETCH_FAILED >&2; exit 6; }
 git -C "$BASE" reset -q --hard origin/main || { echo AIRI_PC_SOURCE_SYNC_FAILED >&2; exit 9; }
+
+# Restart the live server after source synchronization so the running process cannot
+# retain stale Python modules from a previous session.
+PIDS=$(ps -eo pid=,args= | awk '/uvicorn server:app --host 127\.0\.0\.1 --port 9010/ {print $1}')
+for PID in $PIDS; do kill "$PID" 2>/dev/null || true; done
+sleep 1
 if [ -s "$MEMORY_TMP" ]; then
   mkdir -p "$BASE/.ai"
   cp "$MEMORY_TMP" "$BASE/.ai/PROJECT_MEMORY.md"

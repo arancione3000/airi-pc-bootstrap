@@ -56,7 +56,7 @@ def main():
     ctl('key','home'); time.sleep(.2); c,_,_=ctl('scroll','-5'); bstate=post('/action',{'action':'browser_state','payload':{}}); R['scroll']=c==0 and (bstate.get('scroll_y',0)>50 or bstate.get('status')=='AIRI_SCROLL_OK')
     ctl('browser-open',BASE+'/self-test'); av=post('/act-verify',{'action':'click_element','payload':{'text':'AIRI_CLICK_TARGET'}}); bstate=post('/action',{'action':'browser_state','payload':{}}); R['act_verify']=av.get('ok') is True and av.get('changed_ratio',0)>0 and bstate.get('status')=='AIRI_CLICK_OK'
     init=post('/mcp',{'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2024-11-05','capabilities':{},'clientInfo':{'name':'airi-selftest','version':'1'}}}); ml=post('/mcp',{'jsonrpc':'2.0','id':2,'method':'tools/list','params':{}}); names=[x['name'] for x in ml.get('result',{}).get('tools',[])]
-    R['mcp_list']=len(names)>=20 and 'computer_mouse_position' in names and 'computer_browser_state' in names
+    R['mcp_list']=len(names)>=20 and 'computer_mouse_position' in names and 'computer_browser_state' in names and 'computer_browser_auth_save' in names and 'computer_runtime_preflight' in names and 'computer_integrations' in names
     mc=post('/mcp',{'jsonrpc':'2.0','id':3,'method':'tools/call','params':{'name':'computer_status','arguments':{}}}); R['mcp_call']=mc.get('result',{}).get('structuredContent',{}).get('ok') is True
     coding=subprocess.run([str(ROOT/'scripts'/'airi-coding-selftest')],cwd=str(ROOT),env=ENV,text=True,capture_output=True,timeout=170,check=False)
     try: cr=json.loads(coding.stdout)
