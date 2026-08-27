@@ -12,9 +12,4 @@ if [ ! -f "$BASE/computer/start.sh" ]; then
   mv "$TOP" "$BASE"
 fi
 chmod +x "$BASE"/scripts/airi-* "$BASE"/computer/start.sh 2>/dev/null || true
-# Replace any stale Airi Computer process, including one launched from an older workspace.
-PIDS=$(ps -eo pid=,args= | awk '/uvicorn server:app --host 127\.0\.0\.1 --port 9010/ {print $1}')
-for PID in $PIDS; do kill "$PID" 2>/dev/null || true; done
-rm -f "$BASE/.mcp_token"
-sh "$BASE/computer/start.sh"
-exec "$BASE/scripts/airi-next-session"
+exec "$BASE/scripts/airi-connect"
