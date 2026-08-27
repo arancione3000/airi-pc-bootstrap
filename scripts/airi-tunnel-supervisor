@@ -7,10 +7,20 @@ LOG="$BASE/logs/tunnel.log"
 PIDFILE="$STATE/pid"
 URLFILE="$STATE/url"
 STATUSFILE="$STATE/status.json"
+LOCKDIR="$STATE/supervisor.lock"
 INTERVAL="${AIRI_TUNNEL_INTERVAL:-10}"
 FAILS=0
 
 mkdir -p "$STATE" "$BASE/logs"
+if ! mkdir "$LOCKDIR" 2>/dev/null; then
+  LOCKPID=$(cat "$LOCKDIR/pid" 2>/dev/null || true)
+  if [ -n "$LOCKPID" ] && kill -0 "$LOCKPID" 2>/dev/null; then
+    exit 0
+  fi
+  rm -rf "$LOCKDIR"
+  mkdir "$LOCKDIR"
+fi
+printf '%s\n' "$$" > "$LOCKDIR/pid"
 
 pid_alive() {
   [ -s "$PIDFILE" ] || return 1
@@ -36,6 +46,14 @@ write_manifest() {
 }
 
 start_tunnel() {
+  if pid_alive && health_url; then
+    write_manifest
+    return 0
+  fi
+  if [ -s "$PIDFILE" ]; then
+    oldpid=$(cat "$PIDFILE" 2>/dev/null || true)
+    [ -z "$oldpid" ] || kill "$oldpid" 2>/dev/null || true
+  fi
   rm -f "$PIDFILE" "$URLFILE"
   : >"$LOG"
   write_status "starting" ""
@@ -83,7 +101,8 @@ health_url() {
 }
 
 cleanup() {
-  rm -f "$PIDFILE"
+  rm -f "$LOCKDIR/pid"
+  rmdir "$LOCKDIR" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 
