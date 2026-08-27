@@ -26,6 +26,7 @@ jobs:
           AIRI_BOOTSTRAP_SHA: ${{ github.sha }}
           AIRI_EXPECTED_SHA: ${{ github.sha }}
         run: |
+          chmod +x scripts/airi-* computer/start.sh
           ./scripts/airi-session-rebuild || {
             cat /home/user/airi/logs/session-rebuild.log 2>/dev/null || true
             exit 1
