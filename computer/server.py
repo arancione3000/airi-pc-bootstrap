@@ -80,12 +80,16 @@ def _oauth_token_ok(token):
 
 @app.get('/.well-known/oauth-authorization-server')
 async def oauth_metadata(request: Request):
-    base=str(request.base_url).rstrip('/')
+    proto=request.headers.get('x-forwarded-proto') or request.url.scheme
+    host=request.headers.get('x-forwarded-host') or request.headers.get('host')
+    base=f'{proto}://{host}'.rstrip('/')
     return {'issuer':base,'authorization_endpoint':base+'/oauth/authorize','token_endpoint':base+'/oauth/token','registration_endpoint':base+'/oauth/register','response_types_supported':['code'],'grant_types_supported':['authorization_code'],'code_challenge_methods_supported':['S256'],'token_endpoint_auth_methods_supported':['none']}
 
 @app.get('/.well-known/oauth-protected-resource')
 async def oauth_resource_metadata(request: Request):
-    base=str(request.base_url).rstrip('/')
+    proto=request.headers.get('x-forwarded-proto') or request.url.scheme
+    host=request.headers.get('x-forwarded-host') or request.headers.get('host')
+    base=f'{proto}://{host}'.rstrip('/')
     return {'resource':base+'/mcp','authorization_servers':[base]}
 
 @app.post('/oauth/register')
@@ -139,8 +143,14 @@ async def oauth_token(request: Request):
 
 @app.middleware('http')
 async def mcp_auth_middleware(request: Request, call_next):
-    if request.url.path=='/mcp' and not _oauth_token_ok(request.headers.get('authorization','')[7:] if request.headers.get('authorization','').lower().startswith('bearer ') else ''):
-        return JSONResponse(status_code=401, content={'error':'unauthorized','authorization_uri':str(request.base_url).rstrip('/')+'/oauth/authorize'})
+    if request.url.path=='/mcp' and (request.client.host if request.client else '') not in {'127.0.0.1','::1'}:
+        auth=request.headers.get('authorization','')
+        token=auth[7:] if auth.lower().startswith('bearer ') else ''
+        if not _oauth_token_ok(token):
+            proto=request.headers.get('x-forwarded-proto') or request.url.scheme
+            host=request.headers.get('x-forwarded-host') or request.headers.get('host')
+            base=f'{proto}://{host}'.rstrip('/')
+            return JSONResponse(status_code=401, content={'error':'unauthorized','authorization_uri':base+'/oauth/authorize'})
     return await call_next(request)
 
 DISPLAY = os.environ.get('DISPLAY', ':99')
