@@ -8,52 +8,54 @@ PIDFILE="$STATE/pid"
 URLFILE="$STATE/url"
 STATUSFILE="$STATE/status.json"
 LOCKDIR="$STATE/supervisor.lock"
-# Pinggy Free advertises a 60-minute tunnel lifetime. Rotate proactively
-# before expiry. Override for testing or a different policy.
 ROTATE_SECONDS="${AIRI_TUNNEL_ROTATE_SECONDS:-3000}"
 CHECK_INTERVAL="${AIRI_TUNNEL_INTERVAL:-10}"
-GRACE_SECONDS="${AIRI_TUNNEL_GRACE_SECONDS:-15}"
+GRACE_SECONDS="${AIRI_TUNNEL_GRACE_SECONDS:-10}"
+CANDIDATE_WAIT="${AIRI_TUNNEL_CANDIDATE_WAIT:-30}"
 FAILS=0
 
 mkdir -p "$STATE" "$BASE/logs"
 if ! mkdir "$LOCKDIR" 2>/dev/null; then
   LOCKPID=$(cat "$LOCKDIR/pid" 2>/dev/null || true)
-  if [ -n "$LOCKPID" ] && kill -0 "$LOCKPID" 2>/dev/null; then
-    exit 0
-  fi
-  rm -rf "$LOCKDIR"
-  mkdir "$LOCKDIR"
+  if [ -n "$LOCKPID" ] && kill -0 "$LOCKPID" 2>/dev/null; then exit 0; fi
+  rm -rf "$LOCKDIR"; mkdir "$LOCKDIR"
 fi
-printf '%s\n' "$$" > "$LOCKDIR/pid"
-
-pid_alive() {
-  [ -s "$PIDFILE" ] || return 1
-  pid=$(cat "$PIDFILE" 2>/dev/null || true)
-  [ -n "$pid" ] || return 1
-  kill -0 "$pid" 2>/dev/null
-}
+printf '%s\n' "$$" >"$LOCKDIR/pid"
 
 write_status() {
-  status=$1
-  url=${2:-}
-  printf '{"status":"%s","url":"%s","updated_at":%s}\n' "$status" "$url" "$(date +%s)" >"$STATUSFILE"
+  printf '{"status":"%s","url":"%s","updated_at":%s}\n' "$1" "${2:-}" "$(date +%s)" >"$STATUSFILE"
 }
 
-extract_url_from() {
-  file=$1
-  grep -Eo 'https://[^[:space:]]+run\.pinggy-free\.link' "$file" 2>/dev/null | tail -n1 || true
+pid_alive() {
+  [ -s "$1" ] || return 1
+  p=$(cat "$1" 2>/dev/null || true)
+  [ -n "$p" ] && kill -0 "$p" 2>/dev/null
+}
+
+extract_url() {
+  grep -Eo 'https://[^[:space:]]+run\.pinggy-free\.link' "$1" 2>/dev/null | tail -n1 || true
+}
+
+health_url() {
+  u=$1
+  [ -n "$u" ] && curl -fsS --max-time 8 -H 'X-Pinggy-No-Screen: 1' "$u/status" >/dev/null 2>&1
 }
 
 write_manifest() {
-  url=${1:-$(cat "$URLFILE" 2>/dev/null || true)}
+  u=${1:-$(cat "$URLFILE" 2>/dev/null || true)}
   mkdir -p "$BASE/.ai/state"
-  printf '{"url":"%s","local":"http://127.0.0.1:9010","mcp":"%s/mcp","updated_at":%s}\n' "$url" "$url" "$(date +%s)" > "$BASE/.ai/state/airi-endpoint.json"
+  printf '{"url":"%s","local":"http://127.0.0.1:9010","mcp":"%s/mcp","updated_at":%s}\n' "$u" "$u" "$(date +%s)" >"$BASE/.ai/state/airi-endpoint.json"
 }
 
-health_url_value() {
-  url=$1
-  [ -n "$url" ] || return 1
-  curl -fsS --max-time 8 -H 'X-Pinggy-No-Screen: 1' "$url/status" >/dev/null 2>&1
+kill_pid() {
+  p=$1
+  [ -n "$p" ] || return 0
+  kill "$p" 2>/dev/null || true
+  for _ in 1 2 3 4 5; do
+    kill -0 "$p" 2>/dev/null || return 0
+    sleep 1
+  done
+  kill -9 "$p" 2>/dev/null || true
 }
 
 start_candidate() {
@@ -68,44 +70,35 @@ start_candidate() {
 
 candidate_ready() {
   file=$1
-  for _ in $(seq 1 20); do
-    url=$(extract_url_from "$file")
-    if [ -n "$url" ] && health_url_value "$url"; then
-      printf '%s\n' "$url"
+  waited=0
+  while [ "$waited" -lt "$CANDIDATE_WAIT" ]; do
+    u=$(extract_url "$file")
+    if [ -n "$u" ] && health_url "$u"; then
+      printf '%s\n' "$u"
       return 0
     fi
     sleep 1
+    waited=$((waited + 1))
   done
   return 1
 }
 
-kill_pid() {
-  pid=$1
-  [ -n "$pid" ] || return 0
-  kill "$pid" 2>/dev/null || true
-  for _ in $(seq 1 5); do
-    kill -0 "$pid" 2>/dev/null || return 0
-    sleep 1
-  done
-  kill -9 "$pid" 2>/dev/null || true
-}
-
 start_initial() {
+  tmp="$STATE/initial.$$.log"
   write_status "starting" ""
-  tmp="$STATE/tunnel.$$.log"
-  pid=$(start_candidate "$tmp")
-  url=$(candidate_ready "$tmp" || true)
-  if [ -n "$url" ]; then
-    mv "$tmp" "$LOG"
-    printf '%s\n' "$pid" >"$PIDFILE"
-    printf '%s\n' "$url" >"$URLFILE"
-    write_status "online" "$url"
-    write_manifest "$url"
-    echo "$url" >"$STATE/last_start_url"
-    date +%s >"$STATE/started_at"
+  p=$(start_candidate "$tmp")
+  u=$(candidate_ready "$tmp" || true)
+  if [ -n "$u" ]; then
+    printf '%s\n' "$p" >"$PIDFILE"
+    printf '%s\n' "$u" >"$URLFILE"
+    cp "$tmp" "$LOG"
+    printf '%s\n' "$(date +%s)" >"$STATE/started_at"
+    write_manifest "$u"
+    write_status "online" "$u"
+    rm -f "$tmp"
     return 0
   fi
-  kill_pid "$pid"
+  kill_pid "$p"
   rm -f "$tmp"
   write_status "error" ""
   return 1
@@ -114,10 +107,10 @@ start_initial() {
 rotate_tunnel() {
   oldpid=$(cat "$PIDFILE" 2>/dev/null || true)
   oldurl=$(cat "$URLFILE" 2>/dev/null || true)
-  write_status "rotating" "$oldurl"
-  tmp="$STATE/tunnel.$$.next.log"
+  tmp="$STATE/candidate.$$.log"
   newpid=$(start_candidate "$tmp")
   newurl=$(candidate_ready "$tmp" || true)
+
   if [ -z "$newurl" ]; then
     kill_pid "$newpid"
     rm -f "$tmp"
@@ -126,19 +119,16 @@ rotate_tunnel() {
     return 1
   fi
 
-  # Publish the new endpoint only after it has passed a real HTTP health check.
+  # Atomic hand-over: publish the verified new endpoint first, then retire old.
   printf '%s\n' "$newpid" >"$PIDFILE"
   printf '%s\n' "$newurl" >"$URLFILE"
-  mv "$tmp" "$LOG"
+  cp "$tmp" "$LOG"
+  rm -f "$tmp"
+  printf '%s\n' "$(date +%s)" >"$STATE/started_at"
   write_manifest "$newurl"
   write_status "online" "$newurl"
-  date +%s >"$STATE/started_at"
-
-  # Brief overlap prevents a hard cutover while callers pick up the new host.
   sleep "$GRACE_SECONDS"
-  if [ "$oldpid" != "$newpid" ]; then
-    kill_pid "$oldpid"
-  fi
+  [ -z "$oldpid" ] || [ "$oldpid" = "$newpid" ] || kill_pid "$oldpid"
   return 0
 }
 
@@ -148,26 +138,29 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM HUP
 
-if ! pid_alive || ! health_url_value "$(cat "$URLFILE" 2>/dev/null || true)"; then
+if ! pid_alive "$PIDFILE"; then
   start_initial || true
 fi
 
 while :; do
-  now=$(date +%s)
-  started=$(cat "$STATE/started_at" 2>/dev/null || echo "$now")
-  age=$((now - started))
-
-  if pid_alive && health_url_value "$(cat "$URLFILE" 2>/dev/null || true)"; then
+  url=$(cat "$URLFILE" 2>/dev/null || true)
+  if pid_alive "$PIDFILE" && health_url "$url"; then
     FAILS=0
+    write_manifest "$url"
   else
     FAILS=$((FAILS + 1))
   fi
 
-  if [ "$age" -ge "$ROTATE_SECONDS" ] || [ "$FAILS" -ge 3 ]; then
+  now=$(date +%s)
+  started=$(cat "$STATE/started_at" 2>/dev/null || echo "$now")
+  age=$((now - started))
+
+  if [ "$age" -ge "$ROTATE_SECONDS" ]; then
     rotate_tunnel || true
     FAILS=0
-  else
-    write_manifest
+  elif [ "$FAILS" -ge 3 ]; then
+    rotate_tunnel || true
+    FAILS=0
   fi
   sleep "$CHECK_INTERVAL"
 done
