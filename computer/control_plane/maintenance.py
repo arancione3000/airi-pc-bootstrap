@@ -7,6 +7,8 @@ BASE = __import__('pathlib').Path(os.environ.get('AIRIPC_WORKSPACE_ROOT','/home/
 PORT = os.environ.get('AIRI_PORT','9010')
 
 class MaintenanceManager:
+    def _root(self): return os.environ.get('AIRIPC_WORKSPACE_ROOT', '/home/user/airi')
+    def _port(self): return os.environ.get('AIRIPC_PORT', '9010')
     LEVELS={1:"retry",2:"component_restart",3:"component_repair",4:"runtime_rebuild",5:"escalation"}
     def _probe_url(self,url):
         try:

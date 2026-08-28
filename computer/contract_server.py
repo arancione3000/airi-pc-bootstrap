@@ -159,6 +159,11 @@ def tool_specs() -> list[dict[str, Any]]:
         {"name":"computer_experience_record","description":"Persist generalized coding experience","inputSchema":SCHEMAS["computer_experience_record"]},
         {"name":"computer_experience_match","description":"Match previous experience to a new task","inputSchema":SCHEMAS["computer_experience_match"]},
         {"name":"computer_model_choose","description":"Choose an abstract model route","inputSchema":SCHEMAS["computer_model_choose"]},
+        {"name":"computer_subagent_create","description":"Create an isolated subagent worktree","inputSchema":SCHEMAS["computer_subagent_create"]},
+        {"name":"computer_subagent_status","description":"Read subagent status","inputSchema":SCHEMAS["computer_subagent_status"]},
+        {"name":"computer_subagent_list","description":"List subagents","inputSchema":SCHEMAS["computer_subagent_list"]},
+        {"name":"computer_subagent_finish","description":"Finish subagent","inputSchema":SCHEMAS["computer_subagent_finish"]},
+        {"name":"computer_subagent_remove","description":"Remove subagent worktree","inputSchema":SCHEMAS["computer_subagent_remove"]},
     ])
     return specs
 
@@ -180,7 +185,8 @@ def _ready_payload() -> dict[str, Any]:
         checks["browser"] = bool(bs.get("available")) and bool(bs.get("open")) and not bs.get("error")
     except Exception:
         pass
-    checks["mcp"] = TOOL_COUNT == 83 and len(TOOLS) == 83 and len(set(TOOLS)) == 83 and len(tool_specs()) == 85 and all(spec["inputSchema"].get("type") == "object" for spec in tool_specs())
+    specs = tool_specs(); names = [x["name"] for x in specs]
+    checks["mcp"] = len(names) == len(set(names)) and len(names) >= TOOL_COUNT and all(spec["inputSchema"].get("type") == "object" for spec in specs)
     expected_sha = os.environ.get("AIRI_EXPECTED_SHA", "").strip()
     actual_sha = os.environ.get("AIRI_BOOTSTRAP_SHA", "").strip()
     checks["source_match"] = bool(actual_sha) and (not expected_sha or actual_sha == expected_sha)
@@ -212,7 +218,7 @@ def mcp_contract(req: dict[str, Any]) -> dict[str, Any]:
         return {"jsonrpc": "2.0", "id": rid, "result": {"tools": tool_specs()}}
     if method == "tools/call":
         name = req.get("params", {}).get("name")
-        if name in ("computer_control_plane", "computer_autonomous_goal", "computer_context_pack", "computer_verify_deliverable", "computer_experience_record", "computer_experience_match", "computer_model_choose", "computer_terminal_start", "computer_terminal_status", "computer_terminal_list", "computer_terminal_attach", "computer_terminal_detach", "computer_terminal_cancel", "computer_terminal_cleanup", "computer_task_add_node", "computer_task_add_dependency", "computer_task_skip", "computer_task_runnable"):
+        if name in ("computer_control_plane", "computer_autonomous_goal", "computer_context_pack", "computer_verify_deliverable", "computer_experience_record", "computer_experience_match", "computer_model_choose", "computer_terminal_start", "computer_terminal_status", "computer_terminal_list", "computer_terminal_attach", "computer_terminal_detach", "computer_terminal_cancel", "computer_terminal_cleanup", "computer_task_add_node", "computer_task_add_dependency", "computer_task_skip", "computer_task_runnable", "computer_subagent_create", "computer_subagent_status", "computer_subagent_list", "computer_subagent_finish", "computer_subagent_remove"):
             return _legacy.mcp(req)
         if name not in TOOLS:
             return {"jsonrpc": "2.0", "id": rid, "error": {"code": -32601, "message": "Tool not found"}}
