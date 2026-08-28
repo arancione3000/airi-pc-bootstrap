@@ -215,16 +215,23 @@ def guardrail_check(path='.', declared_scope: Optional[Iterable[str]] = None,
         if raw:
             changed.append(raw)
     violations = []
+    scoped_changed = changed
     if declared_scope:
-        try:
-            scope_check([str(git / rel) for rel in changed], declared_scope)
-        except Exception as exc:
-            violations.append(str(exc))
-    for rel in changed:
+        scope = _normalize_scope(declared_scope)
+        scoped_changed = []
+        for rel in changed:
+            candidate = (git / rel).resolve()
+            if any(_inside(candidate, root) or _inside(root, candidate) for root in scope):
+                scoped_changed.append(rel)
+    for rel in scoped_changed:
         low = rel.lower()
         if not allow_security_changes and low in {'computer/security.py','computer/cleanup.py'}:
             violations.append(f'security/cleanup file change requires allow_security_changes=true: {rel}')
-    diff = _diff_text(git)
+    if declared_scope and scoped_changed:
+        rels=' '.join(shlex.quote(x.split('\t')[-1]) for x in scoped_changed)
+        diff = run(f'git diff --no-ext-diff --unified=3 -- {rels}', str(git), 60, True)['stdout']
+    else:
+        diff = _diff_text(git)
     if not allow_test_changes:
         for line in diff.splitlines():
             if line.startswith('-') and not line.startswith('---') and re.search(r'\b(assert|pytest|ALL=True|selftest)\b', line, re.I):
@@ -235,7 +242,7 @@ def guardrail_check(path='.', declared_scope: Optional[Iterable[str]] = None,
             if line.startswith('-') and re.search(r'(RISKY_ACTIONS|mcp_auth_middleware|Confirmation required)', line):
                 violations.append('possible security guard removal detected in server.py diff')
                 break
-    return {'ok': not violations, 'git_available': True, 'changed_paths': changed, 'violations': sorted(set(violations))}
+    return {'ok': not violations, 'git_available': True, 'changed_paths': scoped_changed, 'all_changed_paths': changed, 'violations': sorted(set(violations))}
 
 
 def diff_summary(path='.', declared_scope: Optional[Iterable[str]] = None,

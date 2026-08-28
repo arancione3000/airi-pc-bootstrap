@@ -10,3 +10,7 @@ Airi-PC keeps its existing Runtime and MCP Tool layers and adds a modular Contro
 
 ## Safety
 All mutating workflows remain workspace-scoped. Transactions snapshot files before mutation, task graphs checkpoint progress, audit rows redact common secret fields, and persistence still requires a scoped commit followed by remote verification.
+
+## Reliability Layer
+
+The Control Plane now includes capability telemetry, circuit breaking, an idempotent supervisor, and incremental project dependency indexing.

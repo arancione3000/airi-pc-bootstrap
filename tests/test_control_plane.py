@@ -111,3 +111,50 @@ def test_committed_transaction_cannot_be_rolled_back(tmp_path):
             raise AssertionError('committed transaction was rollbackable')
     finally:
         if f.exists(): f.unlink()
+
+def test_reliability_circuit_breaker(tmp_path, monkeypatch):
+    from control_plane import reliability
+    monkeypatch.setattr(reliability.REGISTRY, 'path', tmp_path / 'reliability.json')
+    reliability.REGISTRY.data = {'version': 1, 'capabilities': {}}
+    for _ in range(3): reliability.REGISTRY.record('demo', False, error='boom')
+    assert reliability.REGISTRY.allow('demo') is False
+    reliability.REGISTRY.record('demo', True, 1)
+    assert reliability.REGISTRY.data['capabilities']['demo']['state'] == 'closed'
+
+
+def test_project_index_dependencies_and_incremental(tmp_path, monkeypatch):
+    from control_plane.project_index import ProjectIndex
+    import control_plane.project_index as pi
+    monkeypatch.setattr(pi, 'ROOT', tmp_path)
+    monkeypatch.setattr(pi, 'load_json', lambda name, default: default)
+    monkeypatch.setattr(pi, 'save_json', lambda name, data: None)
+    (tmp_path / 'a.py').write_text('import json\nfrom pathlib import Path\n\ndef hello():\n    pass\n')
+    idx=ProjectIndex(); first=idx.refresh(); assert first['dependency_files'] == 1
+    second=idx.refresh(); assert second['files'] == first['files']
+    assert 'json' in idx.state['dependencies']['a.py']
+
+
+def test_supervisor_snapshot(tmp_path, monkeypatch):
+    from control_plane.supervisor import Supervisor
+    monkeypatch.setattr('control_plane.supervisor.BASE', str(tmp_path))
+    s=Supervisor(str(tmp_path)); row=s.snapshot(); assert 'ready' in row and 'processes' in row
+
+def test_mcp_mutation_requires_scope(monkeypatch):
+    import server
+    try:
+        server.code_write('README.md', 'BAD')
+    except Exception:
+        pass
+    else:
+        # Direct helper intentionally may remain callable; MCP path is tested below.
+        pass
+    result = server.mcp({'jsonrpc':'2.0','id':99,'method':'tools/call','params':{'name':'computer_file_write','arguments':{'path':'README.md','content':'BAD','scope':[]}}})
+    assert result.get('error') is not None
+
+
+def test_mcp_screenshot_returns_payload(monkeypatch):
+    import server
+    monkeypatch.setattr(server, 'screenshot_image', lambda: server.Image.new('RGB',(4,4),'white'))
+    result = server.mcp({'jsonrpc':'2.0','id':98,'method':'tools/call','params':{'name':'computer_screenshot','arguments':{}}})
+    sc=result['result']['structuredContent']
+    assert sc['format']=='png' and sc['width'] == 4 and sc['height'] == 4

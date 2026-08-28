@@ -7,14 +7,16 @@ from .audit_engine import AuditEngine
 from .project_index import ProjectIndex
 from .maintenance import MaintenanceManager
 from .skill_manager import SkillManager
+from .reliability import REGISTRY
+from .supervisor import Supervisor
 from coding import analyze, read, search, write, patch, test, build, lint, git_status, git_diff, snapshot, restore_snapshot, safe_path
 
 class ControlPlane:
     def __init__(self):
-        self.capabilities=CapabilityManager(); self.transactions=TransactionEngine(); self.tasks=TaskEngine(); self.audit=AuditEngine(); self.index=ProjectIndex(); self.maintenance=MaintenanceManager(); self.skills=SkillManager()
+        self.capabilities=CapabilityManager(); self.transactions=TransactionEngine(); self.tasks=TaskEngine(); self.audit=AuditEngine(); self.index=ProjectIndex(); self.maintenance=MaintenanceManager(); self.skills=SkillManager(); self.supervisor=Supervisor()
     def bootstrap(self, tool_names, schemas=None):
         names=list(tool_names); caps=self.capabilities.discover(names,schemas); idx=self.index.refresh(); skills=self.skills.refresh(); self.audit.event(kind='control_plane_bootstrap',tool_count=len(names),index=idx,skill_count=len(skills.get('skills',{}))); return {'ok':True,'capabilities':caps,'index':idx,'skills':len(skills.get('skills',{}))}
-    def status(self): return {'ok':True,'capabilities':self.capabilities.summary(),'tasks':self.tasks.state,'transactions':self.transactions.state,'index':self.index.summary(),'skills':self.skills.list(),'maintenance':self.maintenance.history(),'audit_events':len(self.audit.tail(100000))}
+    def status(self): return {'ok':True,'capabilities':self.capabilities.summary(),'reliability':REGISTRY.summary(),'tasks':self.tasks.state,'transactions':self.transactions.state,'index':self.index.summary(),'skills':self.skills.list(),'maintenance':self.maintenance.history(),'supervisor':self.supervisor.snapshot(),'audit_events':len(self.audit.tail(100000))}
     def route(self,candidates):
         result=self.capabilities.route(candidates); self.audit.event(kind='route',candidates=list(candidates),result=result); return result
     def plan(self,goal,steps,scope=None):

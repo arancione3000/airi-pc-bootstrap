@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os, shutil, subprocess, time, urllib.request
 from .store import load_json, save_json, now
+from .reliability import REGISTRY
 
 class MaintenanceManager:
     LEVELS={1:"retry",2:"component_restart",3:"component_repair",4:"runtime_rebuild",5:"escalation"}
@@ -16,9 +17,9 @@ class MaintenanceManager:
         try: checks['processes']={'ok':subprocess.run(['bash','-lc','pgrep -f "[u]vicorn.*9010" >/dev/null'],capture_output=True).returncode==0}
         except Exception as e: checks['processes']={'ok':False,'error':str(e)}
         checks['display']={'ok':bool(os.environ.get('DISPLAY',':99')),'display':os.environ.get('DISPLAY',':99')}
-        checks['mcp']=self._probe_url('http://127.0.0.1:9010/status')
-        checks['ready']=self._probe_url('http://127.0.0.1:9010/ready')
-        overall=all(bool(v.get('ok')) for v in checks.values()); row={'timestamp':now(),'overall_ok':overall,'checks':checks,'recommended_level':1 if overall else 2}
+        checks['mcp']=self._probe_url('http://127.0.0.1:9010/status'); REGISTRY.record('mcp', checks['mcp'].get('ok',False), error=checks['mcp'].get('error',''))
+        checks['ready']=self._probe_url('http://127.0.0.1:9010/ready'); REGISTRY.record('ready', checks['ready'].get('ok',False), error=checks['ready'].get('error',''))
+        overall=all(bool(v.get('ok')) for v in checks.values()); row={'timestamp':now(),'overall_ok':overall,'checks':checks,'recommended_level':1 if overall else 2,'reliability':REGISTRY.summary()}
         save_json('maintenance.json',row); return row
     def recover(self,level='auto',confirm=None):
         current=self.run(); lvl=2 if level in ('auto',None) and not current['overall_ok'] else int(level) if str(level).isdigit() else None

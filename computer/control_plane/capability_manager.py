@@ -2,6 +2,7 @@ from __future__ import annotations
 import time
 from typing import Any, Iterable
 from .store import load_json, save_json, now
+from .reliability import REGISTRY
 
 class CapabilityManager:
     def __init__(self) -> None:
@@ -35,7 +36,7 @@ class CapabilityManager:
 
     def score(self, name: str) -> float:
         r=self.data["capabilities"].get(name) or {};
-        if not r.get("available",False) or r.get("health") not in {"healthy", "degraded"}: return -1.0
+        if not r.get("available",False) or r.get("health") not in {"healthy", "degraded"} or not REGISTRY.allow(name): return -1.0
         health={"healthy":1.0,"unknown":0.8,"degraded":0.35}.get(r.get("health"),0.2)
         latency=max(0.0,1.0-min(float(r.get("latency_ms") or 0)/5000.0,1.0))
         return round(health*0.55+latency*0.25+(1.0-float(r.get("error_rate",0)))*0.20,4)

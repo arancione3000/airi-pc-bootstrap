@@ -1,10 +1,12 @@
 from __future__ import annotations
-import re,hashlib
+import re,hashlib,ast
 from pathlib import Path
 from coding import ROOT
 from .store import load_json,save_json,now
 class ProjectIndex:
-    def __init__(self): self.state=load_json("project-index.json", {"version":1,"files":{},"symbols":{},"updated_at":None})
+    def __init__(self):
+        self.state=load_json("project-index.json", {"version":2,"files":{},"symbols":{},"dependencies":{},"updated_at":None})
+        self.state.setdefault('dependencies', {})
     def refresh(self, paths=None):
         targets=[]
         if paths:
@@ -15,13 +17,29 @@ class ProjectIndex:
         else: targets=[p for p in ROOT.rglob('*') if p.is_file() and '.git' not in p.parts and '.venv' not in p.parts and '__pycache__' not in p.parts]
         for p in targets:
             rel=str(p.relative_to(ROOT))
-            try: data=p.read_text(errors='replace')
-            except Exception: continue
-            sha=hashlib.sha256(data.encode()).hexdigest(); prev=self.state['files'].get(rel)
-            if prev and prev.get('sha256')==sha: continue
-            self.state['files'][rel]={"sha256":sha,"bytes":len(data.encode()),"updated_at":now()}
+            try:
+                stat=p.stat()
+                prev=self.state['files'].get(rel)
+                if prev and prev.get('mtime_ns')==stat.st_mtime_ns and prev.get('bytes')==stat.st_size:
+                    continue
+                data=p.read_text(errors='replace')
+            except Exception:
+                continue
+            sha=hashlib.sha256(data.encode()).hexdigest()
+            if prev and prev.get('sha256')==sha:
+                prev.update({'mtime_ns': stat.st_mtime_ns, 'bytes': stat.st_size, 'updated_at': now()})
+                continue
+            self.state['files'][rel]={"sha256":sha,"bytes":len(data.encode()),"mtime_ns":p.stat().st_mtime_ns,"updated_at":now()}
+            if p.suffix == '.py':
+                try:
+                    tree_ast=ast.parse(data)
+                    imports=[n.names[0].name for n in ast.walk(tree_ast) if isinstance(n, ast.Import) and n.names] + [n.module for n in ast.walk(tree_ast) if isinstance(n, ast.ImportFrom) and n.module]
+                except Exception:
+                    imports=[]
+            else: imports=[]
             syms=re.findall(r'^\s*(?:def|class)\s+([A-Za-z_][A-Za-z0-9_]*)',data,re.M)
             self.state['symbols'][rel]=syms
+            self.state.setdefault('dependencies', {})[rel]=sorted({x for x in imports if x})
         self.state['updated_at']=now(); save_json('project-index.json',self.state); return self.summary()
     def search(self,q,limit=50):
         q=q.casefold(); out=[]
@@ -30,4 +48,4 @@ class ProjectIndex:
                 if q in s.casefold() or q in path.casefold(): out.append({"path":path,"symbol":s})
                 if len(out)>=limit: return out
         return out
-    def summary(self): return {"files":len(self.state['files']),"symbol_files":len(self.state['symbols']),"updated_at":self.state['updated_at']}
+    def summary(self): return {"files":len(self.state['files']),"symbol_files":len(self.state['symbols']),"dependency_files":len(self.state.get('dependencies',{})),"updated_at":self.state['updated_at']}

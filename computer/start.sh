@@ -77,6 +77,10 @@ if ! DISPLAY=:99 xdotool search --name 'Airi Terminal' >/dev/null 2>&1; then
   sleep 1
 fi
 
+if [ -x "$ROOT/scripts/airi-supervisor" ] && ! pgrep -f '[a]iri-supervisor' >/dev/null 2>&1; then
+  "$ROOT/scripts/airi-supervisor" >/dev/null 2>&1 &
+fi
+
 if ! curl -fsS http://127.0.0.1:9010/status >/dev/null 2>&1; then
   cd "$ROOT/computer"
   nohup "$VENV/bin/uvicorn" contract_server:app --host 127.0.0.1 --port 9010 >"$ROOT/logs/computer-server.log" 2>&1 &

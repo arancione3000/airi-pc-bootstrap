@@ -445,7 +445,17 @@ def gui_available() -> bool:
 def screenshot_image() -> Image.Image:
     if not gui_available():
         raise RuntimeError('GUI display is unavailable in this sandbox')
-    return ImageGrab.grab()
+    last=None
+    for _ in range(2):
+        try:
+            return ImageGrab.grab()
+        except Exception as exc:
+            last=exc
+            time.sleep(0.15)
+    try:
+        return _pyautogui().screenshot()
+    except Exception as exc:
+        raise RuntimeError(f'GUI screenshot failed: {last}; pyautogui fallback: {exc}') from exc
 
 def image_b64(img: Image.Image) -> str:
     buf = io.BytesIO(); img.save(buf, format='PNG'); return base64.b64encode(buf.getvalue()).decode()
@@ -844,7 +854,7 @@ def mcp(req: Dict[str,Any]):
                 else: raise ValueError(f'unknown control-plane action: {action}')
             elif path=='status': result=status()
             elif path=='observe': result=observe()
-            elif path=='screenshot': result=screenshot()
+            elif path=='screenshot': result=perform('screenshot',{})
             elif path=='windows': result=windows()
             elif path=='mouse_position': result=mouse_position()
             elif path=='find-text': result=find_text(FindText(**payload))
@@ -854,16 +864,18 @@ def mcp(req: Dict[str,Any]):
             elif path=='code_tree': result=code_analyze(payload.get('path','.'))['tree']
             elif path=='code_read': result=code_read(payload['path'])
             elif path=='code_search': result=code_search(payload['query'],payload.get('path','.'),payload.get('limit',100))
-            elif path=='code_write': result=code_write(payload['path'],payload['content'])
-            elif path=='code_patch': result=code_patch(payload['path'],payload['old'],payload['new'],payload.get('replace_all',False))
-            elif path=='code_shell': result=code_shell(payload['command'],payload.get('cwd','.'),payload.get('timeout',120),payload.get('allow_shell',False))
+            elif path=='code_write': result=code_write(payload['path'],payload['content'],declared_scope=payload.get('scope'))
+            elif path=='code_patch': result=code_patch(payload['path'],payload['old'],payload['new'],payload.get('replace_all',False),declared_scope=payload.get('scope'))
+            elif path=='code_shell':
+                code_scope_check([payload.get('cwd','.')], payload.get('scope') or [])
+                result=code_shell(payload['command'],payload.get('cwd','.'),payload.get('timeout',120),payload.get('allow_shell',False))
             elif path=='code_test': result=code_test(payload.get('command','pytest -q'),payload.get('cwd','.'),payload.get('timeout',170))
             elif path=='code_build': result=code_build(payload.get('command','python -m compileall -q .'),payload.get('cwd','.'),payload.get('timeout',170))
             elif path=='code_lint': result=code_lint(payload.get('command','python -m py_compile $(find . -name "*.py" -not -path "./.venv/*")'),payload.get('cwd','.'),payload.get('timeout',170))
             elif path=='code_git_status': result=code_git_status(payload.get('path','.'))
             elif path=='code_git_diff': result=code_git_diff(payload.get('path','.'))
             elif path=='code_git_log': result=code_git_log(payload.get('path','.'),payload.get('n',10))
-            elif path=='code_git_commit': result=code_git_commit(payload['message'],payload.get('path','.'))
+            elif path=='code_git_commit': result=code_git_commit(payload['message'],payload.get('path','.'),declared_scope=payload.get('scope'),allow_test_changes=payload.get('allow_test_changes',False),allow_security_changes=payload.get('allow_security_changes',False))
             elif path=='skill_list': result=list_skills()
             elif path=='skill_load': result=load_skill(payload['name'])
             elif path=='skill_create': result=create_skill(payload['name'],payload['description'],payload['instructions'],payload.get('tools'))
