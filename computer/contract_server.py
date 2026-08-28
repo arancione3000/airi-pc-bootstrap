@@ -20,6 +20,8 @@ if TOOL_COUNT != 83 or len(TOOLS) != 83 or len(set(TOOLS)) != 83:
     raise RuntimeError("AIRI_TOOL_MANIFEST_INVALID")
 
 import server as _legacy
+from legacy_mcp_compat import patch_legacy_mcp
+patch_legacy_mcp(_legacy)
 app: FastAPI = _legacy.app
 
 
