@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json, os, re, time, threading
+import json, os, re, time, threading, tempfile, fcntl, glob
 from pathlib import Path
 from typing import Any
 
@@ -13,10 +13,33 @@ def ensure() -> Path:
     return CP
 
 def atomic_json(path: Path, data: Any) -> None:
+    """Crash-safe, multiprocess-safe JSON replacement in the same filesystem."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
-    tmp.replace(path)
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    payload = json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    with lock_path.open("a+") as lock_fh:
+        fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)
+        fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".tmp.", dir=str(path.parent))
+        tmp = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, path)
+            dir_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+            for stale in glob.glob(str(path.parent / (path.name + ".tmp.*"))):
+                if stale != str(tmp):
+                    try: Path(stale).unlink()
+                    except OSError: pass
+        finally:
+            try: tmp.unlink()
+            except FileNotFoundError: pass
+        fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
 
 def load_json(name: str, default: Any) -> Any:
     p = ensure() / name

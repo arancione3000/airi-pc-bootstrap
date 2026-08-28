@@ -3,6 +3,7 @@ import json, os, re, subprocess, threading, time, urllib.parse, urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from control_plane.store import atomic_json as _store_atomic_json
 
 ROOT = Path(os.environ.get('AIRIPC_WORKSPACE_ROOT', '/home/user/airi')).resolve()
 AI = ROOT / '.ai'
@@ -14,17 +15,30 @@ LOCK = threading.RLock()
 
 
 def _atomic_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + '.tmp')
-    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding='utf-8')
-    tmp.replace(path)
+    _store_atomic_json(path, data)
 
 
-def checkpoint(goal: str, scope: list[str], step: int, note: str = '', artifacts: list[str] | None = None, status: str = 'active') -> dict[str, Any]:
+def checkpoint(goal: str, scope: list[str], step: int, note: str = '', artifacts: list[str] | None = None, status: str = 'active',
+               task: str | None = None, phase: str | None = None, last_verified_sha: str | None = None,
+               retry_count: int = 0, started_at: float | None = None, completed_at: float | None = None,
+               error: str | None = None) -> dict[str, Any]:
     with LOCK:
+        previous = {}
+        if RECOVERY.exists():
+            try: previous = json.loads(RECOVERY.read_text(encoding='utf-8'))
+            except Exception: previous = {}
+        now_ts = time.time()
         data = {
-            'version': 1, 'goal': goal, 'scope': list(scope), 'step': int(step), 'note': note,
-            'artifacts': list(artifacts or []), 'status': status, 'updated_at': time.time(),
+            'version': 2,
+            'task': task or previous.get('task') or goal,
+            'phase': phase or previous.get('phase') or 'recovery',
+            'step': int(step),
+            'goal': goal, 'scope': list(scope), 'note': note, 'artifacts': list(artifacts or []),
+            'status': status, 'started_at': started_at if started_at is not None else previous.get('started_at', now_ts),
+            'completed_at': completed_at if completed_at is not None else (now_ts if status in {'done','completed'} else None),
+            'error': error, 'retry_count': int(retry_count),
+            'last_verified_sha': last_verified_sha if last_verified_sha is not None else previous.get('last_verified_sha'),
+            'updated_at': now_ts,
         }
         _atomic_json(RECOVERY, data)
         return data
