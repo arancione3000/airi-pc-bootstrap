@@ -50,6 +50,8 @@ if [ ! -d "$BASE/.git" ]; then
 fi
 git -C "$BASE" fetch -q --depth=1 origin "$BRANCH" || { write_report failed unknown git_fetch_failed; exit 35; }
 git -C "$BASE" reset -q --hard "origin/$BRANCH" || { write_report failed unknown git_reset_failed; exit 36; }
+git -C "$BASE" symbolic-ref HEAD "refs/heads/$BRANCH" || { write_report failed unknown branch_sync_failed; exit 40; }
+git -C "$BASE" update-ref "refs/heads/$BRANCH" "origin/$BRANCH" || { write_report failed unknown branch_ref_update_failed; exit 41; }
 git -C "$BASE" config user.name 'Airi-PC Agent'
 git -C "$BASE" config user.email 'airi-pc-agent@users.noreply.github.com'
 cp -a "$TMP/state-preserve/." "$BASE/.ai/state/" 2>/dev/null || true
