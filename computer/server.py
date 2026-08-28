@@ -351,10 +351,25 @@ class _BrowserManager:
 
     def screenshot(self):
         def _screenshot():
+            last_error = None
+            for attempt in range(2):
+                try:
+                    page=self._ensure()
+                    b=page.screenshot(type='png', timeout=10000)
+                    return {'ok':True,'format':'png','width':1280,'height':800,'data_base64':base64.b64encode(b).decode(),'method':'playwright'}
+                except Exception as exc:
+                    last_error=str(exc)
+                    self._close_worker()
+                    if attempt == 0:
+                        try: self._ensure()
+                        except Exception as restart_exc: last_error=str(restart_exc)
+                        time.sleep(0.25)
             try:
-                page=self._ensure(); b=page.screenshot(type='png', timeout=10000); return {'ok':True,'format':'png','width':1280,'height':800,'data_base64':base64.b64encode(b).decode()}
-            except Exception as exc:
-                self._close_worker(); return {'ok':False,'error':str(exc)}
+                img=screenshot_image(); b=io.BytesIO(); img.save(b,format='PNG')
+                return {'ok':True,'format':'png','width':img.width,'height':img.height,'data_base64':base64.b64encode(b.getvalue()).decode(),'method':'x11_fallback','warning':'Playwright page screenshot failed; returned the live Airi-PC display capture.','browser_error':last_error}
+            except Exception as fallback_exc:
+                self.last_error=f'{last_error}; fallback={fallback_exc}'
+                return {'ok':False,'error':self.last_error}
         return self.call(_screenshot)
 
     def text(self):
