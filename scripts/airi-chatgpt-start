@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+ROOT="${AIRI_ROOT:-/home/user/airi}"
+mkdir -p "$ROOT/.ai/auth"
+chmod 700 "$ROOT/.ai/auth"
+export DISPLAY="${DISPLAY:-:99}"
+URL="${AIRI_CHATGPT_URL:-https://chatgpt.com/codex}"
+python3 - <<'PY' "$URL"
+import json, sys, urllib.request
+url=sys.argv[1]
+req=urllib.request.Request('http://127.0.0.1:9010/action', data=json.dumps({'action':'browser_open','payload':{'url':url,'wait_until':'domcontentloaded'}}).encode(), headers={'Content-Type':'application/json'})
+with urllib.request.urlopen(req, timeout=30) as r:
+    print(r.read().decode())
+PY
+printf '%s\n' "ChatGPT/Codex opened in Airi-PC. Sign in manually in the browser if required; credentials are never written to files, logs, Git, or chat prompts."

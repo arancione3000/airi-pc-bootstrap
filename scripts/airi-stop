@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+ROOT="${AIRI_ROOT:-/home/user/airi}"
+mkdir -p "$ROOT/.ai/control_plane"
+printf '%s\n' "STOP requested at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ROOT/.ai/STOP"
+# Stop the local autonomous worker without touching repository contents.
+pkill -TERM -f 'airi-local-autonomous|control_plane/local_agent.py' 2>/dev/null || true
+printf '%s\n' "Airi-PC STOP requested. Checkpoint is preserved; remove $ROOT/.ai/STOP to resume."
