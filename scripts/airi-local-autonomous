@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+ROOT="${AIRI_ROOT:-/home/user/airi}"
+VENV="$ROOT/.venv"
+export AIRI_ROOT="$ROOT"
+if [ ! -x "$VENV/bin/python" ]; then
+  echo "Airi-PC Python runtime is missing. Run airi-next-session first." >&2
+  exit 2
+fi
+MODEL="${AIRI_LOCAL_MODEL:-qwen2.5-coder:7b}"
+if ! command -v curl >/dev/null 2>&1; then
+  echo "curl is required for the local model health check" >&2
+  exit 3
+fi
+if ! curl -fsS --max-time 3 http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+  echo "Ollama is not running at 127.0.0.1:11434. No paid API is used; start a local Ollama server and install model $MODEL." >&2
+  exit 4
+fi
+exec "$VENV/bin/python" "$ROOT/computer/control_plane/local_agent.py" "$@"
