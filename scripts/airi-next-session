@@ -48,8 +48,9 @@ cleanup_memory_tmp() { rm -f "$MEMORY_TMP"; rm -rf "$CONTROL_TMP" "$VIEWER_TMP";
 trap cleanup_memory_tmp EXIT INT TERM
 
 git -C "$BASE" fetch -q origin main || { echo AIRI_PC_GIT_FETCH_FAILED >&2; exit 6; }
-git -C "$BASE" switch -C main -q origin/main || { echo AIRI_PC_BRANCH_SYNC_FAILED >&2; exit 9; }
-git -C "$BASE" reset -q --hard origin/main || { echo AIRI_PC_SOURCE_SYNC_FAILED >&2; exit 10; }
+git -C "$BASE" symbolic-ref HEAD refs/heads/main || { echo AIRI_PC_BRANCH_SYNC_FAILED >&2; exit 9; }
+git -C "$BASE" update-ref refs/heads/main origin/main || { echo AIRI_PC_BRANCH_REF_UPDATE_FAILED >&2; exit 10; }
+git -C "$BASE" reset -q --hard origin/main || { echo AIRI_PC_SOURCE_SYNC_FAILED >&2; exit 11; }
 CURRENT_SHA=$(git -C "$BASE" rev-parse HEAD)
 mkdir -p "$BASE/.ai"
 printf '%s\n' "$CURRENT_SHA" > "$BASE/.ai/.runtime_source_sha"
