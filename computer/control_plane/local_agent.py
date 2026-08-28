@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__
 
 import json
 import os
@@ -10,7 +10,10 @@ from typing import Any
 
 ROOT = Path(os.environ.get("AIRI_ROOT", "/home/user/airi")).resolve()
 MODEL = os.environ.get("AIRI_LOCAL_MODEL", "qwen2.5-coder:7b")
+PROVIDER = os.environ.get("AIRI_MODEL_PROVIDER", "ollama")
+MODEL = os.environ.get("OPENROUTER_MODEL", MODEL) if PROVIDER == "openrouter" and os.environ.get("OPENROUTER_MODEL") else MODEL
 OLLAMA_URL = os.environ.get("AIRI_OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
+OPENROUTER_BRIDGE_URL = os.environ.get("AIRI_OPENROUTER_BRIDGE_URL", "http://127.0.0.1:17891/chat")
 MAX_ITERATIONS = max(1, min(int(os.environ.get("AIRI_AUTONOMOUS_ITERATIONS", "5")), 20))
 TEST_COMMAND = os.environ.get("AIRI_AUTONOMOUS_TEST", "python3 -m pytest -q")
 
@@ -21,16 +24,22 @@ def _run(command: list[str], timeout: int = 120) -> subprocess.CompletedProcess[
     return subprocess.run(command, cwd=ROOT, text=True, capture_output=True, timeout=timeout, check=False)
 
 
-def _context() -> str:
-    status = _run(["git", "status", "--short"])
-    diff = _run(["git", "diff", "--", "."]) 
-    log = _run(["git", "log", "-5", "--oneline"])
+def _context_at(root: Path) -> str:
+    def run_local(command: list[str]):
+        return subprocess.run(command, cwd=root, text=True, capture_output=True, timeout=30, check=False)
+    status = run_local(["git", "status", "--short"])
+    diff = run_local(["git", "diff", "--", "."])
+    log = run_local(["git", "log", "-5", "--oneline"])
     return "\n".join([
-        f"REPOSITORY={ROOT}",
+        f"REPOSITORY={root}",
         "\nGIT_STATUS:\n" + status.stdout[:12000],
         "\nGIT_DIFF:\n" + diff.stdout[:30000],
         "\nGIT_LOG:\n" + log.stdout[:4000],
     ])
+
+
+def _context() -> str:
+    return _context_at(ROOT)
 
 
 def ask_local_model(goal: str, feedback: str = "") -> str:
@@ -58,6 +67,70 @@ def ask_local_model(goal: str, feedback: str = "") -> str:
     if not text:
         raise RuntimeError("Local model returned an empty patch")
     return text.replace("```diff", "").replace("```", "").strip()
+
+
+CHANGE_SYSTEM = """You are the Airi-PC autonomous coding engineer. Work only on the repository supplied in context. Return ONLY valid JSON in this exact shape: {\"changes\":[{\"path\":\"...\",\"operation\":\"patch|write\",\"old\":\"...\",\"new\":\"...\",\"content\":\"...\",\"test_command\":\"...\",\"scope\":[\"...\"]}]}. For patch operations provide exact old/new text from the inspected repository. For write operations provide complete file content. Never target credentials, secrets, .git, .ssh, auth files, or paths outside the repository. Return an empty changes array only when no source change is actually required."""
+
+
+def _provider_request(messages: list[dict[str, str]], model: str) -> dict[str, Any]:
+    if PROVIDER == "openrouter":
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            raise RuntimeError("OpenRouter provider configured but OPENROUTER_API_KEY is missing")
+        payload = {
+            "model": os.environ.get("OPENROUTER_MODEL", model),
+            "stream": False,
+            "messages": messages,
+            "max_tokens": 4096,
+            "temperature": 0.1,
+            "include_reasoning": False,
+        }
+        req = urllib.request.Request(
+            os.environ.get("OPENROUTER_URL", "https://openrouter.ai/api/v1/chat/completions"),
+            data=json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+                "HTTP-Referer": os.environ.get("OPENROUTER_HTTP_REFERER", "http://127.0.0.1"),
+                "X-Title": os.environ.get("OPENROUTER_X_TITLE", "Airi-PC"),
+            },
+        )
+    else:
+        payload = {"model": model, "stream": False, "messages": messages, "max_tokens": 4096, "temperature": 0.1, "include_reasoning": False}
+        if PROVIDER == "openrouter_bridge":
+            req = urllib.request.Request(OPENROUTER_BRIDGE_URL, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+        else:
+            payload = {"model": model, "stream": False, "messages": messages, "options": {"temperature": 0.1}}
+            req = urllib.request.Request(OLLAMA_URL, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as exc:
+        body = exc.read(4000).decode(errors="replace")
+        raise RuntimeError(f"Model provider HTTP {exc.code}: {body}") from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise RuntimeError(f"Model provider unavailable: {exc}") from exc
+
+
+def ask_local_model_changes(goal: str, context: str, feedback: str = "", root: str | Path | None = None, model: str | None = None) -> list[dict[str, Any]]:
+    repo = Path(root).resolve() if root else ROOT
+    prompt = (
+        f"GOAL:\n{goal}\n\nREPOSITORY_CONTEXT:\n{context[:120000]}\n\n"
+        f"PREVIOUS_FEEDBACK:\n{feedback[:16000]}\n\n"
+        "Identify the smallest concrete source changes needed to satisfy the goal. "
+        "Each change MUST include path, operation, test_command and scope. "
+        "Use exact old text when operation=patch. Do not merely describe a plan."
+    )
+    data = _provider_request([{"role":"system","content":CHANGE_SYSTEM},{"role":"user","content":prompt}], model or MODEL)
+    text = str(((data.get("choices") or [{}])[0].get("message") or {}).get("content", "") or data.get("message", {}).get("content", "")).strip()
+    text = text.replace("```json", "").replace("```", "").strip()
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Local model returned invalid changes JSON: {exc}") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("changes"), list):
+        raise RuntimeError("Local model response missing changes array")
+    return payload["changes"]
 
 
 def _safe_patch(patch: str) -> None:
