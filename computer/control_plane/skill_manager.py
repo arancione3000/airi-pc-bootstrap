@@ -12,7 +12,9 @@ class SkillManager:
             if not p.is_dir() or not f.exists(): continue
             text=f.read_text(errors='replace'); sha=hashlib.sha256(f.read_bytes()).hexdigest()
             tools=re.findall(r'^-\s+(.+)$', text, re.M);
-            self.state['skills'][p.name]={'name':p.name,'version':'1.0','path':str(f.relative_to(ROOT)),'description':self._section(text,'Description'),'required_tools':tools,'permissions':['workspace-scoped'],'status':'valid','checksum':sha,'verified_at':now()}
+            previous=self.state['skills'].get(p.name,{})
+            ts=now()
+            self.state['skills'][p.name]={'name':p.name,'version':previous.get('version','1.0'),'path':str(f.relative_to(ROOT)),'description':self._section(text,'Description'),'required_tools':tools,'permissions':['workspace-scoped'],'status':'valid','checksum':sha,'verified_at':ts,'last_verified':ts,'origin':previous.get('origin','repository'),'dependencies':previous.get('dependencies',tools),'tests':previous.get('tests',[]),'rollback':previous.get('rollback',{'strategy':'restore previous checksum'})}
         save_json('skill-registry.json',self.state); return self.state
     def _section(self,text,name):
         m=re.search(rf'## {re.escape(name)}\n(.*?)(?:\n## |\Z)',text,re.S); return (m.group(1).strip() if m else '')[:500]

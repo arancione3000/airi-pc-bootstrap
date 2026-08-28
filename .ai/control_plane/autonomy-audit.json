@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "generated_at": 1787921968.163261,
+  "components": {
+    "planning": [
+      "PARTIAL",
+      "computer/code_agent.py:plan; computer/control_plane/orchestrator.py:autonomous_goal",
+      "goals can be decomposed into supplied or default steps; no semantic planner/LLM"
+    ],
+    "task_decomposition": [
+      "EXISTS",
+      "computer/control_plane/task_engine.py:TaskEngine.start",
+      "dependency graph, resumable node state"
+    ],
+    "tool_selection": [
+      "EXISTS",
+      "computer/control_plane/capability_manager.py:route",
+      "health/error-rate/latency scoring with reliability breaker"
+    ],
+    "execution": [
+      "EXISTS",
+      "computer/control_plane/orchestrator.py:execute",
+      "shared operation dispatcher; coding agent uses existing code tools"
+    ],
+    "observation": [
+      "EXISTS",
+      "computer/server.py browser/computer routes",
+      "browser/gui state and screenshots"
+    ],
+    "error_classification": [
+      "EXISTS",
+      "computer/control_plane/orchestrator.py:_classify_failure",
+      "timeout/permission/network/dependency/input/tool_error"
+    ],
+    "retry": [
+      "EXISTS",
+      "computer/control_plane/orchestrator.py:autonomous_goal; computer/code_agent.py",
+      "bounded retries"
+    ],
+    "backoff": [
+      "EXISTS",
+      "computer/control_plane/orchestrator.py:autonomous_goal; reliability.py",
+      "1/2/4/8s style bounded backoff"
+    ],
+    "fallback": [
+      "PARTIAL",
+      "computer/control_plane/orchestrator.py:_default_candidates",
+      "multiple candidates only for selected operations"
+    ],
+    "recovery": [
+      "EXISTS",
+      "computer/advanced.py; supervisor.py; watchdog wrapper",
+      "shared recovery/checkpoint engines"
+    ],
+    "test_generation": [
+      "PARTIAL",
+      "computer/code_agent.py; test-first skill",
+      "agent can execute tests but no general automatic test synthesis"
+    ],
+    "test_execution": [
+      "EXISTS",
+      "computer/coding.py:test; computer/server.py:computer_test_run",
+      "real subprocess tests with timeout"
+    ],
+    "self_review": [
+      "EXISTS",
+      "computer/code_agent.py:prepare_commit; diff_summary; guardrail_check",
+      "review before commit"
+    ],
+    "skill_creation": [
+      "EXISTS",
+      "computer/skills.py; skill_manager.py",
+      "create/test/register via existing skill system"
+    ],
+    "skill_reuse": [
+      "PARTIAL",
+      "computer/code_agent.py:plan/list_skills",
+      "skills are surfaced but no automatic semantic match yet"
+    ],
+    "delivery_preparation": [
+      "PARTIAL",
+      "computer/control_plane/orchestrator.py; git tools",
+      "git diff/commit preparation exists; no generic delivery planner"
+    ],
+    "persistence": [
+      "EXISTS",
+      "computer/control_plane/store.py; advanced.py",
+      "atomic JSON + state files"
+    ],
+    "cross_session_resume": [
+      "EXISTS",
+      "computer/control_plane/task_engine.py; autonomous-workflow.json",
+      "task and workflow state can be reloaded by a new controller instance"
+    ],
+    "autonomous_goal_controller": [
+      "EXISTS",
+      "computer/control_plane/orchestrator.py:autonomous_goal; computer/server.py:computer_autonomous_goal",
+      "persistent bounded decision loop over existing engines"
+    ],
+    "self_healing_environment": [
+      "PARTIAL",
+      "computer/advanced.py:runtime_preflight; maintenance",
+      "preflight exists, generic dependency repair is not universal"
+    ],
+    "resource_governor": [
+      "EXISTS",
+      "computer/control_plane/orchestrator.py:autonomous_goal",
+      "max_time/max_iterations/max_retries/max_tool_calls/max_parallel_tasks"
+    ]
+  },
+  "integration_principle": "orchestrator layer reuses TaskEngine/CapabilityManager/ReliabilityRegistry/SkillManager/TransactionEngine/Checkpoint APIs; no duplicate engines"
+}

@@ -1,0 +1,80 @@
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "computer"))
+import control_plane.orchestrator as mod
+
+
+class FakeTasks:
+    def __init__(self):
+        self.tasks = {}
+    def start(self, goal, nodes, scope):
+        tid='t1'
+        self.tasks[tid]={'id':tid,'goal':goal,'scope':scope,'nodes':[],'current':None,'status':'running'}
+        for n in nodes:
+            row=dict(n); row.update({'status':'running' if not self.tasks[tid]['nodes'] else 'pending','output':None,'error':None,'retry_count':0,'checkpoint':None})
+            self.tasks[tid]['nodes'].append(row)
+        self.tasks[tid]['current']=self.tasks[tid]['nodes'][0]['id'] if nodes else None
+        return self.tasks[tid]
+    def read(self, tid=None):
+        return self.tasks.get(tid)
+    def update(self, node_id, status, output=None, error=None, checkpoint=None, task_id=None):
+        row=self.tasks[task_id]
+        node=next(n for n in row['nodes'] if n['id']==node_id)
+        node.update({'status':status,'output':output,'error':error,'checkpoint':checkpoint})
+        if status=='completed':
+            for nxt in row['nodes']:
+                if nxt['status']=='pending':
+                    nxt['status']='running'; row['current']=nxt['id']; break
+        if all(n['status']=='completed' for n in row['nodes']): row['status']='completed'
+        return row
+    def finish(self, status='completed'):
+        row=next(iter(self.tasks.values())); row['status']=status; return row
+
+
+def test_goal_executes_and_persists(tmp_path, monkeypatch):
+    f=tmp_path/'autonomy.json'; monkeypatch.setattr(mod,'AUTONOMY_FILE',f)
+    cp=mod.ControlPlane(); cp.tasks=FakeTasks()
+    calls=[]
+    def execute(*args, **kwargs):
+        calls.append(args[3]); return {'ok':True,'selected_tool':'fake','result':{'ok':True},'error':None}
+    monkeypatch.setattr(cp,'execute',execute)
+    out=cp.autonomous_goal('demo',steps=[{'id':'a','operation':'analyze','args':{}},{'id':'b','operation':'test','args':{}}],max_time=30)
+    assert out['phase']=='complete' and out['result']['status']=='READY'
+    assert calls==['analyze','test']
+    assert json.loads(f.read_text())['active'] is False
+
+
+def test_goal_retries_then_succeeds(tmp_path, monkeypatch):
+    f=tmp_path/'autonomy.json'; monkeypatch.setattr(mod,'AUTONOMY_FILE',f)
+    cp=mod.ControlPlane(); cp.tasks=FakeTasks(); n={'count':0}
+    def execute(*args, **kwargs):
+        n['count']+=1
+        if n['count']==1: return {'ok':False,'selected_tool':'fake','result':None,'error':'timeout'}
+        return {'ok':True,'selected_tool':'fake','result':{'ok':True},'error':None}
+    monkeypatch.setattr(cp,'execute',execute)
+    out=cp.autonomous_goal('retry',steps=[{'id':'a','operation':'analyze','args':{}}],max_time=30,max_retries=2)
+    assert out['phase']=='complete' and out['retries']==1
+    assert out['history'][0]['classification']=='timeout'
+
+
+def test_goal_stops_on_governor(tmp_path, monkeypatch):
+    f=tmp_path/'autonomy.json'; monkeypatch.setattr(mod,'AUTONOMY_FILE',f)
+    cp=mod.ControlPlane(); cp.tasks=FakeTasks()
+    monkeypatch.setattr(cp,'execute',lambda *a,**k: {'ok':True,'selected_tool':'fake','result':{},'error':None})
+    out=cp.autonomous_goal('limit',steps=[{'id':'a','operation':'analyze','args':{}},{'id':'b','operation':'analyze','args':{}}],max_time=30,max_iterations=1)
+    assert out['result']['status']=='STOP_SAFELY' and out['active'] is True
+
+
+def test_goal_resumes_persisted_state(tmp_path, monkeypatch):
+    f=tmp_path/'autonomy.json'; monkeypatch.setattr(mod,'AUTONOMY_FILE',f)
+    cp=mod.ControlPlane(); cp.tasks=FakeTasks();
+    monkeypatch.setattr(cp,'execute',lambda *a,**k: {'ok':True,'selected_tool':'fake','result':{},'error':None})
+    first=cp.autonomous_goal('resume',steps=[{'id':'a','operation':'analyze','args':{}},{'id':'b','operation':'analyze','args':{}}],max_time=30,max_iterations=1)
+    assert first['active'] is True
+    # create a fresh coordinator instance over the same persisted task/controller state
+    cp2=mod.ControlPlane(); cp2.tasks=cp.tasks
+    monkeypatch.setattr(cp2,'execute',lambda *a,**k: {'ok':True,'selected_tool':'fake','result':{},'error':None})
+    out=cp2.autonomous_goal('resume',max_time=30,max_iterations=10,resume=True)
+    assert out['phase']=='complete'
