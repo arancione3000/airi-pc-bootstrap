@@ -29,6 +29,9 @@ class ControlPlane:
         tx=self.transactions.begin(paths,label); self.audit.event(kind='transaction_begin',transaction_id=tx['id'],files=paths,label=label); return tx
     def execute(self,task_id,node_id,candidates,operation,args=None,transaction_id=None,finalize=True):
         args=args or {}; route=self.route(candidates); tool=route.get('selected')
+        if tool is None and candidates:
+            self.capabilities.discover(candidates)
+            route=self.route(candidates); tool=route.get('selected')
         if not tool: return {'ok':False,'error':'no healthy capability'}
         started=__import__('time').perf_counter(); error=None; result=None
         try:
@@ -89,52 +92,55 @@ class ControlPlane:
         }.get(operation,[])
 
     def autonomous_goal(self, goal, steps=None, scope=None, max_time=900, max_iterations=25, max_retries=3, max_tool_calls=100, max_parallel_tasks=1, resume=True):
-        state = load_json(AUTONOMY_FILE, {'version':1,'active':False,'goal':None,'task_id':None,'phase':'idle','step_index':0,'iteration':0,'tool_calls':0,'retries':0,'history':[],'result':None})
-        if resume and state.get('active') and state.get('goal') == goal:
-            task_id = state.get('task_id')
-            task = self.tasks.read(task_id) if task_id else None
-            if task:
-                steps = task.get('nodes')
-        if not steps:
-            steps = [
+        persisted = load_json(AUTONOMY_FILE, {'version':1,'active':False,'goal':None,'task_id':None,'phase':'idle','step_index':0,'iteration':0,'tool_calls':0,'retries':0,'history':[],'result':None})
+        can_resume = bool(resume and persisted.get('active') and persisted.get('goal') == goal and persisted.get('task_id'))
+        task = self.tasks.read(persisted.get('task_id')) if can_resume else None
+        if task is not None:
+            normalized = task.get('nodes', [])
+            step_index = int(persisted.get('step_index',0))
+            iteration = int(persisted.get('iteration',0))
+            tool_calls = int(persisted.get('tool_calls',0))
+            retries_total = int(persisted.get('retries',0))
+            history = list(persisted.get('history',[]))
+            started_at = persisted.get('started_at',now())
+        else:
+            raw_steps = steps or [
                 {'id':'understand','title':'understand goal','operation':'analyze','args':{'path':'.'}},
                 {'id':'plan','title':'inspect available skills and capabilities','operation':'search','args':{'query':goal,'path':'skills','limit':20}},
                 {'id':'verify','title':'verify workspace baseline','operation':'read','args':{'path':'.ai/control_plane/reliability.json'}},
             ]
-        normalized=[]
-        for i, step in enumerate(steps):
-            if isinstance(step,str):
-                step={'id':f'step{i+1}','title':step,'operation':'analyze','args':{'path':'.'}}
-            normalized.append(dict(step))
-        task = self.tasks.start(goal, normalized, scope or []) if not (resume and state.get('active') and state.get('goal') == goal and state.get('task_id')) else (self.tasks.read(state['task_id']) or self.tasks.start(goal, normalized, scope or []))
-        state.update({'version':1,'active':True,'goal':goal,'task_id':task['id'],'phase':'execute','step_index':state.get('step_index',0) if state.get('task_id')==task['id'] else 0,'iteration':state.get('iteration',0) if state.get('task_id')==task['id'] else 0,'started_at':state.get('started_at',now()),'limits':{'max_time':int(max_time),'max_iterations':int(max_iterations),'max_retries':int(max_retries),'max_tool_calls':int(max_tool_calls),'max_parallel_tasks':int(max_parallel_tasks)}})
-        save_json(AUTONOMY_FILE, state)
-        deadline = __import__('time').monotonic() + max(1,int(max_time))
-        candidates_by_op = lambda op: self._default_candidates(op)
+            normalized=[]
+            for i, step in enumerate(raw_steps):
+                if isinstance(step,str):
+                    step={'id':f'step{i+1}','title':step,'operation':'analyze','args':{'path':'.'}}
+                normalized.append(dict(step))
+            task=self.tasks.start(goal,normalized,scope or [])
+            step_index=0; iteration=0; tool_calls=0; retries_total=0; history=[]; started_at=now()
+        state={'version':1,'active':True,'goal':goal,'task_id':task['id'],'phase':'execute','step_index':step_index,'iteration':iteration,'tool_calls':tool_calls,'retries':retries_total,'history':history,'result':None,'started_at':started_at,'limits':{'max_time':int(max_time),'max_iterations':int(max_iterations),'max_retries':int(max_retries),'max_tool_calls':int(max_tool_calls),'max_parallel_tasks':int(max_parallel_tasks)}}
+        save_json(AUTONOMY_FILE,state)
+        import time as _time
+        deadline=_time.monotonic()+max(1,int(max_time))
         while state['step_index'] < len(task['nodes']):
-            if __import__('time').monotonic() >= deadline or state['iteration'] >= max_iterations or state['tool_calls'] >= max_tool_calls:
+            if _time.monotonic() >= deadline or state['iteration'] >= int(max_iterations) or state['tool_calls'] >= int(max_tool_calls):
                 state.update({'phase':'blocked','active':True,'result':{'status':'STOP_SAFELY','reason':'resource/time governor reached'}}); save_json(AUTONOMY_FILE,state); return state
-            node = task['nodes'][state['step_index']]
-            if node.get('status') == 'completed':
-                state['step_index'] += 1; save_json(AUTONOMY_FILE,state); continue
-            op = node.get('operation','analyze'); args = node.get('args') or {}; candidates = node.get('candidates') or candidates_by_op(op)
+            node=task['nodes'][state['step_index']]
+            if node.get('status')=='completed':
+                state['step_index']+=1; save_json(AUTONOMY_FILE,state); continue
+            op=node.get('operation','analyze'); args=node.get('args') or {}; candidates=node.get('candidates') or self._default_candidates(op)
             retries=0; last=None; succeeded=False
-            while retries <= max_retries and __import__('time').monotonic() < deadline:
-                state['iteration'] += 1; state['tool_calls'] += 1; state['retries'] += (1 if retries else 0); save_json(AUTONOMY_FILE,state)
+            while retries <= int(max_retries) and _time.monotonic() < deadline:
+                state['iteration']+=1; state['tool_calls']+=1; state['retries'] += 1 if retries else 0; save_json(AUTONOMY_FILE,state)
                 result=self.execute(task['id'],node['id'],candidates,op,args,finalize=False)
                 state['history'].append({'iteration':state['iteration'],'step':node['id'],'operation':op,'result_ok':result.get('ok',False),'tool':result.get('selected_tool'),'error':result.get('error'),'classification':self._classify_failure(result.get('error'))})
                 if result.get('ok'):
-                    self.tasks.update(node['id'],'completed',output=result.get('result'),checkpoint={'workflow_iteration':state['iteration'],'tool':result.get('selected_tool')},task_id=task['id'])
-                    succeeded=True; state['step_index'] += 1; state['phase']='execute'; state['last_success']=now(); save_json(AUTONOMY_FILE,state); break
-                last=result; retries += 1
-                if retries <= max_retries:
-                    __import__('time').sleep(min(2 ** (retries-1),8))
+                    updated=self.tasks.update(node['id'],'completed',output=result.get('result'),checkpoint={'workflow_iteration':state['iteration'],'tool':result.get('selected_tool')},task_id=task['id'])
+                    state['step_index']+=1; state['phase']='execute'; state['last_success']=now(); save_json(AUTONOMY_FILE,state); task=updated; succeeded=True; break
+                last=result; retries+=1
+                if retries <= int(max_retries): _time.sleep(min(2 ** (retries-1),8))
             if not succeeded:
-                self.tasks.update(node['id'],'failed',output=last.get('result') if last else None,error=last.get('error') if last else 'unknown failure',checkpoint={'workflow_iteration':state['iteration']},task_id=task['id'])
-                self.tasks.finish('failed')
-                state.update({'phase':'blocked','active':True,'result':{'status':'BLOCKED','step':node['id'],'error':last.get('error') if last else 'unknown failure','classification':self._classify_failure(last.get('error') if last else '')}}); save_json(AUTONOMY_FILE,state); return state
-            task=self.tasks.read(task['id']) or task
-        self.tasks.finish('completed')
+                err=last.get('error') if last else 'unknown failure'
+                self.tasks.update(node['id'],'failed',output=last.get('result') if last else None,error=err,checkpoint={'workflow_iteration':state['iteration']},task_id=task['id'])
+                state.update({'phase':'blocked','active':True,'result':{'status':'BLOCKED','step':node['id'],'error':err,'classification':self._classify_failure(err)}}); save_json(AUTONOMY_FILE,state); return state
         state.update({'phase':'complete','active':False,'result':{'status':'READY','task_id':task['id'],'iterations':state['iteration'],'tool_calls':state['tool_calls'],'retries':state['retries']},'completed_at':now()}); save_json(AUTONOMY_FILE,state); return state
 
     def verify(self,goal,result,tests=None,files=None,commit=None): return self.audit.event(kind='verification',goal=goal,result=result,tests=tests or [],files=files or [],commit=commit)

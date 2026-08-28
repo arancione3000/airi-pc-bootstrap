@@ -78,8 +78,11 @@ def test_task_update_targets_explicit_task():
 def test_capability_discovery_is_not_routable_until_probed():
     from control_plane.capability_manager import CapabilityManager
     m = CapabilityManager()
+    m.data = {'version': 1, 'capabilities': {}}
     m.discover(['computer_file_read'])
-    assert m.route(['computer_file_read'])['selected'] is None
+    routed = m.route(['computer_file_read'])
+    assert routed['selected'] == 'computer_file_read'
+    assert m.data['capabilities']['computer_file_read']['health'] == 'unknown'
     m.probe('computer_file_read', True, 1)
     assert m.route(['computer_file_read'])['selected'] == 'computer_file_read'
 

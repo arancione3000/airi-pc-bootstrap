@@ -110,12 +110,20 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     "computer_browser_auth_save": _obj({"profile": {"type": ["string", "null"]}}),
     "computer_browser_auth_status": _obj({"profile": {"type": "string"}}, ["profile"]),
     "computer_browser_human_wait": _obj({"timeout": {"type": "integer"}, "poll": {"type": "number"}}),
+    "computer_autonomous_goal": _obj({
+        "goal": {"type": "string"}, "steps": {"type": ["array", "null"]},
+        "scope": {"type": ["array", "null"]}, "max_time": {"type": "integer"},
+        "max_iterations": {"type": "integer"}, "max_retries": {"type": "integer"},
+        "max_tool_calls": {"type": "integer"}, "max_parallel_tasks": {"type": "integer"},
+        "resume": {"type": "boolean"}
+    }, ["goal"]),
 }
 
 
 def tool_specs() -> list[dict[str, Any]]:
     specs = [{"name": name, "description": f"Airi-PC canonical tool: {name}", "inputSchema": SCHEMAS.get(name, _obj())} for name in TOOLS]
     specs.append({"name":"computer_control_plane","description":"Airi-PC autonomous operating platform control plane","inputSchema":CONTROL_PLANE_SCHEMA})
+    specs.append({"name":"computer_autonomous_goal","description":"Run a bounded, persistent goal-oriented workflow using the existing Airi-PC control plane","inputSchema":SCHEMAS["computer_autonomous_goal"]})
     return specs
 
 
@@ -136,7 +144,7 @@ def _ready_payload() -> dict[str, Any]:
         checks["browser"] = bool(bs.get("available")) and bool(bs.get("open")) and not bs.get("error")
     except Exception:
         pass
-    checks["mcp"] = TOOL_COUNT == 83 and len(TOOLS) == 83 and len(set(TOOLS)) == 83 and len(tool_specs()) == 84 and all(spec["inputSchema"].get("type") == "object" for spec in tool_specs())
+    checks["mcp"] = TOOL_COUNT == 83 and len(TOOLS) == 83 and len(set(TOOLS)) == 83 and len(tool_specs()) == 85 and all(spec["inputSchema"].get("type") == "object" for spec in tool_specs())
     expected_sha = os.environ.get("AIRI_EXPECTED_SHA", "").strip()
     actual_sha = os.environ.get("AIRI_BOOTSTRAP_SHA", "").strip()
     checks["source_match"] = bool(actual_sha) and (not expected_sha or actual_sha == expected_sha)
@@ -168,7 +176,7 @@ def mcp_contract(req: dict[str, Any]) -> dict[str, Any]:
         return {"jsonrpc": "2.0", "id": rid, "result": {"tools": tool_specs()}}
     if method == "tools/call":
         name = req.get("params", {}).get("name")
-        if name == "computer_control_plane":
+        if name in ("computer_control_plane", "computer_autonomous_goal"):
             return _legacy.mcp(req)
         if name not in TOOLS:
             return {"jsonrpc": "2.0", "id": rid, "error": {"code": -32601, "message": "Tool not found"}}

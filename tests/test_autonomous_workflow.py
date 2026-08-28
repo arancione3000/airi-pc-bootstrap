@@ -78,3 +78,13 @@ def test_goal_resumes_persisted_state(tmp_path, monkeypatch):
     monkeypatch.setattr(cp2,'execute',lambda *a,**k: {'ok':True,'selected_tool':'fake','result':{},'error':None})
     out=cp2.autonomous_goal('resume',max_time=30,max_iterations=10,resume=True)
     assert out['phase']=='complete'
+
+
+def test_capability_discovered_tools_are_routable_before_first_probe(monkeypatch):
+    from control_plane.capability_manager import CapabilityManager
+    m=CapabilityManager()
+    monkeypatch.setattr(m, 'data', {'version':1,'capabilities':{}})
+    m.discover(['computer_file_read'])
+    routed=m.route(['computer_file_read'])
+    assert routed['selected']=='computer_file_read'
+    assert m.data['capabilities']['computer_file_read']['health']=='unknown'
