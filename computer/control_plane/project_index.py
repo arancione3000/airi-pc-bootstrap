@@ -59,7 +59,11 @@ class ProjectIndex:
         snippets=[]; total=0
         for rel in selected:
             p=ROOT/rel
-            try: text=p.read_text(errors='replace')[:max(0,max_bytes-total)]
+            try:
+                raw=p.read_bytes()[:max(0,max_bytes-total)]
+                text=raw.decode('utf-8',errors='replace')
+                while len(text.encode()) > max(0,max_bytes-total):
+                    text=text[:-1]
             except Exception: continue
             snippets.append({'path':rel,'score':next((s for s,r in scored if r==rel),0),'content':text}); total += len(text.encode())
             if total>=max_bytes: break
