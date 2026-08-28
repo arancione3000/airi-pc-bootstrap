@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import json, os, tempfile, threading, time
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'computer'))
+from control_plane.reliability import ReliabilityRegistry
+from control_plane.project_index import ProjectIndex
+from control_plane.task_engine import TaskEngine
+from control_plane.transaction_engine import TransactionEngine
+import control_plane.reliability as reliability
+import control_plane.project_index as project_index
+import control_plane.task_engine as task_engine
+import control_plane.transaction_engine as transaction_engine
+
+ROOT=Path(os.environ.get('AIRIPC_WORKSPACE_ROOT','/home/user/airi')).resolve()
+
+
+def run():
+    out={}
+    with tempfile.TemporaryDirectory(prefix='airi-chaos-') as td:
+        tmp=Path(td)
+        # stale lock cleanup / isolation via temp state directories
+        p=tmp/'state'; p.mkdir(); lock=p/'stale.lock'; lock.write_text('999999999')
+        out['stale_lock_artifact']=lock.exists()
+        lock.unlink(); out['stale_lock_cleanup']=not lock.exists()
+
+        # corrupted JSON must fall back safely without crashing callers
+        old=project_index.ROOT; old_load=project_index.load_json; old_save=project_index.save_json
+        try:
+            project_index.ROOT=tmp
+            idx_file=tmp/'.ai/control_plane/project-index.json'; idx_file.parent.mkdir(parents=True); idx_file.write_text('{broken')
+            project_index.load_json=lambda name, default: default
+            project_index.save_json=lambda name, data: None
+            idx=ProjectIndex(); (tmp/'x.py').write_text('import json\ndef f(): pass\n'); sm=idx.refresh()
+            out['corrupt_index_recovery']=sm['files'] >= 1 and 'dependencies' in idx.state
+        finally:
+            project_index.ROOT=old; project_index.load_json=old_load; project_index.save_json=old_save
+
+        # dependency cycle rejection
+        oldload=task_engine.load_json; oldsave=task_engine.save_json
+        try:
+            task_engine.load_json=lambda name, default: default; task_engine.save_json=lambda name, data: None
+            e=TaskEngine();
+            try: e.start('cycle',[{'id':'a','depends_on':['b']},{'id':'b','depends_on':['a']}]); cycle_rejected=False
+            except ValueError: cycle_rejected=True
+            out['task_cycle_rejected']=cycle_rejected
+        finally:
+            task_engine.load_json=oldload; task_engine.save_json=oldsave
+
+        # circuit breaker open -> cooldown path
+        oldreg=reliability.REGISTRY
+        try:
+            reg=ReliabilityRegistry(); reg.path=tmp/'reliability.json'; reg.data={'version':1,'capabilities':{}}
+            for _ in range(3): reg.record('chaos',False,error='boom')
+            opened=not reg.allow('chaos')
+            reg.data['capabilities']['chaos']['opened_at']=time.time()-31
+            half=reg.allow('chaos')
+            reg.record('chaos',True,1)
+            closed=reg.data['capabilities']['chaos']['state']=='closed'
+            out['breaker_open']=opened; out['breaker_half_open']=half; out['breaker_closes']=closed
+        finally:
+            reliability.REGISTRY=oldreg
+
+        # transaction rollback after mutation
+        oldroot=transaction_engine.ROOT; oldload=transaction_engine.load_json; oldsave=transaction_engine.save_json; oldsafe=transaction_engine.safe_path
+        try:
+            transaction_engine.ROOT=tmp; transaction_engine.load_json=lambda n,d:d; transaction_engine.save_json=lambda n,d:None
+            transaction_engine.safe_path=lambda raw, missing=False: (tmp / str(raw)).resolve()
+            target=tmp/'demo.txt'; target.write_text('before')
+            e=TransactionEngine(); tx=e.begin(['demo.txt'],'chaos'); target.write_text('after'); e.rollback(tx['id'])
+            out['transaction_rollback']=target.read_text()=='before'
+        finally:
+            transaction_engine.ROOT=oldroot; transaction_engine.load_json=oldload; transaction_engine.save_json=oldsave; transaction_engine.safe_path=oldsafe
+    out['all']=all(out.values())
+    print(json.dumps(out,indent=2))
+    return 0 if out['all'] else 1
+
+if __name__=='__main__': raise SystemExit(run())

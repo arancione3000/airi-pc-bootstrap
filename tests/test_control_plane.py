@@ -158,3 +158,10 @@ def test_mcp_screenshot_returns_payload(monkeypatch):
     result = server.mcp({'jsonrpc':'2.0','id':98,'method':'tools/call','params':{'name':'computer_screenshot','arguments':{}}})
     sc=result['result']['structuredContent']
     assert sc['format']=='png' and sc['width'] == 4 and sc['height'] == 4
+
+def test_chaos_selftest_script():
+    import json, subprocess
+    root=__import__('pathlib').Path(__file__).resolve().parents[1]
+    p=subprocess.run([str(root/'scripts/airi-chaos-selftest')],cwd=root,text=True,capture_output=True,timeout=60)
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert json.loads(p.stdout)['all'] is True
