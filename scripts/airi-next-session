@@ -70,8 +70,14 @@ if [ ! -x "$BASE/.venv/bin/python" ]; then
   "$BASE/.venv/bin/python" -m playwright install chromium >>/tmp/airi-next-session-venv.log 2>&1 || { cat /tmp/airi-next-session-venv.log >&2; echo AIRI_PC_PLAYWRIGHT_REPAIR_FAILED >&2; exit 12; }
 fi
 
-if curl -fsS --max-time 5 http://127.0.0.1:9010/ready >/dev/null 2>&1; then
-  echo '{"status":"reused_existing_runtime","server":"127.0.0.1:9010"}' >/tmp/airi-next-session-status.json
+READY_JSON=""
+if READY_JSON=$(curl -fsS --max-time 5 http://127.0.0.1:9010/ready 2>/dev/null); then
+  RUNTIME_SHA=$(printf '%s' "$READY_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("source_sha", ""))' 2>/dev/null || true)
+  if [ -n "$RUNTIME_SHA" ] && [ "$RUNTIME_SHA" = "$CURRENT_SHA" ]; then
+    echo '{"status":"reused_existing_runtime","server":"127.0.0.1:9010","reason":"source_sha_matches"}' >/tmp/airi-next-session-status.json
+  else
+    AIRI_FORCE_RESTART=1 AIRI_EXPECTED_SHA="$CURRENT_SHA" "$BASE/computer/start.sh" >/tmp/airi-next-session-status.json 2>&1 || true
+  fi
 else
   AIRI_FORCE_RESTART=1 AIRI_EXPECTED_SHA="$CURRENT_SHA" "$BASE/computer/start.sh" >/tmp/airi-next-session-status.json 2>&1 || true
   READY=0
