@@ -39,6 +39,7 @@ SRC=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -n1)
 write_checkpoint preserve "preserving runtime-owned state"
 if [ -d "$BASE/.ai/state" ]; then cp -a "$BASE/.ai/state" "$TMP/state-preserve"; else mkdir -p "$TMP/state-preserve"; fi
 [ -f "$BASE/.ai/PROJECT_MEMORY.md" ] && cp "$BASE/.ai/PROJECT_MEMORY.md" "$TMP/PROJECT_MEMORY.md" || true
+if [ -d "$BASE/.ai/control_plane" ]; then cp -a "$BASE/.ai/control_plane" "$TMP/control-plane"; else mkdir -p "$TMP/control-plane"; fi
 write_checkpoint activate "activating canonical source"
 if [ -e "$BASE" ]; then BACKUP="$BASE.backup.$(date +%s)"; mv "$BASE" "$BACKUP" || { write_report failed unknown backup_failed; exit 33; }; fi
 mv "$SRC" "$BASE" || { write_report failed unknown activation_failed; exit 34; }
@@ -53,6 +54,8 @@ git -C "$BASE" config user.name 'Airi-PC Agent'
 git -C "$BASE" config user.email 'airi-pc-agent@users.noreply.github.com'
 cp -a "$TMP/state-preserve/." "$BASE/.ai/state/" 2>/dev/null || true
 [ -f "$TMP/PROJECT_MEMORY.md" ] && cp "$TMP/PROJECT_MEMORY.md" "$BASE/.ai/PROJECT_MEMORY.md" || true
+mkdir -p "$BASE/.ai/control_plane"
+cp -a "$TMP/control-plane/." "$BASE/.ai/control_plane/" 2>/dev/null || true
 write_checkpoint fingerprint "recording exact source commit"
 SHA=$(git -C "$BASE" rev-parse HEAD)
 printf '%s\n' "$SHA" > "$BASE/.ai/.runtime_source_sha"

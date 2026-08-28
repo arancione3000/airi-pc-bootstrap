@@ -30,6 +30,21 @@ def _obj(properties: dict[str, Any] | None = None, required: list[str] | None = 
     return schema
 
 
+CONTROL_PLANE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "action": {"type": "string"}, "candidates": {"type": "array"}, "goal": {"type": "string"},
+        "steps": {"type": "array"}, "scope": {"type": "array"}, "task_id": {"type": "string"},
+        "node_id": {"type": "string"}, "tool": {"type": "string"}, "input_data": {}, "output": {},
+        "error": {"type": "string"}, "paths": {"type": "array"}, "label": {"type": "string"},
+        "transaction_id": {"type": "string"}, "limit": {"type": "integer"}, "query": {"type": "string"},
+        "name": {"type": "string"}, "operation": {"type": "string"}, "args": {"type": "object"},
+        "level": {"type": "string"}, "confirm": {"type": "string"}, "result": {}, "tests": {"type": "array"},
+        "files": {"type": "array"}, "commit": {"type": "string"}
+    },
+    "required": ["action"]
+}
+
 SCHEMAS: dict[str, dict[str, Any]] = {
     "computer_find_text": _obj({"text": {"type": "string"}, "click": {"type": "boolean"}}, ["text"]),
     "computer_click_element": _obj({"text": {"type": "string"}}, ["text"]),
@@ -95,7 +110,9 @@ SCHEMAS: dict[str, dict[str, Any]] = {
 
 
 def tool_specs() -> list[dict[str, Any]]:
-    return [{"name": name, "description": f"Airi-PC canonical tool: {name}", "inputSchema": SCHEMAS.get(name, _obj())} for name in TOOLS]
+    specs = [{"name": name, "description": f"Airi-PC canonical tool: {name}", "inputSchema": SCHEMAS.get(name, _obj())} for name in TOOLS]
+    specs.append({"name":"computer_control_plane","description":"Airi-PC autonomous operating platform control plane","inputSchema":CONTROL_PLANE_SCHEMA})
+    return specs
 
 
 def _remove_routes(paths: set[str]) -> None:
@@ -115,7 +132,7 @@ def _ready_payload() -> dict[str, Any]:
         checks["browser"] = bool(bs.get("available")) and bool(bs.get("open")) and not bs.get("error")
     except Exception:
         pass
-    checks["mcp"] = TOOL_COUNT == 83 and len(TOOLS) == 83 and len(set(TOOLS)) == 83 and all(spec["inputSchema"].get("type") == "object" for spec in tool_specs())
+    checks["mcp"] = TOOL_COUNT == 83 and len(TOOLS) == 83 and len(set(TOOLS)) == 83 and len(tool_specs()) == 84 and all(spec["inputSchema"].get("type") == "object" for spec in tool_specs())
     expected_sha = os.environ.get("AIRI_EXPECTED_SHA", "").strip()
     actual_sha = os.environ.get("AIRI_BOOTSTRAP_SHA", "").strip()
     checks["source_match"] = bool(actual_sha) and (not expected_sha or actual_sha == expected_sha)
@@ -133,7 +150,7 @@ def ready_contract() -> JSONResponse:
 @app.get("/tools")
 def tools_contract() -> dict[str, Any]:
     specs = tool_specs()
-    return {"name": "Airi Computer", "version": MANIFEST["runtime_version"], "tool_count": TOOL_COUNT, "tools": specs}
+    return {"name": "Airi Computer", "version": MANIFEST["runtime_version"], "tool_count": len(specs), "base_tool_count": TOOL_COUNT, "tools": specs}
 
 @app.post("/mcp")
 def mcp_contract(req: dict[str, Any]) -> dict[str, Any]:
@@ -147,6 +164,8 @@ def mcp_contract(req: dict[str, Any]) -> dict[str, Any]:
         return {"jsonrpc": "2.0", "id": rid, "result": {"tools": tool_specs()}}
     if method == "tools/call":
         name = req.get("params", {}).get("name")
+        if name == "computer_control_plane":
+            return _legacy.mcp(req)
         if name not in TOOLS:
             return {"jsonrpc": "2.0", "id": rid, "error": {"code": -32601, "message": "Tool not found"}}
         return _legacy.mcp(req)

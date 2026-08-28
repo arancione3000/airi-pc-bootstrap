@@ -39,8 +39,10 @@ git -C "$BASE" config user.name 'Airi-PC Agent'
 git -C "$BASE" config user.email 'airi-pc-agent@users.noreply.github.com'
 
 MEMORY_TMP=$(mktemp)
+CONTROL_TMP=$(mktemp -d /tmp/airi-control-plane.XXXXXX)
 if [ -f "$BASE/.ai/PROJECT_MEMORY.md" ]; then cp "$BASE/.ai/PROJECT_MEMORY.md" "$MEMORY_TMP"; else : > "$MEMORY_TMP"; fi
-cleanup_memory_tmp() { rm -f "$MEMORY_TMP"; }
+if [ -d "$BASE/.ai/control_plane" ]; then cp -a "$BASE/.ai/control_plane/." "$CONTROL_TMP/"; fi
+cleanup_memory_tmp() { rm -f "$MEMORY_TMP"; rm -rf "$CONTROL_TMP"; }
 trap cleanup_memory_tmp EXIT INT TERM
 
 git -C "$BASE" fetch -q origin main || { echo AIRI_PC_GIT_FETCH_FAILED >&2; exit 6; }
@@ -53,6 +55,8 @@ if [ -s "$MEMORY_TMP" ]; then
   mkdir -p "$BASE/.ai"
   cp "$MEMORY_TMP" "$BASE/.ai/PROJECT_MEMORY.md"
 fi
+mkdir -p "$BASE/.ai/control_plane"
+cp -a "$CONTROL_TMP/." "$BASE/.ai/control_plane/" 2>/dev/null || true
 
 chmod +x "$BASE"/scripts/airi-* "$BASE"/computer/start.sh 2>/dev/null || true
 

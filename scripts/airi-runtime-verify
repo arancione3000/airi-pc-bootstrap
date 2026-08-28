@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import urllib.request
 from pathlib import Path
 
@@ -21,7 +22,15 @@ def req(path: str, payload: dict | None = None) -> dict:
         return json.loads(response.read().decode())
 
 def run_script(path: Path) -> tuple[int, str, str]:
-    p = subprocess.run([str(path)], cwd=ROOT, text=True, capture_output=True, timeout=300)
+    try:
+        first = path.read_text(encoding="utf-8", errors="replace")[:120]
+    except Exception:
+        first = ""
+    if path.suffix == ".py" or "python" in first.splitlines()[0] if first.splitlines() else False:
+        cmd = [str(sys.executable), str(path)]
+    else:
+        cmd = ["/bin/sh", str(path)]
+    p = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, timeout=300)
     return p.returncode, p.stdout, p.stderr
 
 def main() -> int:
@@ -51,7 +60,8 @@ def main() -> int:
         get_specs = tools_payload.get("tools", [])
         get_names = [item.get("name") for item in get_specs]
         get_schemas_ok = all(isinstance(item.get("inputSchema"), dict) and item["inputSchema"].get("type") == "object" for item in get_specs)
-        results["http_tools"] = tools_payload.get("tool_count") == 83 and get_names == names and get_schemas_ok
+        expected_names = names + ["computer_control_plane"]
+        results["http_tools"] = tools_payload.get("tool_count") == 84 and tools_payload.get("base_tool_count") == 83 and get_names == expected_names and get_schemas_ok
         if not results["http_tools"]: errors.append("GET /tools does not exactly match the manifest or lacks schemas")
     except Exception as exc:
         errors.append(f"/tools failed: {exc}")
@@ -67,7 +77,8 @@ def main() -> int:
         mcp_specs = listing.get("result", {}).get("tools", [])
         mcp_names = [item.get("name") for item in mcp_specs]
         mcp_schemas_ok = all(isinstance(item.get("inputSchema"), dict) and item["inputSchema"].get("type") == "object" for item in mcp_specs)
-        results["mcp_tools_list"] = len(mcp_specs) == 83 and mcp_names == names and mcp_schemas_ok
+        expected_names = names + ["computer_control_plane"]
+        results["mcp_tools_list"] = len(mcp_specs) == 84 and mcp_names == expected_names and mcp_schemas_ok
         if not results["mcp_tools_list"]: errors.append("MCP tools/list does not exactly match the manifest or lacks schemas")
     except Exception as exc:
         errors.append(f"MCP tools/list failed: {exc}")

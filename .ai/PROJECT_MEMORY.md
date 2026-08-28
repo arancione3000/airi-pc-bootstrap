@@ -685,3 +685,318 @@ Steps: 2
 
 ### 2026-08-26 23:24:31 UTC — VERIFIED — final persisted-head regression
 After resetting to GitHub main at 93899dc24f4b489dba53d0687ab50848ffb301bb, Airi-PC full self-test was rerun with canonical executable permissions applied by the bootstrap contract. Result: SELFTEST_RC=0 and ALL=True across GUI, browser concurrency/recovery, screenshots, mouse, keyboard, MCP, coding-agent context/todo/rollback/atomic-commit checks. The direct ./script permission issue is packaging metadata only; cold bootstrap explicitly chmods its scripts before execution.
+
+### 2026-08-28 05:55:08 UTC — STARTED — task-start
+Goal: todo proof
+Steps: 3
+
+### 2026-08-28 05:55:08 UTC — PROGRESS — task-step
+Step 1/3: done. step one
+
+### 2026-08-28 05:55:08 UTC — PROGRESS — task-step
+Step 2/3: done. step two
+
+### 2026-08-28 05:55:08 UTC — PROGRESS — task-step
+Step 3/3: done. step three
+
+### 2026-08-28 05:55:08 UTC — DONE — task-finish
+todo proof complete
+
+### 2026-08-28 05:55:08 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-28 05:55:08 UTC — PROGRESS — task-step
+Step 1/4: done. passed on attempt 1
+
+### 2026-08-28 05:55:08 UTC — PROGRESS — task-step
+Step 2/4: done. full verification passed
+
+### 2026-08-28 05:55:08 UTC — PROGRESS — task-step
+Step 3/4: done. diff and guardrails passed
+
+### 2026-08-28 05:55:08 UTC — DONE — task-finish
+autonomous coding cycle complete; ready for explicit persistence step
+
+### 2026-08-28 05:55:08 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-28 05:55:08 UTC — PROGRESS — task-step
+Step 1/4: failed. max attempts reached; snapshot restored
+
+### 2026-08-28 05:55:08 UTC — FAILED — task-finish
+rollback for /home/user/airi/.ai/coding-selftest-project/bad.py
+
+### 2026-08-28 05:55:08 UTC — COMMITTED — git-commit
+1 file(s) changed; 1 additions; 1 deletions. Paths: M	app.py
+Commit: `d993718ecc60c08fdab1acd94402329eeac12f6c`
+
+### 2026-08-28 05:55:08 UTC — STARTED — task-start
+Goal: prove context auto-load
+Steps: 2
+
+### 2026-08-28 06:04:10 UTC — STARTED — task-start
+Goal: todo proof
+Steps: 3
+
+### 2026-08-28 06:04:10 UTC — PROGRESS — task-step
+Step 1/3: done. step one
+
+### 2026-08-28 06:04:10 UTC — PROGRESS — task-step
+Step 2/3: done. step two
+
+### 2026-08-28 06:04:10 UTC — PROGRESS — task-step
+Step 3/3: done. step three
+
+### 2026-08-28 06:04:10 UTC — DONE — task-finish
+todo proof complete
+
+### 2026-08-28 06:04:10 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-28 06:04:10 UTC — PROGRESS — task-step
+Step 1/4: done. passed on attempt 1
+
+### 2026-08-28 06:04:10 UTC — PROGRESS — task-step
+Step 2/4: done. full verification passed
+
+### 2026-08-28 06:04:10 UTC — PROGRESS — task-step
+Step 3/4: done. diff and guardrails passed
+
+### 2026-08-28 06:04:10 UTC — DONE — task-finish
+autonomous coding cycle complete; ready for explicit persistence step
+
+### 2026-08-28 06:04:10 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-28 06:04:10 UTC — PROGRESS — task-step
+Step 1/4: failed. max attempts reached; snapshot restored
+
+### 2026-08-28 06:04:10 UTC — FAILED — task-finish
+rollback for /home/user/airi/.ai/coding-selftest-project/bad.py
+
+### 2026-08-28 06:04:10 UTC — COMMITTED — git-commit
+1 file(s) changed; 1 additions; 1 deletions. Paths: M	app.py
+Commit: `cdecebc0d783ffd224d2179930429a8f32b281fc`
+
+### 2026-08-28 06:04:10 UTC — STARTED — task-start
+Goal: prove context auto-load
+Steps: 2
+
+### 2026-08-28 06:09:52 UTC — STARTED — task-start
+Goal: Transform Airi-PC into an autonomous operating platform with persistent control-plane capabilities
+Steps: 5
+
+### 2026-08-28 06:13:14 UTC — PROGRESS — task-step
+Step 1/5: done. Architecture inspected; modular control-plane package implemented and local tests pass
+
+### 2026-08-28 06:13:14 UTC — PROGRESS — task-step
+Step 2/5: in_progress. Restarting runtime to load the Control Plane facade
+
+### 2026-08-28 06:24:06 UTC — STARTED — task-start
+Goal: todo proof
+Steps: 3
+
+### 2026-08-28 06:24:06 UTC — PROGRESS — task-step
+Step 1/3: done. step one
+
+### 2026-08-28 06:24:06 UTC — PROGRESS — task-step
+Step 2/3: done. step two
+
+### 2026-08-28 06:24:06 UTC — PROGRESS — task-step
+Step 3/3: done. step three
+
+### 2026-08-28 06:24:06 UTC — DONE — task-finish
+todo proof complete
+
+### 2026-08-28 06:24:06 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-28 06:24:06 UTC — PROGRESS — task-step
+Step 1/4: done. passed on attempt 1
+
+### 2026-08-28 06:24:06 UTC — PROGRESS — task-step
+Step 2/4: done. full verification passed
+
+### 2026-08-28 06:24:06 UTC — PROGRESS — task-step
+Step 3/4: done. diff and guardrails passed
+
+### 2026-08-28 06:24:06 UTC — DONE — task-finish
+autonomous coding cycle complete; ready for explicit persistence step
+
+### 2026-08-28 06:24:06 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-28 06:24:07 UTC — PROGRESS — task-step
+Step 1/4: failed. max attempts reached; snapshot restored
+
+### 2026-08-28 06:24:07 UTC — FAILED — task-finish
+rollback for /home/user/airi/.ai/coding-selftest-project/bad.py
+
+### 2026-08-28 06:24:07 UTC — COMMITTED — git-commit
+1 file(s) changed; 1 additions; 1 deletions. Paths: M	app.py
+Commit: `d690a2cb7b2990d712fe34f12e0b2393e126acbb`
+
+### 2026-08-28 06:24:07 UTC — STARTED — task-start
+Goal: prove context auto-load
+Steps: 2
+
+### 2026-08-28 06:24:15 UTC — STARTED — task-start
+Goal: todo proof
+Steps: 3
+
+### 2026-08-28 06:24:15 UTC — PROGRESS — task-step
+Step 1/3: done. step one
+
+### 2026-08-28 06:24:15 UTC — PROGRESS — task-step
+Step 2/3: done. step two
+
+### 2026-08-28 06:24:15 UTC — PROGRESS — task-step
+Step 3/3: done. step three
+
+### 2026-08-28 06:24:15 UTC — DONE — task-finish
+todo proof complete
+
+### 2026-08-28 06:24:15 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-28 06:24:15 UTC — PROGRESS — task-step
+Step 1/4: done. passed on attempt 1
+
+### 2026-08-28 06:24:15 UTC — PROGRESS — task-step
+Step 2/4: done. full verification passed
+
+### 2026-08-28 06:24:15 UTC — PROGRESS — task-step
+Step 3/4: done. diff and guardrails passed
+
+### 2026-08-28 06:24:15 UTC — DONE — task-finish
+autonomous coding cycle complete; ready for explicit persistence step
+
+### 2026-08-28 06:24:15 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-28 06:24:15 UTC — PROGRESS — task-step
+Step 1/4: failed. max attempts reached; snapshot restored
+
+### 2026-08-28 06:24:15 UTC — FAILED — task-finish
+rollback for /home/user/airi/.ai/coding-selftest-project/bad.py
+
+### 2026-08-28 06:24:15 UTC — COMMITTED — git-commit
+1 file(s) changed; 1 additions; 1 deletions. Paths: M	app.py
+Commit: `01c36ecbae5c093589c5eb339dc8325ade691c65`
+
+### 2026-08-28 06:24:15 UTC — STARTED — task-start
+Goal: prove context auto-load
+Steps: 2
+
+### 2026-08-28 06:26:33 UTC — STARTED — task-start
+Goal: todo proof
+Steps: 3
+
+### 2026-08-28 06:26:33 UTC — PROGRESS — task-step
+Step 1/3: done. step one
+
+### 2026-08-28 06:26:33 UTC — PROGRESS — task-step
+Step 2/3: done. step two
+
+### 2026-08-28 06:26:33 UTC — PROGRESS — task-step
+Step 3/3: done. step three
+
+### 2026-08-28 06:26:33 UTC — DONE — task-finish
+todo proof complete
+
+### 2026-08-28 06:26:33 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-28 06:26:33 UTC — PROGRESS — task-step
+Step 1/4: done. passed on attempt 1
+
+### 2026-08-28 06:26:33 UTC — PROGRESS — task-step
+Step 2/4: done. full verification passed
+
+### 2026-08-28 06:26:33 UTC — PROGRESS — task-step
+Step 3/4: done. diff and guardrails passed
+
+### 2026-08-28 06:26:33 UTC — DONE — task-finish
+autonomous coding cycle complete; ready for explicit persistence step
+
+### 2026-08-28 06:26:33 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-28 06:26:33 UTC — PROGRESS — task-step
+Step 1/4: failed. max attempts reached; snapshot restored
+
+### 2026-08-28 06:26:33 UTC — FAILED — task-finish
+rollback for /home/user/airi/.ai/coding-selftest-project/bad.py
+
+### 2026-08-28 06:26:33 UTC — COMMITTED — git-commit
+1 file(s) changed; 1 additions; 1 deletions. Paths: M	app.py
+Commit: `cb6b805476c212954593719cde033cbf874a25e2`
+
+### 2026-08-28 06:26:33 UTC — STARTED — task-start
+Goal: prove context auto-load
+Steps: 2
+
+### 2026-08-28 06:26:37 UTC — STARTED — task-start
+Goal: todo proof
+Steps: 3
+
+### 2026-08-28 06:26:37 UTC — PROGRESS — task-step
+Step 1/3: done. step one
+
+### 2026-08-28 06:26:37 UTC — PROGRESS — task-step
+Step 2/3: done. step two
+
+### 2026-08-28 06:26:37 UTC — PROGRESS — task-step
+Step 3/3: done. step three
+
+### 2026-08-28 06:26:37 UTC — DONE — task-finish
+todo proof complete
+
+### 2026-08-28 06:26:37 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-28 06:26:37 UTC — PROGRESS — task-step
+Step 1/4: done. passed on attempt 1
+
+### 2026-08-28 06:26:37 UTC — PROGRESS — task-step
+Step 2/4: done. full verification passed
+
+### 2026-08-28 06:26:37 UTC — PROGRESS — task-step
+Step 3/4: done. diff and guardrails passed
+
+### 2026-08-28 06:26:37 UTC — DONE — task-finish
+autonomous coding cycle complete; ready for explicit persistence step
+
+### 2026-08-28 06:26:37 UTC — STARTED — task-start
+Goal: autonomous coding change cycle
+Steps: 4
+
+### 2026-08-28 06:26:38 UTC — PROGRESS — task-step
+Step 1/4: failed. max attempts reached; snapshot restored
+
+### 2026-08-28 06:26:38 UTC — FAILED — task-finish
+rollback for /home/user/airi/.ai/coding-selftest-project/bad.py
+
+### 2026-08-28 06:26:38 UTC — COMMITTED — git-commit
+1 file(s) changed; 1 additions; 1 deletions. Paths: M	app.py
+Commit: `db8d5b1b04c9cb9231c9a1a599d5b522d7982767`
+
+### 2026-08-28 06:26:38 UTC — STARTED — task-start
+Goal: prove context auto-load
+Steps: 2
+
+Airi-PC Autonomous Operating Platform evolution: rebuilt from canonical main; Control Plane modular components added for capability routing, transactions/undo, resumable tasks, maintenance/recovery, skill registry, audit, incremental project index, and orchestration. Runtime verifier and self-test pass; changes being persisted to GitHub.
+
+### 2026-08-28 06:28:02 UTC — PROGRESS — task-step
+Step 2/2: done. Control Plane integrated into live contract server as 84th facade tool; runtime restart and readiness verified

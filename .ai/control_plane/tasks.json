@@ -1,0 +1,115 @@
+{
+  "active": "f737fcd621f5",
+  "tasks": {
+    "011f21c31c7d": {
+      "created_at": 1787898341.680742,
+      "current": "n1",
+      "goal": "control-plane end-to-end verification",
+      "id": "011f21c31c7d",
+      "nodes": [
+        {
+          "checkpoint": {
+            "latency_ms": 0.15615100005561544,
+            "tool": "computer_file_read"
+          },
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": {
+            "content": "# Airi-PC Public Bootstrap\n\nAiri-PC \u00e8 un runtime Computer Mode riproducibile.\n\nOgni nuova sessione deve ricostruire il runtime dal branch `main`.\n\nBootstrap:\n\n```sh\ncurl -fsSL https://raw.githubusercontent.com/arancione3000/airi-pc-bootstrap/main/scripts/airi-session-rebuild | sh\n```\n\nIl runtime deve avere:\n\n- GUI 1280x800;\n- Chromium;\n- Playwright;\n- MCP;\n- 83 tool base, pi\u00f9 il facade `computer_control_plane` per l'orchestrazione autonoma;\n- inputSchema MCP per ogni tool;\n- Computer Mode;\n- coding agent;\n- memory;\n- task state;\n- recovery;\n- persistence;\n- research;\n- scheduler;\n- cleanup;\n- browser auth/human verification.\n\nLa readiness \u00e8 valida soltanto quando il verifier finale restituisce:\n\n`AIRI_RUNTIME_ALL= True`\n\nIl repository contiene inoltre il coding-agent runtime, il sistema di skill/memory, i servizi di recovery/persistence, ricerca, scheduler e Smart Cleanup. I controlli di sicurezza, scope dichiarato, snapshot/rollback e OAuth/PKCE restano parte del runtime.\n\nPer la diagnosi locale:\n\n```sh\n./scripts/airi-selftest\n./scripts/airi-coding-selftest\n./scripts/airi-runtime-verify\n```\n\nIl public bootstrap non deve contenere credenziali, token, cookie, `.venv`, log o stato runtime sensibile.\n",
+            "path": "README.md",
+            "size_bytes": 1220,
+            "truncated": false
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "read canonical README"
+        }
+      ],
+      "scope": [
+        "README.md"
+      ],
+      "status": "completed",
+      "updated_at": 1787898341.712245
+    },
+    "a95f36a2bdaf": {
+      "created_at": 1787897588.1781986,
+      "current": "b",
+      "goal": "demo",
+      "id": "a95f36a2bdaf",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "output": {
+            "ok": true
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "analyze"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "a"
+          ],
+          "error": null,
+          "id": "b",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "test"
+        }
+      ],
+      "scope": [
+        "tests"
+      ],
+      "status": "running",
+      "updated_at": 1787897588.1784039
+    },
+    "f737fcd621f5": {
+      "created_at": 1787898382.6020987,
+      "current": "b",
+      "goal": "demo",
+      "id": "f737fcd621f5",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "output": {
+            "ok": true
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "analyze"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "a"
+          ],
+          "error": null,
+          "id": "b",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "test"
+        }
+      ],
+      "scope": [
+        "tests"
+      ],
+      "status": "running",
+      "updated_at": 1787898382.6025038
+    }
+  }
+}

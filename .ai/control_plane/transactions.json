@@ -1,0 +1,77 @@
+{
+  "transactions": {
+    "089a56870e9b": {
+      "created_at": 1787898341.68518,
+      "files": [
+        {
+          "exists": true,
+          "path": "README.md"
+        }
+      ],
+      "id": "089a56870e9b",
+      "label": "e2e-read",
+      "status": "committed",
+      "steps": [
+        {
+          "error": null,
+          "input": {
+            "path": "README.md"
+          },
+          "label": "read",
+          "note": "",
+          "result": {
+            "content": "# Airi-PC Public Bootstrap\n\nAiri-PC \u00e8 un runtime Computer Mode riproducibile.\n\nOgni nuova sessione deve ricostruire il runtime dal branch `main`.\n\nBootstrap:\n\n```sh\ncurl -fsSL https://raw.githubusercontent.com/arancione3000/airi-pc-bootstrap/main/scripts/airi-session-rebuild | sh\n```\n\nIl runtime deve avere:\n\n- GUI 1280x800;\n- Chromium;\n- Playwright;\n- MCP;\n- 83 tool base, pi\u00f9 il facade `computer_control_plane` per l'orchestrazione autonoma;\n- inputSchema MCP per ogni tool;\n- Computer Mode;\n- coding agent;\n- memory;\n- task state;\n- recovery;\n- persistence;\n- research;\n- scheduler;\n- cleanup;\n- browser auth/human verification.\n\nLa readiness \u00e8 valida soltanto quando il verifier finale restituisce:\n\n`AIRI_RUNTIME_ALL= True`\n\nIl repository contiene inoltre il coding-agent runtime, il sistema di skill/memory, i servizi di recovery/persistence, ricerca, scheduler e Smart Cleanup. I controlli di sicurezza, scope dichiarato, snapshot/rollback e OAuth/PKCE restano parte del runtime.\n\nPer la diagnosi locale:\n\n```sh\n./scripts/airi-selftest\n./scripts/airi-coding-selftest\n./scripts/airi-runtime-verify\n```\n\nIl public bootstrap non deve contenere credenziali, token, cookie, `.venv`, log o stato runtime sensibile.\n",
+            "path": "README.md",
+            "size_bytes": 1220,
+            "truncated": false
+          },
+          "timestamp": 1787898341.6898992,
+          "tool": "computer_file_read"
+        }
+      ],
+      "updated_at": 1787898341.7059202
+    },
+    "3245616b0861": {
+      "created_at": 1787897588.176624,
+      "files": [
+        {
+          "exists": true,
+          "path": ".ai/control_plane/test-tx.txt"
+        }
+      ],
+      "id": "3245616b0861",
+      "label": "test",
+      "status": "rolled_back",
+      "steps": [],
+      "updated_at": 1787897588.1773176
+    },
+    "47dc73523eab": {
+      "created_at": 1787898382.600442,
+      "files": [
+        {
+          "exists": true,
+          "path": ".ai/control_plane/test-tx.txt"
+        }
+      ],
+      "id": "47dc73523eab",
+      "label": "test",
+      "status": "rolled_back",
+      "steps": [],
+      "updated_at": 1787898382.601144
+    },
+    "754275c5dc71": {
+      "created_at": 1787897576.1979468,
+      "files": [
+        {
+          "exists": true,
+          "path": ".ai/control_plane/test-tx.txt"
+        }
+      ],
+      "id": "754275c5dc71",
+      "label": "test",
+      "status": "rolled_back",
+      "steps": [],
+      "updated_at": 1787897576.1985009
+    }
+  }
+}

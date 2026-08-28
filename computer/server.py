@@ -25,6 +25,7 @@ from code_agent import apply_fix as code_apply_fix, verify_change as code_verify
 from advanced import (health_check, checkpoint, recovery_read, recovery_finish, record_decision, decisions,
                     persistence_status, persist_current, research, scheduler_status, schedule_job, cancel_job,
                     permission_check, runtime_preflight, integration_status, AI, ROOT)
+from control_plane import ControlPlane
 
 # Optional remote MCP authentication. Local requests remain unchanged when the
 # token is unset; public deployments should set AIRI_MCP_TOKEN.
@@ -32,6 +33,8 @@ _mcp_env_token = os.environ.get('AIRI_MCP_TOKEN', '').strip()
 _mcp_file = Path('/home/user/airi/.mcp_token')
 AIRI_MCP_TOKEN = _mcp_env_token or (_mcp_file.read_text().strip() if _mcp_file.exists() else '')
 AIRI_BOOTSTRAP_SHA = os.environ.get('AIRI_BOOTSTRAP_SHA', '').strip()
+CONTROL_PLANE = ControlPlane()
+CONTROL_PLANE_BOOTSTRAPPED = False
 
 @app.middleware('http')
 async def mcp_auth_middleware(request: Request, call_next):
@@ -764,9 +767,22 @@ def scheduler_schedule_endpoint(req: Dict[str,Any]): return schedule_job(req['na
 @app.post('/scheduler/cancel')
 def scheduler_cancel_endpoint(req: Dict[str,Any]): return cancel_job(req['name'])
 
+def _control_plane_bootstrap():
+    global CONTROL_PLANE_BOOTSTRAPPED
+    if not CONTROL_PLANE_BOOTSTRAPPED:
+        CONTROL_PLANE.bootstrap(tools()["tools"])
+        CONTROL_PLANE_BOOTSTRAPPED = True
+    return CONTROL_PLANE
+
+
+@app.get('/control-plane')
+def control_plane_status_endpoint():
+    return _control_plane_bootstrap().status()
+
+
 @app.get('/tools')
 def tools():
-    names=['computer_status','computer_observe','computer_screenshot','computer_find_text','computer_click_element','computer_click','computer_double_click','computer_move','computer_drag','computer_scroll','computer_key','computer_hotkey','computer_type','computer_wait','computer_windows','computer_mouse_position','computer_browser_open','computer_browser_status','computer_browser_screenshot','computer_browser_state','computer_browser_text','computer_act_verify','computer_cleanup_scan','computer_cleanup_safe','computer_project_analyze','computer_project_tree','computer_file_read','computer_file_search','computer_file_write','computer_file_patch','computer_terminal_run','computer_test_run','computer_build_run','computer_lint','computer_git_status','computer_git_diff','computer_git_log','computer_git_commit','computer_skill_list','computer_skill_load','computer_skill_create','computer_skill_update','computer_skill_test','computer_skill_delete','computer_project_memory_read','computer_project_memory_update','computer_code_apply_fix','computer_code_verify_change','computer_code_agent','computer_project_context','computer_task_start','computer_task_read','computer_task_update','computer_task_finish','computer_scope_check','computer_diff_summary','computer_guardrails','computer_snapshot','computer_restore_snapshot','computer_prepare_commit','computer_code_commit','computer_autonomous_cycle','computer_health','computer_recovery_read','computer_recovery_checkpoint','computer_recovery_finish','computer_decision_record','computer_decisions','computer_persistence_status','computer_persist','computer_research','computer_backup_prune','computer_scheduler_status','computer_scheduler_schedule','computer_scheduler_cancel','computer_browser_auth_set','computer_browser_auth_save','computer_browser_auth_status','computer_browser_human_status','computer_browser_human_wait','computer_permission_check','computer_runtime_preflight','computer_integrations']
+    names=['computer_status','computer_observe','computer_screenshot','computer_find_text','computer_click_element','computer_click','computer_double_click','computer_move','computer_drag','computer_scroll','computer_key','computer_hotkey','computer_type','computer_wait','computer_windows','computer_mouse_position','computer_browser_open','computer_browser_status','computer_browser_screenshot','computer_browser_state','computer_browser_text','computer_act_verify','computer_cleanup_scan','computer_cleanup_safe','computer_project_analyze','computer_project_tree','computer_file_read','computer_file_search','computer_file_write','computer_file_patch','computer_terminal_run','computer_test_run','computer_build_run','computer_lint','computer_git_status','computer_git_diff','computer_git_log','computer_git_commit','computer_skill_list','computer_skill_load','computer_skill_create','computer_skill_update','computer_skill_test','computer_skill_delete','computer_project_memory_read','computer_project_memory_update','computer_code_apply_fix','computer_code_verify_change','computer_code_agent','computer_project_context','computer_task_start','computer_task_read','computer_task_update','computer_task_finish','computer_scope_check','computer_diff_summary','computer_guardrails','computer_snapshot','computer_restore_snapshot','computer_prepare_commit','computer_code_commit','computer_autonomous_cycle','computer_health','computer_recovery_read','computer_recovery_checkpoint','computer_recovery_finish','computer_decision_record','computer_decisions','computer_persistence_status','computer_persist','computer_research','computer_backup_prune','computer_scheduler_status','computer_scheduler_schedule','computer_scheduler_cancel','computer_browser_auth_set','computer_browser_auth_save','computer_browser_auth_status','computer_browser_human_status','computer_browser_human_wait','computer_permission_check','computer_runtime_preflight','computer_integrations','computer_control_plane']
     return {'name':'Airi Computer','version':'2.0','tools':names}
 
 @app.post('/mcp')
@@ -775,7 +791,7 @@ def mcp(req: Dict[str,Any]):
     if method=='initialize': return {'jsonrpc':'2.0','id':rid,'result':{'protocolVersion':'2025-06-18','capabilities':{'tools':{}},'serverInfo':{'name':'Airi Computer','version':'2.0'}}}
     if method in ('notifications/initialized','ping'): return {'jsonrpc':'2.0','id':rid,'result':{}}
     if method=='tools/list':
-        names=tools()['tools']; return {'jsonrpc':'2.0','id':rid,'result':{'tools':[{'name':n,'description':'Airi Computer action'} for n in names]}}
+        names=tools()['tools']; cp_schema={'type':'object','properties':{'action':{'type':'string'},'candidates':{'type':'array'},'goal':{'type':'string'},'steps':{'type':'array'},'scope':{'type':'array'},'task_id':{'type':'string'},'node_id':{'type':'string'},'tool':{'type':'string'},'input_data':{},'output':{},'error':{'type':'string'},'paths':{'type':'array'},'label':{'type':'string'},'transaction_id':{'type':'string'},'limit':{'type':'integer'},'query':{'type':'string'},'name':{'type':'string'},'operation':{'type':'string'},'args':{'type':'object'},'candidates':{'type':'array'},'transaction_id':{'type':'string'},'confirm':{'type':'string'},'level':{'type':'string'},'result':{},'tests':{'type':'array'},'files':{'type':'array'},'commit':{'type':'string'}},'required':['action']}; return {'jsonrpc':'2.0','id':rid,'result':{'tools':[{'name':n,'description':'Airi Computer action','inputSchema':cp_schema if n=='computer_control_plane' else {'type':'object','properties':{}}} for n in names]}}
     if method=='tools/call':
         params=req.get('params',{}); name=params.get('name',''); args=params.get('arguments',{})
         mapping={
@@ -784,11 +800,34 @@ def mcp(req: Dict[str,Any]):
           'computer_double_click':('action',{'action':'double_click','payload':args}),'computer_move':('action',{'action':'move','payload':args}), 'computer_drag':('action',{'action':'drag','payload':args}),
           'computer_scroll':('action',{'action':'scroll','payload':args}), 'computer_key':('action',{'action':'key','payload':args}), 'computer_hotkey':('action',{'action':'hotkey','payload':args}), 'computer_type':('action',{'action':'type','payload':args}),
           'computer_wait':('action',{'action':'wait','payload':args}), 'computer_windows':('windows',{}),'computer_mouse_position':('mouse_position',{}),'computer_browser_open':('action',{'action':'browser_open','payload':args}),
-          'computer_browser_status':('action',{'action':'browser_status','payload':args}),'computer_browser_screenshot':('action',{'action':'browser_screenshot','payload':args}),'computer_browser_state':('action',{'action':'browser_state','payload':args}),'computer_browser_text':('action',{'action':'browser_text','payload':args}), 'computer_act_verify':('act-verify',args),'computer_cleanup_scan':('cleanup_scan',{}),'computer_cleanup_safe':('cleanup_safe',args),'computer_project_analyze':('code_analyze',args),'computer_project_tree':('code_tree',args),'computer_file_read':('code_read',args),'computer_file_search':('code_search',args),'computer_file_write':('code_write',args),'computer_file_patch':('code_patch',args),'computer_terminal_run':('code_shell',args),'computer_test_run':('code_test',args),'computer_build_run':('code_build',args),'computer_lint':('code_lint',args),'computer_git_status':('code_git_status',args),'computer_git_diff':('code_git_diff',args),'computer_git_log':('code_git_log',args),'computer_git_commit':('code_git_commit',args),'computer_skill_list':('skill_list',{}),'computer_skill_load':('skill_load',args),'computer_skill_create':('skill_create',args),'computer_skill_update':('skill_update',args),'computer_skill_test':('skill_test',args),'computer_skill_delete':('skill_delete',args),'computer_project_memory_read':('memory_read',{}),'computer_project_memory_update':('memory_update',args),'computer_code_apply_fix':('code_apply_fix',args),'computer_code_verify_change':('code_verify_change',args),'computer_code_agent':('code_agent',args),'computer_project_context':('code_project_context',args),'computer_task_start':('task_start',args),'computer_task_read':('task_read',{}),'computer_task_update':('task_update',args),'computer_task_finish':('task_finish',args),'computer_scope_check':('scope_check',args),'computer_diff_summary':('diff_summary',args),'computer_guardrails':('guardrails',args),'computer_snapshot':('snapshot',args),'computer_restore_snapshot':('restore_snapshot',args),'computer_prepare_commit':('prepare_commit',args),'computer_code_commit':('code_commit',args),'computer_autonomous_cycle':('autonomous_cycle',args),'computer_health':('health',{}),'computer_recovery_read':('recovery_read',{}),'computer_recovery_checkpoint':('recovery_checkpoint',args),'computer_recovery_finish':('recovery_finish',args),'computer_decision_record':('decision_record',args),'computer_decisions':('decisions',args),'computer_persistence_status':('persistence_status',{}),'computer_persist':('persist',args),'computer_research':('research',args),'computer_backup_prune':('backup_prune',args),'computer_scheduler_status':('scheduler_status',{}),'computer_scheduler_schedule':('scheduler_schedule',args),'computer_scheduler_cancel':('scheduler_cancel',args),'computer_browser_auth_set':('browser_auth_set',args),'computer_browser_auth_save':('browser_auth_save',args),'computer_browser_auth_status':('browser_auth_status',args),'computer_browser_human_status':('browser_human_status',args),'computer_browser_human_wait':('browser_human_wait',args),'computer_permission_check':('permission_check',{}),'computer_runtime_preflight':('runtime_preflight',{}),'computer_integrations':('integrations',{})}
+          'computer_browser_status':('action',{'action':'browser_status','payload':args}),'computer_browser_screenshot':('action',{'action':'browser_screenshot','payload':args}),'computer_browser_state':('action',{'action':'browser_state','payload':args}),'computer_browser_text':('action',{'action':'browser_text','payload':args}), 'computer_act_verify':('act-verify',args),'computer_cleanup_scan':('cleanup_scan',{}),'computer_cleanup_safe':('cleanup_safe',args),'computer_project_analyze':('code_analyze',args),'computer_project_tree':('code_tree',args),'computer_file_read':('code_read',args),'computer_file_search':('code_search',args),'computer_file_write':('code_write',args),'computer_file_patch':('code_patch',args),'computer_terminal_run':('code_shell',args),'computer_test_run':('code_test',args),'computer_build_run':('code_build',args),'computer_lint':('code_lint',args),'computer_git_status':('code_git_status',args),'computer_git_diff':('code_git_diff',args),'computer_git_log':('code_git_log',args),'computer_git_commit':('code_git_commit',args),'computer_skill_list':('skill_list',{}),'computer_skill_load':('skill_load',args),'computer_skill_create':('skill_create',args),'computer_skill_update':('skill_update',args),'computer_skill_test':('skill_test',args),'computer_skill_delete':('skill_delete',args),'computer_project_memory_read':('memory_read',{}),'computer_project_memory_update':('memory_update',args),'computer_code_apply_fix':('code_apply_fix',args),'computer_code_verify_change':('code_verify_change',args),'computer_code_agent':('code_agent',args),'computer_project_context':('code_project_context',args),'computer_task_start':('task_start',args),'computer_task_read':('task_read',{}),'computer_task_update':('task_update',args),'computer_task_finish':('task_finish',args),'computer_scope_check':('scope_check',args),'computer_diff_summary':('diff_summary',args),'computer_guardrails':('guardrails',args),'computer_snapshot':('snapshot',args),'computer_restore_snapshot':('restore_snapshot',args),'computer_prepare_commit':('prepare_commit',args),'computer_code_commit':('code_commit',args),'computer_autonomous_cycle':('autonomous_cycle',args),'computer_health':('health',{}),'computer_recovery_read':('recovery_read',{}),'computer_recovery_checkpoint':('recovery_checkpoint',args),'computer_recovery_finish':('recovery_finish',args),'computer_decision_record':('decision_record',args),'computer_decisions':('decisions',args),'computer_persistence_status':('persistence_status',{}),'computer_persist':('persist',args),'computer_research':('research',args),'computer_backup_prune':('backup_prune',args),'computer_scheduler_status':('scheduler_status',{}),'computer_scheduler_schedule':('scheduler_schedule',args),'computer_scheduler_cancel':('scheduler_cancel',args),'computer_browser_auth_set':('browser_auth_set',args),'computer_browser_auth_save':('browser_auth_save',args),'computer_browser_auth_status':('browser_auth_status',args),'computer_browser_human_status':('browser_human_status',args),'computer_browser_human_wait':('browser_human_wait',args),'computer_permission_check':('permission_check',{}),'computer_runtime_preflight':('runtime_preflight',{}),'computer_integrations':('integrations',{}),'computer_control_plane':('control_plane',args)}
         if name not in mapping: return {'jsonrpc':'2.0','id':rid,'error':{'code':-32601,'message':'Tool not found'}}
         path, payload=mapping[name]
         try:
-            if path=='status': result=status()
+            if path=='control_plane':
+                cp=_control_plane_bootstrap(); action=payload.get('action','status')
+                if action=='status': result=cp.status()
+                elif action=='bootstrap': result=cp.bootstrap(tools()['tools'])
+                elif action=='route': result=cp.route(payload.get('candidates',[]))
+                elif action=='task_start': result=cp.plan(payload['goal'],payload.get('steps',[]),payload.get('scope'))
+                elif action=='task_read': result=cp.tasks.read(payload.get('task_id'))
+                elif action=='task_update': result=cp.tasks.update(payload['node_id'],payload.get('status','completed'),payload.get('output'),payload.get('error'),payload.get('checkpoint'))
+                elif action=='task_finish': result=cp.tasks.finish(payload.get('status','completed'))
+                elif action=='transaction_begin': result=cp.transaction_begin(payload.get('paths',[]),payload.get('label','task'))
+                elif action=='transaction_step': result=cp.transactions.step(payload['transaction_id'],payload.get('label','step'),payload.get('note',''))
+                elif action=='transaction_commit': result=cp.transactions.commit(payload['transaction_id'])
+                elif action=='transaction_rollback': result=cp.transactions.rollback(payload['transaction_id'])
+                elif action=='execute': result=cp.execute(payload['task_id'],payload['node_id'],payload.get('candidates',[]),payload['operation'],payload.get('args'),payload.get('transaction_id'))
+                elif action=='maintenance_recover': result=cp.maintenance.recover(payload.get('level','auto'),payload.get('confirm'))
+                elif action=='audit': result=cp.audit.tail(payload.get('limit',100))
+                elif action=='index_refresh': result=cp.index.refresh(payload.get('paths'))
+                elif action=='index_search': result=cp.index.search(payload.get('query',''),payload.get('limit',50))
+                elif action=='maintenance': result=cp.maintenance.run()
+                elif action=='skills': result=cp.skills.refresh()
+                elif action=='skill_verify': result=cp.skills.verify(payload['name'])
+                elif action=='verify': result=cp.verify(payload.get('goal',''),payload.get('result'),payload.get('tests'),payload.get('files'),payload.get('commit'))
+                else: raise ValueError(f'unknown control-plane action: {action}')
+            elif path=='status': result=status()
             elif path=='observe': result=observe()
             elif path=='screenshot': result=screenshot()
             elif path=='windows': result=windows()
@@ -841,7 +880,7 @@ def mcp(req: Dict[str,Any]):
             elif path=='decision_record': result=record_decision(payload['decision'],payload.get('reason',''),payload.get('evidence'),payload.get('files'),payload.get('commit'),payload.get('result',''))
             elif path=='decisions': result=decisions(payload.get('limit',50))
             elif path=='persistence_status': result=persistence_status()
-            elif path=='persist': result=persist_current(payload['message'],payload.get('branch'),payload.get('push',True))
+            elif path=='persist': result=persist_current(payload['message'],payload.get('branch'),payload.get('push',True),payload.get('scope'))
             elif path=='research': result=_research_with_browser(payload)
             elif path=='backup_prune':
                 from cleanup import prune_backups
