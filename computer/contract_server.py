@@ -22,7 +22,9 @@ if TOOL_COUNT != 83 or len(TOOLS) != 83 or len(set(TOOLS)) != 83:
 import server as _legacy
 from legacy_mcp_compat import patch_legacy_mcp
 patch_legacy_mcp(_legacy)
+from viewer import build_router as build_viewer_router
 app: FastAPI = _legacy.app
+app.include_router(build_viewer_router(_legacy, ROOT))
 
 
 def _obj(properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:
