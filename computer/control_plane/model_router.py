@@ -1,10 +1,14 @@
 from __future__ import annotations
+import os
 from .store import load_json, save_json
 
 FILE='model-routing.json'
 DEFAULTS={'simple':'fast','coding':'strong','research':'strong','vision':'vision','review':'independent'}
 class ModelRouter:
-    def __init__(self): self.state=load_json(FILE, {'version':1,'routes':DEFAULTS.copy(),'providers':{}})
+    def __init__(self):
+        self.state=load_json(FILE, {'version':1,'routes':DEFAULTS.copy(),'providers':{}})
+        if os.environ.get('AIRI_MODEL_PROVIDER') == 'openrouter':
+            self.register_provider('openrouter', ['strong','coding','research','review'], available=bool(os.environ.get('OPENROUTER_API_KEY')), cost_class='configured')
     def register_provider(self,name,capabilities,available=False,cost_class='unknown'):
         self.state['providers'][name]={'name':name,'capabilities':list(capabilities),'available':bool(available),'cost_class':cost_class}; save_json(FILE,self.state); return self.state['providers'][name]
     def choose(self, task_type='simple', complexity='medium', needs_vision=False, prefer_speed=False):
