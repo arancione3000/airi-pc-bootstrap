@@ -40,9 +40,11 @@ git -C "$BASE" config user.email 'airi-pc-agent@users.noreply.github.com'
 
 MEMORY_TMP=$(mktemp)
 CONTROL_TMP=$(mktemp -d /tmp/airi-control-plane.XXXXXX)
+VIEWER_TMP=$(mktemp -d /tmp/airi-viewer-state.XXXXXX)
 if [ -f "$BASE/.ai/PROJECT_MEMORY.md" ]; then cp "$BASE/.ai/PROJECT_MEMORY.md" "$MEMORY_TMP"; else : > "$MEMORY_TMP"; fi
 if [ -d "$BASE/.ai/control_plane" ]; then cp -a "$BASE/.ai/control_plane/." "$CONTROL_TMP/"; fi
-cleanup_memory_tmp() { rm -f "$MEMORY_TMP"; rm -rf "$CONTROL_TMP"; }
+if [ -f "$BASE/.ai/state/viewer_token" ]; then cp "$BASE/.ai/state/viewer_token" "$VIEWER_TMP/viewer_token"; fi
+cleanup_memory_tmp() { rm -f "$MEMORY_TMP"; rm -rf "$CONTROL_TMP" "$VIEWER_TMP"; }
 trap cleanup_memory_tmp EXIT INT TERM
 
 git -C "$BASE" fetch -q origin main || { echo AIRI_PC_GIT_FETCH_FAILED >&2; exit 6; }
@@ -57,6 +59,7 @@ if [ -s "$MEMORY_TMP" ]; then
 fi
 mkdir -p "$BASE/.ai/control_plane"
 cp -a "$CONTROL_TMP/." "$BASE/.ai/control_plane/" 2>/dev/null || true
+if [ -f "$VIEWER_TMP/viewer_token" ]; then mkdir -p "$BASE/.ai/state"; cp "$VIEWER_TMP/viewer_token" "$BASE/.ai/state/viewer_token"; chmod 600 "$BASE/.ai/state/viewer_token" 2>/dev/null || true; fi
 
 chmod +x "$BASE"/scripts/airi-* "$BASE"/computer/start.sh 2>/dev/null || true
 
@@ -94,6 +97,8 @@ if [ -x "$BASE/scripts/airi-relay-updater" ]; then
     "$BASE/scripts/airi-relay-updater" >/dev/null 2>&1 &
   fi
 fi
+
+if [ -x "$BASE/scripts/airi-viewer-link" ]; then "$BASE/scripts/airi-viewer-link" || true; fi
 
 cat /tmp/airi-next-session-status.json
 if [ -f "$BASE/.ai/state/airi-endpoint.json" ]; then
