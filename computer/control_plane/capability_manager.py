@@ -11,9 +11,10 @@ class CapabilityManager:
     def discover(self, tool_names: Iterable[str], schemas: dict[str, Any] | None = None) -> dict[str, Any]:
         schemas = schemas or {}
         for name in tool_names:
-            row = self.data["capabilities"].setdefault(name, {"name":name,"category":self._category(name),"description":"Airi-PC MCP capability","dependencies":[],"available":True,"health":"unknown","latency_ms":None,"error_rate":0.0,"fallbacks":[]})
+            row = self.data["capabilities"].setdefault(name, {"name":name,"category":self._category(name),"description":"Airi-PC MCP capability","dependencies":[],"available":False,"health":"unknown","latency_ms":None,"error_rate":0.0,"fallbacks":[]})
             row["input_schema"] = schemas.get(name, row.get("input_schema", {"type":"object","properties":{}}))
-            row["available"] = True
+            row["available"] = False
+            row["health"] = "unknown"
             row["last_discovered"] = now()
         save_json("capabilities.json", self.data)
         return self.summary()
@@ -34,14 +35,15 @@ class CapabilityManager:
 
     def score(self, name: str) -> float:
         r=self.data["capabilities"].get(name) or {};
-        if not r.get("available",False): return -1.0
+        if not r.get("available",False) or r.get("health") not in {"healthy", "degraded"}: return -1.0
         health={"healthy":1.0,"unknown":0.8,"degraded":0.35}.get(r.get("health"),0.2)
         latency=max(0.0,1.0-min(float(r.get("latency_ms") or 0)/5000.0,1.0))
         return round(health*0.55+latency*0.25+(1.0-float(r.get("error_rate",0)))*0.20,4)
 
     def route(self, candidates: Iterable[str]) -> dict[str, Any]:
         scored=sorted(((n,self.score(n)) for n in candidates), key=lambda x:x[1], reverse=True)
-        return {"selected": scored[0][0] if scored else None, "candidates":[{"name":n,"score":s} for n,s in scored]}
+        selected=scored[0][0] if scored and scored[0][1] >= 0 else None
+        return {"selected": selected, "candidates":[{"name":n,"score":s} for n,s in scored]}
 
     def invalidate(self, name: str, reason: str = "") -> dict[str, Any]:
         r=self.data["capabilities"].setdefault(name,{"name":name}); r.update({"available":False,"health":"failed","last_error":reason,"invalidated_at":now()}); save_json("capabilities.json",self.data); return r

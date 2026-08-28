@@ -97,3 +97,15 @@ def test_prune_backups_removes_only_old_excess(tmp_path, monkeypatch):
     result=cleanup.prune_backups(max_entries=1,max_age_days=30,dry_run=False)
     assert result['candidate_count']==2
     assert (root/'b2').exists() and not (root/'b0').exists() and not (root/'b1').exists()
+
+def test_persistent_store_does_not_silently_reset_corrupt_json(tmp_path, monkeypatch):
+    import control_plane.store as store
+    monkeypatch.setattr(store, 'CP', tmp_path)
+    p = tmp_path / 'broken.json'
+    p.write_text('{broken', encoding='utf-8')
+    try:
+        store.load_json('broken.json', {'fallback': True})
+    except RuntimeError:
+        assert (tmp_path / 'broken.json.corrupt').exists()
+    else:
+        raise AssertionError('corrupt state was silently replaced by default')

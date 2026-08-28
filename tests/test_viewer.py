@@ -17,3 +17,10 @@ def test_viewer_has_private_token_and_safe_actions():
 def test_viewer_never_accepts_shell_action():
     src = (ROOT / "computer" / "viewer.py").read_text(encoding="utf-8")
     assert "run_shell" not in src.split("allowed =",1)[1].split("}",1)[0]
+
+
+def test_viewer_blocks_invalid_token_and_shell_action():
+    src = (ROOT / 'computer' / 'viewer.py').read_text(encoding='utf-8')
+    assert "HTTPException(status_code=401" in src
+    allowed = src.split('allowed =', 1)[1].split('}', 1)[0]
+    assert 'shell' not in allowed.lower()

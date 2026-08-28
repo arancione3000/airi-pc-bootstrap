@@ -45,3 +45,69 @@ def test_recovery_level_four_requires_barrier():
     from control_plane.maintenance import MaintenanceManager
     result=MaintenanceManager().recover(4)
     assert result["ok"] is False and result["needs_confirmation"] is True and result["required_confirmation"]=="REBUILD"
+
+def test_task_rejects_invalid_graphs():
+    from control_plane.task_engine import TaskEngine
+    e = TaskEngine()
+    try:
+        e.start('bad', [{'id': 'a', 'depends_on': ['missing']}])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('unknown dependency accepted')
+    try:
+        e.start('cycle', [{'id': 'a', 'depends_on': ['b']}, {'id': 'b', 'depends_on': ['a']}])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('dependency cycle accepted')
+
+
+def test_task_update_targets_explicit_task():
+    from control_plane.task_engine import TaskEngine
+    a = TaskEngine().start('a', ['one'])
+    b = TaskEngine().start('b', ['one'])
+    e = TaskEngine()
+    e.update('n1', 'completed', task_id=a['id'])
+    assert e.read(a['id'])['status'] == 'completed'
+    assert e.read(b['id'])['nodes'][0]['status'] == 'running'
+
+
+def test_capability_discovery_is_not_routable_until_probed():
+    from control_plane.capability_manager import CapabilityManager
+    m = CapabilityManager()
+    m.discover(['computer_file_read'])
+    assert m.route(['computer_file_read'])['selected'] is None
+    m.probe('computer_file_read', True, 1)
+    assert m.route(['computer_file_read'])['selected'] == 'computer_file_read'
+
+
+def test_task_cannot_force_complete_unfinished_nodes():
+    from control_plane.task_engine import TaskEngine
+    e = TaskEngine()
+    e.start('not-done', ['one', 'two'])
+    try:
+        e.finish('completed')
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('unfinished task was force-completed')
+
+
+def test_committed_transaction_cannot_be_rolled_back(tmp_path):
+    from control_plane.transaction_engine import TransactionEngine
+    target=tmp_path/'x.txt'; target.write_text('before')
+    # Use a workspace-local test file so the transaction engine safety rules apply.
+    rel='.ai/control_plane/test-committed-tx.txt'
+    from pathlib import Path
+    f=Path(rel); f.parent.mkdir(parents=True, exist_ok=True); f.write_text('before')
+    try:
+        e=TransactionEngine(); tx=e.begin([rel], 'guard-test'); f.write_text('after'); e.commit(tx['id'])
+        try:
+            e.rollback(tx['id'])
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('committed transaction was rollbackable')
+    finally:
+        if f.exists(): f.unlink()

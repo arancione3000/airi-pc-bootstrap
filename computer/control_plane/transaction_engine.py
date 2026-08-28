@@ -23,11 +23,16 @@ class TransactionEngine:
     def commit(self,tid):
         row=self.state["transactions"][tid]; row["status"]="committed"; row["updated_at"]=now(); save_json("transactions.json",self.state); return row
     def rollback(self,tid):
-        row=self.state["transactions"][tid]; base=ROOT/".ai"/"control_plane"/"transactions"/tid
+        row=self.state["transactions"][tid]
+        if row.get("status") != "active":
+            raise ValueError(f"cannot rollback transaction in status {row.get('status')}")
+        base=ROOT/".ai"/"control_plane"/"transactions"/tid
         for f in row["files"]:
             p=ROOT/f["path"]; snap=base/f["path"]
             if f["exists"]:
                 p.parent.mkdir(parents=True,exist_ok=True); shutil.copy2(snap,p)
-            elif p.exists(): p.unlink()
+            elif p.exists():
+                if p.is_dir(): shutil.rmtree(p)
+                else: p.unlink()
         row["status"]="rolled_back"; row["updated_at"]=now(); save_json("transactions.json",self.state); return row
     def read(self,tid=None): return self.state["transactions"].get(tid) if tid else self.state

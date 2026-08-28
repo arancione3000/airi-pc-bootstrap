@@ -1,11 +1,12 @@
 from __future__ import annotations
-import json, os, re, time
+import json, os, re, time, threading
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(os.environ.get("AIRIPC_WORKSPACE_ROOT", "/home/user/airi")).resolve()
 AI = ROOT / ".ai"
 CP = AI / "control_plane"
+_STORE_LOCK = threading.RLock()
 
 def ensure() -> Path:
     CP.mkdir(parents=True, exist_ok=True)
@@ -19,15 +20,31 @@ def atomic_json(path: Path, data: Any) -> None:
 
 def load_json(name: str, default: Any) -> Any:
     p = ensure() / name
-    try: return json.loads(p.read_text(encoding="utf-8")) if p.exists() else default
-    except Exception: return default
+    with _STORE_LOCK:
+        if not p.exists():
+            return default
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception as exc:
+            corrupt = p.with_suffix(p.suffix + ".corrupt")
+            try:
+                if not corrupt.exists(): p.replace(corrupt)
+            except OSError:
+                pass
+            raise RuntimeError(f"corrupt persistent state: {p}: {exc}") from exc
 
 def save_json(name: str, data: Any) -> None:
-    atomic_json(ensure() / name, data)
+    with _STORE_LOCK:
+        atomic_json(ensure() / name, data)
 
 def append_jsonl(name: str, row: dict[str, Any]) -> None:
     p = ensure() / name
-    p.open("a", encoding="utf-8").write(json.dumps(row, ensure_ascii=False) + "\n")
+    with _STORE_LOCK:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
 
 def redact(value: Any) -> Any:
     if isinstance(value, dict): return {k: redact(v) for k,v in value.items()}
