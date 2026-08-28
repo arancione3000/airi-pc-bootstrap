@@ -1,4 +1,4 @@
-from __future__
+from __future__ import annotations
 
 import json
 import os
@@ -13,7 +13,8 @@ MODEL = os.environ.get("AIRI_LOCAL_MODEL", "qwen2.5-coder:7b")
 PROVIDER = os.environ.get("AIRI_MODEL_PROVIDER", "ollama")
 MODEL = os.environ.get("OPENROUTER_MODEL", MODEL) if PROVIDER == "openrouter" and os.environ.get("OPENROUTER_MODEL") else MODEL
 OLLAMA_URL = os.environ.get("AIRI_OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
-OPENROUTER_BRIDGE_URL = os.environ.get("AIRI_OPENROUTER_BRIDGE_URL", "http://127.0.0.1:17891/chat")
+OPENROUTER_BRIDGE_URL = os.environ.get("AIRI_OPENROUTER_BRIDGE_URL", "http://127.0.0.1:17893/v1/chat/completions")
+OPENROUTER_BRIDGE_AUTH_FILE = Path(os.environ.get("AIRI_MODEL_GATEWAY_AUTH_FILE", "/tmp/airi-model-gateway.token"))
 MAX_ITERATIONS = max(1, min(int(os.environ.get("AIRI_AUTONOMOUS_ITERATIONS", "5")), 20))
 TEST_COMMAND = os.environ.get("AIRI_AUTONOMOUS_TEST", "python3 -m pytest -q")
 
@@ -98,7 +99,11 @@ def _provider_request(messages: list[dict[str, str]], model: str) -> dict[str, A
     else:
         payload = {"model": model, "stream": False, "messages": messages, "max_tokens": 4096, "temperature": 0.1, "include_reasoning": False}
         if PROVIDER == "openrouter_bridge":
-            req = urllib.request.Request(OPENROUTER_BRIDGE_URL, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+            try:
+                bridge_token = OPENROUTER_BRIDGE_AUTH_FILE.read_text().strip()
+            except OSError as exc:
+                raise RuntimeError("Model gateway unavailable: auth token missing") from exc
+            req = urllib.request.Request(OPENROUTER_BRIDGE_URL, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json", "Authorization": f"Bearer {bridge_token}"})
         else:
             payload = {"model": model, "stream": False, "messages": messages, "options": {"temperature": 0.1}}
             req = urllib.request.Request(OLLAMA_URL, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})

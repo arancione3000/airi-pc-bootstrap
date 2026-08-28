@@ -3,6 +3,10 @@ set -eu
 ROOT=/home/user/airi
 VENV="$ROOT/.venv"
 mkdir -p "$ROOT/logs"
+GATEWAY_PORT="${AIRI_MODEL_GATEWAY_PORT:-17893}"
+if ! curl -fsS --max-time 1 "http://127.0.0.1:${GATEWAY_PORT}/health" >/dev/null 2>&1; then
+  nohup env PYTHONPATH="$ROOT/computer" AIRI_MODEL_GATEWAY_PORT="$GATEWAY_PORT" AIRI_MODEL_GATEWAY_AUTH_FILE="${AIRI_MODEL_GATEWAY_AUTH_FILE:-/tmp/airi-model-gateway.token}" "$VENV/bin/python" -c "from control_plane.model_gateway import serve; serve()" >"$ROOT/logs/model-gateway.log" 2>&1 &
+fi
 export DISPLAY=":${DISPLAY_NUM:-99}"
 SERVER_PID_FILE="$ROOT/logs/computer-server.pid"
 RUNTIME_SHA_FILE="$ROOT/.ai/.runtime_source_sha"
@@ -13,7 +17,7 @@ stop_server() {
     [ -z "$PID" ] || kill "$PID" 2>/dev/null || true
     rm -f "$SERVER_PID_FILE"
   fi
-  pkill -f 'uvicorn (server|contract_server):app --host 127\.0\.0\.1 --port 9010' 2>/dev/null || true
+  pkill -f 'uvicorn (server|contract_server):app --host 127\\.0\\.0\\.1 --port 9010' 2>/dev/null || true
 }
 
 if [ "${AIRI_FORCE_RESTART:-0}" = "1" ]; then
