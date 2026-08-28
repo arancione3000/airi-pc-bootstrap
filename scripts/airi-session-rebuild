@@ -2,7 +2,7 @@
 set -eu
 
 BASE="/home/user/airi"
-REPO_URL="https://github.com/arancione3000/airi-pc-bootstrap/archive/refs/heads/main.tar.gz"
+REPO_URL="https://github.com/arancione3000/airi-pc-bootstrap.git"
 TMP="$(mktemp -d /tmp/airi-session-rebuild.XXXXXX)"
 BACKUP=""
 KEEP_STATE="${AIRI_PRESERVE_STATE:-1}"
@@ -11,13 +11,18 @@ trap cleanup EXIT INT TERM
 
 mkdir -p /home/user
 
-printf '%s\n' '[1/8] Download canonical main'
-curl -fsSL "$REPO_URL" -o "$TMP/main.tar.gz"
+printf '%s\n' '[1/8] Fetch canonical main'
+TOP="$TMP/source"
+git init -q "$TOP"
+git -C "$TOP" remote add origin "$REPO_URL"
+EXPECTED_SHA="$(git ls-remote "$REPO_URL" refs/heads/main | awk '{print $1}')"
+[ -n "$EXPECTED_SHA" ] || { echo 'AIRI_SOURCE_REF_MISSING' >&2; exit 5; }
+git -C "$TOP" fetch -q --depth=1 origin main || { echo 'AIRI_GIT_FETCH_FAILED' >&2; exit 6; }
+FETCHED_SHA="$(git -C "$TOP" rev-parse FETCH_HEAD)"
+[ "$FETCHED_SHA" = "$EXPECTED_SHA" ] || { echo 'AIRI_SOURCE_SHA_MISMATCH' >&2; exit 7; }
+git -C "$TOP" checkout -q -b main "$FETCHED_SHA" || { echo 'AIRI_BRANCH_CHECKOUT_FAILED' >&2; exit 8; }
 
-printf '%s\n' '[2/8] Extract canonical runtime'
-tar -xzf "$TMP/main.tar.gz" -C "$TMP"
-TOP="$(find "$TMP" -mindepth 1 -maxdepth 1 -type d ! -name state | head -n1)"
-[ -n "$TOP" ] || { echo 'AIRI_REBUILD_ARCHIVE_EMPTY' >&2; exit 5; }
+printf '%s\n' '[2/8] Canonical source verified'
 
 if [ -d "$BASE" ] && [ "$KEEP_STATE" = "1" ]; then
   printf '%s\n' '[3/8] Preserve .ai and browser auth state'

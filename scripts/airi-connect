@@ -1,16 +1,23 @@
 #!/bin/sh
 set -eu
 BASE=/home/user/airi
-REPO=https://github.com/arancione3000/airi-pc-bootstrap/archive/refs/heads/main.tar.gz
+REPO=https://github.com/arancione3000/airi-pc-bootstrap.git
 bootstrap_runtime() {
   mkdir -p /home/user
-  rm -rf "$BASE" /tmp/airi-connect-bootstrap
-  mkdir -p /tmp/airi-connect-bootstrap
-  curl -fsSL "$REPO" -o /tmp/airi-connect-bootstrap/a.tar.gz
-  tar -xzf /tmp/airi-connect-bootstrap/a.tar.gz -C /tmp/airi-connect-bootstrap
-  TOP=$(find /tmp/airi-connect-bootstrap -mindepth 1 -maxdepth 1 -type d | head -n1)
-  [ -n "$TOP" ] || { echo AIRI_PC_BOOTSTRAP_ARCHIVE_EMPTY >&2; exit 5; }
-  mv "$TOP" "$BASE"
+  TMP=/tmp/airi-connect-bootstrap-$$
+  rm -rf "$TMP"
+  mkdir -p "$TMP/source"
+  git -C "$TMP/source" init -q
+  git -C "$TMP/source" remote add origin "$REPO"
+  EXPECTED_SHA="$(git ls-remote "$REPO" refs/heads/main | awk '{print $1}')"
+  [ -n "$EXPECTED_SHA" ] || { echo AIRI_PC_SOURCE_REF_MISSING >&2; exit 5; }
+  git -C "$TMP/source" fetch -q --depth=1 origin main || { echo AIRI_PC_GIT_FETCH_FAILED >&2; exit 6; }
+  FETCHED_SHA="$(git -C "$TMP/source" rev-parse FETCH_HEAD)"
+  [ "$FETCHED_SHA" = "$EXPECTED_SHA" ] || { echo AIRI_PC_SOURCE_SHA_MISMATCH >&2; exit 7; }
+  git -C "$TMP/source" checkout -q -b main "$FETCHED_SHA" || { echo AIRI_PC_BRANCH_CHECKOUT_FAILED >&2; exit 8; }
+  if [ -e "$BASE" ]; then BACKUP="${BASE}.backup.$(date +%s)"; mv "$BASE" "$BACKUP" || { echo AIRI_PC_WORKSPACE_BACKUP_FAILED >&2; exit 9; }; fi
+  mv "$TMP/source" "$BASE"
+  rm -rf "$TMP"
 }
 
 if [ ! -x "$BASE/computer/start.sh" ]; then

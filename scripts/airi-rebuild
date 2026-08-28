@@ -3,7 +3,7 @@ set -eu
 BASE="${AIRI_BASE:-/home/user/airi}"
 REPO="${AIRI_REPO:-arancione3000/airi-pc-bootstrap}"
 BRANCH="${AIRI_BRANCH:-main}"
-BOOTSTRAP_URL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
+REPO_URL="https://github.com/${REPO}.git"
 STATE_DIR="$BASE/.ai/state"
 REPORT="$STATE_DIR/rebuild-report.json"
 CHECKPOINT="$STATE_DIR/rebuild-checkpoint.json"
@@ -32,10 +32,15 @@ p.write_text(json.dumps({"status":sys.argv[2],"source_repo":sys.argv[6],"source_
 PY
 }
 write_checkpoint download "fetching canonical ${REPO}:${BRANCH}"
-curl -fsSL "$BOOTSTRAP_URL" -o "$TMP/source.tar.gz" || { write_report failed unknown download_failed; exit 30; }
-tar -xzf "$TMP/source.tar.gz" -C "$TMP" || { write_report failed unknown archive_invalid; exit 31; }
-SRC=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -n1)
-[ -n "$SRC" ] || { write_report failed unknown source_missing; exit 32; }
+SRC="$TMP/source"
+git init -q "$SRC"
+git -C "$SRC" remote add origin "$REPO_URL"
+EXPECTED_SHA=$(git ls-remote "$REPO_URL" "refs/heads/$BRANCH" | awk '{print $1}')
+[ -n "$EXPECTED_SHA" ] || { write_report failed unknown source_ref_missing; exit 30; }
+git -C "$SRC" fetch -q --depth=1 origin "$BRANCH" || { write_report failed unknown git_fetch_failed; exit 31; }
+FETCHED_SHA=$(git -C "$SRC" rev-parse FETCH_HEAD)
+[ "$FETCHED_SHA" = "$EXPECTED_SHA" ] || { write_report failed "$FETCHED_SHA" source_sha_mismatch; exit 32; }
+git -C "$SRC" checkout -q -b "$BRANCH" "$FETCHED_SHA" || { write_report failed "$FETCHED_SHA" branch_checkout_failed; exit 33; }
 write_checkpoint preserve "preserving runtime-owned state"
 if [ -d "$BASE/.ai/state" ]; then cp -a "$BASE/.ai/state" "$TMP/state-preserve"; else mkdir -p "$TMP/state-preserve"; fi
 [ -f "$BASE/.ai/PROJECT_MEMORY.md" ] && cp "$BASE/.ai/PROJECT_MEMORY.md" "$TMP/PROJECT_MEMORY.md" || true
@@ -48,10 +53,6 @@ if [ ! -d "$BASE/.git" ]; then
   git init -q "$BASE"
   git -C "$BASE" remote add origin "https://github.com/${REPO}.git"
 fi
-git -C "$BASE" fetch -q --depth=1 origin "$BRANCH" || { write_report failed unknown git_fetch_failed; exit 35; }
-git -C "$BASE" reset -q --hard "origin/$BRANCH" || { write_report failed unknown git_reset_failed; exit 36; }
-git -C "$BASE" symbolic-ref HEAD "refs/heads/$BRANCH" || { write_report failed unknown branch_sync_failed; exit 40; }
-git -C "$BASE" update-ref "refs/heads/$BRANCH" "origin/$BRANCH" || { write_report failed unknown branch_ref_update_failed; exit 41; }
 git -C "$BASE" config user.name 'Airi-PC Agent'
 git -C "$BASE" config user.email 'airi-pc-agent@users.noreply.github.com'
 cp -a "$TMP/state-preserve/." "$BASE/.ai/state/" 2>/dev/null || true
@@ -60,6 +61,7 @@ mkdir -p "$BASE/.ai/control_plane"
 cp -a "$TMP/control-plane/." "$BASE/.ai/control_plane/" 2>/dev/null || true
 write_checkpoint fingerprint "recording exact source commit"
 SHA=$(git -C "$BASE" rev-parse HEAD)
+[ "$SHA" = "$EXPECTED_SHA" ] || { write_report failed "$SHA" activation_sha_mismatch; exit 40; }
 printf '%s\n' "$SHA" > "$BASE/.ai/.runtime_source_sha"
 write_checkpoint start "starting and verifying canonical runtime"
 chmod +x "$BASE/scripts/airi-*" "$BASE/computer/start.sh" 2>/dev/null || true

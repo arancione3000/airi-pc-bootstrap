@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 BASE=/home/user/airi
-BOOTSTRAP_URL=https://github.com/arancione3000/airi-pc-bootstrap/archive/refs/heads/main.tar.gz
+REPO_URL=https://github.com/arancione3000/airi-pc-bootstrap.git
 
 bootstrap_code() {
   TMP_BOOTSTRAP=$(mktemp -d /tmp/airi-bootstrap.XXXXXX)
@@ -47,11 +47,14 @@ if [ -f "$BASE/.ai/state/viewer_token" ]; then cp "$BASE/.ai/state/viewer_token"
 cleanup_memory_tmp() { rm -f "$MEMORY_TMP"; rm -rf "$CONTROL_TMP" "$VIEWER_TMP"; }
 trap cleanup_memory_tmp EXIT INT TERM
 
-git -C "$BASE" fetch -q origin main || { echo AIRI_PC_GIT_FETCH_FAILED >&2; exit 6; }
-git -C "$BASE" symbolic-ref HEAD refs/heads/main || { echo AIRI_PC_BRANCH_SYNC_FAILED >&2; exit 9; }
-git -C "$BASE" update-ref refs/heads/main origin/main || { echo AIRI_PC_BRANCH_REF_UPDATE_FAILED >&2; exit 10; }
-git -C "$BASE" reset -q --hard origin/main || { echo AIRI_PC_SOURCE_SYNC_FAILED >&2; exit 11; }
-CURRENT_SHA=$(git -C "$BASE" rev-parse HEAD)
+EXPECTED_SHA="$(git ls-remote "$REPO_URL" refs/heads/main | awk '{print $1}')"
+[ -n "$EXPECTED_SHA" ] || { echo AIRI_PC_SOURCE_REF_MISSING >&2; exit 6; }
+if git -C "$BASE" diff --numstat -- . ":(exclude).ai/**" | awk '$1+$2>0 {found=1} END {exit found ? 0 : 1}'; then echo AIRI_PC_SOURCE_DIRTY >&2; exit 13; fi
+git -C "$BASE" fetch -q --depth=1 origin main || { echo AIRI_PC_GIT_FETCH_FAILED >&2; exit 7; }
+FETCHED_SHA=$(git -C "$BASE" rev-parse FETCH_HEAD)
+[ "$FETCHED_SHA" = "$EXPECTED_SHA" ] || { echo AIRI_PC_SOURCE_SHA_MISMATCH >&2; exit 8; }
+git -C "$BASE" checkout -q -B main "$EXPECTED_SHA" || { echo AIRI_PC_BRANCH_SYNC_FAILED >&2; exit 9; }
+CURRENT_SHA="$EXPECTED_SHA"
 mkdir -p "$BASE/.ai"
 printf '%s\n' "$CURRENT_SHA" > "$BASE/.ai/.runtime_source_sha"
 
