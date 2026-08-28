@@ -88,3 +88,16 @@ def test_capability_discovered_tools_are_routable_before_first_probe(monkeypatch
     routed=m.route(['computer_file_read'])
     assert routed['selected']=='computer_file_read'
     assert m.data['capabilities']['computer_file_read']['health']=='unknown'
+
+
+def test_skill_matching_reuses_existing_metadata(monkeypatch):
+    from control_plane.skill_manager import SkillManager
+    m=SkillManager(); m.state={'version':1,'skills':{'coding-task':{'name':'coding-task','version':'1.0','description':'structured coding workflow','required_tools':['computer_code_agent'],'status':'valid','dependencies':['pytest']}}}
+    assert m.match('run a structured coding workflow')['matches'][0]['name']=='coding-task'
+
+
+def test_control_plane_dispatches_browser_and_code_agent(monkeypatch):
+    cp=mod.ControlPlane(); cp.capabilities.data={'version':1,'capabilities':{}}
+    def fake_execute(*args, **kwargs): return {'ok':True,'selected_tool':'fake','result':{}}
+    monkeypatch.setattr(cp,'execute',fake_execute)
+    assert cp.autonomous_goal('browser smoke',steps=[{'id':'a','operation':'browser_state','args':{}}],max_time=5,max_iterations=2,max_tool_calls=2,resume=False)['phase']=='complete'

@@ -47,6 +47,24 @@ class ControlPlane:
             elif operation=='git_diff': result=git_diff(args.get('path','.'))
             elif operation=='snapshot': result=snapshot(args.get('paths',[]),args.get('label','control-plane'))
             elif operation=='restore': result=restore_snapshot(args['snapshot'])
+            elif operation=='browser_open':
+                from server import browser
+                result=browser().open(args['url'], args.get('wait_until','domcontentloaded'))
+            elif operation=='browser_state':
+                from server import browser
+                result=browser().state()
+            elif operation=='browser_screenshot':
+                from server import browser
+                result=browser().screenshot()
+            elif operation=='browser_text':
+                from server import browser
+                result=browser().text()
+            elif operation=='research':
+                from advanced import research
+                result=research(args['topic'], args.get('urls'), args.get('max_sources',5))
+            elif operation=='code_agent':
+                from code_agent import agent
+                result=agent(args['goal'], args.get('project_path','.'), args.get('max_attempts',5), args.get('steps'), args.get('scope'), args.get('changes'), args.get('test_command',''))
             else: raise ValueError('unsupported operation')
         except Exception as exc: error=str(exc)
         latency=(__import__('time').perf_counter()-started)*1000; self.capabilities.probe(tool,error is None,latency,error or ''); REGISTRY.record(tool,error is None,latency,error or '')
@@ -89,6 +107,12 @@ class ControlPlane:
             'git_diff':['computer_git_diff'],
             'snapshot':['computer_snapshot'],
             'restore':['computer_restore_snapshot'],
+            'browser_open':['computer_browser_open'],
+            'browser_state':['computer_browser_state'],
+            'browser_screenshot':['computer_browser_screenshot','computer_screenshot'],
+            'browser_text':['computer_browser_text'],
+            'research':['computer_research'],
+            'code_agent':['computer_code_agent'],
         }.get(operation,[])
 
     def autonomous_goal(self, goal, steps=None, scope=None, max_time=900, max_iterations=25, max_retries=3, max_tool_calls=100, max_parallel_tasks=1, resume=True):
@@ -116,7 +140,8 @@ class ControlPlane:
                 normalized.append(dict(step))
             task=self.tasks.start(goal,normalized,scope or [])
             step_index=0; iteration=0; tool_calls=0; retries_total=0; history=[]; started_at=now()
-        state={'version':1,'active':True,'goal':goal,'task_id':task['id'],'phase':'execute','step_index':step_index,'iteration':iteration,'tool_calls':tool_calls,'retries':retries_total,'history':history,'result':None,'started_at':started_at,'limits':{'max_time':int(max_time),'max_iterations':int(max_iterations),'max_retries':int(max_retries),'max_tool_calls':int(max_tool_calls),'max_parallel_tasks':int(max_parallel_tasks)}}
+        skill_matches=self.skills.match(goal)
+        state={'version':1,'active':True,'goal':goal,'task_id':task['id'],'phase':'execute','step_index':step_index,'iteration':iteration,'tool_calls':tool_calls,'retries':retries_total,'history':history,'result':None,'started_at':started_at,'skills':skill_matches,'limits':{'max_time':int(max_time),'max_iterations':int(max_iterations),'max_retries':int(max_retries),'max_tool_calls':int(max_tool_calls),'max_parallel_tasks':int(max_parallel_tasks)}}
         save_json(AUTONOMY_FILE,state)
         import time as _time
         deadline=_time.monotonic()+max(1,int(max_time))
