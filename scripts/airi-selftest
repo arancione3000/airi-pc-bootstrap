@@ -6,10 +6,22 @@ BASE=os.environ.get('AIRIPC_STATUS_URL','http://127.0.0.1:9010/status').rsplit('
 ROOT=Path(os.environ.get('AIRIPC_WORKSPACE_ROOT','/home/user/airi')).expanduser()
 ENV={**os.environ,'DISPLAY':os.environ.get('DISPLAY',':99')}
 def get(path):
-    with urllib.request.urlopen(BASE+path,timeout=20) as r:return json.loads(r.read())
+    last=None
+    for attempt in range(8):
+        try:
+            with urllib.request.urlopen(BASE+path,timeout=20) as r:return json.loads(r.read())
+        except Exception as exc:
+            last=exc; time.sleep(0.5)
+    raise last
 def post(path,payload):
     req=urllib.request.Request(BASE+path,data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'},method='POST')
-    with urllib.request.urlopen(req,timeout=30) as r:return json.loads(r.read())
+    last=None
+    for attempt in range(8):
+        try:
+            with urllib.request.urlopen(req,timeout=30) as r:return json.loads(r.read())
+        except Exception as exc:
+            last=exc; time.sleep(0.5)
+    raise last
 def ctl(*args):
     p=subprocess.run(['/bin/sh',str(ROOT/'scripts/airi-control'),*args],env=ENV,text=True,capture_output=True,timeout=45)
     return p.returncode,p.stdout.strip(),p.stderr.strip()
