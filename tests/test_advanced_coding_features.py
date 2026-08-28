@@ -15,3 +15,17 @@ def test_experience_and_model_router(monkeypatch):
     assert any(x['id']==row['id'] for x in e.match('python timeout', limit=10))
     r=ModelRouter(); r.register_provider('local-coder',['strong'],True,'low')
     assert r.choose('coding',complexity='high')['selected']=='local-coder'
+
+def test_orchestrator_supports_job_operations(monkeypatch):
+    from control_plane.orchestrator import ControlPlane
+    cp=ControlPlane()
+    captured={}
+    monkeypatch.setattr(cp, 'job_start', lambda *a, **k: {'id':'j1','status':'running'})
+    monkeypatch.setattr(cp, 'job_status', lambda jid: {'id':jid,'status':'completed','exit_code':0})
+    monkeypatch.setattr(cp.capabilities,'route', lambda candidates: {'selected':candidates[0] if candidates else None,'candidates':list(candidates)})
+    import control_plane.orchestrator as mod
+    monkeypatch.setattr(mod.REGISTRY,'record',lambda *a,**k: None)
+    # exercise operation dispatch with a tiny task
+    t=cp.tasks.start('job-op',[{'id':'n1','operation':'job_start','args':{'command':'true'},'candidates':['computer_terminal_start']}],scope=['tests'])
+    r=cp.execute(t['id'],'n1',['computer_terminal_start'],'job_start',{'command':'true'},finalize=True)
+    assert r['ok'] and r['result']['id']=='j1'

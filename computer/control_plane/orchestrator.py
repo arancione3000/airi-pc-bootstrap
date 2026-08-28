@@ -73,6 +73,10 @@ class ControlPlane:
             elif operation=='code_agent':
                 from code_agent import agent
                 result=agent(args['goal'], args.get('project_path','.'), args.get('max_attempts',5), args.get('steps'), args.get('scope'), args.get('changes'), args.get('test_command',''))
+            elif operation=='job_start': result=self.job_start(args['command'],args.get('cwd','.'),args.get('timeout',900),task_id,args.get('scope'),args.get('allow_shell',False))
+            elif operation=='job_status': result=self.job_status(args['job_id'])
+            elif operation=='job_attach': result=self.job_attach(args['job_id'],args.get('tail',200))
+            elif operation=='job_cancel': result=self.job_cancel(args['job_id'],args.get('grace',5))
             else: raise ValueError('unsupported operation')
         except Exception as exc: error=str(exc)
         latency=(__import__('time').perf_counter()-started)*1000; self.capabilities.probe(tool,error is None,latency,error or ''); REGISTRY.record(tool,error is None,latency,error or '')
@@ -121,6 +125,10 @@ class ControlPlane:
             'browser_text':['computer_browser_text'],
             'research':['computer_research'],
             'code_agent':['computer_code_agent'],
+            'job_start':['computer_terminal_start'],
+            'job_status':['computer_terminal_status'],
+            'job_attach':['computer_terminal_attach'],
+            'job_cancel':['computer_terminal_cancel'],
         }.get(operation,[])
 
     def autonomous_goal(self, goal, steps=None, scope=None, max_time=900, max_iterations=25, max_retries=3, max_tool_calls=100, max_parallel_tasks=1, resume=True):
