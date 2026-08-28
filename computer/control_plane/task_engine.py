@@ -93,7 +93,7 @@ class TaskEngine:
         if row is None: return []
         out=[]
         for n in row['nodes']:
-            if n['status'] != 'pending': continue
+            if n['status'] not in {'pending','running'}: continue
             if all(next(m for m in row['nodes'] if m['id']==d)['status']=='completed' for d in n.get('depends_on',[])): out.append(n)
         return out
 
