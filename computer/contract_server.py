@@ -135,6 +135,15 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     }, ["goal"]),
 }
 
+SCHEMAS.update({
+    "computer_subagent_create": _obj({"goal":{"type":"string"},"repo_path":{"type":"string"},"branch_prefix":{"type":"string"}}, ["goal"]),
+    "computer_subagent_status": _obj({"agent_id":{"type":"string"}}, ["agent_id"]),
+    "computer_subagent_list": _obj({}),
+    "computer_subagent_finish": _obj({"agent_id":{"type":"string"},"status":{"type":"string"}}, ["agent_id"]),
+    "computer_subagent_remove": _obj({"agent_id":{"type":"string"},"force":{"type":"boolean"}}, ["agent_id"]),
+})
+
+
 
 def tool_specs() -> list[dict[str, Any]]:
     specs = [{"name": name, "description": f"Airi-PC canonical tool: {name}", "inputSchema": SCHEMAS.get(name, _obj())} for name in TOOLS]
