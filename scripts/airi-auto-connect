@@ -1,0 +1,37 @@
+#!/bin/sh
+set -u
+BASE=/home/user/airi
+NEXT="$BASE/scripts/airi-next-session"
+REBUILD="$BASE/scripts/airi-session-rebuild"
+
+printf '%s\n' '=== AIRI-PC AUTO CONNECT ==='
+printf '%s\n' '[A] Try existing runtime / next-session recovery'
+if "$NEXT"; then
+  printf '%s\n' 'AIRI_AUTO_CONNECT_A_OK'
+  exit 0
+fi
+
+A_STATUS=$?
+printf '%s\n' "AIRI_AUTO_CONNECT_A_FAILED exit=$A_STATUS" >&2
+printf '%s\n' '[B] Fallback: full session rebuild from canonical GitHub main'
+if [ ! -x "$REBUILD" ]; then
+  chmod +x "$REBUILD" 2>/dev/null || true
+fi
+if "$REBUILD"; then
+  printf '%s\n' 'AIRI_AUTO_CONNECT_B_OK'
+else
+  B_STATUS=$?
+  printf '%s\n' "AIRI_AUTO_CONNECT_B_FAILED exit=$B_STATUS" >&2
+  exit "$B_STATUS"
+fi
+
+printf '%s\n' '[FINAL] Strict readiness verification'
+if ! curl -fsS --max-time 5 http://127.0.0.1:9010/ready >/dev/null 2>&1; then
+  printf '%s\n' 'AIRI_AUTO_CONNECT_NOT_READY' >&2
+  exit 10
+fi
+"$BASE/scripts/airi-control" status
+"$BASE/scripts/airi-control" browser-status
+"$BASE/scripts/airi-control" browser-state
+"$BASE/scripts/airi-selftest"
+printf '%s\n' 'AIRI_AUTO_CONNECT_OK'
