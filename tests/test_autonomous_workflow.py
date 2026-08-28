@@ -101,3 +101,43 @@ def test_control_plane_dispatches_browser_and_code_agent(monkeypatch):
     def fake_execute(*args, **kwargs): return {'ok':True,'selected_tool':'fake','result':{}}
     monkeypatch.setattr(cp,'execute',fake_execute)
     assert cp.autonomous_goal('browser smoke',steps=[{'id':'a','operation':'browser_state','args':{}}],max_time=5,max_iterations=2,max_tool_calls=2,resume=False)['phase']=='complete'
+
+
+def test_dynamic_goal_plan_includes_execution_pipeline(monkeypatch):
+    cp=mod.ControlPlane()
+    plan=cp._synthesize_goal_plan('Implement backend and frontend feature across repositories', ['repo'])
+    ops=[n['operation'] for n in plan]
+    assert ops[0]=='research'
+    assert 'analyze' in ops and 'context_pack' in ops and 'code_agent' in ops
+    assert 'model_choose' in ops and 'test' in ops and 'verify' in ops
+    assert all('repository' in n and 'workspace' in n for n in plan)
+
+
+def test_code_agent_planning_only_is_not_task_completion(tmp_path, monkeypatch):
+    f=tmp_path/'autonomy.json'; monkeypatch.setattr(mod,'AUTONOMY_FILE',f)
+    cp=mod.ControlPlane(); cp.tasks=FakeTasks()
+    monkeypatch.setattr(cp,'execute',lambda *a,**k: {'ok':True,'selected_tool':'computer_code_agent','result':{'ok':True,'note':'No concrete changes supplied; plan created and context loaded, no source was modified.'},'error':None})
+    out=cp.autonomous_goal('implement feature',steps=[{'id':'a','operation':'code_agent','args':{},'verification':{'required':True}}],max_time=5,max_iterations=3,max_retries=0,max_tool_calls=3,resume=False)
+    assert out['phase']=='blocked'
+    assert out['result']['status'] in {'BLOCKED','STOP_SAFELY'}
+    assert any(h['classification']=='verification' for h in out['history'])
+
+
+def test_execution_strategy_reports_resource_constraints():
+    cp=mod.ControlPlane()
+    out=cp.execution_strategy(2048, True)
+    assert out['strategy'] in {'full_install','targeted_install','isolated_component','static_verification'}
+    assert {'mem_available_mb','estimated_memory_mb','resource_limited'} <= set(out)
+
+
+def test_task_graph_tracks_multiple_repositories():
+    from control_plane.task_engine import TaskEngine
+    e=TaskEngine()
+    row=e.start('multi-repo', [
+        {'id':'backend','repository':'repo-backend','workspace':'repo-backend'},
+        {'id':'frontend','repository':'repo-frontend','workspace':'repo-frontend','depends_on':['backend']},
+    ])
+    assert row['repositories']==['repo-backend','repo-frontend']
+    e.update('backend','completed',task_id=row['id'])
+    assert e.read(row['id'])['current']=='frontend'
+    assert e.read(row['id'])['nodes'][1]['status']=='running'

@@ -73,6 +73,12 @@ class ControlPlane:
             elif operation=='code_agent':
                 from code_agent import agent
                 result=agent(args['goal'], args.get('project_path','.'), args.get('max_attempts',5), args.get('steps'), args.get('scope'), args.get('changes'), args.get('test_command',''))
+            elif operation=='context_pack': result=self.context_pack(args['query'],args.get('limit_files',12),args.get('max_bytes',120000))
+            elif operation=='verify': result=self.verify_deliverable(args.get('requirements'),args.get('tests'),args.get('build_cmd'),args.get('lint_cmd'),args.get('project_path','.'),args.get('runtime'),args.get('security'))
+            elif operation=='experience_match': result=self.experience_match(args['query'],args.get('limit',5))
+            elif operation=='model_choose': result=self.choose_model(args.get('task_type','coding'),args.get('complexity','medium'),args.get('needs_vision',False),args.get('prefer_speed',False))
+            elif operation=='subagent_create': result=self.subagent_create(args['goal'],args.get('repo_path','.'),args.get('branch_prefix','agent'))
+            elif operation=='environment_strategy': result=self.execution_strategy(args.get('estimated_memory_mb',1024),args.get('full_integration',True))
             elif operation=='job_start': result=self.job_start(args['command'],args.get('cwd','.'),args.get('timeout',900),task_id,args.get('scope'),args.get('allow_shell',False))
             elif operation=='job_status': result=self.job_status(args['job_id'])
             elif operation=='job_attach': result=self.job_attach(args['job_id'],args.get('tail',200))
@@ -89,6 +95,8 @@ class ControlPlane:
         text = str(error or '').lower()
         if not text:
             return 'unknown'
+        if any(x in text for x in ('exit 137', 'exit code 137', 'killed', 'out of memory', 'oom', 'cannot allocate memory', 'resource temporarily unavailable')):
+            return 'resource_limit'
         if 'timeout' in text or 'timed out' in text:
             return 'timeout'
         if 'permission' in text or 'forbidden' in text or 'scope' in text:
@@ -124,6 +132,12 @@ class ControlPlane:
             'browser_screenshot':['computer_browser_screenshot','computer_screenshot'],
             'browser_text':['computer_browser_text'],
             'research':['computer_research'],
+            'context_pack':['computer_context_pack'],
+            'verify':['computer_verify_deliverable'],
+            'experience_match':['computer_experience_match'],
+            'model_choose':['computer_model_choose'],
+            'subagent_create':['computer_subagent_create'],
+            'environment_strategy':['computer_runtime_preflight'],
             'code_agent':['computer_code_agent'],
             'job_start':['computer_terminal_start'],
             'job_status':['computer_terminal_status'],
@@ -131,58 +145,141 @@ class ControlPlane:
             'job_cancel':['computer_terminal_cancel'],
         }.get(operation,[])
 
+    def execution_strategy(self, estimated_memory_mb=1024, full_integration=True):
+        try:
+            mem=Path('/proc/meminfo').read_text()
+            available_mb=int(next(line.split()[1] for line in mem.splitlines() if line.startswith('MemAvailable:')))/1024
+        except Exception:
+            available_mb=0
+        estimate=float(estimated_memory_mb)
+        if full_integration and available_mb >= estimate*1.5:
+            strategy='full_install'
+        elif available_mb >= max(256.0, estimate*0.75):
+            strategy='targeted_install'
+        elif available_mb >= 128.0:
+            strategy='isolated_component'
+        else:
+            strategy='static_verification'
+        return {'strategy':strategy,'mem_available_mb':round(available_mb,1),'estimated_memory_mb':estimate,'full_integration_requested':bool(full_integration),'resource_limited':available_mb < estimate}
+
     def autonomous_goal(self, goal, steps=None, scope=None, max_time=900, max_iterations=25, max_retries=3, max_tool_calls=100, max_parallel_tasks=1, resume=True):
-        persisted = load_json(AUTONOMY_FILE, {'version':1,'active':False,'goal':None,'task_id':None,'phase':'idle','step_index':0,'iteration':0,'tool_calls':0,'retries':0,'history':[],'result':None})
+        persisted = load_json(AUTONOMY_FILE, {'version':2,'active':False,'goal':None,'task_id':None,'phase':'idle','step_index':0,'iteration':0,'tool_calls':0,'retries':0,'history':[],'result':None,'completed_nodes':[]})
         can_resume = bool(resume and persisted.get('active') and persisted.get('goal') == goal and persisted.get('task_id'))
         task = self.tasks.read(persisted.get('task_id')) if can_resume else None
         if task is not None:
-            normalized = task.get('nodes', [])
-            step_index = int(persisted.get('step_index',0))
-            iteration = int(persisted.get('iteration',0))
-            tool_calls = int(persisted.get('tool_calls',0))
-            retries_total = int(persisted.get('retries',0))
-            history = list(persisted.get('history',[]))
-            started_at = persisted.get('started_at',now())
+            step_index = int(persisted.get('step_index',0)); iteration=int(persisted.get('iteration',0)); tool_calls=int(persisted.get('tool_calls',0)); retries_total=int(persisted.get('retries',0)); history=list(persisted.get('history',[])); started_at=persisted.get('started_at',now())
         else:
-            raw_steps = steps or [
-                {'id':'understand','title':'understand goal','operation':'analyze','args':{'path':'.'}},
-                {'id':'plan','title':'inspect available skills and capabilities','operation':'search','args':{'query':goal,'path':'skills','limit':20}},
-                {'id':'verify','title':'verify workspace baseline','operation':'read','args':{'path':'.ai/control_plane/reliability.json'}},
-            ]
+            raw_steps = list(steps) if steps else self._synthesize_goal_plan(goal, scope or [])
             normalized=[]
             for i, step in enumerate(raw_steps):
-                if isinstance(step,str):
-                    step={'id':f'step{i+1}','title':step,'operation':'analyze','args':{'path':'.'}}
+                if isinstance(step,str): step={'id':f'step{i+1}','title':step,'operation':'analyze','args':{'path':'.'}}
                 normalized.append(dict(step))
-            task=self.tasks.start(goal,normalized,scope or [])
-            step_index=0; iteration=0; tool_calls=0; retries_total=0; history=[]; started_at=now()
+            task=self.tasks.start(goal,normalized,scope or []); step_index=0; iteration=0; tool_calls=0; retries_total=0; history=[]; started_at=now()
         skill_matches=self.skills.match(goal)
-        state={'version':1,'active':True,'goal':goal,'task_id':task['id'],'phase':'execute','step_index':step_index,'iteration':iteration,'tool_calls':tool_calls,'retries':retries_total,'history':history,'result':None,'started_at':started_at,'skills':skill_matches,'limits':{'max_time':int(max_time),'max_iterations':int(max_iterations),'max_retries':int(max_retries),'max_tool_calls':int(max_tool_calls),'max_parallel_tasks':int(max_parallel_tasks)}}
+        state={'version':2,'active':True,'goal':goal,'task_id':task['id'],'phase':'execute','step_index':step_index,'iteration':iteration,'tool_calls':tool_calls,'retries':retries_total,'history':history,'result':None,'started_at':started_at,'skills':skill_matches,'completed_nodes':[n['id'] for n in task.get('nodes',[]) if n.get('status')=='completed'],'limits':{'max_time':int(max_time),'max_iterations':int(max_iterations),'max_retries':int(max_retries),'max_tool_calls':int(max_tool_calls),'max_parallel_tasks':int(max_parallel_tasks)}}
         save_json(AUTONOMY_FILE,state)
         import time as _time
         deadline=_time.monotonic()+max(1,int(max_time))
-        while state['step_index'] < len(task['nodes']):
-            if _time.monotonic() >= deadline or state['iteration'] >= int(max_iterations) or state['tool_calls'] >= int(max_tool_calls):
-                state.update({'phase':'blocked','active':True,'result':{'status':'STOP_SAFELY','reason':'resource/time governor reached'}}); save_json(AUTONOMY_FILE,state); return state
-            node=task['nodes'][state['step_index']]
+        while _time.monotonic() < deadline and state['iteration'] < int(max_iterations) and state['tool_calls'] < int(max_tool_calls):
+            runnable = self.tasks.runnable(task['id']) if hasattr(self.tasks, 'runnable') else [n for n in task.get('nodes', []) if n.get('status') in ('pending','running')][:1]
+            if not runnable:
+                unfinished=[n for n in task['nodes'] if n.get('status') not in ('completed','cancelled')]
+                if not unfinished:
+                    break
+                pending=unfinished[0]
+                state.update({'phase':'replanning','current_step':pending['id']}); save_json(AUTONOMY_FILE,state)
+                new_nodes=self._replan_nodes(goal,task,pending)
+                if not new_nodes:
+                    self.tasks.update(pending['id'],'blocked',error='no viable replanning path',checkpoint={'reason':'no_runnable_nodes'},task_id=task['id'])
+                    state.update({'phase':'blocked','active':True,'result':{'status':'BLOCKED','step':pending['id'],'error':'no viable replanning path','classification':'strategy_exhausted'}})
+                    save_json(AUTONOMY_FILE,state); return state
+                for node in new_nodes:
+                    self.tasks.add_node(task['id'],node,created_by='replanner')
+                task=self.tasks.read(task['id']); continue
+            node=runnable[0]
             if node.get('status')=='completed':
-                state['step_index']+=1; save_json(AUTONOMY_FILE,state); continue
+                continue
             op=node.get('operation','analyze'); args=node.get('args') or {}; candidates=node.get('candidates') or self._default_candidates(op)
-            retries=0; last=None; succeeded=False
+            retries=int(node.get('retry_count',0)); last=None
+            state['phase']='execute'; state['current_step']=node['id']; save_json(AUTONOMY_FILE,state)
+            if node.get('status') in ('pending','ready'): self.tasks.update(node['id'],'running',task_id=task['id'])
             while retries <= int(max_retries) and _time.monotonic() < deadline:
-                state['iteration']+=1; state['tool_calls']+=1; state['retries'] += 1 if retries else 0; save_json(AUTONOMY_FILE,state)
+                state['iteration']+=1; state['tool_calls']+=1; save_json(AUTONOMY_FILE,state)
                 result=self.execute(task['id'],node['id'],candidates,op,args,finalize=False)
-                state['history'].append({'iteration':state['iteration'],'step':node['id'],'operation':op,'result_ok':result.get('ok',False),'tool':result.get('selected_tool'),'error':result.get('error'),'classification':self._classify_failure(result.get('error'))})
-                if result.get('ok'):
-                    updated=self.tasks.update(node['id'],'completed',output=result.get('result'),checkpoint={'workflow_iteration':state['iteration'],'tool':result.get('selected_tool')},task_id=task['id'])
-                    state['step_index']+=1; state['phase']='execute'; state['last_success']=now(); save_json(AUTONOMY_FILE,state); task=updated; succeeded=True; break
-                last=result; retries+=1
-                if retries <= int(max_retries): _time.sleep(min(2 ** (retries-1),8))
-            if not succeeded:
-                err=last.get('error') if last else 'unknown failure'
-                self.tasks.update(node['id'],'failed',output=last.get('result') if last else None,error=err,checkpoint={'workflow_iteration':state['iteration']},task_id=task['id'])
+                ok=result.get('ok',False); cls=self._classify_failure(result.get('error'))
+                history_row={'iteration':state['iteration'],'step':node['id'],'operation':op,'result_ok':ok,'tool':result.get('selected_tool'),'error':result.get('error'),'classification':cls}
+                state['history'].append(history_row)
+                if ok:
+                    self.tasks.update(node['id'],'verifying',output=result.get('result'),checkpoint={'workflow_iteration':state['iteration'],'tool':result.get('selected_tool')},task_id=task['id'])
+                    verification=self._verify_node(node,result)
+                    if verification['ok']:
+                        updated=self.tasks.update(node['id'],'completed',output=result.get('result'),checkpoint={'workflow_iteration':state['iteration'],'tool':result.get('selected_tool'),'verification':verification},task_id=task['id'])
+                        task=updated; state['completed_nodes'].append(node['id']); state['step_index']=sum(1 for n in task['nodes'] if n.get('status')=='completed'); state['last_success']=now(); save_json(AUTONOMY_FILE,state); break
+                    self.tasks.update(node['id'],'failed',output=result.get('result'),error=verification.get('error','verification failed'),checkpoint={'verification':verification},task_id=task['id']); last={'error':verification.get('error','verification failed'),'result':result.get('result')}; cls='verification'; history_row['classification']=cls; state['history'][-1]=history_row; save_json(AUTONOMY_FILE,state)
+                else:
+                    last=result
+                    self.tasks.update(node['id'],'retrying',error=result.get('error'),checkpoint={'classification':cls},task_id=task['id'])
+                retries += 1; state['retries'] += 1
+                if cls in ('resource_limit','dependency'):
+                    state['phase']='fallback'; save_json(AUTONOMY_FILE,state)
+                    fallback=self._fallback_for(node,cls)
+                    if fallback:
+                        node.setdefault('args',{}).update(fallback.get('args',{})); node['operation']=fallback.get('operation',node.get('operation')); node['candidates']=fallback.get('candidates',node.get('candidates')); self.tasks.update(node['id'],'fallback',checkpoint={'classification':cls,'fallback':fallback},task_id=task['id']); retries=max(retries-1,0)
+                    else:
+                        self.tasks.update(node['id'],'replanning',checkpoint={'classification':cls},task_id=task['id'])
+                        break
+                elif retries <= int(max_retries):
+                    _time.sleep(min(2 ** max(retries-1,0),8))
+            else:
+                err=(last or {}).get('error','unknown failure')
+                self.tasks.update(node['id'],'failed',error=err,checkpoint={'classification':self._classify_failure(err)},task_id=task['id'])
                 state.update({'phase':'blocked','active':True,'result':{'status':'BLOCKED','step':node['id'],'error':err,'classification':self._classify_failure(err)}}); save_json(AUTONOMY_FILE,state); return state
-        state.update({'phase':'complete','active':False,'result':{'status':'READY','task_id':task['id'],'iterations':state['iteration'],'tool_calls':state['tool_calls'],'retries':state['retries']},'completed_at':now()}); save_json(AUTONOMY_FILE,state); return state
+            task=self.tasks.read(task['id'])
+        task=self.tasks.read(task['id']) if task else task
+        nodes_complete=bool(task and task.get('nodes')) and all(n.get('status') in ('completed','cancelled') for n in task.get('nodes',[]))
+        if task and (task.get('status')=='completed' or nodes_complete):
+            state.update({'phase':'complete','active':False,'result':{'status':'READY','task_id':task['id'],'iterations':state['iteration'],'tool_calls':state['tool_calls'],'retries':state['retries']},'completed_at':now()}); save_json(AUTONOMY_FILE,state); return state
+        reason='resource/time governor reached' if _time.monotonic() >= deadline or state['iteration'] >= int(max_iterations) or state['tool_calls'] >= int(max_tool_calls) else 'workflow blocked'
+        state.update({'phase':'blocked','active':True,'result':{'status':'STOP_SAFELY','reason':reason}}); save_json(AUTONOMY_FILE,state); return state
+
+    def _synthesize_goal_plan(self, goal, scope):
+        text=goal.lower(); repo=scope[0] if scope else '.'
+        steps=[{'id':'research','title':'research requirements and relevant repository context','operation':'research','args':{'topic':goal,'max_sources':5},'repository':repo,'workspace':repo,'verification':{'required':False}},
+               {'id':'analyze','title':'analyze project and targeted context','operation':'analyze','args':{'path':repo},'repository':repo,'workspace':repo,'verification':{'required':True}},
+               {'id':'context','title':'build focused context pack','operation':'context_pack','args':{'query':goal,'limit_files':12,'max_bytes':120000},'repository':repo,'workspace':repo},
+               {'id':'implementation','title':'implement the requested change','operation':'code_agent','args':{'goal':goal,'project_path':repo,'max_attempts':3,'scope':scope or [repo]},'repository':repo,'workspace':repo,'verification':{'required':True}},
+               {'id':'test','title':'run targeted verification','operation':'test','args':{'command':'python -m compileall -q .','cwd':repo,'timeout':120},'repository':repo,'workspace':repo,'verification':{'required':True}},
+               {'id':'review','title':'review diff and guardrails','operation':'git_diff','args':{'path':repo},'repository':repo,'workspace':repo},
+               {'id':'verify','title':'verify deliverable against requirements','operation':'verify','args':{'requirements':[goal],'project_path':repo},'repository':repo,'workspace':repo,'verification':{'required':True}}]
+        if 'multi-repo' in text or 'repository' in text or 'frontend' in text or 'backend' in text:
+            steps.insert(3,{'id':'environment','title':'choose resource-aware environment strategy','operation':'environment_strategy','args':{'estimated_memory_mb':2048,'full_integration':True},'repository':repo,'workspace':repo})
+            steps.insert(4,{'id':'model','title':'choose execution route','operation':'model_choose','args':{'task_type':'coding','complexity':'high'},'repository':repo,'workspace':repo})
+        return steps
+
+    def _verify_node(self,node,result):
+        spec=node.get('verification') or {}
+        if not spec or spec.get('required') is False: return {'ok':True,'level':'L1'}
+        payload=result.get('result')
+        if isinstance(payload,dict):
+            if payload.get('ok') is False: return {'ok':False,'level':'L0','error':'tool reported unsuccessful result'}
+            note=str(payload.get('note','')).lower()
+            if note and 'no source was modified' in note: return {'ok':False,'level':'L0','error':'planning_only_no_source_change'}
+            if payload.get('status') in {'SKIPPED','STOP_SAFELY'}: return {'ok':False,'level':'L0','error':str(payload.get('status'))}
+        return {'ok':True,'level':'L1'}
+
+    def _fallback_for(self,node,classification):
+        if classification=='resource_limit':
+            op=node.get('operation')
+            if op=='test': return {'operation':'build','args':{'command':'python -m compileall -q .','cwd':node.get('args',{}).get('cwd','.'),'timeout':120},'candidates':['computer_build_run']}
+            if op=='code_agent': return {'operation':'analyze','args':{'path':node.get('repository','.')},'candidates':['computer_project_analyze']}
+        if classification=='dependency' and node.get('operation')=='test': return {'operation':'build','args':{'command':'python -m compileall -q .','cwd':node.get('args',{}).get('cwd','.'),'timeout':120},'candidates':['computer_build_run']}
+        return None
+
+    def _replan_nodes(self,goal,task,pending):
+        nodes=[]
+        if pending.get('operation')=='code_agent' and not any(n.get('id')=='test-generated' for n in task.get('nodes',[])):
+            nodes.append({'id':'test-generated','title':'generated focused verification','operation':'test','args':{'command':'python -m compileall -q .','cwd':pending.get('repository','.'),'timeout':120},'depends_on':[pending['id']],'repository':pending.get('repository','.'),'workspace':pending.get('workspace','.')})
+        return nodes
 
     def job_start(self, command, cwd='.', timeout=900, owner_task=None, scope=None, allow_shell=False):
         result=self.jobs.start(command,cwd,timeout,owner_task,scope,allow_shell)

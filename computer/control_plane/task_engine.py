@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from .store import load_json, save_json, now
 
-STATES={"pending","running","completed","failed","blocked","cancelled"}
+STATES={"pending","ready","running","verifying","completed","failed","retrying","fallback","replanning","blocked","human_review","cancelled"}
 class TaskEngine:
     def __init__(self): self.state=load_json("tasks.json", {"tasks":{},"active":None})
     def start(self, goal:str, nodes:list[dict]|list[str], scope:list[str]|None=None):
@@ -10,7 +10,7 @@ class TaskEngine:
         for i,n in enumerate(nodes):
             if isinstance(n,str): n={"id":f"n{i+1}","title":n,"depends_on":[]}
             else: n={**n}; n.setdefault("id",f"n{i+1}"); n.setdefault("title",n["id"]); n.setdefault("depends_on",[])
-            n.setdefault("operation", 'analyze'); n.setdefault("args", {}); n.setdefault("verification", {}); n.setdefault("created_by", 'task_engine')
+            n.setdefault("repository", n.get("repo", '.')); n.setdefault("workspace", n.get("workspace", '.')); n.setdefault("owner", n.get("owner", 'control_plane')); n.setdefault("expected_result", n.get("expected", '')); n.setdefault("retry_policy", {}); n.setdefault("operation", 'analyze'); n.setdefault("args", {}); n.setdefault("verification", {}); n.setdefault("created_by", 'task_engine')
             n.setdefault("created_at", now()); n.setdefault("updated_at", now())
             n.update({"status":n.get("status","pending"),"input":n.get("input"),"output":n.get("output"),"error":None,"retry_count":n.get("retry_count",0),"checkpoint":n.get("checkpoint")})
             norm.append(n)
@@ -34,7 +34,8 @@ class TaskEngine:
         runnable=[n for n in norm if not n["depends_on"]]
         if runnable:
             runnable[0]["status"]="running"
-        row={"id":tid,"goal":goal,"scope":scope or [],"created_at":now(),"updated_at":now(),"nodes":norm,"current":norm[0]["id"] if norm else None}
+        repositories=sorted({str(n.get('repository','.')) for n in norm})
+        row={"id":tid,"goal":goal,"scope":scope or [],"repositories":repositories,"created_at":now(),"updated_at":now(),"nodes":norm,"current":norm[0]["id"] if norm else None}
         self.state["tasks"][tid]=row; self.state["active"]=tid; save_json("tasks.json",self.state); return row
     def read(self,tid=None):
         return self.state["tasks"].get(tid or self.state.get("active"))
@@ -52,7 +53,7 @@ class TaskEngine:
                     nxt["status"]="running"; row["current"]=nxt["id"]; break
         if any(n["status"]=="failed" for n in row["nodes"]):
             row["status"] = "failed"
-        elif all(n["status"]=="completed" for n in row["nodes"]):
+        elif all(n["status"] in {"completed","cancelled"} for n in row["nodes"]):
             row["status"] = "completed"
             self.state["active"] = None
         else:
@@ -67,7 +68,7 @@ class TaskEngine:
         ids={x['id'] for x in row['nodes']}
         if n['id'] in ids: raise ValueError('duplicate task node id')
         if any(d not in ids and d != n['id'] for d in n['depends_on']): raise ValueError('unknown task dependency')
-        row['nodes'].append(n); row['updated_at']=now(); save_json('tasks.json',self.state); return n
+        row['nodes'].append(n); row['repositories']=sorted({str(x.get('repository','.')) for x in row['nodes']}); row['updated_at']=now(); save_json('tasks.json',self.state); return n
 
     def add_dependency(self, task_id, node_id, depends_on):
         row=self.read(task_id)
