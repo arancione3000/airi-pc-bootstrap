@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+ROOT="${AIRI_ROOT:-/home/user/airi}"
+TOKEN_FILE="$ROOT/.ai/state/viewer_token"
+URL_FILE="$ROOT/.ai/state/tunnel/url"
+mkdir -p "$ROOT/.ai/state"
+if [ ! -s "$TOKEN_FILE" ]; then
+  umask 077
+  python3 - <<'PY' "$TOKEN_FILE"
+import secrets,sys
+from pathlib import Path
+p=Path(sys.argv[1]); p.write_text(secrets.token_urlsafe(32),encoding='utf-8'); p.chmod(0o600)
+PY
+fi
+if [ -s "$URL_FILE" ]; then
+  BASE_URL=$(cat "$URL_FILE")
+  case "$BASE_URL" in http://*|https://*) : ;; *) BASE_URL="" ;; esac
+else BASE_URL=""; fi
+TOKEN=$(cat "$TOKEN_FILE")
+if [ -n "$BASE_URL" ]; then
+  echo "AIRI_PC_VIEWER_URL=${BASE_URL%/}/viewer#token=$TOKEN"
+else
+  echo "AIRI_PC_VIEWER_URL=http://127.0.0.1:9010/viewer#token=$TOKEN"
+  echo "AIRI_PC_VIEWER_NOTE=local-only (no external tunnel URL available yet)" >&2
+fi
