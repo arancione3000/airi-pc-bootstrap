@@ -1,10 +1,51 @@
 {
   "skills": {
+    "autonomous-goal-execution": {
+      "checksum": "f290331513a686cc50ac36e6195de4ffa9b7a0caefff72e096a590b5144a3a11",
+      "dependencies": [
+        "computer_autonomous_goal",
+        "computer_task_start",
+        "computer_task_update",
+        "computer_recovery_checkpoint",
+        "computer_test_run"
+      ],
+      "description": "Reusable bounded workflow for goal execution with persistent task/checkpoint state.",
+      "last_verified": 1787922466.373002,
+      "name": "autonomous-goal-execution",
+      "origin": "repository",
+      "path": "skills/autonomous-goal-execution/SKILL.md",
+      "permissions": [
+        "workspace-scoped"
+      ],
+      "required_tools": [
+        "computer_autonomous_goal",
+        "computer_task_start",
+        "computer_task_update",
+        "computer_recovery_checkpoint",
+        "computer_test_run"
+      ],
+      "rollback": {
+        "strategy": "restore previous checksum"
+      },
+      "status": "valid",
+      "tests": [],
+      "verified_at": 1787922466.373002,
+      "version": "1.0"
+    },
     "browser-research": {
       "checksum": "a22d7e5fe48ab98b39c7cf860d2b8d1e981b662dbea11b48598335b0a00a3a6d",
       "current_checksum": "a22d7e5fe48ab98b39c7cf860d2b8d1e981b662dbea11b48598335b0a00a3a6d",
+      "dependencies": [
+        "computer_research",
+        "computer_browser_open",
+        "computer_browser_text",
+        "computer_browser_screenshot",
+        "computer_decision_record"
+      ],
       "description": "Multi-source web research using Airi-PC browser/network evidence collection.",
+      "last_verified": 1787922466.3723385,
       "name": "browser-research",
+      "origin": "repository",
       "path": "skills/browser-research/SKILL.md",
       "permissions": [
         "workspace-scoped"
@@ -16,27 +57,48 @@
         "computer_browser_screenshot",
         "computer_decision_record"
       ],
+      "rollback": {
+        "strategy": "restore previous checksum"
+      },
       "status": "valid",
-      "verified_at": 1787898382.6100287,
+      "tests": [],
+      "verified_at": 1787922466.3723385,
       "version": "1.0"
     },
     "coding-task": {
       "checksum": "eaccc885617920654f8572c6f115389a5e7da0526ffec654cd5afe0375e168b2",
+      "dependencies": [],
       "description": "Structured multi-step coding workflow built into Airi-PC's existing skill subsystem.",
+      "last_verified": 1787922466.3725288,
       "name": "coding-task",
+      "origin": "repository",
       "path": "skills/coding-task/SKILL.md",
       "permissions": [
         "workspace-scoped"
       ],
       "required_tools": [],
+      "rollback": {
+        "strategy": "restore previous checksum"
+      },
       "status": "valid",
-      "verified_at": 1787898382.6101725,
+      "tests": [],
+      "verified_at": 1787922466.3725288,
       "version": "1.0"
     },
     "git-review": {
       "checksum": "7c4f12f6ae2d809be2defb7fc9408ecc97eda94848e51175347481ac11e7d24a",
+      "dependencies": [
+        "computer_git_status",
+        "computer_git_diff",
+        "computer_test_run",
+        "computer_build_run",
+        "computer_lint",
+        "computer_git_commit"
+      ],
       "description": "Review a coding change safely before commit.",
+      "last_verified": 1787922466.3726177,
       "name": "git-review",
+      "origin": "repository",
       "path": "skills/git-review/SKILL.md",
       "permissions": [
         "workspace-scoped"
@@ -49,14 +111,26 @@
         "computer_lint",
         "computer_git_commit"
       ],
+      "rollback": {
+        "strategy": "restore previous checksum"
+      },
       "status": "valid",
-      "verified_at": 1787898382.6102552,
+      "tests": [],
+      "verified_at": 1787922466.3726177,
       "version": "1.0"
     },
     "human-in-the-loop": {
       "checksum": "ab182efb3e2b1110e54b9954aef6a25a4e37fdbca4ca08043a79e4f647fce931",
+      "dependencies": [
+        "computer_browser_human_status",
+        "computer_browser_human_wait",
+        "computer_browser_open",
+        "computer_browser_state"
+      ],
       "description": "Safe handling of CAPTCHA and human-verification pages without bypassing site protection.",
+      "last_verified": 1787922466.3726997,
       "name": "human-in-the-loop",
+      "origin": "repository",
       "path": "skills/human-in-the-loop/SKILL.md",
       "permissions": [
         "workspace-scoped"
@@ -67,14 +141,27 @@
         "computer_browser_open",
         "computer_browser_state"
       ],
+      "rollback": {
+        "strategy": "restore previous checksum"
+      },
       "status": "valid",
-      "verified_at": 1787898382.6103346,
+      "tests": [],
+      "verified_at": 1787922466.3726997,
       "version": "1.0"
     },
     "persistence-recovery": {
       "checksum": "3bc6d29d0dca9a2f9baf0ed72cccb52d0cca36effbdeb6f56f43f460070c9541",
+      "dependencies": [
+        "computer_recovery_checkpoint",
+        "computer_recovery_read",
+        "computer_persistence_status",
+        "computer_persist",
+        "computer_decision_record"
+      ],
       "description": "Safe checkpoint, remote persistence and recovery workflow.",
+      "last_verified": 1787922466.3727775,
       "name": "persistence-recovery",
+      "origin": "repository",
       "path": "skills/persistence-recovery/SKILL.md",
       "permissions": [
         "workspace-scoped"
@@ -86,14 +173,27 @@
         "computer_persist",
         "computer_decision_record"
       ],
+      "rollback": {
+        "strategy": "restore previous checksum"
+      },
       "status": "valid",
-      "verified_at": 1787898382.6104107,
+      "tests": [],
+      "verified_at": 1787922466.3727775,
       "version": "1.0"
     },
     "python-debug": {
       "checksum": "ab6648540b427eda86995e9f89bed45fa0e070acdafe22fb3e85ccaf2166d6e0",
+      "dependencies": [
+        "computer_project_analyze",
+        "computer_file_read",
+        "computer_file_patch",
+        "computer_test_run",
+        "computer_code_verify_change"
+      ],
       "description": "Diagnose Python failures from tracebacks and minimal repros.",
+      "last_verified": 1787922466.3728523,
       "name": "python-debug",
+      "origin": "repository",
       "path": "skills/python-debug/SKILL.md",
       "permissions": [
         "workspace-scoped"
@@ -105,14 +205,26 @@
         "computer_test_run",
         "computer_code_verify_change"
       ],
+      "rollback": {
+        "strategy": "restore previous checksum"
+      },
       "status": "valid",
-      "verified_at": 1787898382.6104867,
+      "tests": [],
+      "verified_at": 1787922466.3728523,
       "version": "1.0"
     },
     "test-first": {
       "checksum": "9610af51145aebcfc9e4858f7f10c4d1877b9f5e899112a0680a5434857617f1",
+      "dependencies": [
+        "computer_file_write",
+        "computer_file_patch",
+        "computer_test_run",
+        "computer_build_run"
+      ],
       "description": "Add or update a focused regression test before risky refactors.",
+      "last_verified": 1787922466.372926,
       "name": "test-first",
+      "origin": "repository",
       "path": "skills/test-first/SKILL.md",
       "permissions": [
         "workspace-scoped"
@@ -123,8 +235,12 @@
         "computer_test_run",
         "computer_build_run"
       ],
+      "rollback": {
+        "strategy": "restore previous checksum"
+      },
       "status": "valid",
-      "verified_at": 1787898382.6105614,
+      "tests": [],
+      "verified_at": 1787922466.372926,
       "version": "1.0"
     }
   },

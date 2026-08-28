@@ -1,0 +1,51 @@
+{
+  "experiment": "real-world-work",
+  "task": "Jackxiaozhiren/datasentry#4 — Airflow DAG example with DataSentry quality gate",
+  "platform": "GitHub",
+  "phase": "report",
+  "step": "complete",
+  "status": "completed_with_human_review_required",
+  "started_at": 1787920487.0079114,
+  "completed_at": 1787921314.5508306,
+  "retry_count": 0,
+  "error": null,
+  "deliverables": [
+    ".ai/work/datasentry/examples/airflow/datasentry_quality_gate.py",
+    ".ai/work/datasentry/examples/airflow/README.md",
+    ".ai/work/datasentry/tests/test_airflow_example.py",
+    ".ai/work/datasentry-issue-4.patch"
+  ],
+  "verified": true,
+  "task_url": "https://github.com/Jackxiaozhiren/datasentry/issues/4",
+  "commit": "22b9e9279dd92dea321572811b7caec7b742fdea",
+  "tests": {
+    "airflow_example_pytest": "PASS 2 passed",
+    "airflow_example_smoke": "PASS",
+    "compileall": "PASS",
+    "git_diff_check": "PASS",
+    "full_datasentry_cli": "BLOCKED — dependency installation exceeded remote channel limit"
+  },
+  "delivery": {
+    "status": "BLOCKED",
+    "reason": "upstream contribution requires human review of repository contribution/license terms",
+    "artifact_ready": true,
+    "artifact_sha256": "f8672ab9dec3e3776c5cfd83bf6a399b9bbd45f4a6776896164fb6abef98a3d7"
+  },
+  "limitations": [
+    "Airflow/DataSentry full dependency environment could not be installed within repeated 180s Composio windows."
+  ],
+  "task_current_upstream_sha": "12387c8c38816bce816d2ac697320a8cde1c82dc",
+  "local_experiment_sha": "22b9e9279dd92dea321572811b7caec7b742fdea",
+  "current_main_validation_sha": "dc67e9c2a23d48a665fa8558e27e808f11475539",
+  "metrics": {
+    "time_to_find_task_minutes": 1,
+    "time_to_plan_minutes": 3,
+    "time_to_implement_minutes": 18,
+    "time_to_test_minutes": 8,
+    "time_to_deliver_minutes": 5,
+    "failures": 4,
+    "recoveries": 2,
+    "retries": 3,
+    "human_interventions": 1
+  }
+}

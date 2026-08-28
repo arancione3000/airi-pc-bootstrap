@@ -1,5 +1,5 @@
 {
-  "active": "f737fcd621f5",
+  "active": "ab82a03d82e0",
   "tasks": {
     "011f21c31c7d": {
       "created_at": 1787898341.680742,
@@ -17,7 +17,7 @@
           "id": "n1",
           "input": null,
           "output": {
-            "content": "# Airi-PC Public Bootstrap\n\nAiri-PC \u00e8 un runtime Computer Mode riproducibile.\n\nOgni nuova sessione deve ricostruire il runtime dal branch `main`.\n\nBootstrap:\n\n```sh\ncurl -fsSL https://raw.githubusercontent.com/arancione3000/airi-pc-bootstrap/main/scripts/airi-session-rebuild | sh\n```\n\nIl runtime deve avere:\n\n- GUI 1280x800;\n- Chromium;\n- Playwright;\n- MCP;\n- 83 tool base, pi\u00f9 il facade `computer_control_plane` per l'orchestrazione autonoma;\n- inputSchema MCP per ogni tool;\n- Computer Mode;\n- coding agent;\n- memory;\n- task state;\n- recovery;\n- persistence;\n- research;\n- scheduler;\n- cleanup;\n- browser auth/human verification.\n\nLa readiness \u00e8 valida soltanto quando il verifier finale restituisce:\n\n`AIRI_RUNTIME_ALL= True`\n\nIl repository contiene inoltre il coding-agent runtime, il sistema di skill/memory, i servizi di recovery/persistence, ricerca, scheduler e Smart Cleanup. I controlli di sicurezza, scope dichiarato, snapshot/rollback e OAuth/PKCE restano parte del runtime.\n\nPer la diagnosi locale:\n\n```sh\n./scripts/airi-selftest\n./scripts/airi-coding-selftest\n./scripts/airi-runtime-verify\n```\n\nIl public bootstrap non deve contenere credenziali, token, cookie, `.venv`, log o stato runtime sensibile.\n",
+            "content": "# Airi-PC Public Bootstrap\n\nAiri-PC è un runtime Computer Mode riproducibile.\n\nOgni nuova sessione deve ricostruire il runtime dal branch `main`.\n\nBootstrap:\n\n```sh\ncurl -fsSL https://raw.githubusercontent.com/arancione3000/airi-pc-bootstrap/main/scripts/airi-session-rebuild | sh\n```\n\nIl runtime deve avere:\n\n- GUI 1280x800;\n- Chromium;\n- Playwright;\n- MCP;\n- 83 tool base, più il facade `computer_control_plane` per l'orchestrazione autonoma;\n- inputSchema MCP per ogni tool;\n- Computer Mode;\n- coding agent;\n- memory;\n- task state;\n- recovery;\n- persistence;\n- research;\n- scheduler;\n- cleanup;\n- browser auth/human verification.\n\nLa readiness è valida soltanto quando il verifier finale restituisce:\n\n`AIRI_RUNTIME_ALL= True`\n\nIl repository contiene inoltre il coding-agent runtime, il sistema di skill/memory, i servizi di recovery/persistence, ricerca, scheduler e Smart Cleanup. I controlli di sicurezza, scope dichiarato, snapshot/rollback e OAuth/PKCE restano parte del runtime.\n\nPer la diagnosi locale:\n\n```sh\n./scripts/airi-selftest\n./scripts/airi-coding-selftest\n./scripts/airi-runtime-verify\n```\n\nIl public bootstrap non deve contenere credenziali, token, cookie, `.venv`, log o stato runtime sensibile.\n",
             "path": "README.md",
             "size_bytes": 1220,
             "truncated": false
@@ -32,6 +32,957 @@
       ],
       "status": "completed",
       "updated_at": 1787898341.712245
+    },
+    "0849b6dd3f5e": {
+      "created_at": 1787922187.3300488,
+      "current": "b",
+      "goal": "demo",
+      "id": "0849b6dd3f5e",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "output": {
+            "ok": true
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "analyze"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "a"
+          ],
+          "error": null,
+          "id": "b",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "test"
+        }
+      ],
+      "scope": [
+        "tests"
+      ],
+      "status": "running",
+      "updated_at": 1787922187.3315327
+    },
+    "09199290f91c": {
+      "created_at": 1787922211.600263,
+      "current": "b",
+      "goal": "demo",
+      "id": "09199290f91c",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "output": {
+            "ok": true
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "analyze"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "a"
+          ],
+          "error": null,
+          "id": "b",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "test"
+        }
+      ],
+      "scope": [
+        "tests"
+      ],
+      "status": "running",
+      "updated_at": 1787922211.601798
+    },
+    "1064392ae9a1": {
+      "created_at": 1787922271.6097023,
+      "current": "s1",
+      "goal": "Run an Airi-PC persistence smoke test",
+      "id": "1064392ae9a1",
+      "nodes": [
+        {
+          "args": {
+            "path": "README.md"
+          },
+          "checkpoint": {
+            "tool": "computer_file_read",
+            "workflow_iteration": 1
+          },
+          "depends_on": [],
+          "error": null,
+          "id": "s1",
+          "input": null,
+          "operation": "read",
+          "output": {
+            "content": "BAD",
+            "path": "README.md",
+            "size_bytes": 3,
+            "truncated": false
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "read project README"
+        }
+      ],
+      "scope": [
+        "."
+      ],
+      "status": "completed",
+      "updated_at": 1787922271.6163487
+    },
+    "153c6ef66b29": {
+      "created_at": 1787922211.7186294,
+      "current": "n1",
+      "goal": "a",
+      "id": "153c6ef66b29",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "completed",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922211.7216394
+    },
+    "1650df0a81c6": {
+      "created_at": 1787921935.9741886,
+      "current": "b",
+      "goal": "demo",
+      "id": "1650df0a81c6",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "output": {
+            "ok": true
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "analyze"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "a"
+          ],
+          "error": null,
+          "id": "b",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "test"
+        }
+      ],
+      "scope": [
+        "tests"
+      ],
+      "status": "running",
+      "updated_at": 1787921935.9754653
+    },
+    "2ddc218165c6": {
+      "created_at": 1787922383.0894184,
+      "current": "b",
+      "goal": "demo",
+      "id": "2ddc218165c6",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "output": {
+            "ok": true
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "analyze"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "a"
+          ],
+          "error": null,
+          "id": "b",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "test"
+        }
+      ],
+      "scope": [
+        "tests"
+      ],
+      "status": "running",
+      "updated_at": 1787922383.0912418
+    },
+    "2e5df26dd618": {
+      "created_at": 1787922187.4420686,
+      "current": "n1",
+      "goal": "a",
+      "id": "2e5df26dd618",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "completed",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922187.4447203
+    },
+    "3021b8773ccb": {
+      "created_at": 1787922229.0504742,
+      "current": "s1",
+      "goal": "integration smoke",
+      "id": "3021b8773ccb",
+      "nodes": [
+        {
+          "args": {
+            "path": "README.md"
+          },
+          "checkpoint": {
+            "tool": "computer_file_read",
+            "workflow_iteration": 1
+          },
+          "depends_on": [],
+          "error": null,
+          "id": "s1",
+          "input": null,
+          "operation": "read",
+          "output": {
+            "content": "BAD",
+            "path": "README.md",
+            "size_bytes": 3,
+            "truncated": false
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "s1"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922229.0608866
+    },
+    "315e0ddafb07": {
+      "created_at": 1787921936.119836,
+      "current": "n1",
+      "goal": "a",
+      "id": "315e0ddafb07",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "completed",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787921936.1221
+    },
+    "353303016363": {
+      "created_at": 1787922155.6645143,
+      "current": "s1",
+      "goal": "Run a bounded integration smoke check",
+      "id": "353303016363",
+      "nodes": [
+        {
+          "args": {
+            "path": "README.md"
+          },
+          "checkpoint": {
+            "workflow_iteration": 2
+          },
+          "depends_on": [],
+          "error": "no healthy capability",
+          "id": "s1",
+          "input": null,
+          "operation": "read",
+          "output": null,
+          "retry_count": 1,
+          "status": "failed",
+          "title": "read runtime README"
+        }
+      ],
+      "scope": [
+        "."
+      ],
+      "status": "failed",
+      "updated_at": 1787922156.6713533
+    },
+    "355d7d9997b9": {
+      "created_at": 1787922245.718257,
+      "current": "s1",
+      "goal": "debug autonomy",
+      "id": "355d7d9997b9",
+      "nodes": [
+        {
+          "args": {
+            "path": "README.md"
+          },
+          "checkpoint": {
+            "tool": "computer_file_read",
+            "workflow_iteration": 1
+          },
+          "depends_on": [],
+          "error": null,
+          "id": "s1",
+          "input": null,
+          "operation": "read",
+          "output": {
+            "content": "BAD",
+            "path": "README.md",
+            "size_bytes": 3,
+            "truncated": false
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "s1"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922245.7300684
+    },
+    "3a6822465a84": {
+      "created_at": 1787922201.0123832,
+      "current": "n1",
+      "goal": "b",
+      "id": "3a6822465a84",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922201.0123835
+    },
+    "4648ed9ba5ab": {
+      "created_at": 1787922255.3834414,
+      "current": "n1",
+      "goal": "b",
+      "id": "4648ed9ba5ab",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922255.3834417
+    },
+    "49a11cc7b86d": {
+      "created_at": 1787922187.4434447,
+      "current": "n1",
+      "goal": "b",
+      "id": "49a11cc7b86d",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922187.443445
+    },
+    "55d2b2be0676": {
+      "created_at": 1787922466.4800787,
+      "current": "n1",
+      "goal": "a",
+      "id": "55d2b2be0676",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "completed",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922466.485077
+    },
+    "57a4e91ac585": {
+      "created_at": 1787922201.010845,
+      "current": "n1",
+      "goal": "a",
+      "id": "57a4e91ac585",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "completed",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922201.0138125
+    },
+    "5a78b96e6b2d": {
+      "created_at": 1787922383.2261255,
+      "current": "n1",
+      "goal": "b",
+      "id": "5a78b96e6b2d",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922383.2261262
+    },
+    "658f92d7fc04": {
+      "created_at": 1787921936.120971,
+      "current": "n1",
+      "goal": "b",
+      "id": "658f92d7fc04",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787921936.1209712
+    },
+    "66343f5f850e": {
+      "created_at": 1787922383.0724561,
+      "current": "a",
+      "goal": "browser smoke",
+      "id": "66343f5f850e",
+      "nodes": [
+        {
+          "args": {},
+          "checkpoint": {
+            "tool": "fake",
+            "workflow_iteration": 1
+          },
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "operation": "browser_state",
+          "output": {},
+          "retry_count": 0,
+          "status": "completed",
+          "title": "a"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922383.0763688
+    },
+    "67309b159441": {
+      "created_at": 1787921947.70174,
+      "current": "n1",
+      "goal": "not-done",
+      "id": "67309b159441",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n2",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "pending",
+          "title": "two"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787921947.7017403
+    },
+    "70a52df18702": {
+      "created_at": 1787922211.720222,
+      "current": "n1",
+      "goal": "b",
+      "id": "70a52df18702",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922211.7202225
+    },
+    "722efd4b3766": {
+      "created_at": 1787922307.116725,
+      "current": "n1",
+      "goal": "not-done",
+      "id": "722efd4b3766",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n2",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "pending",
+          "title": "two"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922307.1167252
+    },
+    "777c33dc85b8": {
+      "created_at": 1787922280.2216554,
+      "current": "s1",
+      "goal": "direct smoke",
+      "id": "777c33dc85b8",
+      "nodes": [
+        {
+          "args": {
+            "path": "README.md"
+          },
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "s1",
+          "input": null,
+          "operation": "read",
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "s1"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922280.221656
+    },
+    "788a28e76d02": {
+      "created_at": 1787922200.8936236,
+      "current": "b",
+      "goal": "demo",
+      "id": "788a28e76d02",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "output": {
+            "ok": true
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "analyze"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "a"
+          ],
+          "error": null,
+          "id": "b",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "test"
+        }
+      ],
+      "scope": [
+        "tests"
+      ],
+      "status": "running",
+      "updated_at": 1787922200.8953032
+    },
+    "7c852de2b20d": {
+      "created_at": 1787922307.1067119,
+      "current": "n1",
+      "goal": "b",
+      "id": "7c852de2b20d",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922307.1067123
+    },
+    "7ce6fbe0a3be": {
+      "created_at": 1787922255.3816595,
+      "current": "n1",
+      "goal": "a",
+      "id": "7ce6fbe0a3be",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "completed",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922255.3851123
+    },
+    "816e8f53f549": {
+      "created_at": 1787922172.0565963,
+      "current": "n1",
+      "goal": "not-done",
+      "id": "816e8f53f549",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n2",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "pending",
+          "title": "two"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922172.0565965
+    },
+    "87c1fb1be810": {
+      "created_at": 1787922383.2333903,
+      "current": "n1",
+      "goal": "not-done",
+      "id": "87c1fb1be810",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n2",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "pending",
+          "title": "two"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922383.2333906
+    },
+    "8b6ed62de46c": {
+      "created_at": 1787922466.4829957,
+      "current": "n1",
+      "goal": "b",
+      "id": "8b6ed62de46c",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922466.482996
+    },
+    "9c15cf95c7e3": {
+      "created_at": 1787922201.0324383,
+      "current": "n1",
+      "goal": "not-done",
+      "id": "9c15cf95c7e3",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n2",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "pending",
+          "title": "two"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922201.0324385
+    },
+    "9f32574acca0": {
+      "created_at": 1787922255.3912141,
+      "current": "n1",
+      "goal": "not-done",
+      "id": "9f32574acca0",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n2",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "pending",
+          "title": "two"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922255.3912144
+    },
+    "a2f3f2d44035": {
+      "created_at": 1787922466.3468032,
+      "current": "b",
+      "goal": "demo",
+      "id": "a2f3f2d44035",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "output": {
+            "ok": true
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "analyze"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "a"
+          ],
+          "error": null,
+          "id": "b",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "test"
+        }
+      ],
+      "scope": [
+        "tests"
+      ],
+      "status": "running",
+      "updated_at": 1787922466.348837
+    },
+    "a686f313bdaf": {
+      "created_at": 1787922306.9749403,
+      "current": "b",
+      "goal": "demo",
+      "id": "a686f313bdaf",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "output": {
+            "ok": true
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "analyze"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "a"
+          ],
+          "error": null,
+          "id": "b",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "test"
+        }
+      ],
+      "scope": [
+        "tests"
+      ],
+      "status": "running",
+      "updated_at": 1787922306.976666
     },
     "a95f36a2bdaf": {
       "created_at": 1787897588.1781986,
@@ -72,6 +1023,411 @@
       "status": "running",
       "updated_at": 1787897588.1784039
     },
+    "ab82a03d82e0": {
+      "created_at": 1787922466.4911518,
+      "current": "n1",
+      "goal": "not-done",
+      "id": "ab82a03d82e0",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n2",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "pending",
+          "title": "two"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922466.4911523
+    },
+    "b1767731e803": {
+      "created_at": 1787922211.727707,
+      "current": "n1",
+      "goal": "not-done",
+      "id": "b1767731e803",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n2",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "pending",
+          "title": "two"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922211.7277071
+    },
+    "b3454035b6a7": {
+      "created_at": 1787922452.456952,
+      "current": "resume",
+      "goal": "cross-session autonomy certification",
+      "id": "b3454035b6a7",
+      "nodes": [
+        {
+          "checkpoint": {
+            "status": "completed",
+            "step": "prepare"
+          },
+          "depends_on": [],
+          "error": null,
+          "id": "prepare",
+          "input": null,
+          "output": {
+            "prepared": true,
+            "session": "A"
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "prepare persistent state"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "prepare"
+          ],
+          "error": null,
+          "id": "resume",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "resume from persisted checkpoint"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "resume"
+          ],
+          "error": null,
+          "id": "verify",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "pending",
+          "title": "verify restored state"
+        }
+      ],
+      "scope": [
+        ".ai/control_plane"
+      ],
+      "status": "running",
+      "updated_at": 1787922452.4587188
+    },
+    "c2c64e319d9f": {
+      "created_at": 1787922172.04934,
+      "current": "n1",
+      "goal": "a",
+      "id": "c2c64e319d9f",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "completed",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922172.0518475
+    },
+    "c4d1c1fe8fe0": {
+      "created_at": 1787922171.9288037,
+      "current": "b",
+      "goal": "demo",
+      "id": "c4d1c1fe8fe0",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "output": {
+            "ok": true
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "analyze"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "a"
+          ],
+          "error": null,
+          "id": "b",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "test"
+        }
+      ],
+      "scope": [
+        "tests"
+      ],
+      "status": "running",
+      "updated_at": 1787922171.9301176
+    },
+    "d38ecd2dffe9": {
+      "created_at": 1787922307.1041815,
+      "current": "n1",
+      "goal": "a",
+      "id": "d38ecd2dffe9",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "completed",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922307.1093159
+    },
+    "d6a1ae853fbf": {
+      "created_at": 1787922187.4627194,
+      "current": "n1",
+      "goal": "not-done",
+      "id": "d6a1ae853fbf",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n2",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "pending",
+          "title": "two"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922187.4627197
+    },
+    "d9b5c622fed5": {
+      "created_at": 1787921947.69292,
+      "current": "n1",
+      "goal": "a",
+      "id": "d9b5c622fed5",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "completed",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787921947.6955009
+    },
+    "e94e4be9672e": {
+      "created_at": 1787922383.2243423,
+      "current": "n1",
+      "goal": "a",
+      "id": "e94e4be9672e",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "completed",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922383.2278357
+    },
+    "ebe7855d8909": {
+      "created_at": 1787921947.694263,
+      "current": "n1",
+      "goal": "b",
+      "id": "ebe7855d8909",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787921947.6942632
+    },
+    "ed1332927401": {
+      "created_at": 1787922353.8855307,
+      "current": "s1",
+      "goal": "autonomous smoke check",
+      "id": "ed1332927401",
+      "nodes": [
+        {
+          "args": {
+            "path": "README.md"
+          },
+          "checkpoint": {
+            "tool": "computer_file_read",
+            "workflow_iteration": 1
+          },
+          "depends_on": [],
+          "error": null,
+          "id": "s1",
+          "input": null,
+          "operation": "read",
+          "output": {
+            "content": "BAD",
+            "path": "README.md",
+            "size_bytes": 3,
+            "truncated": false
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "read README"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922353.8926995
+    },
+    "ed48bb99de60": {
+      "created_at": 1787921936.1281042,
+      "current": "n1",
+      "goal": "not-done",
+      "id": "ed48bb99de60",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n2",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "pending",
+          "title": "two"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787921936.1281044
+    },
+    "f2d84c130113": {
+      "created_at": 1787921947.5673637,
+      "current": "b",
+      "goal": "demo",
+      "id": "f2d84c130113",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "output": {
+            "ok": true
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "analyze"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "a"
+          ],
+          "error": null,
+          "id": "b",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "test"
+        }
+      ],
+      "scope": [
+        "tests"
+      ],
+      "status": "running",
+      "updated_at": 1787921947.56868
+    },
     "f737fcd621f5": {
       "created_at": 1787898382.6020987,
       "current": "b",
@@ -110,6 +1466,93 @@
       ],
       "status": "running",
       "updated_at": 1787898382.6025038
+    },
+    "fb1f1fcddccb": {
+      "created_at": 1787922466.3258257,
+      "current": "a",
+      "goal": "browser smoke",
+      "id": "fb1f1fcddccb",
+      "nodes": [
+        {
+          "args": {},
+          "checkpoint": {
+            "tool": "fake",
+            "workflow_iteration": 1
+          },
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "operation": "browser_state",
+          "output": {},
+          "retry_count": 0,
+          "status": "completed",
+          "title": "a"
+        }
+      ],
+      "scope": [],
+      "status": "completed",
+      "updated_at": 1787922466.3296213
+    },
+    "fbeefb93af39": {
+      "created_at": 1787922172.0505981,
+      "current": "n1",
+      "goal": "b",
+      "id": "fbeefb93af39",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "n1",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "one"
+        }
+      ],
+      "scope": [],
+      "updated_at": 1787922172.0505984
+    },
+    "fbfd600159e8": {
+      "created_at": 1787922255.2734668,
+      "current": "b",
+      "goal": "demo",
+      "id": "fbfd600159e8",
+      "nodes": [
+        {
+          "checkpoint": null,
+          "depends_on": [],
+          "error": null,
+          "id": "a",
+          "input": null,
+          "output": {
+            "ok": true
+          },
+          "retry_count": 0,
+          "status": "completed",
+          "title": "analyze"
+        },
+        {
+          "checkpoint": null,
+          "depends_on": [
+            "a"
+          ],
+          "error": null,
+          "id": "b",
+          "input": null,
+          "output": null,
+          "retry_count": 0,
+          "status": "running",
+          "title": "test"
+        }
+      ],
+      "scope": [
+        "tests"
+      ],
+      "status": "running",
+      "updated_at": 1787922255.2753716
     }
   }
 }

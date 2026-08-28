@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "experiment": "cross-session-autonomy",
+  "task_id": "b3454035b6a7",
+  "skill_name": "autonomous-goal-execution",
+  "checkpoint": {
+    "version": 2,
+    "task": "cross-session autonomy certification",
+    "phase": "recovery",
+    "step": 1,
+    "goal": "cross-session autonomy certification",
+    "scope": [
+      ".ai/control_plane"
+    ],
+    "note": "Session A persisted before session termination.",
+    "artifacts": [
+      ".ai/control_plane/tasks.json",
+      ".ai/control_plane/skill-registry.json",
+      ".ai/control_plane/cross-session-test.json"
+    ],
+    "status": "active",
+    "started_at": 1787922452.4601827,
+    "completed_at": null,
+    "error": null,
+    "retry_count": 0,
+    "last_verified_sha": null,
+    "updated_at": 1787922464.8482113
+  },
+  "created_in_session": "A",
+  "resume_required_step": "resume",
+  "expected_completed": [
+    "prepare"
+  ],
+  "expected_pending": [
+    "resume",
+    "verify"
+  ],
+  "source_sha": "5e3b4efb900b043717ee4c951a24e71d49797dff",
+  "skill_verified": true,
+  "task_state": {
+    "created_at": 1787922452.456952,
+    "current": "resume",
+    "goal": "cross-session autonomy certification",
+    "id": "b3454035b6a7",
+    "nodes": [
+      {
+        "checkpoint": {
+          "status": "completed",
+          "step": "prepare"
+        },
+        "depends_on": [],
+        "error": null,
+        "id": "prepare",
+        "input": null,
+        "output": {
+          "prepared": true,
+          "session": "A"
+        },
+        "retry_count": 0,
+        "status": "completed",
+        "title": "prepare persistent state"
+      },
+      {
+        "checkpoint": null,
+        "depends_on": [
+          "prepare"
+        ],
+        "error": null,
+        "id": "resume",
+        "input": null,
+        "output": null,
+        "retry_count": 0,
+        "status": "running",
+        "title": "resume from persisted checkpoint"
+      },
+      {
+        "checkpoint": null,
+        "depends_on": [
+          "resume"
+        ],
+        "error": null,
+        "id": "verify",
+        "input": null,
+        "output": null,
+        "retry_count": 0,
+        "status": "pending",
+        "title": "verify restored state"
+      }
+    ],
+    "scope": [
+      ".ai/control_plane"
+    ],
+    "status": "running",
+    "updated_at": 1787922452.4587188
+  }
+}
