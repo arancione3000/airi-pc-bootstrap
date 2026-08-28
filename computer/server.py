@@ -271,19 +271,27 @@ class _BrowserManager:
 
     def open(self, url, wait_until='domcontentloaded'):
         def _open():
-            try:
-                page=self._ensure(); response=page.goto(url, wait_until=wait_until, timeout=30000)
-                status=response.status if response is not None else None
-                classification='auth_or_permission' if status in {401,403} else 'ok'
-                return {'ok':True,'url':page.url,'title':page.title(),'status':status,'classification':classification,'auth_profile':self.auth_profile}
-            except Exception as exc:
-                message=str(exc); low=message.lower()
-                if 'err_blocked_by_administrator' in low: cls='policy_block'
-                elif 'timeout' in low: cls='timeout'
-                elif 'net::' in low or 'connection' in low: cls='network_error'
-                elif 'certificate' in low or 'ssl' in low: cls='tls_error'
-                else: cls='browser_error'
-                self._close_worker(); return {'ok':False,'error':message,'url':None,'status':None,'classification':cls,'auth_profile':self.auth_profile}
+            last_error = None
+            for attempt in range(2):
+                try:
+                    page=self._ensure(); response=page.goto(url, wait_until=wait_until, timeout=30000)
+                    status=response.status if response is not None else None
+                    classification='auth_or_permission' if status in {401,403} else 'ok'
+                    return {'ok':True,'url':page.url,'title':page.title(),'status':status,'classification':classification,'auth_profile':self.auth_profile,'attempt':attempt+1}
+                except Exception as exc:
+                    last_error=str(exc)
+                    low=last_error.lower()
+                    if 'err_blocked_by_administrator' in low: cls='policy_block'
+                    elif 'timeout' in low: cls='timeout'
+                    elif 'net::' in low or 'connection' in low: cls='network_error'
+                    elif 'certificate' in low or 'ssl' in low: cls='tls_error'
+                    else: cls='browser_error'
+                    self._close_worker()
+                    if attempt == 0:
+                        try: self._ensure()
+                        except Exception as restart_exc: last_error=str(restart_exc)
+                        time.sleep(0.25)
+            return {'ok':False,'error':last_error or 'browser_open_failed','url':None,'status':None,'classification':cls if 'cls' in locals() else 'browser_error','auth_profile':self.auth_profile,'attempt':2}
         return self.call(_open)
 
     def auth_set(self, name):
