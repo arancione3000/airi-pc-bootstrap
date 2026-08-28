@@ -1,47 +1,29 @@
-# Airi-PC + ChatGPT/Codex autonomous development
+# Airi-PC + ChatGPT autonomous workflow
 
-Airi-PC can open the official ChatGPT/Codex web experience in its own browser. Authentication is performed manually by the user in the browser; passwords, cookies, tokens, and browser storage are never committed to the public repository.
+## Secure login takeover
 
-## Start
+Run `sh scripts/airi-chatgpt-login`. Airi-PC opens the official ChatGPT site in its own browser profile and then pauses for a human to complete authentication. The login page receives the credentials directly; the script never reads, echoes, or stores the password.
 
-Run:
+The authenticated browser storage is saved only after explicit human confirmation. It is kept under `.ai/auth/` with restrictive permissions and is excluded by `.gitignore`. It is never committed to the public repository.
 
-`sh scripts/airi-chatgpt-start`
+## Autonomy
 
-This opens `https://chatgpt.com/codex` using the existing Airi-PC browser. Complete any sign-in in the browser itself. Do not paste credentials into chat or project files.
+ChatGPT/Codex is the planning/programming side when an authenticated product session and the required platform features are available. Airi-PC remains the controlled execution side for files, tests, browser actions, checkpoints, rollback, audit, and Git.
 
-## Autonomous development model
+No script attempts to bypass platform authentication or to scrape passwords/cookies from the browser.
 
-ChatGPT/Codex is the programming/review brain. Airi-PC remains the controlled execution environment: code changes, tests, browser actions, checkpoints, rollback and Git are mediated by Airi-PC.
+## Stop
 
-The development loop is bounded and checkpointed rather than an uncontrolled message stream. A typical cycle is:
+Run `sh scripts/airi-stop` or issue the control-plane stop command. A stop writes `.ai/STOP`, terminates the local autonomous worker, and preserves the checkpoint. No new autonomous work should start while `.ai/STOP` exists.
 
-`goal -> analysis -> change -> test -> verification -> commit -> next iteration`
+## Rate and message discipline
 
-Airi-PC should not execute new work after an emergency stop is requested.
-
-## Emergency stop
-
-Run:
-
-`sh scripts/airi-stop`
-
-This creates `.ai/STOP`, asks the autonomous worker to terminate, and preserves the current checkpoint. To resume later, remove the stop flag only after inspecting the saved state.
-
-## Security
-
-The repository is public, so these paths are deliberately ignored by Git:
-
-- `.ai/auth/`
-- `.ai/STOP`
-- `.ai/control_plane/local-agent-checkpoint.json`
-
-No script in this feature reads or writes ChatGPT passwords. Browser authentication stays inside the browser session. Private session state is never treated as project source.
+Autonomous work should proceed in bounded iterations rather than an unrestricted message stream. Each iteration must reach a checkpoint before the next one begins. Suggested limits are 20 iterations, 30 minutes, or 5 consecutive failures per task.
 
 ## Thinking / Computer mode
 
-Airi-PC may open the official ChatGPT/Codex page, but it must not assume that a UI click successfully enabled a platform-level feature. The operator should verify the active mode in the ChatGPT interface. The bridge does not attempt to collect credentials or bypass platform authentication.
+Airi-PC may open ChatGPT/Codex, but it must not assume that a UI click successfully enabled platform-level Thinking or Computer Mode. The operator verifies the active mode in the ChatGPT interface. Airi-PC can report the observed page state but does not bypass platform controls.
 
-## Cost
+## Recovery
 
-This browser bridge does not require an OpenAI API key. Actual ChatGPT/Codex usage remains subject to the limits and availability of the user's ChatGPT plan.
+On browser crash, restart the browser manager and retry the current idempotent step. On Airi-PC process failure, restart the runtime and resume from the last checkpoint. On workspace corruption, use the canonical `airi-rebuild` path and restore persisted state.

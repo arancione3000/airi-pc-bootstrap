@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+ROOT="${AIRI_ROOT:-/home/user/airi}"
+BASE_URL="${AIRI_MCP_URL:-http://127.0.0.1:9010}"
+PROFILE="${AIRI_CHATGPT_PROFILE:-chatgpt}"
+TIMEOUT="${AIRI_LOGIN_TIMEOUT:-900}"
+export AIRI_ROOT="$ROOT"
+mkdir -p "$ROOT/.ai/auth"
+chmod 700 "$ROOT/.ai/auth"
+python3 - "$BASE_URL" "$PROFILE" "$TIMEOUT" <<'PY'
+import json,sys,time,urllib.request
+base,profile,timeout=sys.argv[1:]
+timeout=int(timeout)
+def post(path,payload):
+    req=urllib.request.Request(base+path,data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
+    with urllib.request.urlopen(req,timeout=30) as r:return json.load(r)
+def get(path):
+    with urllib.request.urlopen(base+path,timeout=30) as r:return json.load(r)
+post('/browser/auth/set', {'profile':profile})
+opened=post('/action', {'action':'browser_open','payload':{'url':'https://chatgpt.com/','wait_until':'domcontentloaded'}})
+print(json.dumps({'browser_open':opened},indent=2))
+print('HUMAN LOGIN REQUIRED: complete the ChatGPT login in the Airi-PC browser. Credentials stay in the browser and are never sent to this script.')
+print('After login, press ENTER here to save the browser session locally.')
+input()
+status=get('/browser/auth/status?profile='+profile)
+if status.get('exists'):
+    print('A saved profile already exists; replacing it only after explicit human confirmation.')
+saved=post('/browser/auth/save', {'profile':profile})
+print(json.dumps({'saved':saved},indent=2))
+print('LOGIN STATE SAVED LOCALLY. It is excluded from Git and stored with mode 0600.')
+PY
