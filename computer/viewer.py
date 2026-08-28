@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
+import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -73,6 +74,9 @@ refresh();setInterval(refresh,2000)</script></body></html>"""
         stop.write_text('viewer stop\n', encoding='utf-8')
         try: stop.chmod(0o600)
         except OSError: pass
-        return {'ok':True,'stopped':True}
+        script = root / 'scripts' / 'airi-stop'
+        if script.exists():
+            subprocess.run(['sh', str(script)], cwd=root, capture_output=True, text=True, timeout=10, check=False)
+        return {'ok':True,'stopped':True,'checkpoint_preserved':True}
 
     return router
