@@ -13,6 +13,12 @@ jobs:
       - name: Checkout canonical main
         uses: actions/checkout@v4
 
+      - name: Check reconstruction scripts
+        run: |
+          sh -n scripts/airi-next-session
+          sh -n scripts/airi-session-rebuild
+          sh -n scripts/airi-rebuild
+
       - name: Recreate canonical workspace
         run: |
           sudo rm -rf /home/user/airi

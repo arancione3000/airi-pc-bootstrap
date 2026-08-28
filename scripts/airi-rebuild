@@ -1,0 +1,71 @@
+#!/bin/sh
+set -eu
+BASE="${AIRI_BASE:-/home/user/airi}"
+REPO="${AIRI_REPO:-arancione3000/airi-pc-bootstrap}"
+BRANCH="${AIRI_BRANCH:-main}"
+BOOTSTRAP_URL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
+STATE_DIR="$BASE/.ai/state"
+REPORT="$STATE_DIR/rebuild-report.json"
+CHECKPOINT="$STATE_DIR/rebuild-checkpoint.json"
+LOCK="$STATE_DIR/.rebuild.lock"
+mkdir -p "$STATE_DIR"
+if ! ( set -C; : > "$LOCK" ) 2>/dev/null; then echo 'AIRI_REBUILD_LOCKED' >&2; exit 20; fi
+cleanup() { rm -f "$LOCK"; }
+trap cleanup EXIT INT TERM
+STAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+TMP=$(mktemp -d /tmp/airi-rebuild.XXXXXX)
+trap 'rm -rf "$TMP"; cleanup' EXIT INT TERM
+write_checkpoint() {
+  python3 - "$CHECKPOINT" "$1" "$2" "$STAMP" <<'PY'
+import json,sys
+from pathlib import Path
+p=Path(sys.argv[1]); p.parent.mkdir(parents=True,exist_ok=True)
+p.write_text(json.dumps({"status":"running","stage":sys.argv[2],"detail":sys.argv[3],"updated_at":sys.argv[4]},indent=2)+"\n",encoding="utf-8")
+PY
+}
+write_report() {
+  python3 - "$REPORT" "$1" "$2" "$3" "$STAMP" "$REPO" "$BRANCH" <<'PY'
+import json,sys
+from pathlib import Path
+p=Path(sys.argv[1]); p.parent.mkdir(parents=True,exist_ok=True)
+p.write_text(json.dumps({"status":sys.argv[2],"source_repo":sys.argv[6],"source_branch":sys.argv[7],"source_sha":sys.argv[3],"note":sys.argv[4],"updated_at":sys.argv[5]},indent=2)+"\n",encoding="utf-8")
+PY
+}
+write_checkpoint download "fetching canonical ${REPO}:${BRANCH}"
+curl -fsSL "$BOOTSTRAP_URL" -o "$TMP/source.tar.gz" || { write_report failed unknown download_failed; exit 30; }
+tar -xzf "$TMP/source.tar.gz" -C "$TMP" || { write_report failed unknown archive_invalid; exit 31; }
+SRC=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -n1)
+[ -n "$SRC" ] || { write_report failed unknown source_missing; exit 32; }
+write_checkpoint preserve "preserving runtime-owned state"
+if [ -d "$BASE/.ai/state" ]; then cp -a "$BASE/.ai/state" "$TMP/state-preserve"; else mkdir -p "$TMP/state-preserve"; fi
+[ -f "$BASE/.ai/PROJECT_MEMORY.md" ] && cp "$BASE/.ai/PROJECT_MEMORY.md" "$TMP/PROJECT_MEMORY.md" || true
+write_checkpoint activate "activating canonical source"
+if [ -e "$BASE" ]; then BACKUP="$BASE.backup.$(date +%s)"; mv "$BASE" "$BACKUP" || { write_report failed unknown backup_failed; exit 33; }; fi
+mv "$SRC" "$BASE" || { write_report failed unknown activation_failed; exit 34; }
+mkdir -p "$BASE/.ai/state"
+if [ ! -d "$BASE/.git" ]; then
+  git init -q "$BASE"
+  git -C "$BASE" remote add origin "https://github.com/${REPO}.git"
+fi
+git -C "$BASE" fetch -q --depth=1 origin "$BRANCH" || { write_report failed unknown git_fetch_failed; exit 35; }
+git -C "$BASE" reset -q --hard "origin/$BRANCH" || { write_report failed unknown git_reset_failed; exit 36; }
+git -C "$BASE" config user.name 'Airi-PC Agent'
+git -C "$BASE" config user.email 'airi-pc-agent@users.noreply.github.com'
+cp -a "$TMP/state-preserve/." "$BASE/.ai/state/" 2>/dev/null || true
+[ -f "$TMP/PROJECT_MEMORY.md" ] && cp "$TMP/PROJECT_MEMORY.md" "$BASE/.ai/PROJECT_MEMORY.md" || true
+write_checkpoint fingerprint "recording exact source commit"
+SHA=$(git -C "$BASE" rev-parse HEAD)
+printf '%s\n' "$SHA" > "$BASE/.ai/.runtime_source_sha"
+write_checkpoint start "starting and verifying canonical runtime"
+chmod +x "$BASE/scripts/airi-*" "$BASE/computer/start.sh" 2>/dev/null || true
+AIRI_FORCE_RESTART=1 AIRI_EXPECTED_SHA="$SHA" "$BASE/computer/start.sh" >"$BASE/.ai/state/rebuild-start.log" 2>&1 || { write_report failed "$SHA" runtime_start_failed; exit 37; }
+curl -fsS --max-time 5 http://127.0.0.1:9010/ready >"$BASE/.ai/state/rebuild-ready.json" || { write_report failed "$SHA" ready_failed; exit 38; }
+if [ -x "$BASE/scripts/airi-runtime-verify" ]; then "$BASE/scripts/airi-runtime-verify" >"$BASE/.ai/state/rebuild-verify.log" 2>&1 || { write_report failed "$SHA" runtime_verify_failed; exit 39; }; fi
+write_checkpoint complete "rebuild verified"
+write_report success "$SHA" verified
+python3 - "$CHECKPOINT" "$SHA" "$STAMP" <<'PY'
+import json,sys
+from pathlib import Path
+p=Path(sys.argv[1]); p.write_text(json.dumps({"status":"complete","stage":"complete","source_sha":sys.argv[2],"updated_at":sys.argv[3]},indent=2)+"\n",encoding="utf-8")
+PY
+cat "$REPORT"
