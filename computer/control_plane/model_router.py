@@ -12,7 +12,8 @@ class ModelRouter:
             self.register_provider('openrouter', ['strong','coding','research','review'], available=bool(os.environ.get('OPENROUTER_API_KEY')), cost_class='configured')
         elif provider == 'openrouter_bridge':
             auth_file=os.environ.get('AIRI_MODEL_GATEWAY_AUTH_FILE','/tmp/airi-model-gateway.token')
-            self.register_provider('openrouter_bridge', ['strong','coding','research','review'], available=os.path.exists(auth_file), cost_class='gateway')
+            configured=bool(os.environ.get('AIRI_MODEL_GATEWAY_TOKEN')) or os.path.exists(auth_file)
+            self.register_provider('openrouter_bridge', ['strong','coding','research','review'], available=configured, cost_class='gateway')
     def register_provider(self,name,capabilities,available=False,cost_class='unknown'):
         self.state['providers'][name]={'name':name,'capabilities':list(capabilities),'available':bool(available),'cost_class':cost_class}; save_json(FILE,self.state); return self.state['providers'][name]
     def choose(self, task_type='simple', complexity='medium', needs_vision=False, prefer_speed=False):
