@@ -9,6 +9,11 @@ from .maintenance import MaintenanceManager
 from .skill_manager import SkillManager
 from .reliability import REGISTRY
 from .supervisor import Supervisor
+from .job_manager import JobManager
+from .verification_engine import VerificationEngine
+from .experience import ExperienceStore
+from .model_router import ModelRouter
+from .subagent_manager import SubagentManager
 from .store import load_json, save_json, now
 from coding import analyze, read, search, write, patch, test, build, lint, git_status, git_diff, snapshot, restore_snapshot, safe_path
 
@@ -17,10 +22,13 @@ AUTONOMY_FILE = 'autonomous-workflow.json'
 
 class ControlPlane:
     def __init__(self):
-        self.capabilities=CapabilityManager(); self.transactions=TransactionEngine(); self.tasks=TaskEngine(); self.audit=AuditEngine(); self.index=ProjectIndex(); self.maintenance=MaintenanceManager(); self.skills=SkillManager(); self.supervisor=Supervisor()
+        self.capabilities=CapabilityManager(); self.transactions=TransactionEngine(); self.tasks=TaskEngine(); self.audit=AuditEngine(); self.index=ProjectIndex(); self.maintenance=MaintenanceManager(); self.skills=SkillManager(); self.supervisor=Supervisor(); self.jobs=JobManager(); self.verification=VerificationEngine(); self.experience=ExperienceStore(); self.models=ModelRouter(); self.subagents=SubagentManager()
     def bootstrap(self, tool_names, schemas=None):
         names=list(tool_names); caps=self.capabilities.discover(names,schemas); idx=self.index.refresh(); skills=self.skills.refresh(); self.audit.event(kind='control_plane_bootstrap',tool_count=len(names),index=idx,skill_count=len(skills.get('skills',{}))); return {'ok':True,'capabilities':caps,'index':idx,'skills':len(skills.get('skills',{}))}
-    def status(self): return {'ok':True,'capabilities':self.capabilities.summary(),'reliability':REGISTRY.summary(),'tasks':self.tasks.state,'transactions':self.transactions.state,'index':self.index.summary(),'skills':self.skills.list(),'maintenance':self.maintenance.history(),'supervisor':self.supervisor.snapshot(),'autonomous_workflow':load_json(AUTONOMY_FILE, {'active':False,'phase':'idle','task_id':None}),'audit_events':len(self.audit.tail(100000))}
+    def status(self): return {'ok':True,'capabilities':self.capabilities.summary(),'reliability':REGISTRY.summary(),'tasks':self.tasks.state,'transactions':self.transactions.state,'index':self.index.summary(),'skills':self.skills.list(),'maintenance':self.maintenance.history(),'supervisor':self.supervisor.snapshot(),'jobs':self.jobs.list(),'verification':{'available':True},'experience':{'count':len(self.experience.state.get('experiences',{}))},'model_routing':self.models.status(),'subagents':self.subagents.list(),'autonomous_workflow':load_json(AUTONOMY_FILE, {'active':False,'phase':'idle','task_id':None}),'audit_events':len(self.audit.tail(100000))}
+    def context_pack(self, query, limit_files=12, max_bytes=120000):
+        return self.index.context_pack(query, limit_files, max_bytes)
+
     def route(self,candidates):
         result=self.capabilities.route(candidates); self.audit.event(kind='route',candidates=list(candidates),result=result); return result
     def plan(self,goal,steps,scope=None):
@@ -168,4 +176,47 @@ class ControlPlane:
                 state.update({'phase':'blocked','active':True,'result':{'status':'BLOCKED','step':node['id'],'error':err,'classification':self._classify_failure(err)}}); save_json(AUTONOMY_FILE,state); return state
         state.update({'phase':'complete','active':False,'result':{'status':'READY','task_id':task['id'],'iterations':state['iteration'],'tool_calls':state['tool_calls'],'retries':state['retries']},'completed_at':now()}); save_json(AUTONOMY_FILE,state); return state
 
+    def job_start(self, command, cwd='.', timeout=900, owner_task=None, scope=None, allow_shell=False):
+        result=self.jobs.start(command,cwd,timeout,owner_task,scope,allow_shell)
+        self.audit.event(kind='job_start',job_id=result['id'],owner_task=owner_task,command=command,cwd=cwd)
+        return result
+
+    def job_status(self, job_id):
+        return self.jobs.status(job_id)
+
+    def job_list(self):
+        return self.jobs.list()
+
+    def job_attach(self, job_id, tail=200):
+        return self.jobs.attach(job_id,tail)
+
+    def job_detach(self, job_id):
+        return self.jobs.detach(job_id)
+
+    def job_cancel(self, job_id, grace=5):
+        result=self.jobs.cancel(job_id,grace); self.audit.event(kind='job_cancel',job_id=job_id,result=result); return result
+
+    def job_cleanup(self, keep_final=100):
+        return self.jobs.cleanup(keep_final)
+
     def verify(self,goal,result,tests=None,files=None,commit=None): return self.audit.event(kind='verification',goal=goal,result=result,tests=tests or [],files=files or [],commit=commit)
+
+    def verify_deliverable(self, requirements=None, tests=None, build_cmd=None, lint_cmd=None, project_path='.', runtime=None, security=None):
+        result=self.verification.run(requirements=requirements, tests=tests, build_cmd=build_cmd, lint_cmd=lint_cmd, project_path=project_path, runtime=runtime, security=security)
+        self.audit.event(kind='deliverable_verification', result=result); return result
+
+    def record_experience(self, problem, context, solution, tools=None, failure_modes=None, successful_strategy='', verification=None, tags=None):
+        row=self.experience.record(problem,context,solution,tools,failure_modes,successful_strategy,verification,tags); self.audit.event(kind='experience_record',experience_id=row['id']); return row
+
+    def experience_match(self, query, limit=5): return {'experiences':self.experience.match(query,limit)}
+
+    def subagent_create(self, goal, repo_path='.', branch_prefix='agent'):
+        return self.subagents.create(goal,repo_path,branch_prefix)
+
+    def subagent_status(self, agent_id): return self.subagents.status(agent_id)
+    def subagent_list(self): return self.subagents.list()
+    def subagent_finish(self, agent_id, status='ready'): return self.subagents.finish(agent_id,status)
+    def subagent_remove(self, agent_id, force=False): return self.subagents.remove(agent_id,force)
+
+    def choose_model(self, task_type='simple', complexity='medium', needs_vision=False, prefer_speed=False):
+        return self.models.choose(task_type,complexity,needs_vision,prefer_speed)

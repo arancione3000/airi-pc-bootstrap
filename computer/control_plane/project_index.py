@@ -48,4 +48,21 @@ class ProjectIndex:
                 if q in s.casefold() or q in path.casefold(): out.append({"path":path,"symbol":s})
                 if len(out)>=limit: return out
         return out
+    def context_pack(self, query: str, limit_files: int = 12, max_bytes: int = 120000):
+        q=str(query).casefold().strip(); scored=[]
+        for path, meta in self.state.get('files',{}).items():
+            symbols=self.state.get('symbols',{}).get(path,[])
+            hay=(path+' '+' '.join(symbols)).casefold()
+            score=sum(2 for tok in q.split() if tok and tok in path.casefold()) + sum(1 for tok in q.split() if tok and tok in hay)
+            if score: scored.append((score,path))
+        scored.sort(key=lambda x:(-x[0],x[1])); selected=[p for _,p in scored[:max(1,int(limit_files))]]
+        snippets=[]; total=0
+        for rel in selected:
+            p=ROOT/rel
+            try: text=p.read_text(errors='replace')[:max(0,max_bytes-total)]
+            except Exception: continue
+            snippets.append({'path':rel,'score':next((s for s,r in scored if r==rel),0),'content':text}); total += len(text.encode())
+            if total>=max_bytes: break
+        return {'query':query,'files':snippets,'bytes':total,'truncated':total>=max_bytes}
+
     def summary(self): return {"files":len(self.state['files']),"symbol_files":len(self.state['symbols']),"dependency_files":len(self.state.get('dependencies',{})),"updated_at":self.state['updated_at']}

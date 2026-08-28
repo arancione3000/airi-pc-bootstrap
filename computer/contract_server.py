@@ -110,6 +110,22 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     "computer_browser_auth_save": _obj({"profile": {"type": ["string", "null"]}}),
     "computer_browser_auth_status": _obj({"profile": {"type": "string"}}, ["profile"]),
     "computer_browser_human_wait": _obj({"timeout": {"type": "integer"}, "poll": {"type": "number"}}),
+    "computer_terminal_start": _obj({"command":{"type":"string"},"cwd":{"type":"string"},"timeout":{"type":"integer"},"owner_task":{"type":["string","null"]},"scope":{"type":"array"},"allow_shell":{"type":"boolean"}}, ["command"]),
+    "computer_terminal_status": _obj({"job_id":{"type":"string"}}, ["job_id"]),
+    "computer_terminal_list": _obj({}),
+    "computer_terminal_attach": _obj({"job_id":{"type":"string"},"tail":{"type":"integer"}}, ["job_id"]),
+    "computer_terminal_detach": _obj({"job_id":{"type":"string"}}, ["job_id"]),
+    "computer_terminal_cancel": _obj({"job_id":{"type":"string"},"grace":{"type":"integer"}}, ["job_id"]),
+    "computer_terminal_cleanup": _obj({"keep_final":{"type":"integer"}}),
+    "computer_task_add_node": _obj({"task_id":{"type":"string"},"node":{"type":"object"},"created_by":{"type":"string"}}, ["task_id","node"]),
+    "computer_task_add_dependency": _obj({"task_id":{"type":"string"},"node_id":{"type":"string"},"depends_on":{"type":"string"}}, ["task_id","node_id","depends_on"]),
+    "computer_task_skip": _obj({"task_id":{"type":"string"},"node_id":{"type":"string"},"reason":{"type":"string"}}, ["task_id","node_id"]),
+    "computer_task_runnable": _obj({"task_id":{"type":["string","null"]}}),
+    "computer_context_pack": _obj({"query":{"type":"string"},"limit_files":{"type":"integer"},"max_bytes":{"type":"integer"}}, ["query"]),
+    "computer_verify_deliverable": _obj({"requirements":{"type":"array"},"tests":{"type":["string","null"]},"build_cmd":{"type":["string","null"]},"lint_cmd":{"type":["string","null"]},"project_path":{"type":"string"}}),
+    "computer_experience_record": _obj({"problem":{"type":"string"},"context":{"type":"string"},"solution":{"type":"string"},"tools":{"type":"array"},"failure_modes":{"type":"array"},"successful_strategy":{"type":"string"},"verification":{"type":"object"},"tags":{"type":"array"}}, ["problem","context","solution"]),
+    "computer_experience_match": _obj({"query":{"type":"string"},"limit":{"type":"integer"}}, ["query"]),
+    "computer_model_choose": _obj({"task_type":{"type":"string"},"complexity":{"type":"string"},"needs_vision":{"type":"boolean"},"prefer_speed":{"type":"boolean"}}),
     "computer_autonomous_goal": _obj({
         "goal": {"type": "string"}, "steps": {"type": ["array", "null"]},
         "scope": {"type": ["array", "null"]}, "max_time": {"type": "integer"},
@@ -124,6 +140,26 @@ def tool_specs() -> list[dict[str, Any]]:
     specs = [{"name": name, "description": f"Airi-PC canonical tool: {name}", "inputSchema": SCHEMAS.get(name, _obj())} for name in TOOLS]
     specs.append({"name":"computer_control_plane","description":"Airi-PC autonomous operating platform control plane","inputSchema":CONTROL_PLANE_SCHEMA})
     specs.append({"name":"computer_autonomous_goal","description":"Run a bounded, persistent goal-oriented workflow using the existing Airi-PC control plane","inputSchema":SCHEMAS["computer_autonomous_goal"]})
+    specs.extend([
+        {"name": "computer_terminal_start", "description": "Start a bounded persistent terminal job", "inputSchema": SCHEMAS["computer_terminal_start"]},
+        {"name": "computer_terminal_status", "description": "Read a persistent terminal job", "inputSchema": SCHEMAS["computer_terminal_status"]},
+        {"name": "computer_terminal_list", "description": "List persistent terminal jobs", "inputSchema": SCHEMAS["computer_terminal_list"]},
+        {"name": "computer_terminal_attach", "description": "Attach/read persistent terminal output", "inputSchema": SCHEMAS["computer_terminal_attach"]},
+        {"name": "computer_terminal_detach", "description": "Detach terminal job", "inputSchema": SCHEMAS["computer_terminal_detach"]},
+        {"name": "computer_terminal_cancel", "description": "Cancel terminal job", "inputSchema": SCHEMAS["computer_terminal_cancel"]},
+        {"name": "computer_terminal_cleanup", "description": "Cleanup finished terminal jobs", "inputSchema": SCHEMAS["computer_terminal_cleanup"]},
+        {"name": "computer_task_add_node", "description": "Dynamically add a task node", "inputSchema": SCHEMAS["computer_task_add_node"]},
+        {"name": "computer_task_add_dependency", "description": "Dynamically add a task dependency", "inputSchema": SCHEMAS["computer_task_add_dependency"]},
+        {"name": "computer_task_skip", "description": "Skip a task node", "inputSchema": SCHEMAS["computer_task_skip"]},
+        {"name": "computer_task_runnable", "description": "List runnable task nodes", "inputSchema": SCHEMAS["computer_task_runnable"]},
+    ])
+    specs.extend([
+        {"name":"computer_context_pack","description":"Build a targeted repository context pack from the project index","inputSchema":SCHEMAS["computer_context_pack"]},
+        {"name":"computer_verify_deliverable","description":"Run structured code/deliverable verification","inputSchema":SCHEMAS["computer_verify_deliverable"]},
+        {"name":"computer_experience_record","description":"Persist generalized coding experience","inputSchema":SCHEMAS["computer_experience_record"]},
+        {"name":"computer_experience_match","description":"Match previous experience to a new task","inputSchema":SCHEMAS["computer_experience_match"]},
+        {"name":"computer_model_choose","description":"Choose an abstract model route","inputSchema":SCHEMAS["computer_model_choose"]},
+    ])
     return specs
 
 
@@ -176,7 +212,7 @@ def mcp_contract(req: dict[str, Any]) -> dict[str, Any]:
         return {"jsonrpc": "2.0", "id": rid, "result": {"tools": tool_specs()}}
     if method == "tools/call":
         name = req.get("params", {}).get("name")
-        if name in ("computer_control_plane", "computer_autonomous_goal"):
+        if name in ("computer_control_plane", "computer_autonomous_goal", "computer_context_pack", "computer_verify_deliverable", "computer_experience_record", "computer_experience_match", "computer_model_choose", "computer_terminal_start", "computer_terminal_status", "computer_terminal_list", "computer_terminal_attach", "computer_terminal_detach", "computer_terminal_cancel", "computer_terminal_cleanup", "computer_task_add_node", "computer_task_add_dependency", "computer_task_skip", "computer_task_runnable"):
             return _legacy.mcp(req)
         if name not in TOOLS:
             return {"jsonrpc": "2.0", "id": rid, "error": {"code": -32601, "message": "Tool not found"}}

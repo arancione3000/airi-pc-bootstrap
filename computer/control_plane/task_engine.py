@@ -10,7 +10,9 @@ class TaskEngine:
         for i,n in enumerate(nodes):
             if isinstance(n,str): n={"id":f"n{i+1}","title":n,"depends_on":[]}
             else: n={**n}; n.setdefault("id",f"n{i+1}"); n.setdefault("title",n["id"]); n.setdefault("depends_on",[])
-            n.update({"status":"pending","input":n.get("input"),"output":None,"error":None,"retry_count":0,"checkpoint":None})
+            n.setdefault("operation", 'analyze'); n.setdefault("args", {}); n.setdefault("verification", {}); n.setdefault("created_by", 'task_engine')
+            n.setdefault("created_at", now()); n.setdefault("updated_at", now())
+            n.update({"status":n.get("status","pending"),"input":n.get("input"),"output":n.get("output"),"error":None,"retry_count":n.get("retry_count",0),"checkpoint":n.get("checkpoint")})
             norm.append(n)
         ids=[n["id"] for n in norm]
         if len(ids) != len(set(ids)):
@@ -42,7 +44,7 @@ class TaskEngine:
         if row is None: raise KeyError(task_id or self.state.get("active"))
         node=next((n for n in row["nodes"] if n["id"]==node_id), None)
         if node is None: raise KeyError(node_id)
-        node.update({"status":status,"output":output,"error":error,"checkpoint":checkpoint})
+        node.update({"status":status,"output":output,"error":error,"checkpoint":checkpoint,"updated_at":now()})
         if status=="failed": node["retry_count"]+=1
         if status == "completed":
             for nxt in row["nodes"]:
@@ -56,6 +58,44 @@ class TaskEngine:
         else:
             row["status"] = row.get("status","running")
         row["updated_at"]=now(); save_json("tasks.json",self.state); return row
+    def add_node(self, task_id, node, created_by='dynamic'):
+        row=self.read(task_id)
+        if row is None: raise KeyError(task_id)
+        n=dict(node); n.setdefault('id', uuid.uuid4().hex[:10]); n.setdefault('title', n['id']); n.setdefault('depends_on',[])
+        n.setdefault('operation','analyze'); n.setdefault('args',{}); n.setdefault('verification',{}); n.setdefault('created_by',created_by)
+        n.update({'status':'pending','input':n.get('input'),'output':None,'error':None,'retry_count':0,'checkpoint':None,'created_at':now(),'updated_at':now()})
+        ids={x['id'] for x in row['nodes']}
+        if n['id'] in ids: raise ValueError('duplicate task node id')
+        if any(d not in ids and d != n['id'] for d in n['depends_on']): raise ValueError('unknown task dependency')
+        row['nodes'].append(n); row['updated_at']=now(); save_json('tasks.json',self.state); return n
+
+    def add_dependency(self, task_id, node_id, depends_on):
+        row=self.read(task_id)
+        if row is None: raise KeyError(task_id)
+        node=next((n for n in row['nodes'] if n['id']==node_id),None)
+        if node is None: raise KeyError(node_id)
+        if not any(n['id']==depends_on for n in row['nodes']): raise KeyError(depends_on)
+        if depends_on == node_id: raise ValueError('self dependency')
+        if depends_on not in node['depends_on']: node['depends_on'].append(depends_on)
+        node['updated_at']=now(); row['updated_at']=now(); save_json('tasks.json',self.state); return node
+
+    def skip(self, task_id, node_id, reason='not needed'):
+        row=self.read(task_id)
+        if row is None: raise KeyError(task_id)
+        node=next((n for n in row['nodes'] if n['id']==node_id),None)
+        if node is None: raise KeyError(node_id)
+        if node['status']=='completed': return node
+        node.update({'status':'cancelled','error':reason,'updated_at':now()}); save_json('tasks.json',self.state); return row
+
+    def runnable(self, task_id=None):
+        row=self.read(task_id)
+        if row is None: return []
+        out=[]
+        for n in row['nodes']:
+            if n['status'] != 'pending': continue
+            if all(next(m for m in row['nodes'] if m['id']==d)['status']=='completed' for d in n.get('depends_on',[])): out.append(n)
+        return out
+
     def finish(self,status="completed"):
         row=self.read()
         if row is None: raise KeyError(self.state.get("active"))
