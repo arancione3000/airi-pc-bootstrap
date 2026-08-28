@@ -37,15 +37,15 @@ def build_router(backend, root: Path) -> APIRouter:
 <main><img id="screen" alt="Airi-PC live display"><div class="row"><input id="url" class="grow" placeholder="https://chatgpt.com/"><button onclick="openUrl()">Apri URL</button></div>
 <div class="row"><input id="text" class="grow" placeholder="Testo da digitare"><button onclick="typeText()">Digita</button><button onclick="key('ENTER')">ENTER</button></div>
 <div class="hint">Clicca sullo schermo per inviare un click. Il token resta nel frammento # dell'URL e non viene inviato al server come query parameter.</div></main>
-<script>const token=new URLSearchParams(location.hash.slice(1)).get('token')||''; const headers={'X-Airi-Viewer-Token':token,'Content-Type':'application/json'};
+<script>const hash=new URLSearchParams(location.hash.slice(1)); const token=hash.get('token')||''; const autoOpen=hash.get('open')||'https://chatgpt.com/'; const headers={'X-Airi-Viewer-Token':token,'Content-Type':'application/json'};
 async function api(path,body){const r=await fetch(path,{method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined});if(!r.ok)throw new Error(await r.text());return r.json()}
 async function refresh(){try{const s=await api('/viewer/state');const el=document.getElementById('status');el.textContent=(s.browser.available?'browser OK':'browser offline')+' • '+(s.url||'');el.className='status '+(s.ok?'ok':'bad');if(s.screenshot?.data_base64)document.getElementById('screen').src='data:image/png;base64,'+s.screenshot.data_base64}catch(e){document.getElementById('status').textContent='viewer error'}}
-async function openUrl(){await api('/viewer/action',{action:'browser_open',payload:{url:document.getElementById('url').value,wait_until:'domcontentloaded'}});await refresh()}
+async function openUrl(){const u=document.getElementById('url').value.trim()||autoOpen; document.getElementById('url').value=u; await api('/viewer/action',{action:'browser_open',payload:{url:u,wait_until:'domcontentloaded'}});await refresh()}
 async function typeText(){await api('/viewer/action',{action:'type',payload:{text:document.getElementById('text').value}});await refresh()}
 async function key(k){await api('/viewer/action',{action:'key',payload:{key:k}});await refresh()}
 async function stopAiri(){await api('/viewer/stop',{});document.getElementById('status').textContent='STOPPED'}
 document.getElementById('screen').addEventListener('click',async e=>{const r=e.currentTarget.getBoundingClientRect();const x=Math.round((e.clientX-r.left)*1280/r.width);const y=Math.round((e.clientY-r.top)*800/r.height);await api('/viewer/action',{action:'click',payload:{x,y}});await refresh()});
-refresh();setInterval(refresh,2000)</script></body></html>"""
+document.getElementById('url').value=autoOpen; openUrl().catch(()=>refresh()); setInterval(refresh,2000)</script></body></html>"""
     @router.get('/viewer', response_class=HTMLResponse)
     def viewer_page():
         return HTMLResponse(page)
