@@ -1,4 +1,6 @@
 from pathlib import Path
+import os
+os.environ.setdefault("DISPLAY", ":99")
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "computer"))
 from control_plane.capability_manager import CapabilityManager
