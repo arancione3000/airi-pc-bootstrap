@@ -1,35 +1,88 @@
 #!/bin/sh
 set -eu
-BASE=/home/user/airi
-PIDFILE=/tmp/airi-pc-watchdog.pid
-INTERVAL="${AIRI_WATCHDOG_INTERVAL:-5}"
+BASE=${AIRI_BASE:-/home/user/airi}
+STATE_DIR=${AIRI_STATE_DIR:-$BASE/.ai/state}
+LOCKFILE=${AIRI_WATCHDOG_LOCKFILE:-$STATE_DIR/watchdog.lock}
+PIDFILE=${AIRI_WATCHDOG_PIDFILE:-$STATE_DIR/watchdog.pid}
+INTERVAL=${AIRI_WATCHDOG_INTERVAL:-5}
+SUPERVISOR_STALE=${AIRI_SUPERVISOR_STALE_SECONDS:-20}
+MAX_RETRIES=${AIRI_WATCHDOG_MAX_RETRIES:-4}
 
-is_running() {
-  [ -f "$PIDFILE" ] || return 1
-  pid=$(cat "$PIDFILE" 2>/dev/null || true)
-  [ -n "$pid" ] || return 1
-  kill -0 "$pid" 2>/dev/null
+mkdir -p "$STATE_DIR" "$BASE/logs"
+
+do_lock() {
+  exec 9>"$LOCKFILE"
+  if ! flock -n 9; then exit 20; fi
+  echo $$ > "$PIDFILE"
+}
+cleanup() { [ -f "$PIDFILE" ] && [ "$(cat "$PIDFILE" 2>/dev/null || true)" = "$$" ] && rm -f "$PIDFILE" || true; flock -u 9 2>/dev/null || true; }
+trap cleanup EXIT INT TERM HUP
+
+do_lock
+
+supervisor_pid() {
+  [ -f "$STATE_DIR/supervisor.pid" ] || return 1
+  pid=$(cat "$STATE_DIR/supervisor.pid" 2>/dev/null || true)
+  case "$pid" in ''|*[!0-9]*) return 1;; esac
+  kill -0 "$pid" 2>/dev/null || return 1
+  [ -r "/proc/$pid/cmdline" ] || return 1
+  tr '\000' ' ' < "/proc/$pid/cmdline" | grep -Eq 'computer/control_plane/supervisor\.py( |$)' || return 1
+  printf '%s\n' "$pid"
 }
 
-if is_running; then
-  exit 0
-fi
+supervisor_heartbeat_ok() {
+  file="$BASE/.ai/control_plane/supervisor-run.json"
+  [ -f "$file" ] || return 1
+  now=$(date +%s)
+  stamp=$(python3 - "$file" <<'PY'
+import json,sys,datetime
+p=sys.argv[1]
+try:
+    d=json.load(open(p,encoding='utf-8'))
+    ts=d.get('timestamp')
+    print(int(float(ts)) if ts is not None else 0)
+except Exception:
+    print(0)
+PY
+)
+  [ "$stamp" -gt 0 ] || return 1
+  age=$((now-stamp)); [ "$age" -le "$SUPERVISOR_STALE" ]
+}
 
-echo $$ > "$PIDFILE"
-trap 'rm -f "$PIDFILE"' EXIT INT TERM HUP
-mkdir -p "$BASE/logs"
+start_supervisor() {
+  nohup "$BASE/scripts/airi-supervisor" >>"$BASE/logs/watchdog-supervisor.log" 2>&1 &
+}
 
+attempt=0
 FAILS=0
 while :; do
-  if curl -fsS --max-time 5 http://127.0.0.1:9010/ready >/dev/null 2>&1; then
+  pid=$(supervisor_pid 2>/dev/null || true)
+  healthy=0
+  if [ -n "$pid" ] && supervisor_heartbeat_ok; then healthy=1; fi
+  if [ "$healthy" -eq 1 ]; then
     FAILS=0
+    attempt=0
   else
     FAILS=$((FAILS + 1))
   fi
-  if [ "$FAILS" -ge 3 ]; then
-    if [ -x "$BASE/computer/start.sh" ]; then
-      AIRI_FORCE_RESTART=1 "$BASE/computer/start.sh" >>"$BASE/logs/watchdog.log" 2>&1 || true
-    fi
+  if [ "$FAILS" -ge 2 ]; then
+    attempt=0
+    recovered=0
+    while [ "$attempt" -lt "$MAX_RETRIES" ]; do
+      attempt=$((attempt + 1))
+      oldpid=$(supervisor_pid 2>/dev/null || true)
+      if [ -n "$oldpid" ]; then kill "$oldpid" 2>/dev/null || true; sleep 1; kill -0 "$oldpid" 2>/dev/null && kill -KILL "$oldpid" 2>/dev/null || true; fi
+      start_supervisor
+      deadline=$(( $(date +%s) + 20 ))
+      while [ "$(date +%s)" -lt "$deadline" ]; do
+        pid=$(supervisor_pid 2>/dev/null || true)
+        if [ -n "$pid" ] && supervisor_heartbeat_ok; then recovered=1; break; fi
+        sleep 1
+      done
+      [ "$recovered" -eq 1 ] && break
+      [ "$attempt" -lt "$MAX_RETRIES" ] && sleep $((2 ** (attempt - 1)))
+    done
+    printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ) watchdog supervisor_recovery attempts=$attempt result=$([ "$recovered" -eq 1 ] && echo PASS || echo FAIL)" >>"$BASE/logs/watchdog.log"
     FAILS=0
   fi
   sleep "$INTERVAL"

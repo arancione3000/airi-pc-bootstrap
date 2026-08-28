@@ -1,7 +1,10 @@
 from __future__ import annotations
 import argparse, fcntl, os, signal, subprocess, time
 from pathlib import Path
-from .store import now, save_json
+try:
+    from .store import now, save_json
+except ImportError:
+    from store import now, save_json
 
 BASE = '/home/user/airi'
 READY_URL = 'http://127.0.0.1:9010/ready'
