@@ -1,5 +1,5 @@
 #define AppName "Airi-PC Companion"
-#define AppVersion "0.2.0"
+#define AppVersion "0.2.1"
 #define ExeName "AiriPC-Companion.exe"
 [Setup]
 AppId={{B2A91C6B-5B82-45C3-9E6B-8C0A53A6D5D1}

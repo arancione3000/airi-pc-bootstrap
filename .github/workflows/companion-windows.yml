@@ -1,4 +1,6 @@
 name: Airi-PC Companion Windows
+permissions:
+  contents: write
 on:
   workflow_dispatch:
   push:
@@ -23,6 +25,17 @@ jobs:
       - name: Archive portable
         shell: pwsh
         run: Compress-Archive -Path dist/AiriPC-Companion -DestinationPath AiriPC-Companion-portable-windows.zip
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/companion-v')
+        shell: pwsh
+        run: |
+          gh release create "${env:GITHUB_REF_NAME}" `
+            "dist/installer/AiriPC-Companion-Setup.exe" `
+            "AiriPC-Companion-portable-windows.zip" `
+            --title "Airi-PC Companion ${env:GITHUB_REF_NAME}" `
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v4
         with:
           name: AiriPC-Companion-windows

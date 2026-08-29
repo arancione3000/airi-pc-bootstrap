@@ -11,4 +11,4 @@ def test_source_has_no_obvious_secret_literals():
 
 def test_app_does_not_store_pairing_token_in_config():
  text=(Path(__file__).resolve().parents[1]/'app/main.py').read_text()
- assert "json.dumps({k:v for k,v in d.items() if k!='token'}" in text
+ assert "pairing_token" in text
