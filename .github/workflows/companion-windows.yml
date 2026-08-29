@@ -1,0 +1,31 @@
+name: Airi-PC Companion Windows
+on:
+  workflow_dispatch:
+  push:
+    tags: ['companion-v*']
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: airi-pc-companion
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build portable EXE
+        shell: pwsh
+        run: ./installer/build_windows.ps1
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+      - name: Build installer
+        shell: pwsh
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "installer\AiriPC-Companion.iss"'
+      - name: Archive portable
+        shell: pwsh
+        run: Compress-Archive -Path dist/AiriPC-Companion -DestinationPath AiriPC-Companion-portable-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AiriPC-Companion-windows
+          path: |
+            airi-pc-companion/dist/AiriPC-Companion-portable-windows.zip
+            airi-pc-companion/dist/installer/AiriPC-Companion-Setup.exe

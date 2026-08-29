@@ -1,5 +1,5 @@
-$ErrorActionPreference='SilentlyContinue'
+$ErrorActionPreference='Stop'
 $Root = if ($env:AIRIPC_INSTALL_DIR) { $env:AIRIPC_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'AiriPC-Companion' }
-Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*$Root*companion.cli*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-Remove-Item -Recurse -Force $Root
-Write-Host 'Airi-PC Companion removed.'
+Get-Process | Where-Object { $_.ProcessName -eq 'AiriPC-Companion' } | Stop-Process -Force -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force $Root -ErrorAction SilentlyContinue
+Write-Host 'Airi-PC Companion removed. Pairing data and runtime state were removed with the local app directory.'

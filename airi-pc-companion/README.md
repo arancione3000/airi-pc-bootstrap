@@ -1,27 +1,20 @@
 # Airi-PC Companion
 
-Local, permissioned desktop companion for a user's physical computer.
+Desktop companion for safe control of the user's physical PC.
 
-## Security model
-- Binds to loopback by default.
-- Every `/status` and `/v1/execute` request requires a bearer token.
-- The token is stored only as a SHA-256 hash in `auth.json` (0600 where supported).
-- Requests expire by timestamp.
-- HIGH_RISK and DESTRUCTIVE operations require explicit confirmation metadata.
-- Filesystem access is sandbox-scoped; deletion is limited to `test-*` files.
-- Shell execution is not exposed by the protocol.
-- No credentials, cookies, API keys, or pairing secrets belong in this repository.
+## End-user mode
+The preferred distribution is the packaged `AiriPC-Companion.exe`, produced by the Windows build workflow. The app starts the local companion service, exposes connection/auth state, and provides STOP ALL and GAME MODE controls.
 
-## Current capability surface
-`system`, `screen`, `mouse`, `keyboard`, `windows`, `applications`, `filesystem`, `processes`, `process_control`.
+## Security
+- Companion service binds to `127.0.0.1` by default.
+- Auth material is stored locally as a verifier; the desktop UI never displays or exports credentials.
+- The app does not expose arbitrary shell execution.
+- Filesystem deletion is restricted to `test-*` files.
+- HIGH_RISK operations require explicit confirmation.
+- STOP ALL disables game automation locally.
 
-## Important limitation
-The package provides the secure local control endpoint and protocol, but a real physical-PC deployment still requires a reachable authenticated transport from Airi-PC to the companion. The default is loopback-only, intentionally preventing accidental Internet exposure. Do not change the bind address until a secure tunnel/relay is configured.
+## Airi transport
+The desktop app contains an optional `airi_url` setting for a future authenticated relay. The repository does not invent or bundle a public relay. Until a secure transport is provided, the companion remains local-only.
 
-## Run
-Linux/macOS: `./installer/install.sh` then `$HOME/.airi-pc-companion/run.sh`.
-
-Windows PowerShell: `./installer/install.ps1` then run the generated `run.ps1`.
-
-## Pairing
-The first start creates a one-time local bearer token in memory (`initial_token`) for provisioning. A production pairing flow should transfer only a short-lived pairing code over an authenticated control channel and store only a verifier/hash locally.
+## Game Agent foundation
+`game_agent/` provides generic screen capture, state estimation, action timing, safety control and GameProfile support. It intentionally contains no game-specific exploit, anti-cheat bypass, or unrestricted process control.
