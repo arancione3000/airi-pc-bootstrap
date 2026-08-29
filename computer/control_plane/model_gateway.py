@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-HOST = "127.0.0.1"
+HOST = os.environ.get("AIRI_MODEL_GATEWAY_HOST", "127.0.0.1")
 PORT = int(os.environ.get("AIRI_MODEL_GATEWAY_PORT", "17893"))
 MODEL = os.environ.get("OPENROUTER_MODEL", "inclusionai/ling-3.0-flash-fin:free")
 OPENROUTER_URL = os.environ.get("OPENROUTER_URL", "https://openrouter.ai/api/v1/chat/completions")
