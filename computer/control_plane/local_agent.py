@@ -11,7 +11,7 @@ from typing import Any
 ROOT = Path(os.environ.get("AIRI_ROOT", "/home/user/airi")).resolve()
 MODEL = os.environ.get("AIRI_LOCAL_MODEL", "qwen2.5-coder:7b")
 PROVIDER = os.environ.get("AIRI_MODEL_PROVIDER", "ollama")
-MODEL = os.environ.get("OPENROUTER_MODEL", MODEL) if PROVIDER == "openrouter" and os.environ.get("OPENROUTER_MODEL") else MODEL
+MODEL = os.environ.get("OPENROUTER_MODEL", MODEL) if PROVIDER in {"openrouter", "openrouter_bridge"} and os.environ.get("OPENROUTER_MODEL") else MODEL
 OLLAMA_URL = os.environ.get("AIRI_OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
 OPENROUTER_BRIDGE_URL = os.environ.get("AIRI_OPENROUTER_BRIDGE_URL", "http://127.0.0.1:17893/v1/chat/completions")
 OPENROUTER_BRIDGE_AUTH_FILE = Path(os.environ.get("AIRI_MODEL_GATEWAY_AUTH_FILE", "/tmp/airi-model-gateway.token"))
@@ -189,12 +189,23 @@ def autonomous_cycle(goal: str, iterations: int = MAX_ITERATIONS, commit: bool =
 
 def provider_status() -> dict[str, Any]:
     try:
-        body = json.dumps({"model": MODEL, "prompt": "ping", "stream": False}).encode()
-        req = urllib.request.Request(OLLAMA_URL.replace("/api/chat", "/api/generate"), data=body, headers={"Content-Type": "application/json"})
+        payload = {"model": MODEL, "stream": False, "messages": [{"role": "user", "content": "Reply exactly AIRI_PROVIDER_OK"}], "max_tokens": 8, "temperature": 0}
+        if PROVIDER == "openrouter_bridge":
+            token = OPENROUTER_BRIDGE_AUTH_FILE.read_text().strip()
+            if not token:
+                raise RuntimeError("Model gateway unavailable: auth token missing")
+            req = urllib.request.Request(OPENROUTER_BRIDGE_URL, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"})
+        elif PROVIDER == "openrouter":
+            api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+            if not api_key:
+                raise RuntimeError("OpenRouter provider configured but OPENROUTER_API_KEY is missing")
+            req = urllib.request.Request(os.environ.get("OPENROUTER_URL", "https://openrouter.ai/api/v1/chat/completions"), data=json.dumps(payload).encode(), headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}", "HTTP-Referer": os.environ.get("OPENROUTER_HTTP_REFERER", "http://127.0.0.1"), "X-Title": os.environ.get("OPENROUTER_X_TITLE", "Airi-PC")})
+        else:
+            req = urllib.request.Request(OLLAMA_URL.replace("/api/chat", "/api/generate"), data=json.dumps({"model": MODEL, "prompt": "ping", "stream": False}).encode(), headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=10) as resp:
-            return {"available": True, "model": MODEL, "http_status": resp.status}
+            return {"available": True, "provider": PROVIDER, "model": MODEL, "http_status": resp.status}
     except Exception as exc:
-        return {"available": False, "model": MODEL, "error": str(exc)}
+        return {"available": False, "provider": PROVIDER, "model": MODEL, "error": str(exc)}
 
 
 if __name__ == "__main__":
