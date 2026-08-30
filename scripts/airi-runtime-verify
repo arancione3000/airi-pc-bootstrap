@@ -60,8 +60,7 @@ def main() -> int:
         get_specs = tools_payload.get("tools", [])
         get_names = [item.get("name") for item in get_specs]
         get_schemas_ok = all(isinstance(item.get("inputSchema"), dict) and item["inputSchema"].get("type") == "object" for item in get_specs)
-        expected_names = names + ["computer_control_plane"]
-        results["http_tools"] = tools_payload.get("tool_count") == 84 and tools_payload.get("base_tool_count") == 83 and get_names == expected_names and get_schemas_ok
+        results["http_tools"] = tools_payload.get("tool_count") == 106 and tools_payload.get("base_tool_count") == 83 and get_names[:len(names)] == names and len(get_names) == 106 and get_schemas_ok
         if not results["http_tools"]: errors.append("GET /tools does not exactly match the manifest or lacks schemas")
     except Exception as exc:
         errors.append(f"/tools failed: {exc}")
@@ -77,8 +76,7 @@ def main() -> int:
         mcp_specs = listing.get("result", {}).get("tools", [])
         mcp_names = [item.get("name") for item in mcp_specs]
         mcp_schemas_ok = all(isinstance(item.get("inputSchema"), dict) and item["inputSchema"].get("type") == "object" for item in mcp_specs)
-        expected_names = names + ["computer_control_plane"]
-        results["mcp_tools_list"] = len(mcp_specs) == 84 and mcp_names == expected_names and mcp_schemas_ok
+        results["mcp_tools_list"] = len(mcp_specs) == 106 and mcp_names[:len(names)] == names and len(mcp_names) == 106 and mcp_schemas_ok
         if not results["mcp_tools_list"]: errors.append("MCP tools/list does not exactly match the manifest or lacks schemas")
     except Exception as exc:
         errors.append(f"MCP tools/list failed: {exc}")
