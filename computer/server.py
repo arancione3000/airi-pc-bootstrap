@@ -504,13 +504,13 @@ def mouse_position() -> Dict[str, int]:
     return {'x': int(pos.x), 'y': int(pos.y)}
 
 def perform(action: str, p: Dict[str, Any]) -> Any:
-    pa = _pyautogui()
     if action == 'click_element':
         query=p['text']; img=screenshot_image(); matches=[x for x in ocr(img) if query.casefold() in x['text'].casefold()]
         if not matches: raise RuntimeError(f'Element text not found: {query}')
         m=matches[0]; _pyautogui().click(m['x']+m['w']//2,m['y']+m['h']//2); return {'ok':True,'match':m}
     if action == 'screenshot':
         img=screenshot_image(); return {'format':'png','width':img.width,'height':img.height,'data_base64':image_b64(img)}
+    pa = _pyautogui()
     if action == 'move': pa.moveTo(p['x'], p['y']); return {'ok':True}
     if action == 'click': pa.click(button=p.get('button','left'), clicks=p.get('clicks',1)); return {'ok':True}
     if action == 'double_click': pa.doubleClick(button=p.get('button','left')); return {'ok':True}
