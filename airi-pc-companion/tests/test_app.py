@@ -1,5 +1,7 @@
 from pathlib import Path
 
+APP = Path(__file__).resolve().parents[1] / "app" / "main.py"
+
 def test_app_files_exist():
- assert Path('app/main.py').exists()
- assert 'airi_url' in Path('app/main.py').read_text()
+ assert APP.exists()
+ assert "airi_url" in APP.read_text()

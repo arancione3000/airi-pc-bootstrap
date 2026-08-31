@@ -19,10 +19,10 @@ def test_watchdog_single_instance(tmp_path):
     _fake_supervisor(base)
     env={**os.environ,'AIRI_BASE':str(base),'BASE':str(base),'AIRI_STATE_DIR':str(base/'.ai/state'),'AIRI_WATCHDOG_INTERVAL':'0.1','AIRI_SUPERVISOR_STALE_SECONDS':'20'}
     wd=Path(__file__).resolve().parents[1]/'scripts/airi-watchdog'
-    first=subprocess.Popen([str(wd)],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+    first=subprocess.Popen(['/bin/sh', str(wd)],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
     try:
         time.sleep(0.5)
-        second=subprocess.run([str(wd)],env=env,capture_output=True,text=True,timeout=3)
+        second=subprocess.run(['/bin/sh', str(wd)],env=env,capture_output=True,text=True,timeout=3)
         assert second.returncode==20
         assert first.poll() is None
         assert (base/'.ai/state/watchdog.pid').read_text().strip()==str(first.pid)
@@ -39,7 +39,7 @@ def test_watchdog_stale_pid_starts_supervisor(tmp_path):
     (base/'.ai/state/supervisor.pid').write_text('999999\n')
     env={**os.environ,'AIRI_BASE':str(base),'BASE':str(base),'AIRI_STATE_DIR':str(base/'.ai/state'),'AIRI_WATCHDOG_INTERVAL':'0.1','AIRI_SUPERVISOR_STALE_SECONDS':'20','AIRI_WATCHDOG_MAX_RETRIES':'1'}
     wd=Path(__file__).resolve().parents[1]/'scripts/airi-watchdog'
-    proc=subprocess.Popen([str(wd)],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+    proc=subprocess.Popen(['/bin/sh', str(wd)],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
     try:
         deadline=time.time()+5
         while time.time()<deadline:
