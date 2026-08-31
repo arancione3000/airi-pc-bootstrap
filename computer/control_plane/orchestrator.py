@@ -14,6 +14,7 @@ from .verification_engine import VerificationEngine
 from .experience import ExperienceStore
 from .model_router import ModelRouter
 from .subagent_manager import SubagentManager
+from .reasoning_engine import ReasoningEngine
 from .store import load_json, save_json, now
 from coding import analyze, read, search, write, patch, test, build, lint, git_status, git_diff, snapshot, restore_snapshot, safe_path
 
@@ -22,12 +23,109 @@ AUTONOMY_FILE = 'autonomous-workflow.json'
 
 class ControlPlane:
     def __init__(self):
-        self.capabilities=CapabilityManager(); self.transactions=TransactionEngine(); self.tasks=TaskEngine(); self.audit=AuditEngine(); self.index=ProjectIndex(); self.maintenance=MaintenanceManager(); self.skills=SkillManager(); self.supervisor=Supervisor(); self.jobs=JobManager(); self.verification=VerificationEngine(); self.experience=ExperienceStore(); self.models=ModelRouter(); self.subagents=SubagentManager()
+        self.capabilities=CapabilityManager(); self.transactions=TransactionEngine(); self.tasks=TaskEngine(); self.audit=AuditEngine(); self.index=ProjectIndex(); self.maintenance=MaintenanceManager(); self.skills=SkillManager(); self.supervisor=Supervisor(); self.jobs=JobManager(); self.verification=VerificationEngine(); self.experience=ExperienceStore(); self.models=ModelRouter(); self.subagents=SubagentManager(); self.reasoning=ReasoningEngine()
     def bootstrap(self, tool_names, schemas=None):
         names=list(tool_names); caps=self.capabilities.discover(names,schemas); idx=self.index.refresh(); skills=self.skills.refresh(); self.audit.event(kind='control_plane_bootstrap',tool_count=len(names),index=idx,skill_count=len(skills.get('skills',{}))); return {'ok':True,'capabilities':caps,'index':idx,'skills':len(skills.get('skills',{}))}
-    def status(self): return {'ok':True,'capabilities':self.capabilities.summary(),'reliability':REGISTRY.summary(),'tasks':self.tasks.state,'transactions':self.transactions.state,'index':self.index.summary(),'skills':self.skills.list(),'maintenance':self.maintenance.history(),'supervisor':self.supervisor.snapshot(),'jobs':self.jobs.list(),'verification':{'available':True},'experience':{'count':len(self.experience.state.get('experiences',{}))},'model_routing':self.models.status(),'subagents':self.subagents.list(),'autonomous_workflow':load_json(AUTONOMY_FILE, {'active':False,'phase':'idle','task_id':None}),'audit_events':len(self.audit.tail(100000))}
+    def status(self): return {'ok':True,'capabilities':self.capabilities.summary(),'reliability':REGISTRY.summary(),'tasks':self.tasks.state,'transactions':self.transactions.state,'index':self.index.summary(),'skills':self.skills.list(),'maintenance':self.maintenance.history(),'supervisor':self.supervisor.snapshot(),'jobs':self.jobs.list(),'verification':{'available':True},'experience':{'count':len(self.experience.state.get('experiences',{}))},'model_routing':self.models.status(),'subagents':self.subagents.list(),'reasoning':self.reasoning.status(self.reasoning.state.get('active_run_id')) if self.reasoning.state.get('active_run_id') else {'active_run_id':None},'autonomous_workflow':load_json(AUTONOMY_FILE, {'active':False,'phase':'idle','task_id':None}),'audit_events':len(self.audit.tail(100000))}
     def context_pack(self, query, limit_files=12, max_bytes=120000):
         return self.index.context_pack(query, limit_files, max_bytes)
+
+    def reasoning_start(self, goal, plan=None, scope=None, metadata=None):
+        meta = dict(metadata or {})
+        meta.setdefault('model_route', self.choose_model(
+            meta.get('task_type', 'coding'), meta.get('complexity', 'medium'),
+            bool(meta.get('needs_vision', False)), bool(meta.get('prefer_speed', False))))
+        result = self.reasoning.start(goal, plan, scope=scope, metadata=meta)
+        self.audit.event(kind='reasoning_start', run_id=result['run_id'], goal=goal, model_route=meta['model_route'])
+        return result
+
+    def reasoning_status(self, run_id=None):
+        return self.reasoning.status(run_id)
+
+    def reasoning_next_action(self, run_id=None):
+        result = self.reasoning.next_action(run_id)
+        self.audit.event(kind='reasoning_next_action', run_id=result.get('run_id'), action=result.get('action'), step=(result.get('step') or {}).get('id'))
+        return result
+
+    def reasoning_observe(self, observation, run_id=None, evidence=None, phase=None):
+        result = self.reasoning.observe(observation, run_id=run_id, evidence=evidence, phase=phase)
+        self.audit.event(kind='reasoning_observe', run_id=result['run_id'])
+        return result
+
+    def reasoning_mark_step(self, step_id, status, run_id=None, result=None, error=None, evidence=None, metadata=None):
+        out = self.reasoning.mark_step(step_id, status, run_id=run_id, result=result, error=error, evidence=evidence, metadata=metadata)
+        self.audit.event(kind='reasoning_mark_step', run_id=out.get('run_id'), step_id=step_id, status=status)
+        return out
+
+    def reasoning_replan(self, reason=None, run_id=None, strategy=None):
+        out = self.reasoning.replan(reason=reason, run_id=run_id, strategy=strategy)
+        self.audit.event(kind='reasoning_replan', run_id=out.get('run_id'), reason=reason, strategy=strategy)
+        return out
+
+    def reasoning_feedback(self, operation, success, result=None, error=None, tool=None, task=None, step=None, evidence=None, metadata=None, run_id=None):
+        out = self.reasoning.feedback(operation=operation, success=success, result=result, error=error, tool=tool, task=task, step=step, evidence=evidence, metadata=metadata, run_id=run_id)
+        self.audit.event(kind='reasoning_feedback', run_id=run_id or self.reasoning.state.get('active_run_id'), operation=operation, success=success, step=step)
+        return out
+
+    def reasoning_finish(self, verified=False, result=None, run_id=None):
+        out = self.reasoning.finish(verified=verified, result=result, run_id=run_id)
+        self.audit.event(kind='reasoning_finish', run_id=out['run_id'], verified=verified)
+        return out
+
+    def reasoning_goal(self, goal, steps=None, scope=None, metadata=None, max_time=900, max_iterations=25, max_retries=3, max_tool_calls=100, resume=True):
+        meta = dict(metadata or {})
+        run = self.reasoning_start(goal, steps, scope, meta)
+        self.reasoning_feedback('planning', True, result={'steps': [s['id'] for s in run['plan']], 'model_route': run['metadata'].get('model_route')}, step=run['current_step'], run_id=run['run_id'])
+        try:
+            execution = self.autonomous_goal(goal, steps or [self._reasoning_node_to_task_step(s) for s in run['plan']], scope, max_time, max_iterations, max_retries, max_tool_calls, 1, resume=False)
+            task_id = execution.get('task_id')
+            task = self.tasks.read(task_id) if task_id else None
+            if task:
+                for node in task.get('nodes', []):
+                    status = node.get('status', 'pending').upper()
+                    mapped = 'COMPLETED' if status == 'COMPLETED' else 'SKIPPED' if status in {'CANCELLED','SKIPPED'} else 'FAILED' if status == 'FAILED' else 'RUNNING' if status == 'RUNNING' else 'PENDING'
+                    try:
+                        if mapped == 'RUNNING': continue
+                        self.reasoning_mark_step(node['id'], mapped, run['run_id'], result=node.get('output'), error=node.get('error'), evidence=node.get('checkpoint'))
+                    except (KeyError, ValueError):
+                        continue
+            ok = execution.get('result', {}).get('status') == 'READY'
+            self.reasoning_feedback('autonomous_goal', ok, result=execution, error=None if ok else execution.get('result', {}).get('reason'), task=task_id, run_id=run['run_id'])
+            self.reasoning.mark_done_criterion('unit_tests', ok, run_id=run['run_id'])
+            self.reasoning.mark_done_criterion('git_diff', ok, run_id=run['run_id'])
+            self.reasoning.mark_done_criterion('evidence', bool(self.reasoning.status(run['run_id']).get('evidence')) if ok else False, run_id=run['run_id'])
+            if not ok:
+                return self.reasoning.fail(str(execution.get('result', {}).get('reason', 'engineering loop failed')), run_id=run['run_id'])
+            auto_commit = bool(meta.get('auto_commit', False))
+            commit_required = bool(meta.get('commit_required', False) or auto_commit)
+            project_path = str(meta.get('project_path') or (list(scope or ['.'])[0]))
+            commit_result = None
+            if auto_commit:
+                from code_agent import atomic_commit as coding_atomic_commit
+                commit_message = str(meta.get('commit_message') or f'reasoning: {goal}')
+                commit_result = coding_atomic_commit(commit_message, project_path, scope, bool(meta.get('allow_test_changes', False)), bool(meta.get('allow_security_changes', False)))
+                committed = bool(commit_result.get('commit', {}).get('committed'))
+                self.reasoning.mark_done_criterion('commit', committed, run_id=run['run_id'])
+                if not committed:
+                    return self.reasoning.fail('auto_commit did not create a commit', run_id=run['run_id'])
+            else:
+                self.reasoning.mark_done_criterion('commit', None if not commit_required else False, run_id=run['run_id'])
+            self.reasoning.mark_done_criterion('persistence', True, run_id=run['run_id'])
+            return self.reasoning_finish(True, {'execution': execution, 'commit': commit_result}, run['run_id'])
+        except Exception as exc:
+            self.reasoning_feedback('reasoning_goal', False, error=str(exc), run_id=run['run_id'])
+            try: self.reasoning_replan(str(exc), run['run_id'])
+            except Exception: pass
+            return self.reasoning.fail(str(exc), run_id=run['run_id'])
+
+    @staticmethod
+    def _reasoning_node_to_task_step(step):
+        return {
+            'id': step['id'], 'title': step.get('title', step['id']), 'operation': step.get('operation', 'analyze'),
+            'args': step.get('args', {}), 'depends_on': step.get('dependencies', []),
+            'repository': step.get('repository', '.'), 'workspace': step.get('workspace', '.'),
+            'verification': {'required': step.get('kind') == 'verification'},
+        }
 
     def route(self,candidates):
         result=self.capabilities.route(candidates); self.audit.event(kind='route',candidates=list(candidates),result=result); return result

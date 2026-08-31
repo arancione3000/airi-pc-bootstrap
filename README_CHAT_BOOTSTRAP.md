@@ -24,3 +24,7 @@ Full rebuild: `/home/user/airi/scripts/airi-rebuild`
 The browser implementation uses a dedicated single worker thread for Playwright sync objects, bounded retries/timeouts, stale-browser recovery, and structured errors. Runtime-owned state and the Playwright cache are repaired when older sessions left root-owned files and passwordless sudo permits recovery.
 
 **Persistence rule:** an Airi-PC task is not complete until intended changes are committed to `arancione3000/airi-pc-bootstrap:main`, the new commit SHA is recorded, remote HEAD is reread and matches, and important changed paths are verified remotely.
+
+## Reasoning Engine requirement
+
+The bootstrap is incomplete unless the canonical runtime also contains the persistent Reasoning Engine at `computer/control_plane/reasoning_engine.py`, its Control Plane integration, MCP `computer_reasoning_*` tools, and `tests/test_reasoning_engine.py`. A fresh `ricrea Airi-PC` flow must not omit this layer.

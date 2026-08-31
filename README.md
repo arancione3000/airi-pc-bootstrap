@@ -22,3 +22,11 @@ La readiness è valida soltanto quando il verifier finale restituisce `AIRI_RUNT
 Per la diagnosi locale: `scripts/airi-selftest`, `scripts/airi-coding-selftest`, `scripts/airi-runtime-verify`.
 
 Il public bootstrap non deve contenere credenziali, token, cookie, `.venv`, log o stato runtime sensibile.
+
+## Autonomous engineering
+
+Airi-PC includes a mandatory persistent Reasoning Engine above the Control Plane. New sessions and `ricrea Airi-PC` bootstrap flows must preserve and activate the Reasoning Engine together with the existing 83 tools, coding agent, autonomous goal, verification, evidence, model gateway/router, persistence, recovery, audit, and Git integration.
+
+The reasoning runtime is exposed through `computer_reasoning_start`, `computer_reasoning_status`, `computer_reasoning_next_action`, `computer_reasoning_observe`, `computer_reasoning_mark_step`, `computer_reasoning_replan`, `computer_reasoning_feedback`, `computer_reasoning_finish`, and `computer_reasoning_goal`.
+
+Reasoning state is runtime-owned at `.ai/control_plane/reasoning.json` and is never part of the public bootstrap source history.
