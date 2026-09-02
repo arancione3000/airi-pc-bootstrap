@@ -7,6 +7,7 @@ LOG="$BASE/logs/tailscale.log"
 STATUSFILE="$STATE/status.json"
 URLFILE="$STATE/url"
 PIDFILE="$STATE/pid"
+MAIN_MANIFEST="$BASE/.ai/state/airi-endpoint.json"
 INTERVAL="${AIRI_TAILSCALE_INTERVAL:-15}"
 LOCAL="${AIRI_TAILSCALE_TARGET:-127.0.0.1:9010}"
 
@@ -16,6 +17,15 @@ write_status() {
   status=$1
   url=${2:-}
   printf '{"status":"%s","url":"%s","updated_at":%s}\n' "$status" "$url" "$(date +%s)" >"$STATUSFILE"
+}
+
+write_main_manifest() {
+  url=${1:-}
+  [ -n "$url" ] || return 0
+  mkdir -p "$BASE/.ai/state"
+  tmp="$MAIN_MANIFEST.tmp.$$"
+  printf '{"url":"%s","local":"http://127.0.0.1:9010","mcp":"%s/mcp","transport":"tailscale-funnel","updated_at":%s}\n' "$url" "$url" "$(date +%s)" >"$tmp"
+  mv "$tmp" "$MAIN_MANIFEST"
 }
 
 pid_alive() {
@@ -37,7 +47,6 @@ health_check() {
   url=$(cat "$URLFILE" 2>/dev/null || true)
   [ -n "$url" ] || return 1
   curl -fsS --max-time 8 -H 'X-Airi-PC-Health: 1' "$url/status" >/dev/null 2>&1
-  curl -fsS --max-time 8 -H 'X-Airi-PC-Health: 1' "$url/mcp" >/dev/null 2>&1 || true
 }
 
 start_funnel() {
@@ -62,6 +71,7 @@ start_funnel() {
   fi
   url="https://$dns"
   printf '%s\n' "$url" >"$URLFILE"
+  write_main_manifest "$url"
   write_status "online" "$url"
   echo "$url"
 }
@@ -80,7 +90,9 @@ echo $$ >"$PIDFILE"
 
 while :; do
   if health_check; then
-    write_status "online" "$(cat "$URLFILE" 2>/dev/null || true)"
+    url=$(cat "$URLFILE" 2>/dev/null || true)
+    write_main_manifest "$url"
+    write_status "online" "$url"
   else
     if ! start_funnel >/dev/null 2>&1; then
       write_status "degraded" "$(cat "$URLFILE" 2>/dev/null || true)"

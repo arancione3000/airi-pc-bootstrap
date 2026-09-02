@@ -10,7 +10,7 @@ while :; do
   if [ -s "$MANIFEST" ]; then
     U=$(sed -n 's/.*"url":"\([^"]*\)".*/\1/p' "$MANIFEST" | head -n1)
     case "$U" in
-      https://*.run.pinggy-free.link)
+      https://*.run.pinggy-free.link|https://*.ts.net)
         if [ "$U" != "$LAST" ]; then
           curl -fsS --max-time 10 -H 'content-type: application/json' -X POST "$RELAY_URL$RELAY_ADMIN" --data "{\"url\":\"$U\"}" >/dev/null 2>&1 || true
           LAST="$U"
