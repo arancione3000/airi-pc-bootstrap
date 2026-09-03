@@ -45,6 +45,11 @@ if ! command -v Xvfb >/dev/null 2>&1; then
   sudo -n apt-get install -y xvfb xdotool openbox xterm x11-utils >/dev/null 2>&1
 fi
 
+if ! command -v xdpyinfo >/dev/null 2>&1; then
+  sudo -n apt-get update >/dev/null 2>&1
+  sudo -n apt-get install -y x11-utils >/dev/null 2>&1
+fi
+
 if ! pgrep -f '[X]vfb :99 -screen 0 1280x800x24' >/dev/null 2>&1; then
   nohup Xvfb :99 -screen 0 1280x800x24 -ac >"$ROOT/logs/xvfb.log" 2>&1 < /dev/null &
   sleep 1
