@@ -13,8 +13,11 @@ def test_experience_and_model_router(monkeypatch):
     from control_plane.model_router import ModelRouter
     e=ExperienceStore(); row=e.record('pytest timeout','python repo','reduce scope',['pytest'],['timeout'],'focused test',{'tests':1},['python'])
     assert any(x['id']==row['id'] for x in e.match('python timeout', limit=100))
-    r=ModelRouter(); r.register_provider('local-coder',['strong'],True,'low')
-    assert r.choose('coding',complexity='high')['selected']=='local-coder'
+    r=ModelRouter()
+    registered = r.register_provider('local-coder', ['strong'], True, 'low')
+    assert registered['available'] is False
+    assert 'local-coder' not in r.state['providers']
+    assert r.choose('coding', complexity='high')['selected'] == 'chatgpt'
 
 def test_orchestrator_supports_job_operations(monkeypatch):
     from control_plane.orchestrator import ControlPlane
