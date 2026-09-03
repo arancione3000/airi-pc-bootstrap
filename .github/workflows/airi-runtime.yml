@@ -40,6 +40,12 @@ jobs:
           .venv/bin/pip install --disable-pip-version-check -r computer/requirements.txt
           .venv/bin/python -m playwright install chromium
 
+      - name: Full Python test suite
+        working-directory: /home/user/airi
+        run: .venv/bin/python -m pytest -q
+      - name: ChatGPT-only rebuild verifier (static)
+        working-directory: /home/user/airi
+        run: .venv/bin/python scripts/airi-rebuild-verify.py
       - name: Start Airi-PC runtime directly
         working-directory: /home/user/airi
         env:
