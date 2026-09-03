@@ -15,20 +15,17 @@ jobs:
     steps:
       - name: Checkout canonical main
         uses: actions/checkout@v4
-
       - name: Check reconstruction scripts
         run: |
           sh -n scripts/airi-next-session
           sh -n scripts/airi-session-rebuild
           sh -n scripts/airi-rebuild
-
       - name: Recreate canonical workspace
         run: |
           sudo rm -rf /home/user/airi
           sudo mkdir -p /home/user
           sudo cp -a "$GITHUB_WORKSPACE" /home/user/airi
           sudo chown -R "$USER":"$USER" /home/user/airi
-
       - name: Repair bounded browser startup if needed
         working-directory: /home/user/airi
         run: |
@@ -59,40 +56,41 @@ jobs:
                   p.write_text('\n'.join(lines) + '\n', encoding='utf-8')
                   break
           PY
-          git config user.name "Airi-PC Repair"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add computer/server.py
-          if ! git diff --cached --quiet; then
-            git commit -m "fix: bound browser startup during runtime readiness"
-            git push origin HEAD:main
-          fi
-          echo "AIRI_BOOTSTRAP_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-          echo "AIRI_EXPECTED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-
       - name: Start Airi-PC
         working-directory: /home/user/airi
         run: |
           chmod +x scripts/airi-* computer/start.sh
-          ./scripts/airi-session-rebuild || {
-            cat /home/user/airi/logs/session-rebuild.log 2>/dev/null || true
-            exit 1
-          }
-
-      - name: Canonical runtime verifier
-        working-directory: /home/user/airi
-        run: ./scripts/airi-runtime-verify
-
-      - name: Restart and reverify Airi-PC
+          ./scripts/airi-session-rebuild
+      - name: Startup diagnostics
+        if: always()
         working-directory: /home/user/airi
         run: |
-          pkill -f 'uvicorn server:app --host 127.0.0.1 --port 9010' || true
+          echo '--- process list ---'
+          ps -ef | grep -E 'uvicorn|contract_server|server.py|model_gateway|Xvfb' | grep -v grep || true
+          echo '--- /ready ---'
+          curl -sS --max-time 5 http://127.0.0.1:9010/ready || true
+          echo
+          echo '--- /status ---'
+          curl -sS --max-time 5 http://127.0.0.1:9010/status || true
+          echo
+          echo '--- next-session status ---'
+          cat /tmp/airi-next-session-status.json 2>/dev/null || true
+          echo '--- computer-server.log ---'
+          cat logs/computer-server.log 2>/dev/null || true
+          echo '--- model-gateway.log ---'
+          cat logs/model-gateway.log 2>/dev/null || true
+          echo '--- session-rebuild.log ---'
+          cat logs/session-rebuild.log 2>/dev/null || true
+      - name: Canonical runtime verifier
+        if: success()
+        working-directory: /home/user/airi
+        run: ./scripts/airi-runtime-verify
+      - name: Restart and reverify Airi-PC
+        if: success()
+        working-directory: /home/user/airi
+        run: |
+          pkill -f 'uvicorn (server|contract_server):app --host 127.0.0.1 --port 9010' || true
           sleep 2
-          AIRI_BOOTSTRAP_SHA="$(git rev-parse HEAD)" AIRI_EXPECTED_SHA="$(git rev-parse HEAD)" ./computer/start.sh
-          for _ in $(seq 1 30); do
-            if curl -fsS --max-time 3 http://127.0.0.1:9010/ready >/dev/null 2>&1; then
-              break
-            fi
-            sleep 1
-          done
+          AIRI_FORCE_RESTART=1 AIRI_EXPECTED_SHA="$(git rev-parse HEAD)" ./computer/start.sh
           curl -fsS --max-time 5 http://127.0.0.1:9010/ready
           ./scripts/airi-runtime-verify
