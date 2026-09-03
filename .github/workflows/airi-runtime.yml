@@ -30,9 +30,9 @@ jobs:
           sudo chown -R "$USER":"$USER" /home/user/airi
           mkdir -p /home/user/airi/.ai
           printf '%s\n' "$GITHUB_SHA" > /home/user/airi/.ai/.runtime_source_sha
-      - name: Validate Python sources
+      - name: Validate all Python sources
         working-directory: /home/user/airi
-        run: python3 -m py_compile computer/server.py computer/contract_server.py
+        run: python3 -m compileall -q computer api scripts tests airi-pc-companion
       - name: Build runtime Python environment
         working-directory: /home/user/airi
         run: |
@@ -61,6 +61,16 @@ jobs:
         run: |
           export PATH="/home/user/airi/.venv/bin:$PATH"
           .venv/bin/python -m pytest -q
+      - name: Explicit coding self-test
+        working-directory: /home/user/airi
+        run: |
+          export PATH="/home/user/airi/.venv/bin:$PATH"
+          .venv/bin/python scripts/airi-coding-selftest
+      - name: Explicit rebuild verifier
+        working-directory: /home/user/airi
+        run: |
+          export PATH="/home/user/airi/.venv/bin:$PATH"
+          .venv/bin/python scripts/airi-rebuild-verify.py
       - name: Canonical runtime verifier
         working-directory: /home/user/airi
         run: ./scripts/airi-runtime-verify
