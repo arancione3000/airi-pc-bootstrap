@@ -67,7 +67,7 @@ health_url() {
 write_manifest() {
   u=${1:-$(cat "$URLFILE" 2>/dev/null || true)}
   mkdir -p "$BASE/.ai/state"
-  printf '{"url":"%s","local":"http://127.0.0.1:9010","mcp":"%s/mcp","updated_at":%s}\n' "$u" "$u" "$(date +%s)" >"$BASE/.ai/state/airi-endpoint.json"
+  atomic_write "$BASE/.ai/state/airi-endpoint.json" "{\"url\":\"$u\",\"local\":\"http://127.0.0.1:9010\",\"mcp\":\"$u/mcp\",\"updated_at\":$(date +%s)}"
 }
 
 kill_pid() {

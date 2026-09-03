@@ -13,10 +13,18 @@ LOCAL="${AIRI_TAILSCALE_TARGET:-127.0.0.1:9010}"
 
 mkdir -p "$STATE" "$BASE/logs"
 
+atomic_write() {
+  target=$1
+  value=$2
+  tmp="$target.tmp.$$"
+  printf '%s\n' "$value" >"$tmp"
+  mv -f "$tmp" "$target"
+}
+
 write_status() {
   status=$1
   url=${2:-}
-  printf '{"status":"%s","url":"%s","updated_at":%s}\n' "$status" "$url" "$(date +%s)" >"$STATUSFILE"
+  atomic_write "$STATUSFILE" "{\"status\":\"$status\",\"url\":\"$url\",\"updated_at\":$(date +%s)}"
 }
 
 write_main_manifest() {
@@ -72,7 +80,7 @@ start_funnel() {
     }
   fi
   url="https://$dns"
-  printf '%s\n' "$url" >"$URLFILE"
+  atomic_write "$URLFILE" "$url"
   write_main_manifest "$url"
   write_status "online" "$url"
   echo "$url"
@@ -88,7 +96,7 @@ trap cleanup EXIT INT TERM HUP
 if pid_alive; then
   exit 0
 fi
-echo $$ >"$PIDFILE"
+atomic_write "$PIDFILE" "$$"
 
 while :; do
   if health_check; then

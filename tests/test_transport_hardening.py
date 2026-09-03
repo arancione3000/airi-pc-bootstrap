@@ -30,6 +30,7 @@ def test_tailscale_is_authoritative_and_pinggy_is_fallback():
     tunnel = read("scripts/airi-tunnel-supervisor")
     assert "tailscale_healthy" in tunnel
     assert 'write_status "standby"' in tunnel
+    assert 'atomic_write "$BASE/.ai/state/airi-endpoint.json"' in tunnel
 
 
 def test_relay_retries_failed_publish():
