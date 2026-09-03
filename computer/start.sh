@@ -40,6 +40,12 @@ if [ -f "$ROOT/computer/requirements.txt" ]; then
   "$VENV/bin/python" -m pip install --disable-pip-version-check --quiet -r "$ROOT/computer/requirements.txt"
 fi
 
+# PyAutoGUI/MouseInfo needs Tk on Debian/Ubuntu; install it explicitly even when Python itself is already present.
+if ! "$VENV/bin/python" -c "import tkinter" >/dev/null 2>&1; then
+  sudo -n apt-get update >/dev/null 2>&1
+  sudo -n apt-get install -y python3-tk python3-dev >/dev/null 2>&1
+fi
+
 if ! command -v Xvfb >/dev/null 2>&1; then
   sudo -n apt-get update >/dev/null 2>&1
   sudo -n apt-get install -y xvfb xdotool openbox xterm x11-utils >/dev/null 2>&1
