@@ -38,11 +38,10 @@ jobs:
         run: |
           python3 -m venv .venv
           .venv/bin/pip install --disable-pip-version-check -r computer/requirements.txt
+          export PLAYWRIGHT_BROWSERS_PATH=/home/user/airi/.cache/ms-playwright
+          mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
           .venv/bin/python -m playwright install chromium
 
-      - name: Full Python test suite
-        working-directory: /home/user/airi
-        run: .venv/bin/python -m pytest -q
       - name: ChatGPT-only rebuild verifier (static)
         working-directory: /home/user/airi
         run: .venv/bin/python scripts/airi-rebuild-verify.py
@@ -57,6 +56,11 @@ jobs:
         run: |
           chmod +x scripts/airi-* computer/start.sh
           timeout 300s ./computer/start.sh
+      - name: Full Python test suite
+        working-directory: /home/user/airi
+        run: |
+          export PATH="/home/user/airi/.venv/bin:$PATH"
+          .venv/bin/python -m pytest -q
       - name: Canonical runtime verifier
         working-directory: /home/user/airi
         run: ./scripts/airi-runtime-verify
