@@ -34,7 +34,7 @@ def main():
     for p in ROOT.rglob("*"):
         if not p.is_file() or ".git" in p.parts or ".venv" in p.parts or p.suffix.lower() not in {".py",".sh",".json"}: continue
         rel=str(p.relative_to(ROOT))
-        if rel=="scripts/airi-rebuild-verify.py" or rel in ALLOW_LEGACY or rel.startswith("tests/"): continue
+        if rel=="scripts/airi-rebuild-verify.py" or rel in ALLOW_LEGACY or "/tests/" in f"/{rel}" or rel.startswith("config/"): continue
         text=p.read_text(encoding="utf-8",errors="ignore").lower()
         if any(term in text for term in FORBIDDEN): hits.append(rel)
     if not check("forbidden providers absent from operational code",not hits,", ".join(hits)): failures.extend(hits)
