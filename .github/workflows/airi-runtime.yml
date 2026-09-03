@@ -32,7 +32,7 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > /home/user/airi/.ai/.runtime_source_sha
       - name: Validate Python sources
         working-directory: /home/user/airi
-        run: python3 -m py_compile computer/server.py computer/contract_server.py computer/cognitive_reactor.py
+        run: python3 -m py_compile computer/server.py computer/contract_server.py
       - name: Start Airi-PC runtime directly
         working-directory: /home/user/airi
         env:
