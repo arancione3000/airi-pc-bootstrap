@@ -9,10 +9,10 @@ printf '%s\n' '[A] Try existing runtime / next-session recovery'
 if "$NEXT"; then
   printf '%s\n' 'AIRI_AUTO_CONNECT_A_OK'
   exit 0
+else
+  A_STATUS=$?
+  printf '%s\n' "AIRI_AUTO_CONNECT_A_FAILED exit=$A_STATUS" >&2
 fi
-
-A_STATUS=$?
-printf '%s\n' "AIRI_AUTO_CONNECT_A_FAILED exit=$A_STATUS" >&2
 printf '%s\n' '[B] Fallback: full session rebuild from canonical GitHub main'
 if [ ! -x "$REBUILD" ]; then
   chmod +x "$REBUILD" 2>/dev/null || true

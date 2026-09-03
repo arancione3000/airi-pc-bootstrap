@@ -13,14 +13,20 @@ Non usare una vecchia sessione.
 Non assumere che Airi-PC esista già.
 Non sostituire Airi-PC con un altro computer.
 
-Esegui:
+Per una nuova sessione normale esegui:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/arancione3000/airi-pc-bootstrap/main/scripts/airi-session-rebuild | sh
+/home/user/airi/scripts/airi-next-session
+```
+
+Per una ricostruzione completa dalla sorgente canonica esegui:
+
+```sh
+/home/user/airi/scripts/airi-rebuild
 ```
 
 Il rebuild deve:
-ricreare `/home/user/airi`;
+ricreare `/home/user/airi` dalla sorgente canonica;
 installare tutte le dipendenze Python;
 installare Chromium/Playwright;
 creare `DISPLAY=:99`;

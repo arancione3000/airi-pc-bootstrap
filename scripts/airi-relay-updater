@@ -2,10 +2,22 @@
 set -eu
 BASE=/home/user/airi
 MANIFEST="$BASE/.ai/state/airi-endpoint.json"
+STATE="$BASE/.ai/state"
+LOCKDIR="$STATE/relay-updater.lock"
 RELAY_URL="${AIRI_MCP_RELAY_URL:-https://airi-pc-mcp.arancione3333.workers.dev}"
 RELAY_ADMIN="${AIRI_MCP_RELAY_ADMIN:-/admin/airi-9b2d7f6c/set}"
 INTERVAL="${AIRI_RELAY_UPDATE_INTERVAL:-5}"
 LAST=""
+mkdir -p "$STATE"
+if ! mkdir "$LOCKDIR" 2>/dev/null; then
+  LOCKPID=$(cat "$LOCKDIR/pid" 2>/dev/null || true)
+  if [ -n "$LOCKPID" ] && kill -0 "$LOCKPID" 2>/dev/null; then exit 0; fi
+  rm -rf "$LOCKDIR"
+  mkdir "$LOCKDIR"
+fi
+printf '%s\n' "$$" >"$LOCKDIR/pid"
+cleanup() { rm -f "$LOCKDIR/pid"; rmdir "$LOCKDIR" 2>/dev/null || true; }
+trap cleanup EXIT INT TERM HUP
 while :; do
   if [ -s "$MANIFEST" ]; then
     U=$(sed -n 's/.*"url":"\([^"]*\)".*/\1/p' "$MANIFEST" | head -n1)

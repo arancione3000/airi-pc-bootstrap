@@ -33,6 +33,20 @@ def test_tailscale_is_authoritative_and_pinggy_is_fallback():
     assert 'atomic_write "$BASE/.ai/state/airi-endpoint.json"' in tunnel
 
 
+def test_singleton_guards_exist_for_long_lived_transport_helpers():
+    tailscale = read("scripts/airi-tailscale-supervisor")
+    relay = read("scripts/airi-relay-updater")
+    assert 'LOCKDIR="$STATE/supervisor.lock"' in tailscale
+    assert 'mkdir "$LOCKDIR"' in tailscale
+    assert 'LOCKDIR="$STATE/relay-updater.lock"' in relay
+    assert 'mkdir "$LOCKDIR"' in relay
+
+
+def test_auto_connect_preserves_next_failure_status():
+    text = read("scripts/airi-auto-connect")
+    assert 'else\n  A_STATUS=$?' in text
+
+
 def test_relay_retries_failed_publish():
     text = read("scripts/airi-relay-updater")
     assert "if curl -fsS" in text

@@ -7,11 +7,18 @@ LOG="$BASE/logs/tailscale.log"
 STATUSFILE="$STATE/status.json"
 URLFILE="$STATE/url"
 PIDFILE="$STATE/pid"
+LOCKDIR="$STATE/supervisor.lock"
 MAIN_MANIFEST="$BASE/.ai/state/airi-endpoint.json"
 INTERVAL="${AIRI_TAILSCALE_INTERVAL:-15}"
 LOCAL="${AIRI_TAILSCALE_TARGET:-127.0.0.1:9010}"
 
 mkdir -p "$STATE" "$BASE/logs"
+if ! mkdir "$LOCKDIR" 2>/dev/null; then
+  LOCKPID=$(cat "$LOCKDIR/pid" 2>/dev/null || true)
+  if [ -n "$LOCKPID" ] && kill -0 "$LOCKPID" 2>/dev/null; then exit 0; fi
+  rm -rf "$LOCKDIR"
+  mkdir "$LOCKDIR"
+fi
 
 atomic_write() {
   target=$1
@@ -87,7 +94,8 @@ start_funnel() {
 }
 
 stop_supervisor() {
-  rm -f "$PIDFILE"
+  rm -f "$PIDFILE" "$LOCKDIR/pid"
+  rmdir "$LOCKDIR" 2>/dev/null || true
 }
 
 cleanup() { stop_supervisor; }
