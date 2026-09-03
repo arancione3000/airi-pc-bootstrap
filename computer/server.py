@@ -211,9 +211,16 @@ class _BrowserManager:
             self._pw = sync_playwright().start()
         launch_args = ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
         last_error = None
-        modes = [False, True] if gui_available() else [True]
+        mode = os.environ.get('AIRI_BROWSER_HEADLESS', 'auto').strip().lower()
+        if mode in {'1', 'true', 'yes', 'on', 'headless'}:
+            modes = [True]
+        elif mode in {'0', 'false', 'no', 'off', 'headed'}:
+            modes = [False] if gui_available() else [True]
+        else:
+            modes = [False, True] if gui_available() else [True]
         for headless in modes:
-            for _attempt in range(3):
+            # A failed headed launch gets one bounded attempt before headless fallback.
+            for _attempt in range(1):
                 try:
                     self._browser = self._pw.chromium.launch(headless=headless, args=launch_args, timeout=15000)
                     auth_file = self._auth_path() if self.auth_profile else None
