@@ -510,6 +510,24 @@ def mouse_position() -> Dict[str, int]:
     pos = _pyautogui().position()
     return {'x': int(pos.x), 'y': int(pos.y)}
 
+def _normalize_button(value: Any) -> str:
+    """Normalize legacy numeric mouse-button codes to PyAutoGUI names."""
+    if isinstance(value, bool):
+        raise ValueError("button must be left, middle, or right")
+    if isinstance(value, (int, float)):
+        numeric = int(value)
+        if value != numeric or numeric not in (0, 1, 2):
+            raise ValueError("button numeric code must be 0 (left), 1 (middle), or 2 (right)")
+        return {0: "left", 1: "middle", 2: "right"}[numeric]
+    if isinstance(value, str):
+        button = value.strip().lower()
+        if button in {"0", "1", "2"}:
+            return {"0": "left", "1": "middle", "2": "right"}[button]
+        if button in {"left", "middle", "right"}:
+            return button
+    raise ValueError("button must be left, middle, or right")
+
+
 def perform(action: str, p: Dict[str, Any]) -> Any:
     if action == 'click_element':
         query=p['text']; img=screenshot_image(); matches=[x for x in ocr(img) if query.casefold() in x['text'].casefold()]
@@ -542,8 +560,12 @@ def perform(action: str, p: Dict[str, Any]) -> Any:
         img=screenshot_image(); return {'format':'png','width':img.width,'height':img.height,'data_base64':image_b64(img)}
     pa = _pyautogui()
     if action == 'move': pa.moveTo(p['x'], p['y']); return {'ok':True}
-    if action == 'click': pa.click(button=p.get('button','left'), clicks=p.get('clicks',1)); return {'ok':True}
-    if action == 'double_click': pa.doubleClick(button=p.get('button','left')); return {'ok':True}
+    if action == 'click':
+        pa.click(button=_normalize_button(p.get('button', 'left')), clicks=p.get('clicks', 1))
+        return {'ok':True}
+    if action == 'double_click':
+        pa.doubleClick(button=_normalize_button(p.get('button', 'left')))
+        return {'ok':True}
     if action == 'drag': pa.moveTo(p['x1'],p['y1']); pa.dragTo(p['x2'],p['y2'],duration=p.get('duration',0.25)); return {'ok':True}
     if action == 'scroll': pa.scroll(p['amount']); return {'ok':True}
     if action == 'key': pa.press(p['key']); return {'ok':True}
