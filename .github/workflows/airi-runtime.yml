@@ -37,7 +37,7 @@ jobs:
         working-directory: /home/user/airi
         run: |
           python3 -m venv .venv
-          .venv/bin/pip install --disable-pip-version-check -r requirements.txt
+          .venv/bin/pip install --disable-pip-version-check -r computer/requirements.txt
           .venv/bin/python -m playwright install chromium
 
       - name: Start Airi-PC runtime directly
