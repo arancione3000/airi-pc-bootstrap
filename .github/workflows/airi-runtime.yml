@@ -33,6 +33,13 @@ jobs:
       - name: Validate Python sources
         working-directory: /home/user/airi
         run: python3 -m py_compile computer/server.py computer/contract_server.py
+      - name: Build runtime Python environment
+        working-directory: /home/user/airi
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --disable-pip-version-check -r requirements.txt
+          .venv/bin/python -m playwright install chromium
+
       - name: Start Airi-PC runtime directly
         working-directory: /home/user/airi
         env:
