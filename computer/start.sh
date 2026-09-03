@@ -42,7 +42,7 @@ fi
 
 if ! command -v Xvfb >/dev/null 2>&1; then
   sudo -n apt-get update >/dev/null 2>&1
-  sudo -n apt-get install -y xvfb xdotool openbox xterm >/dev/null 2>&1
+  sudo -n apt-get install -y xvfb xdotool openbox xterm x11-utils >/dev/null 2>&1
 fi
 
 if ! pgrep -f '[X]vfb :99 -screen 0 1280x800x24' >/dev/null 2>&1; then
