@@ -6,91 +6,94 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
     steps:
       - name: Checkout canonical main
         uses: actions/checkout@v4
-      - name: Check reconstruction scripts
+      - name: Validate bootstrap shell scripts
         run: |
           sh -n scripts/airi-next-session
           sh -n scripts/airi-session-rebuild
           sh -n scripts/airi-rebuild
+          sh -n scripts/airi-connect
+          sh -n computer/start.sh
       - name: Recreate canonical workspace
         run: |
           sudo rm -rf /home/user/airi
           sudo mkdir -p /home/user
           sudo cp -a "$GITHUB_WORKSPACE" /home/user/airi
           sudo chown -R "$USER":"$USER" /home/user/airi
-      - name: Repair bounded browser startup if needed
+          mkdir -p /home/user/airi/.ai
+          printf '%s\n' "$GITHUB_SHA" > /home/user/airi/.ai/.runtime_source_sha
+      - name: Validate Python sources
         working-directory: /home/user/airi
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('computer/server.py')
-          lines = p.read_text(encoding='utf-8').splitlines()
-          target = [
-              "        modes = [False, True] if gui_available() else [True]",
-              "        for headless in modes:",
-              "            for _attempt in range(3):",
-          ]
-          replacement = [
-              "        mode = os.environ.get('AIRI_BROWSER_HEADLESS', 'auto').strip().lower()",
-              "        if mode in {'1', 'true', 'yes', 'on', 'headless'}:",
-              "            modes = [True]",
-              "        elif mode in {'0', 'false', 'no', 'off', 'headed'}:",
-              "            modes = [False] if gui_available() else [True]",
-              "        else:",
-              "            modes = [False, True] if gui_available() else [True]",
-              "        for headless in modes:",
-              "            # A failed headed launch gets one bounded attempt before headless fallback.",
-              "            for _attempt in range(1):",
-          ]
-          for i in range(len(lines) - len(target) + 1):
-              if lines[i:i + len(target)] == target:
-                  lines[i:i + len(target)] = replacement
-                  p.write_text('\n'.join(lines) + '\n', encoding='utf-8')
-                  break
-          PY
-      - name: Start Airi-PC
+        run: python3 -m py_compile computer/server.py computer/contract_server.py computer/cognitive_reactor.py
+      - name: Start Airi-PC runtime directly
         working-directory: /home/user/airi
+        env:
+          DISPLAY_NUM: '99'
+          AIRI_BROWSER_HEADLESS: '1'
+          AIRI_BOOTSTRAP_SHA: ${{ github.sha }}
+          AIRI_EXPECTED_SHA: ${{ github.sha }}
+          AIRI_FORCE_RESTART: '1'
         run: |
           chmod +x scripts/airi-* computer/start.sh
-          ./scripts/airi-session-rebuild
-      - name: Startup diagnostics
-        if: always()
+          timeout 300s ./computer/start.sh
+      - name: Canonical runtime verifier
+        working-directory: /home/user/airi
+        run: ./scripts/airi-runtime-verify
+      - name: Independent browser controls
         working-directory: /home/user/airi
         run: |
-          echo '--- process list ---'
-          ps -ef | grep -E 'uvicorn|contract_server|server.py|model_gateway|Xvfb' | grep -v grep || true
-          echo '--- /ready ---'
-          curl -sS --max-time 5 http://127.0.0.1:9010/ready || true
-          echo
+          ./.venv/bin/python - <<'PY'
+          import json, urllib.request
+          base='http://127.0.0.1:9010'
+          def get(path):
+              with urllib.request.urlopen(base+path, timeout=20) as r: return json.loads(r.read().decode())
+          def post(payload):
+              req=urllib.request.Request(base+'/mcp', data=json.dumps(payload).encode(), headers={'Content-Type':'application/json'}, method='POST')
+              with urllib.request.urlopen(req, timeout=30) as r: return json.loads(r.read().decode())
+          print('/status', get('/status'))
+          print('/ready', get('/ready'))
+          for i,(name,args) in enumerate([
+              ('computer_browser_open', {'url':'https://example.com','wait_until':'domcontentloaded'}),
+              ('computer_browser_state', {}),
+              ('computer_screenshot', {}),
+              ('computer_move', {'x':100,'y':100}),
+              ('computer_scroll', {'amount':100}),
+              ('computer_key', {'key':'HOME'}),
+          ],1):
+              out=post({'jsonrpc':'2.0','id':i,'method':'tools/call','params':{'name':name,'arguments':args}})
+              print(name, out)
+          PY
+      - name: Restart and reverify from clean server process
+        working-directory: /home/user/airi
+        env:
+          DISPLAY_NUM: '99'
+          AIRI_BROWSER_HEADLESS: '1'
+          AIRI_BOOTSTRAP_SHA: ${{ github.sha }}
+          AIRI_EXPECTED_SHA: ${{ github.sha }}
+          AIRI_FORCE_RESTART: '1'
+        run: |
+          ./computer/start.sh
+          ./scripts/airi-runtime-verify
+      - name: Runtime failure diagnostics
+        if: failure()
+        working-directory: /home/user/airi
+        run: |
           echo '--- /status ---'
           curl -sS --max-time 5 http://127.0.0.1:9010/status || true
           echo
-          echo '--- next-session status ---'
-          cat /tmp/airi-next-session-status.json 2>/dev/null || true
+          echo '--- /ready ---'
+          curl -sS --max-time 5 http://127.0.0.1:9010/ready || true
+          echo
+          ps -ef | grep -E 'uvicorn|contract_server|model_gateway|Xvfb' | grep -v grep || true
           echo '--- computer-server.log ---'
           cat logs/computer-server.log 2>/dev/null || true
           echo '--- model-gateway.log ---'
           cat logs/model-gateway.log 2>/dev/null || true
-          echo '--- session-rebuild.log ---'
-          cat logs/session-rebuild.log 2>/dev/null || true
-      - name: Canonical runtime verifier
-        if: success()
-        working-directory: /home/user/airi
-        run: ./scripts/airi-runtime-verify
-      - name: Restart and reverify Airi-PC
-        if: success()
-        working-directory: /home/user/airi
-        run: |
-          pkill -f 'uvicorn (server|contract_server):app --host 127.0.0.1 --port 9010' || true
-          sleep 2
-          AIRI_FORCE_RESTART=1 AIRI_EXPECTED_SHA="$(git rev-parse HEAD)" ./computer/start.sh
-          curl -fsS --max-time 5 http://127.0.0.1:9010/ready
-          ./scripts/airi-runtime-verify
