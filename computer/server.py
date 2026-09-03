@@ -513,8 +513,24 @@ def mouse_position() -> Dict[str, int]:
 def perform(action: str, p: Dict[str, Any]) -> Any:
     if action == 'click_element':
         query=p['text']; img=screenshot_image(); matches=[x for x in ocr(img) if query.casefold() in x['text'].casefold()]
-        if not matches: raise RuntimeError(f'Element text not found: {query}')
-        m=matches[0]; _pyautogui().click(m['x']+m['w']//2,m['y']+m['h']//2); return {'ok':True,'match':m}
+        if matches:
+            m=matches[0]; _pyautogui().click(m['x']+m['w']//2,m['y']+m['h']//2); return {'ok':True,'match':m,'method':'ocr'}
+        # The browser can be visible to Playwright while desktop OCR does not
+        # reliably capture its rendered text. Use the same browser session as a
+        # deterministic fallback, then verify through the normal browser state.
+        try:
+            def _dom_click():
+                page=browser()._ensure()
+                locator=page.get_by_text(query, exact=True).first
+                if locator.count() == 0:
+                    locator=page.get_by_text(query, exact=False).first
+                if locator.count() == 0:
+                    raise RuntimeError(f'Element text not found: {query}')
+                locator.click(timeout=5000)
+                return {'ok':True,'method':'dom','text':query}
+            return browser().call(_dom_click)
+        except Exception as exc:
+            raise RuntimeError(f'Element text not found: {query}; OCR and DOM fallback failed: {exc}')
     if action == 'screenshot':
         img=screenshot_image(); return {'format':'png','width':img.width,'height':img.height,'data_base64':image_b64(img)}
     pa = _pyautogui()
