@@ -525,7 +525,14 @@ def perform(action: str, p: Dict[str, Any]) -> Any:
                 if locator.count() == 0:
                     locator=page.get_by_text(query, exact=False).first
                 if locator.count() == 0:
-                    raise RuntimeError(f'Element text not found: {query}')
+                    locator=page.get_by_placeholder(query, exact=True).first
+                if locator.count() == 0:
+                    locator=page.get_by_role('textbox', name=query, exact=True).first
+                if locator.count() == 0:
+                    locator=page.locator(f'#{query}').first
+                if locator.count() == 0:
+                    raise RuntimeError(f'Element text/placeholder/role/id not found: {query}')
+                locator.scroll_into_view_if_needed()
                 locator.click(timeout=5000)
                 return {'ok':True,'method':'dom','text':query}
             return browser().call(_dom_click)
