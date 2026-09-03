@@ -29,50 +29,48 @@ jobs:
           sudo cp -a "$GITHUB_WORKSPACE" /home/user/airi
           sudo chown -R "$USER":"$USER" /home/user/airi
 
-      - name: One-time repair of bounded browser startup
-        if: github.event_name == 'workflow_dispatch'
+      - name: Repair bounded browser startup if needed
         working-directory: /home/user/airi
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path("computer/server.py")
-          s = p.read_text(encoding="utf-8")
-          old = r'''        launch_args = ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-        last_error = None
-        modes = [False, True] if gui_available() else [True]
-        for headless in modes:
-            for _attempt in range(3):
-'''
-          new = r'''        launch_args = ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-        last_error = None
-        mode = os.environ.get('AIRI_BROWSER_HEADLESS', 'auto').strip().lower()
-        if mode in {'1', 'true', 'yes', 'on', 'headless'}:
-            modes = [True]
-        elif mode in {'0', 'false', 'no', 'off', 'headed'}:
-            modes = [False] if gui_available() else [True]
-        else:
-            modes = [False, True] if gui_available() else [True]
-        for headless in modes:
-            # Bound readiness: one failed launch must not consume the full session-rebuild budget.
-            for _attempt in range(1):
-'''
-          if old not in s:
-              raise SystemExit("browser startup block not found")
-          s = s.replace(old, new, 1)
-          compile(s, "computer/server.py", "exec")
-          p.write_text(s, encoding="utf-8")
+          p = Path('computer/server.py')
+          lines = p.read_text(encoding='utf-8').splitlines()
+          target = [
+              "        modes = [False, True] if gui_available() else [True]",
+              "        for headless in modes:",
+              "            for _attempt in range(3):",
+          ]
+          replacement = [
+              "        mode = os.environ.get('AIRI_BROWSER_HEADLESS', 'auto').strip().lower()",
+              "        if mode in {'1', 'true', 'yes', 'on', 'headless'}:",
+              "            modes = [True]",
+              "        elif mode in {'0', 'false', 'no', 'off', 'headed'}:",
+              "            modes = [False] if gui_available() else [True]",
+              "        else:",
+              "            modes = [False, True] if gui_available() else [True]",
+              "        for headless in modes:",
+              "            # A failed headed launch gets one bounded attempt before headless fallback.",
+              "            for _attempt in range(1):",
+          ]
+          for i in range(len(lines) - len(target) + 1):
+              if lines[i:i + len(target)] == target:
+                  lines[i:i + len(target)] = replacement
+                  p.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+                  break
           PY
           git config user.name "Airi-PC Repair"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add computer/server.py
-          git diff --cached --quiet || git commit -m "fix: bound browser startup during runtime readiness"
-          git push origin HEAD:main
+          if ! git diff --cached --quiet; then
+            git commit -m "fix: bound browser startup during runtime readiness"
+            git push origin HEAD:main
+          fi
+          echo "AIRI_BOOTSTRAP_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "AIRI_EXPECTED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Start Airi-PC
         working-directory: /home/user/airi
-        env:
-          AIRI_BOOTSTRAP_SHA: ${{ github.sha }}
-          AIRI_EXPECTED_SHA: ${{ github.sha }}
         run: |
           chmod +x scripts/airi-* computer/start.sh
           ./scripts/airi-session-rebuild || {
@@ -83,3 +81,18 @@ jobs:
       - name: Canonical runtime verifier
         working-directory: /home/user/airi
         run: ./scripts/airi-runtime-verify
+
+      - name: Restart and reverify Airi-PC
+        working-directory: /home/user/airi
+        run: |
+          pkill -f 'uvicorn server:app --host 127.0.0.1 --port 9010' || true
+          sleep 2
+          AIRI_BOOTSTRAP_SHA="$(git rev-parse HEAD)" AIRI_EXPECTED_SHA="$(git rev-parse HEAD)" ./computer/start.sh
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 3 http://127.0.0.1:9010/ready >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS --max-time 5 http://127.0.0.1:9010/ready
+          ./scripts/airi-runtime-verify
