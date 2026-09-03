@@ -1,0 +1,38 @@
+{
+  "architecture": "chatgpt-only",
+  "bootstrap_order": [
+    "manifest",
+    "reasoning_directive",
+    "runtime",
+    "verification",
+    "execution",
+    "persistence",
+    "recovery"
+  ],
+  "execution_layer": "airi-pc",
+  "forbidden_reasoning_providers": [
+    "ollama",
+    "openrouter",
+    "openrouter_bridge",
+    "local_llm",
+    "external_llm"
+  ],
+  "manifest_version": 1,
+  "reasoning_authority": "chatgpt",
+  "runtime": {
+    "display": ":99",
+    "host": "127.0.0.1",
+    "mcp_endpoint": "/mcp",
+    "playwright_browsers_path": "$ROOT/.cache/ms-playwright",
+    "port": 9010,
+    "ready_endpoint": "/ready",
+    "resolution": "1280x800",
+    "status_endpoint": "/status"
+  },
+  "second_llm_allowed": false,
+  "tool_expectations": {
+    "http_tools": 106,
+    "manifest_base_tools": 83,
+    "minimum_mcp_tools": 20
+  }
+}

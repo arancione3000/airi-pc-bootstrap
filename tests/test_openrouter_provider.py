@@ -1,67 +1,19 @@
-import json
-import os
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from threading import Thread
-
+import pytest
 sys.path.insert(0, 'computer')
-
 from control_plane import local_agent
 from control_plane.model_router import ModelRouter
-
-class Handler(BaseHTTPRequestHandler):
-    seen_auth = None
-    def do_POST(self):
-        Handler.seen_auth = self.headers.get('Authorization')
-        length = int(self.headers.get('Content-Length', '0'))
-        _ = self.rfile.read(length)
-        body = {'choices': [{'message': {'content': '{"changes": [{"path": "sample.py", "operation": "patch", "old": "A", "new": "B", "test_command": "python -m pytest -q", "scope": ["sample.py"]}]}'}}]}
-        payload = json.dumps(body).encode()
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
-    def log_message(self, *_): pass
-
-def test_missing_key():
-    old = dict(os.environ)
-    try:
-        os.environ['AIRI_MODEL_PROVIDER'] = 'openrouter'
-        os.environ.pop('OPENROUTER_API_KEY', None)
-        local_agent.PROVIDER = 'openrouter'
-        try:
-            local_agent._provider_request([{'role':'user','content':'x'}], 'inclusionai/ling-3.0-flash-fin:free')
-        except RuntimeError as exc:
-            assert 'OPENROUTER_API_KEY is missing' in str(exc)
-        else:
-            raise AssertionError('missing key did not fail safely')
-    finally:
-        os.environ.clear(); os.environ.update(old)
-
-def test_structured_openrouter_request_without_real_secret():
-    server = HTTPServer(('127.0.0.1', 0), Handler)
-    thread = Thread(target=server.serve_forever, daemon=True); thread.start()
-    old = dict(os.environ)
-    try:
-        os.environ['AIRI_MODEL_PROVIDER'] = 'openrouter'
-        os.environ['OPENROUTER_API_KEY'] = 'TEST_ONLY_NOT_A_REAL_KEY'
-        os.environ['OPENROUTER_MODEL'] = 'inclusionai/ling-3.0-flash-fin:free'
-        os.environ['OPENROUTER_URL'] = f'http://127.0.0.1:{server.server_port}/chat'
-        local_agent.PROVIDER = 'openrouter'
-        result = local_agent.ask_local_model_changes('add feature', 'context', root='.')
-        assert result and result[0]['path'] == 'sample.py'
-        assert Handler.seen_auth == 'Bearer TEST_ONLY_NOT_A_REAL_KEY'
-        assert 'TEST_ONLY_NOT_A_REAL_KEY' not in json.dumps(result)
-    finally:
-        server.shutdown(); thread.join(timeout=2); os.environ.clear(); os.environ.update(old)
-
-def test_router_openrouter_available_requires_key():
-    old = dict(os.environ)
-    try:
-        os.environ['AIRI_MODEL_PROVIDER'] = 'openrouter'
-        os.environ['OPENROUTER_API_KEY'] = 'TEST_ONLY_NOT_A_REAL_KEY'
-        router = ModelRouter()
-        assert any(p.get('name') == 'openrouter' and p.get('available') for p in router.state['providers'].values())
-    finally:
-        os.environ.clear(); os.environ.update(old)
+def test_chatgpt_only_surface_has_no_operational_provider():
+    status=local_agent.provider_status()
+    assert local_agent.CHATGPT_ONLY is True
+    assert local_agent.REASONING_AUTHORITY == 'chatgpt'
+    assert status['available'] is False and status['provider']=='disabled' and status['model'] is None
+def test_local_agent_provider_calls_fail_closed():
+    with pytest.raises(RuntimeError, match='sole reasoning authority'): local_agent._provider_request([{'role':'user','content':'x'}],'ignored')
+    with pytest.raises(RuntimeError, match='sole reasoning authority'): local_agent.ask_local_model('goal')
+    with pytest.raises(RuntimeError, match='sole reasoning authority'): local_agent.ask_local_model_changes('goal','context')
+def test_openrouter_cannot_be_registered_operationally(monkeypatch):
+    monkeypatch.setenv('AIRI_MODEL_PROVIDER','openrouter'); monkeypatch.setenv('OPENROUTER_API_KEY','TEST_ONLY_NOT_A_REAL_KEY')
+    router=ModelRouter(); assert set(router.state['providers']) == {'chatgpt'}
+    assert router.choose(task_type='coding')['selected']=='chatgpt'
+    result=router.register_provider('openrouter',['coding'],available=True); assert result['available'] is False and 'openrouter' not in router.state['providers']

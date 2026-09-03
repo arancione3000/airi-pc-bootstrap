@@ -1,24 +1,18 @@
 from __future__ import annotations
-import os
 from .store import load_json, save_json
-
-FILE='model-routing.json'
-DEFAULTS={'simple':'fast','coding':'strong','research':'strong','vision':'vision','review':'independent'}
+FILE="model-routing.json"
+DEFAULTS={"simple":"chatgpt","coding":"chatgpt","research":"chatgpt","vision":"chatgpt","review":"chatgpt"}
+CHATGPT_PROVIDER={"name":"chatgpt","capabilities":["simple","coding","research","vision","review"],"available":True,"cost_class":"reasoning-authority"}
 class ModelRouter:
+    """Represent the reasoning boundary without selecting a second LLM."""
     def __init__(self):
-        self.state=load_json(FILE, {'version':1,'routes':DEFAULTS.copy(),'providers':{}})
-        provider=os.environ.get('AIRI_MODEL_PROVIDER')
-        if provider == 'openrouter':
-            self.register_provider('openrouter', ['strong','coding','research','review'], available=bool(os.environ.get('OPENROUTER_API_KEY')), cost_class='configured')
-        elif provider == 'openrouter_bridge':
-            auth_file=os.environ.get('AIRI_MODEL_GATEWAY_AUTH_FILE','/tmp/airi-model-gateway.token')
-            configured=bool(os.environ.get('AIRI_MODEL_GATEWAY_TOKEN')) or os.path.exists(auth_file)
-            self.register_provider('openrouter_bridge', ['strong','coding','research','review'], available=configured, cost_class='gateway')
-    def register_provider(self,name,capabilities,available=False,cost_class='unknown'):
-        self.state['providers'][name]={'name':name,'capabilities':list(capabilities),'available':bool(available),'cost_class':cost_class}; save_json(FILE,self.state); return self.state['providers'][name]
-    def choose(self, task_type='simple', complexity='medium', needs_vision=False, prefer_speed=False):
-        kind='vision' if needs_vision else ('simple' if prefer_speed or complexity=='low' else task_type)
-        target=self.state['routes'].get(kind,self.state['routes']['simple'])
-        candidates=[p for p in self.state['providers'].values() if p.get('available') and target in p.get('capabilities',[])]
-        return {'route':target,'selected':candidates[0]['name'] if candidates else None,'candidates':[p['name'] for p in candidates]}
+        self.state=load_json(FILE,{})
+        self.state["version"]=2; self.state["routing_authority"]="chatgpt"; self.state["routes"]=DEFAULTS.copy(); self.state["providers"]={"chatgpt":dict(CHATGPT_PROVIDER)}; save_json(FILE,self.state)
+    def register_provider(self,name,capabilities=None,available=False,cost_class="unknown"):
+        if name!="chatgpt": return {"name":str(name),"capabilities":list(capabilities or []),"available":False,"cost_class":"disabled","disabled":True,"reason":"ChatGPT is the sole reasoning authority."}
+        self.state["providers"]={"chatgpt":dict(CHATGPT_PROVIDER)}; save_json(FILE,self.state); return self.state["providers"]["chatgpt"]
+    def choose(self,task_type="simple",complexity="medium",needs_vision=False,prefer_speed=False):
+        del complexity,prefer_speed
+        kind="vision" if needs_vision else task_type; route=self.state["routes"].get(kind,"chatgpt")
+        return {"route":route,"selected":"chatgpt","candidates":["chatgpt"],"reasoning_authority":"chatgpt"}
     def status(self): return self.state

@@ -1,37 +1,27 @@
-# Airi-PC Local Autonomous Development
+# Airi-PC Autonomous Execution (ChatGPT-only)
 
-Airi-PC can run an autonomous development loop without a paid OpenAI API by using a local Ollama-compatible model.
+Airi-PC does not contain a second reasoning model. **ChatGPT is the sole reasoning authority**; Airi-PC is the execution layer.
 
-## Architecture
+Supported architecture:
 
-`goal -> local model -> unified diff -> git apply --check -> apply -> tests -> retry with feedback -> commit`
+`ChatGPT reasoning -> Airi-PC tools -> observe/execute -> verify -> persist -> recover/rollback`
 
-The loop is bounded by `AIRI_AUTONOMOUS_ITERATIONS` (default 5). Patch paths are constrained to the repository and sensitive locations are rejected. The model never receives secrets automatically.
+Airi-PC may expose terminal, filesystem, browser, GUI, mouse, keyboard, screenshots, observation, OCR, MCP, persistence, verification, rollback, and supervised command execution. These capabilities do not constitute an independent reasoning engine.
 
-## Configuration
+## Local runtime rule
 
-- `AIRI_ROOT=/home/user/airi`
-- `AIRI_LOCAL_MODEL=qwen2.5-coder:7b`
-- `AIRI_OLLAMA_URL=http://127.0.0.1:11434/api/chat`
-- `AIRI_AUTONOMOUS_TEST='python3 -m pytest -q'`
-- `AIRI_AUTONOMOUS_ITERATIONS=5`
+The local runtime must never start or contact a second LLM. `scripts/airi-local-autonomous` is a compatibility guard and exits explicitly; it does not start a local model or model gateway.
 
-This mode has **zero API usage cost**. It does require local CPU/RAM (or a local GPU) and disk space for the model. Ollama/model installation itself does not require an API subscription.
+The compatibility shim in `computer/control_plane/model_gateway.py` is deliberately disabled and returns an error rather than forwarding requests.
 
-## Usage
+## Operational autonomy
 
-Run from Airi-PC:
+Autonomous means ChatGPT can drive Airi-PC tools through the execution layer without a human manually performing each operation. It does **not** mean Airi-PC gains an independent LLM.
 
-```sh
-scripts/airi-local-autonomous "Improve the browser screenshot recovery tests"
-```
-
-Use `--iterations N` to bound the run further or `--no-commit` to leave a verified worktree without creating a Git commit.
-
-## Startup safety
-
-`airi-next-session` remains the runtime bootstrap. The local agent is not started automatically on every session; autonomy is explicitly enabled by invoking `airi-local-autonomous`. This avoids a background agent modifying the repository without a concrete goal.
-
-## Relation to ChatGPT
-
-This free mode deliberately does **not** automate the ChatGPT website or reuse a ChatGPT login session as an API. The browser may still be used for ordinary Airi-PC tasks. The autonomous software-engineering loop is local and provider-agnostic.
+## Bootstrap order
+1. Load the ChatGPT-only manifest and reasoning directive.
+2. Start the execution runtime and GUI/browser surfaces.
+3. Verify `/status`, `/ready`, `/tools`, and MCP `tools/list`.
+4. Execute the requested task with explicit scope and guardrails.
+5. Run tests and verify the deliverable.
+6. Persist the verified state and record recovery/rollback evidence.
