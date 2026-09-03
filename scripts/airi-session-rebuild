@@ -45,7 +45,7 @@ chmod +x "$BASE"/scripts/airi-* "$BASE/computer/start.sh" 2>/dev/null || true
 
 printf '%s\n' '[6/8] Start canonical runtime'
 mkdir -p "$BASE/logs"
-"$BASE/scripts/airi-connect" >"$BASE/logs/session-rebuild.log" 2>&1 &
+nohup "$BASE/scripts/airi-connect" >"$BASE/logs/session-rebuild.log" 2>&1 < /dev/null &
 CONNECT_PID=$!
 
 printf '%s\n' '[7/8] Wait for strict readiness'

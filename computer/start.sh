@@ -46,14 +46,14 @@ if ! command -v Xvfb >/dev/null 2>&1; then
 fi
 
 if ! pgrep -f '[X]vfb :99 -screen 0 1280x800x24' >/dev/null 2>&1; then
-  Xvfb :99 -screen 0 1280x800x24 -ac >"$ROOT/logs/xvfb.log" 2>&1 &
+  nohup Xvfb :99 -screen 0 1280x800x24 -ac >"$ROOT/logs/xvfb.log" 2>&1 < /dev/null &
   sleep 1
 fi
 
 if ! DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then
   pkill -f '[X]vfb :99 ' >/dev/null 2>&1 || true
   sleep 1
-  Xvfb :99 -screen 0 1280x800x24 -ac >"$ROOT/logs/xvfb.log" 2>&1 &
+  nohup Xvfb :99 -screen 0 1280x800x24 -ac >"$ROOT/logs/xvfb.log" 2>&1 < /dev/null &
   sleep 2
   if ! DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then
     echo 'Xvfb health check failed after recovery' >&2
@@ -72,17 +72,13 @@ then
 fi
 
 if ! pgrep -f '[o]penbox.*:99' >/dev/null 2>&1; then
-  DISPLAY=:99 openbox >"$ROOT/logs/openbox.log" 2>&1 &
+  nohup env DISPLAY=:99 openbox >"$ROOT/logs/openbox.log" 2>&1 < /dev/null &
   sleep 1
 fi
 
 if ! DISPLAY=:99 xdotool search --name 'Airi Terminal' >/dev/null 2>&1; then
-  DISPLAY=:99 xterm -title 'Airi Terminal' >"$ROOT/logs/xterm.log" 2>&1 &
+  nohup env DISPLAY=:99 xterm -title 'Airi Terminal' >"$ROOT/logs/xterm.log" 2>&1 < /dev/null &
   sleep 1
-fi
-
-if [ -x "$ROOT/scripts/airi-supervisor" ] && ! pgrep -f '[a]iri-supervisor' >/dev/null 2>&1; then
-  "$ROOT/scripts/airi-supervisor" >/dev/null 2>&1 &
 fi
 
 if ! curl -fsS http://127.0.0.1:9010/status >/dev/null 2>&1; then
@@ -104,6 +100,11 @@ if [ "$READY" != "1" ]; then
   echo 'AIRI_START_NOT_READY' >&2
   cat "$ROOT/logs/computer-server.log" 2>/dev/null || true
   exit 4
+fi
+
+# Start the supervisor only after the server is healthy, avoiding recovery races during startup.
+if [ -x "$ROOT/scripts/airi-supervisor" ] && ! pgrep -f '[a]iri-supervisor' >/dev/null 2>&1; then
+  nohup "$ROOT/scripts/airi-supervisor" >"$ROOT/logs/supervisor.log" 2>&1 < /dev/null &
 fi
 
 curl -fsS http://127.0.0.1:9010/status

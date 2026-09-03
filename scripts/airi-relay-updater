@@ -12,8 +12,9 @@ while :; do
     case "$U" in
       https://*.run.pinggy-free.link|https://*.ts.net)
         if [ "$U" != "$LAST" ]; then
-          curl -fsS --max-time 10 -H 'content-type: application/json' -X POST "$RELAY_URL$RELAY_ADMIN" --data "{\"url\":\"$U\"}" >/dev/null 2>&1 || true
-          LAST="$U"
+          if curl -fsS --max-time 10 -H 'content-type: application/json' -X POST "$RELAY_URL$RELAY_ADMIN" --data "{\"url\":\"$U\"}" >/dev/null 2>&1; then
+            LAST="$U"
+          fi
         fi
         ;;
     esac

@@ -26,5 +26,5 @@ fi
 chmod +x "$BASE"/scripts/airi-* "$BASE"/computer/start.sh 2>/dev/null || true
 "$BASE/scripts/airi-next-session"
 if [ -x "$BASE/scripts/airi-tailscale-supervisor" ]; then
-  "$BASE/scripts/airi-tailscale-supervisor" >/dev/null 2>&1 &
+  nohup "$BASE/scripts/airi-tailscale-supervisor" >>"$BASE/logs/tailscale-supervisor-launch.log" 2>&1 < /dev/null &
 fi

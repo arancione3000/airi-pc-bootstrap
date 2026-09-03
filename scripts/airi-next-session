@@ -95,12 +95,12 @@ else
 fi
 
 if [ -x "$BASE/scripts/airi-watchdog" ]; then
-  "$BASE/scripts/airi-watchdog" >/dev/null 2>&1 &
+  nohup "$BASE/scripts/airi-watchdog" >>"$BASE/logs/watchdog-launch.log" 2>&1 < /dev/null &
 fi
 
 if [ -x "$BASE/scripts/airi-tailscale-supervisor" ]; then
   if ! pgrep -f '[a]iri-tailscale-supervisor' >/dev/null 2>&1; then
-    "$BASE/scripts/airi-tailscale-supervisor" >/dev/null 2>&1 &
+    nohup "$BASE/scripts/airi-tailscale-supervisor" >>"$BASE/logs/tailscale-supervisor-launch.log" 2>&1 < /dev/null &
   fi
   for _ in $(seq 1 "${AIRI_TAILSCALE_BOOT_WAIT:-8}"); do
     [ -s "$BASE/.ai/state/tailscale/url" ] && break
@@ -108,17 +108,17 @@ if [ -x "$BASE/scripts/airi-tailscale-supervisor" ]; then
   done
 fi
 
-if [ -x "$BASE/scripts/airi-tunnel-supervisor" ]; then
-  if [ ! -s "$BASE/.ai/state/tailscale/url" ] || [ "${AIRI_ALLOW_PINGGY_FALLBACK:-1}" = "1" ] && [ ! -s "$BASE/.ai/state/airi-endpoint.json" ]; then
-    if ! pgrep -f '[a]iri-tunnel-supervisor' >/dev/null 2>&1; then
-      "$BASE/scripts/airi-tunnel-supervisor" >/dev/null 2>&1 &
-    fi
+if [ -x "$BASE/scripts/airi-tunnel-supervisor" ] && [ "${AIRI_ALLOW_PINGGY_FALLBACK:-1}" = "1" ]; then
+  # Keep the fallback supervisor resident. It stays dormant while Tailscale is healthy
+  # and activates Pinggy only after Tailscale becomes unavailable.
+  if ! pgrep -f '[a]iri-tunnel-supervisor' >/dev/null 2>&1; then
+    nohup "$BASE/scripts/airi-tunnel-supervisor" >>"$BASE/logs/tunnel-supervisor-launch.log" 2>&1 < /dev/null &
   fi
 fi
 
 if [ -x "$BASE/scripts/airi-relay-updater" ]; then
   if ! pgrep -f '[a]iri-relay-updater' >/dev/null 2>&1; then
-    "$BASE/scripts/airi-relay-updater" >/dev/null 2>&1 &
+    nohup "$BASE/scripts/airi-relay-updater" >>"$BASE/logs/relay-updater-launch.log" 2>&1 < /dev/null &
   fi
 fi
 
