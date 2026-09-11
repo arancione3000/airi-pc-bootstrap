@@ -1,159 +1,153 @@
 # Airi-PC
 
-> Reproducible local Computer Mode runtime with a separate Windows Companion for end users.
+> Reproducible local Computer Mode runtime for Airi-PC, with a separate Windows Companion for end users.
 
-Airi-PC is an open-source project by **[@arancione3000](https://github.com/arancione3000)**. It focuses on rebuilding and verifying a local computer-use runtime from a canonical GitHub source instead of relying on unreproducible session state.
+**Creator / maintainer:** [@arancione3000](https://github.com/arancione3000)
+
+Airi-PC rebuilds and verifies a local computer-use runtime from the canonical `main` branch instead of depending on unreproducible session state.
 
 ## Try Airi-PC
 
-**Windows users:** the easiest way to start is the published **Airi-PC Companion** release.
+**Windows users:** the quickest path is the packaged **Airi-PC Companion** release.
 
-- **[Download the Windows installer](https://github.com/arancione3000/airi-pc-bootstrap/releases/download/companion-v0.2.1/AiriPC-Companion-Setup.exe)**
-- **[Download the portable package](https://github.com/arancione3000/airi-pc-bootstrap/releases/download/companion-v0.2.1/AiriPC-Companion-portable-windows.zip)**
-- **[Open the Companion release](https://github.com/arancione3000/airi-pc-bootstrap/releases/tag/companion-v0.2.1)**
+- **[Download the Windows installer](https://github.com/arancione3000/airi-pc-bootstrap/releases/tag/companion-v0.2.1)**
+- **[Download the portable Windows package](https://github.com/arancione3000/airi-pc-bootstrap/releases/tag/companion-v0.2.1)**
+- **[Open the release page](https://github.com/arancione3000/airi-pc-bootstrap/releases/tag/companion-v0.2.1)**
 - **[Read the End User Guide](docs/END_USER.md)**
 
-The Companion is a Windows desktop control surface. It is not the complete Airi-PC core runtime and it does not bundle a public relay or an AI-provider API key.
+There is **no bundled demo video or screenshot yet**. The repository deliberately does not imply a demo exists when it does not; the planned 30–60 second sequence is documented in [docs/DEMO.md](docs/DEMO.md).
 
-## What Airi-PC does
+## What can Airi-PC do?
 
 At a high level, the project combines:
 
 - a canonical bootstrap/rebuild path from `main`;
 - a local HTTP/MCP Computer Mode runtime;
-- browser and GUI automation with recovery and verification paths;
-- a Control Plane for orchestration, task/job management, persistence, verification and audit;
+- browser and GUI automation with recovery/verification paths;
+- a Control Plane for orchestration, tasks/jobs, persistence, verification and audit;
 - a persistent Reasoning Engine integrated with the Control Plane;
 - coding/Git integration and repository-level verification;
-- a separate Windows Companion for local physical-PC safety controls.
+- a separate Windows Companion for local PC safety controls and connection state.
 
-The public repository is the source of the bootstrap/runtime implementation. Runtime-owned state, authentication material and other local state are intentionally kept outside the public source tree.
+The public repository is the source for the reproducible bootstrap/runtime implementation. Local runtime state, authentication material and other machine-specific state stay outside the public source tree.
 
-## What it does not claim
+## How it is structured
 
-Airi-PC is **not** presented here as a hosted cloud service, a universal autonomous agent, production-ready software, or a guarantee of security against every possible threat. Remote MCP exposure requires its own authenticated transport and deployment controls; the public repository does not provide a bundled public relay.
+```text
+GitHub / main
+     |
+     v
+bootstrap + rebuild scripts
+     |
+     v
+local Airi-PC runtime
+  |       |        |
+ MCP   Browser   GUI
+  |       |        |
+  +-------+--------+
+          v
+     Control Plane
+      |    |    |
+ Reasoning Jobs  Verification/Audit
+      |
+ Persistence / Git
 
-The current model-routing implementation is intentionally **ChatGPT-only**. It does not provide an active multi-provider fallback system.
+Windows Companion
+(separate local control surface)
+```
 
-## Quick developer setup
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the component boundaries.
 
-The repository has a clear dependency split:
+## Quick start for developers
 
-- `requirements.txt` is the canonical **core runtime** entry point and includes `computer/requirements.txt`, where **FastAPI** is declared.
-- `requirements-dev.txt` is the canonical **full local test** entry point and adds the Windows Companion dependencies.
-- `airi-pc-companion/installer/requirements-build.txt` is only for Companion packaging/build tooling.
-
-From a fresh clone on Linux/macOS:
+From a fresh Linux/macOS clone, use the repository's dependency entrypoints rather than a global Python environment:
 
 ```sh
-export AIRIPC_WORKSPACE_ROOT="$PWD"
-export AIRI_ROOT="$PWD"
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
-chmod +x scripts/airi-* computer/start.sh
 ```
 
-The workspace variables above bind the runtime's repository-aware Control Plane components to the clone you are testing. The managed runtime defaults to `/home/user/airi`, so an arbitrary Git clone should set these variables explicitly.
+`requirements.txt` is the canonical **runtime** dependency entrypoint. FastAPI belongs there through `computer/requirements.txt` because the core runtime creates FastAPI applications in `computer/server.py`, `computer/contract_server.py` and `api/index.py`.
 
-The full Python suite contains checks that probe the local runtime, so start the runtime before running it:
+`requirements-dev.txt` adds repository-wide test/development dependencies such as `pytest` and the Windows Companion test requirements.
+
+Then run the suite after starting the local runtime:
 
 ```sh
+chmod +x scripts/airi-* computer/start.sh
 DISPLAY_NUM=99 AIRI_BROWSER_HEADLESS=0 sh computer/start.sh
 python -m pytest -q
 ```
 
-For the complete verification path, use the project verifiers listed in the [Developer Guide](docs/DEVELOPER.md). A bare `pytest` in an unprepared Python environment is not a valid full-suite run: dependencies such as FastAPI must be installed first, the workspace variables must point at the clone, and the runtime-dependent tests require a running local Airi-PC server.
+For the full verification path, follow [docs/DEVELOPER.md](docs/DEVELOPER.md).
 
-## Core runtime
+## Why the dependency split matters
 
-The main session/rebuild entry points are:
+The previous `ModuleNotFoundError: fastapi` was caused by running `pytest` in an environment that had **not installed the repository's committed dependency set**. FastAPI was already declared by the project; the local environment was incomplete.
 
-```sh
-sh scripts/airi-next-session
-sh scripts/airi-session-rebuild
-sh scripts/airi-rebuild
-```
+The repository now makes the intended model explicit:
 
-Verification scripts are Python programs:
+- `requirements.txt` → runtime dependencies;
+- `requirements-dev.txt` → full developer/test environment;
+- `computer/requirements.txt` → detailed core runtime dependencies;
+- `airi-pc-companion/requirements.txt` → Companion runtime/test dependencies.
 
-```sh
-python scripts/airi-rebuild-verify.py
-python scripts/airi-coding-selftest
-python scripts/airi-runtime-verify
-python scripts/airi-selftest
-```
+A bare `pytest` in an unprepared Python installation is not a supported substitute for the documented environment setup.
 
-The canonical local server surface used by the verification workflow is `http://127.0.0.1:9010`, with readiness exposed through `/ready` and status through `/status`.
+## Security boundaries
 
-## Architecture
+Airi-PC is published with implementation and documentation, not local secrets or runtime credentials.
 
-```text
-GitHub main
-   |
-   v
-bootstrap / rebuild scripts
-   |
-   v
-local Airi-PC runtime
-   |
-   +--> MCP / Computer Mode
-   +--> Browser / GUI automation
-   +--> Control Plane
-   |      +--> Reasoning
-   |      +--> Tasks / Jobs
-   |      +--> Persistence
-   |      +--> Verification / Audit
-   |      +--> Recovery / Reliability
-   |      +--> Git integration
-   |
-   +--> Windows Companion (separate local desktop control surface)
-```
-
-See [Architecture](docs/ARCHITECTURE.md) for the verified component boundaries.
-
-## Security
-
-The public repository is designed to contain implementation and documentation, not local secrets or runtime state.
-
-Never commit API keys, PATs, bearer/session tokens, passwords, cookies, private keys, OAuth secrets, personal runtime state or local logs. The repository uses `.gitignore`, GitHub Secret Scanning and Push Protection, and the project includes explicit security boundaries.
+- Do not commit API keys, access tokens, passwords, cookies, private keys, bearer tokens or local runtime state.
+- The active model-routing implementation is intentionally **ChatGPT-only**; the project does not ship an active multi-provider fallback router.
+- The Windows Companion is a local control surface and does not bundle a public relay.
+- The Companion does not expose arbitrary shell execution; destructive filesystem operations are restricted by its implementation and high-risk actions require explicit confirmation.
+- The Game Agent foundation is generic and does not implement game-specific exploits or anti-cheat bypasses.
 
 Read [SECURITY.md](SECURITY.md) before exposing the runtime remotely.
 
+## Verification and CI
+
+The canonical GitHub Actions workflow recreates `/home/user/airi` from the current `main` snapshot, installs `requirements-dev.txt`, compiles Python sources, starts the runtime, runs the full pytest suite, executes project verifiers/self-tests, checks representative browser controls, and restarts/reverifies the server.
+
+Useful local checks include:
+
+```sh
+python -m compileall -q computer api scripts tests airi-pc-companion
+python -m pytest -q
+python scripts/airi-rebuild-verify.py
+python scripts/airi-coding-selftest
+./scripts/airi-runtime-verify
+```
+
 ## Documentation
 
-- [End User Guide](docs/END_USER.md) — download and use the Windows Companion.
-- [Developer Guide](docs/DEVELOPER.md) — prepare an environment, run tests and verify the runtime.
-- [Architecture](docs/ARCHITECTURE.md) — understand the major components.
-- [Troubleshooting](docs/TROUBLESHOOTING.md) — common setup and runtime failures.
-- [Demo Plan](docs/DEMO.md) — the recommended future 30–60 second project demo.
-- [Contributing](CONTRIBUTING.md) — contribution expectations.
-- [Chat/bootstrap notes](README_CHAT_BOOTSTRAP.md) — maintainer-oriented session/bootstrap details.
-
-## Demo status
-
-There is currently **no bundled video or screenshot demo** in the repository. Do not infer a demo from test screenshots or runtime logs. A future 30–60 second demo should show, in order:
-
-1. the GitHub landing page and the simple Windows download path;
-2. the Companion starting locally;
-3. its connection/auth state and safety controls;
-4. one representative Airi-PC computer-use action;
-5. verification/readiness completing successfully;
-6. the repository/release page as the official source.
-
-A short README caption for that future demo can be: **“Airi-PC rebuilds a local Computer Mode runtime from a canonical GitHub source, then verifies the runtime before use.”**
+- [End User Guide](docs/END_USER.md)
+- [Developer Guide](docs/DEVELOPER.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Demo Plan](docs/DEMO.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
 
 ## Releases
 
-The published Windows Companion release is **`companion-v0.2.1`**. Its assets are the installer and portable package linked above. GitHub exposes SHA-256 digests for these assets; verify the digest when distributing the binaries through another channel.
+The current packaged Windows Companion release is **`companion-v0.2.1`**. The release page contains the installer and portable package.
 
-## License
+For binary redistribution, verify the published SHA-256 digests shown by GitHub Releases.
 
-This repository currently has **no `LICENSE` file**. No licensing terms have been invented here. Before encouraging external redistribution or reuse, the maintainer should choose and add an explicit open-source license.
+## Licensing
 
-## Maintainer
+This repository currently has **no `LICENSE` file**. No licensing terms are being invented here. Before external redistribution or reuse is encouraged, the maintainer should choose and add an explicit open-source license.
 
-**[@arancione3000](https://github.com/arancione3000)** — creator and maintainer of Airi-PC.
+## Community
 
-The canonical public source is this repository and its `main` branch.
+Use **GitHub Issues** for reproducible bugs and concrete changes. Use **GitHub Discussions** for questions, feedback, ideas and project-direction conversations.
+
+Please keep reports safe: never attach credentials, cookies, authentication material or private runtime state.
+
+---
+
+**Airi-PC** is maintained by **[@arancione3000](https://github.com/arancione3000)**. The canonical public source is this repository and its `main` branch.

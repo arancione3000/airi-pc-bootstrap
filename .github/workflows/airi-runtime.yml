@@ -33,11 +33,11 @@ jobs:
       - name: Validate all Python sources
         working-directory: /home/user/airi
         run: python3 -m compileall -q computer api scripts tests airi-pc-companion
-      - name: Build runtime Python environment
+      - name: Build verification Python environment
         working-directory: /home/user/airi
         run: |
           python3 -m venv .venv
-          .venv/bin/pip install --disable-pip-version-check -r computer/requirements.txt
+          .venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
           export PLAYWRIGHT_BROWSERS_PATH=/home/user/airi/.cache/ms-playwright
           mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
           .venv/bin/python -m playwright install chromium
