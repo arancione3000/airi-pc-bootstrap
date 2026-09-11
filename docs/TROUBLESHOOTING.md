@@ -6,9 +6,11 @@ Use this page before opening an issue. Never include credentials, tokens, cookie
 
 This error means the Python environment running `pytest` does not have the project's committed dependency set installed. **FastAPI is already declared by the repository in `computer/requirements.txt`.**
 
-Create a fresh virtual environment and install the repository's developer dependency entry point:
+Create a fresh virtual environment and install the repository's developer dependency entry point. When testing a normal Git clone, also bind the repository-aware runtime components to that clone:
 
 ```sh
+export AIRIPC_WORKSPACE_ROOT="$PWD"
+export AIRI_ROOT="$PWD"
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
@@ -27,7 +29,7 @@ Do not install FastAPI globally and treat that as a repository fix. The reproduc
 
 ## Python tests fail during collection
 
-First confirm the environment was created from `requirements-dev.txt`. Then run:
+First confirm the environment was created from `requirements-dev.txt` and that `AIRIPC_WORKSPACE_ROOT`/`AIRI_ROOT` point to the repository you are testing. Then run:
 
 ```sh
 python -m compileall -q computer api scripts tests airi-pc-companion

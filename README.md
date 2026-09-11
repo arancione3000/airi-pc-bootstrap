@@ -46,12 +46,16 @@ The repository has a clear dependency split:
 From a fresh clone on Linux/macOS:
 
 ```sh
+export AIRIPC_WORKSPACE_ROOT="$PWD"
+export AIRI_ROOT="$PWD"
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
 chmod +x scripts/airi-* computer/start.sh
 ```
+
+The workspace variables above bind the runtime's repository-aware Control Plane components to the clone you are testing. The managed runtime defaults to `/home/user/airi`, so an arbitrary Git clone should set these variables explicitly.
 
 The full Python suite contains checks that probe the local runtime, so start the runtime before running it:
 
@@ -60,7 +64,7 @@ DISPLAY_NUM=99 AIRI_BROWSER_HEADLESS=0 sh computer/start.sh
 python -m pytest -q
 ```
 
-For the complete verification path, use the project verifiers listed in the [Developer Guide](docs/DEVELOPER.md). A bare `pytest` in an unprepared Python environment is not a valid full-suite run: dependencies such as FastAPI must be installed first, and the runtime-dependent tests require a running local Airi-PC server.
+For the complete verification path, use the project verifiers listed in the [Developer Guide](docs/DEVELOPER.md). A bare `pytest` in an unprepared Python environment is not a valid full-suite run: dependencies such as FastAPI must be installed first, the workspace variables must point at the clone, and the runtime-dependent tests require a running local Airi-PC server.
 
 ## Core runtime
 
@@ -123,6 +127,7 @@ Read [SECURITY.md](SECURITY.md) before exposing the runtime remotely.
 - [Developer Guide](docs/DEVELOPER.md) — prepare an environment, run tests and verify the runtime.
 - [Architecture](docs/ARCHITECTURE.md) — understand the major components.
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common setup and runtime failures.
+- [Demo Plan](docs/DEMO.md) — the recommended future 30–60 second project demo.
 - [Contributing](CONTRIBUTING.md) — contribution expectations.
 - [Chat/bootstrap notes](README_CHAT_BOOTSTRAP.md) — maintainer-oriented session/bootstrap details.
 

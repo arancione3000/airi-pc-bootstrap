@@ -11,12 +11,16 @@ Use a current Python 3 environment, Git, and a POSIX-compatible shell for the co
 From the repository root:
 
 ```sh
+export AIRIPC_WORKSPACE_ROOT="$PWD"
+export AIRI_ROOT="$PWD"
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
 chmod +x scripts/airi-* computer/start.sh
 ```
+
+These two workspace variables are important when testing an arbitrary clone: several Control Plane components are also used in the managed `/home/user/airi` runtime and otherwise default there. Binding them to `$PWD` keeps project indexing, transactions, maintenance and related state inside the clone being tested.
 
 `requirements.txt` is the canonical core runtime dependency entry point and includes `computer/requirements.txt`, where FastAPI is declared. `requirements-dev.txt` adds the Companion dependency set so the repository-wide test suite can run.
 
@@ -42,7 +46,7 @@ http://127.0.0.1:9010/ready
 python -m pytest -q
 ```
 
-A clean verification run on the current repository should complete the suite after the runtime has started. Running pytest in a completely empty environment is not a substitute for this setup.
+A clean verification run on the current repository should complete the suite after the runtime has started and the workspace variables point to the clone. Running pytest in a completely empty environment, or against a different workspace root, is not a substitute for this setup.
 
 For a syntax-only check:
 
