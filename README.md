@@ -10,7 +10,7 @@ Airi-PC is an open-source project by **[@arancione3000](https://github.com/aranc
 
 - **[Download the Windows installer](https://github.com/arancione3000/airi-pc-bootstrap/releases/download/companion-v0.2.1/AiriPC-Companion-Setup.exe)**
 - **[Download the portable package](https://github.com/arancione3000/airi-pc-bootstrap/releases/download/companion-v0.2.1/AiriPC-Companion-portable-windows.zip)**
-- **[Open the latest Companion release](https://github.com/arancione3000/airi-pc-bootstrap/releases/tag/companion-v0.2.1)**
+- **[Open the Companion release](https://github.com/arancione3000/airi-pc-bootstrap/releases/tag/companion-v0.2.1)**
 - **[Read the End User Guide](docs/END_USER.md)**
 
 The Companion is a Windows desktop control surface. It is not the complete Airi-PC core runtime and it does not bundle a public relay or an AI-provider API key.
@@ -37,12 +37,11 @@ The current model-routing implementation is intentionally **ChatGPT-only**. It d
 
 ## Quick developer setup
 
-The repository has separate dependency entry points:
+The repository has a clear dependency split:
 
-- `requirements.txt` contains the core runtime dependency surface.
-- `computer/requirements.txt` contains the core runtime/test stack used by CI, including **FastAPI**.
-- `airi-pc-companion/requirements.txt` contains Companion dependencies.
-- `requirements-dev.txt` combines the runtime and Companion test dependencies for a complete local test environment.
+- `requirements.txt` is the canonical **core runtime** entry point and includes `computer/requirements.txt`, where **FastAPI** is declared.
+- `requirements-dev.txt` is the canonical **full local test** entry point and adds the Windows Companion dependencies.
+- `airi-pc-companion/installer/requirements-build.txt` is only for Companion packaging/build tooling.
 
 From a fresh clone on Linux/macOS:
 
@@ -51,22 +50,35 @@ python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
+chmod +x scripts/airi-* computer/start.sh
+```
+
+The full Python suite contains checks that probe the local runtime, so start the runtime before running it:
+
+```sh
+DISPLAY_NUM=99 AIRI_BROWSER_HEADLESS=0 sh computer/start.sh
 python -m pytest -q
 ```
 
-For the core runtime verification path, see [Developer Guide](docs/DEVELOPER.md). A bare `pytest` in an unprepared Python environment is not considered a valid full-suite verification because required runtime dependencies such as FastAPI may not be installed.
+For the complete verification path, use the project verifiers listed in the [Developer Guide](docs/DEVELOPER.md). A bare `pytest` in an unprepared Python environment is not a valid full-suite run: dependencies such as FastAPI must be installed first, and the runtime-dependent tests require a running local Airi-PC server.
 
 ## Core runtime
 
-From the repository root, the main entry points are:
+The main session/rebuild entry points are:
 
 ```sh
-./scripts/airi-next-session
-./scripts/airi-session-rebuild
-./scripts/airi-rebuild
-./scripts/airi-selftest
-./scripts/airi-coding-selftest
-./scripts/airi-runtime-verify
+sh scripts/airi-next-session
+sh scripts/airi-session-rebuild
+sh scripts/airi-rebuild
+```
+
+Verification scripts are Python programs:
+
+```sh
+python scripts/airi-rebuild-verify.py
+python scripts/airi-coding-selftest
+python scripts/airi-runtime-verify
+python scripts/airi-selftest
 ```
 
 The canonical local server surface used by the verification workflow is `http://127.0.0.1:9010`, with readiness exposed through `/ready` and status through `/status`.
@@ -129,7 +141,7 @@ A short README caption for that future demo can be: **“Airi-PC rebuilds a loca
 
 ## Releases
 
-The published Windows Companion release is **`companion-v0.2.1`**. Its assets are the installer and portable package linked above. Release assets include SHA-256 digests on GitHub; verify the digest when distributing the binaries through another channel.
+The published Windows Companion release is **`companion-v0.2.1`**. Its assets are the installer and portable package linked above. GitHub exposes SHA-256 digests for these assets; verify the digest when distributing the binaries through another channel.
 
 ## License
 

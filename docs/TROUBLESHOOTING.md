@@ -4,7 +4,7 @@ Use this page before opening an issue. Never include credentials, tokens, cookie
 
 ## `ModuleNotFoundError: No module named 'fastapi'`
 
-This error means the Python environment running `pytest` does not have the project's runtime dependencies installed. **FastAPI is already declared by the repository.**
+This error means the Python environment running `pytest` does not have the project's committed dependency set installed. **FastAPI is already declared by the repository in `computer/requirements.txt`.**
 
 Create a fresh virtual environment and install the repository's developer dependency entry point:
 
@@ -13,6 +13,13 @@ python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
+```
+
+Then, because the full suite includes runtime health checks, start Airi-PC before pytest:
+
+```sh
+chmod +x scripts/airi-* computer/start.sh
+DISPLAY_NUM=99 AIRI_BROWSER_HEADLESS=0 sh computer/start.sh
 python -m pytest -q
 ```
 
@@ -20,11 +27,11 @@ Do not install FastAPI globally and treat that as a repository fix. The reproduc
 
 ## Python tests fail during collection
 
-First confirm the environment was created from the repository dependency files. Then run:
+First confirm the environment was created from `requirements-dev.txt`. Then run:
 
 ```sh
-python -m pytest -q
 python -m compileall -q computer api scripts tests airi-pc-companion
+python -m pytest -q
 ```
 
 If collection still fails, record the exact import error and the Python version. Do not attach `.venv`, credential files, auth state or private runtime logs.
@@ -38,12 +45,19 @@ http://127.0.0.1:9010/status
 http://127.0.0.1:9010/ready
 ```
 
-Use the project verifiers first:
+Start the runtime with:
 
 ```sh
-./scripts/airi-selftest
-./scripts/airi-coding-selftest
-./scripts/airi-runtime-verify
+DISPLAY_NUM=99 AIRI_BROWSER_HEADLESS=0 sh computer/start.sh
+```
+
+Then use the project verifiers:
+
+```sh
+python scripts/airi-rebuild-verify.py
+python scripts/airi-coding-selftest
+python scripts/airi-runtime-verify
+python scripts/airi-selftest
 ```
 
 If `/home/user/airi` is missing in a canonical session environment, use the repository bootstrap/rebuild entry points described in the Developer Guide.

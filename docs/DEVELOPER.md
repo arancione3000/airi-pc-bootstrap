@@ -15,17 +15,34 @@ python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
+chmod +x scripts/airi-* computer/start.sh
 ```
 
-`requirements-dev.txt` is the convenience entry point for the full repository test environment. It includes `computer/requirements.txt` (where FastAPI is declared for the runtime) and `airi-pc-companion/requirements.txt` for Companion tests.
+`requirements.txt` is the canonical core runtime dependency entry point and includes `computer/requirements.txt`, where FastAPI is declared. `requirements-dev.txt` adds the Companion dependency set so the repository-wide test suite can run.
 
-This is the important difference from the earlier bare local test invocation: **FastAPI is already declared by the project; it simply must be installed into the environment used to run pytest.**
+This is the important distinction from the earlier bare local test invocation: **FastAPI was already declared by the project; the Python environment running pytest simply had not installed the committed dependency set.**
 
-## 3. Run the Python suite
+## 3. Start the local runtime before the full suite
+
+Some Control Plane tests intentionally probe `/status` and `/ready`, so a full local suite needs the runtime available.
+
+```sh
+DISPLAY_NUM=99 AIRI_BROWSER_HEADLESS=0 sh computer/start.sh
+```
+
+Expected readiness is exposed at:
+
+```text
+http://127.0.0.1:9010/ready
+```
+
+## 4. Run the Python suite
 
 ```sh
 python -m pytest -q
 ```
+
+A clean verification run on the current repository should complete the suite after the runtime has started. Running pytest in a completely empty environment is not a substitute for this setup.
 
 For a syntax-only check:
 
@@ -33,43 +50,42 @@ For a syntax-only check:
 python -m compileall -q computer api scripts tests airi-pc-companion
 ```
 
-A compile-only pass is useful but is not equivalent to the runtime verification.
+## 5. Project verification commands
 
-## 4. Runtime verification
-
-The canonical project commands are:
+The verification programs are Python scripts in the current tree, so invoke them with the environment's interpreter:
 
 ```sh
-./scripts/airi-selftest
-./scripts/airi-coding-selftest
-./scripts/airi-rebuild-verify.py
-./scripts/airi-runtime-verify
+python scripts/airi-rebuild-verify.py
+python scripts/airi-coding-selftest
+python scripts/airi-runtime-verify
+python scripts/airi-selftest
 ```
 
-The local runtime normally uses:
+Shell session/bootstrap entry points can be invoked with `sh`:
 
-- server: `http://127.0.0.1:9010`
-- status: `/status`
-- readiness: `/ready`
-- GUI display in CI: `DISPLAY=:99`
-
-## 5. GitHub Actions
-
-`.github/workflows/airi-runtime.yml` runs the canonical runtime verification on pushes to `main` and on manual dispatch. It installs the runtime dependency set, starts the runtime, executes the Python suite, runs the project self-tests/verifiers, exercises representative browser controls, and restarts/reverifies the server.
-
-`.github/workflows/companion-windows.yml` builds the Windows Companion when a `companion-v*` tag is pushed and publishes the installer and portable archive to a GitHub Release.
+```sh
+sh scripts/airi-next-session
+sh scripts/airi-session-rebuild
+sh scripts/airi-rebuild
+```
 
 ## 6. Dependency model
 
-- `requirements.txt` — minimal core dependency entry point (currently points to the core FastAPI runtime requirement set).
-- `computer/requirements.txt` — canonical core runtime/test dependencies used by CI.
-- `airi-pc-companion/requirements.txt` — Windows Companion test/runtime dependencies.
+- `requirements.txt` — canonical core runtime dependency entry point; it includes `computer/requirements.txt`.
+- `computer/requirements.txt` — detailed core runtime/test dependencies used by CI, including FastAPI.
+- `requirements-dev.txt` — complete repository test environment, combining core and Companion requirements.
+- `airi-pc-companion/requirements.txt` — Windows Companion runtime/test dependencies.
 - `airi-pc-companion/installer/requirements-build.txt` — packaging/build-time Companion dependencies.
-- `requirements-dev.txt` — convenience file for developers who want to run the repository-wide suite locally.
 
 Do not solve missing imports by installing packages globally. Update the appropriate dependency file when a dependency is genuinely part of the project, then verify from a clean virtual environment.
 
-## 7. Contribution rules
+## 7. GitHub Actions
+
+`.github/workflows/airi-runtime.yml` runs the canonical runtime verification on pushes to `main` and on manual dispatch. It installs the runtime dependency set, starts the runtime, executes the Python suite, runs the project self-tests/verifiers, exercises representative browser controls, and restarts/reverifies the server.
+
+`.github/workflows/companion-windows.yml` builds the Windows Companion when a `companion-v*` tag is pushed and publishes the installer and portable archive to a GitHub Release. A manual dispatch runs the packaging path without creating a tag release.
+
+## 8. Contribution rules
 
 Keep changes scoped and reproducible. Do not commit local runtime state, credentials or session data. Update tests when behavior changes and rerun the relevant verification after changes.
 
