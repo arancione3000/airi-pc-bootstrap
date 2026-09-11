@@ -3,7 +3,7 @@ from __future__ import annotations
 import json, shutil, subprocess, tempfile
 from pathlib import Path
 import sys
-sys.path.insert(0, str(Path('/home/user/airi/computer')))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'computer'))
 from coding import ROOT, project_context, search, scope_check, write, patch, diff_summary, guardrail_check
 from code_agent import agent, autonomous_change_cycle, atomic_commit
 from skills import task_start, task_read, task_update, task_finish, memory_read
