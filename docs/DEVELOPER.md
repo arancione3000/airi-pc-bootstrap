@@ -1,1 +1,76 @@
-# Airi-PC — Developer Guide\n\nThis is the advanced path for contributors and maintainers working on the core runtime.\n\n## Runtime model\n\nThe canonical public source is:\n\n- repository: `arancione3000/airi-pc-bootstrap`\n- branch: `main`\n- runtime path used by canonical CI: `/home/user/airi`\n- local runtime server: `http://127.0.0.1:9010`\n- GUI display used by CI: `DISPLAY=:99`\n\nThe repository is not a generic one-command cloud deployment. It reconstructs a local Computer Mode environment and verifies its contract.\n\n## Requirements\n\nThe canonical CI installs the dependencies from `computer/requirements.txt`, creates a Python virtual environment, installs Playwright Chromium and runs the repository test suite. The current source tree is Python plus shell scripts and Windows Companion code.\n\n## Bootstrap entrypoints\n\nFrom the repository root:\n\n```sh\n./scripts/airi-next-session\n./scripts/airi-session-rebuild\n./scripts/airi-rebuild\n./scripts/airi-connect\n./scripts/airi-selftest\n./scripts/airi-coding-selftest\n./scripts/airi-rebuild-verify.py\n./scripts/airi-runtime-verify\n```\n\n`airi-next-session` is the normal session-oriented entrypoint. `airi-rebuild` is the deliberate full reconstruction path.\n\n## Runtime components\n\nThe core source is organised around:\n\n- `computer/server.py` and `computer/contract_server.py` for runtime/server surfaces;\n- `computer/control_plane/` for orchestration, jobs, persistence, reasoning, verification, audit, reliability, model routing and related control-plane components;\n- `computer/` browser/GUI and startup components;\n- `scripts/` for bootstrap, connection, rebuild, self-test and verification entrypoints;\n- `tests/` for the core regression and hardening suite;\n- `airi-pc-companion/` for the separate Windows desktop Companion and its tests.\n\n## Provider boundary\n\nThe current public model-routing implementation deliberately exposes **ChatGPT as the sole reasoning authority**. The legacy model-gateway module is disabled compatibility code rather than an active multi-provider gateway.\n\nDo not reintroduce provider fallbacks in documentation unless the implementation and tests change accordingly.\n\n## Verification commands\n\nThe canonical CI workflow performs, among other checks:\n\n```sh\npython3 -m compileall -q computer api scripts tests airi-pc-companion\npython3 -m pytest -q\npython3 scripts/airi-rebuild-verify.py\n./scripts/airi-runtime-verify\n```\n\nSome checks require the runtime dependencies and a working GUI/browser environment. A successful `compileall` run alone is **not** equivalent to a passing runtime verification.\n\n## GitHub Actions\n\n`.github/workflows/airi-runtime.yml` validates the core runtime on pushes to `main` and on manual dispatch.\n\n`.github/workflows/companion-windows.yml` builds the Windows Companion when a `companion-v*` tag is pushed and publishes the installer and portable archive to a GitHub Release.\n\n## Development rules\n\n1. Keep changes scoped and reproducible.\n2. Do not commit local runtime state, credentials or secrets.\n3. Update tests when behaviour changes.\n4. Re-run the relevant verification after changes.\n5. Do not describe an unverified feature as production-ready or universally autonomous.\n6. Keep `main` as the canonical public source.\n
+# Airi-PC — Developer Guide
+
+This is the developer/maintainer path for the core runtime and the repository test suite.
+
+## 1. Prerequisites
+
+Use a current Python 3 environment, Git, and a POSIX-compatible shell for the core runtime scripts. Some runtime verification also requires a GUI/browser environment; the canonical CI workflow provisions Playwright Chromium and Xvfb.
+
+## 2. Create the reproducible local environment
+
+From the repository root:
+
+```sh
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements-dev.txt
+```
+
+`requirements-dev.txt` is the convenience entry point for the full repository test environment. It includes `computer/requirements.txt` (where FastAPI is declared for the runtime) and `airi-pc-companion/requirements.txt` for Companion tests.
+
+This is the important difference from the earlier bare local test invocation: **FastAPI is already declared by the project; it simply must be installed into the environment used to run pytest.**
+
+## 3. Run the Python suite
+
+```sh
+python -m pytest -q
+```
+
+For a syntax-only check:
+
+```sh
+python -m compileall -q computer api scripts tests airi-pc-companion
+```
+
+A compile-only pass is useful but is not equivalent to the runtime verification.
+
+## 4. Runtime verification
+
+The canonical project commands are:
+
+```sh
+./scripts/airi-selftest
+./scripts/airi-coding-selftest
+./scripts/airi-rebuild-verify.py
+./scripts/airi-runtime-verify
+```
+
+The local runtime normally uses:
+
+- server: `http://127.0.0.1:9010`
+- status: `/status`
+- readiness: `/ready`
+- GUI display in CI: `DISPLAY=:99`
+
+## 5. GitHub Actions
+
+`.github/workflows/airi-runtime.yml` runs the canonical runtime verification on pushes to `main` and on manual dispatch. It installs the runtime dependency set, starts the runtime, executes the Python suite, runs the project self-tests/verifiers, exercises representative browser controls, and restarts/reverifies the server.
+
+`.github/workflows/companion-windows.yml` builds the Windows Companion when a `companion-v*` tag is pushed and publishes the installer and portable archive to a GitHub Release.
+
+## 6. Dependency model
+
+- `requirements.txt` — minimal core dependency entry point (currently points to the core FastAPI runtime requirement set).
+- `computer/requirements.txt` — canonical core runtime/test dependencies used by CI.
+- `airi-pc-companion/requirements.txt` — Windows Companion test/runtime dependencies.
+- `airi-pc-companion/installer/requirements-build.txt` — packaging/build-time Companion dependencies.
+- `requirements-dev.txt` — convenience file for developers who want to run the repository-wide suite locally.
+
+Do not solve missing imports by installing packages globally. Update the appropriate dependency file when a dependency is genuinely part of the project, then verify from a clean virtual environment.
+
+## 7. Contribution rules
+
+Keep changes scoped and reproducible. Do not commit local runtime state, credentials or session data. Update tests when behavior changes and rerun the relevant verification after changes.
+
+The canonical source is always `arancione3000/airi-pc-bootstrap:main`.
