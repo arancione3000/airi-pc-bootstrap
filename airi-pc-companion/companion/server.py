@@ -8,7 +8,7 @@ from .protocol import Request, ok, err
 from .platform import PlatformControl
 
 class Companion:
-    VERSION='0.1.0'
+    VERSION='0.2.1'
     def __init__(self, state_dir: Path):
         self.state_dir=state_dir; self.auth=AuthStore(state_dir); self.control=PlatformControl(state_dir/'sandbox'); self.paired=self.auth._hash!=''; self.started=time.time(); self.stop_event=threading.Event(); self.disable_file=state_dir/'DISABLED'
     def status(self): return {'online':not self.disable_file.exists(),'version':self.VERSION,'paired':self.auth._hash!='','authenticated':self.auth._hash!='','disabled':self.disable_file.exists(),'capabilities':['screen','system','mouse','keyboard','windows','active_window','applications','filesystem','processes','process_control'],'os':self.control.info()['os'],'last_connection':time.time()}
@@ -37,7 +37,7 @@ class Companion:
         except Exception as e: return err(req,'EXECUTION_ERROR',type(e).__name__)
 
 class Handler(BaseHTTPRequestHandler):
-    server_version='AiriCompanion/0.1'
+    server_version='AiriCompanion/0.2.1'
     def _json(self, code, body):
         raw=json.dumps(body,separators=(',',':')).encode(); self.send_response(code); self.send_header('Content-Type','application/json'); self.send_header('Content-Length',str(len(raw))); self.end_headers(); self.wfile.write(raw)
     def do_GET(self):

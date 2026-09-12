@@ -36,14 +36,6 @@ AIRI_BOOTSTRAP_SHA = os.environ.get('AIRI_BOOTSTRAP_SHA', '').strip()
 CONTROL_PLANE = ControlPlane()
 CONTROL_PLANE_BOOTSTRAPPED = False
 
-@app.middleware('http')
-async def mcp_auth_middleware(request: Request, call_next):
-    if AIRI_MCP_TOKEN and request.url.path == '/mcp':
-        auth = request.headers.get('authorization', '')
-        if auth != f'Bearer {AIRI_MCP_TOKEN}':
-            return JSONResponse(status_code=401, content={'error': 'unauthorized'})
-    return await call_next(request)
-
 # Minimal OAuth 2.0 + PKCE for the remote MCP connector.
 OAUTH_STATE = AI / 'state' / 'oauth.json'
 OAUTH_LOCK = threading.RLock()
@@ -58,7 +50,15 @@ def _oauth_save(data):
     OAUTH_STATE.parent.mkdir(parents=True, exist_ok=True)
     tmp = OAUTH_STATE.with_suffix('.tmp')
     tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding='utf-8')
+    try:
+        tmp.chmod(0o600)
+    except OSError:
+        pass
     tmp.replace(OAUTH_STATE)
+    try:
+        OAUTH_STATE.chmod(0o600)
+    except OSError:
+        pass
 
 def _oauth_redirect_ok(uri):
     try:
@@ -148,16 +148,34 @@ async def oauth_token(request: Request):
         token=secrets.token_urlsafe(32); data.setdefault('tokens',{})[token]={'client_id':row['client_id'],'scope':row.get('scope','mcp'),'expires_at':time.time()+86400}; _oauth_save(data)
     return {'access_token':token,'token_type':'Bearer','expires_in':86400,'scope':row.get('scope','mcp')}
 
+def _mcp_request_is_remote(request: Request) -> bool:
+    peer=(request.client.host if request.client else '').strip().lower()
+    if peer not in {'127.0.0.1','::1','localhost'}:
+        return True
+    if request.headers.get('x-forwarded-for'):
+        return True
+    visible_host=(request.headers.get('x-forwarded-host') or request.headers.get('host') or '').split(',',1)[0].strip().lower()
+    if visible_host.startswith('['):
+        hostname=visible_host[1:].split(']',1)[0]
+    elif visible_host.count(':') == 1:
+        hostname=visible_host.rsplit(':',1)[0]
+    else:
+        hostname=visible_host
+    return hostname not in {'127.0.0.1','::1','localhost'}
+
 @app.middleware('http')
 async def mcp_auth_middleware(request: Request, call_next):
-    if request.url.path=='/mcp' and (request.client.host if request.client else '') not in {'127.0.0.1','::1'}:
+    if request.url.path == '/mcp':
         auth=request.headers.get('authorization','')
-        token=auth[7:] if auth.lower().startswith('bearer ') else ''
-        if not _oauth_token_ok(token):
-            proto=request.headers.get('x-forwarded-proto') or request.url.scheme
-            host=request.headers.get('x-forwarded-host') or request.headers.get('host')
-            base=f'{proto}://{host}'.rstrip('/')
-            return JSONResponse(status_code=401, content={'error':'unauthorized','authorization_uri':base+'/oauth/authorize'})
+        token=auth[7:].strip() if auth.lower().startswith('bearer ') else ''
+        if _mcp_request_is_remote(request):
+            if not _oauth_token_ok(token):
+                proto=request.headers.get('x-forwarded-proto') or request.url.scheme
+                host=request.headers.get('x-forwarded-host') or request.headers.get('host')
+                base=f'{proto}://{host}'.rstrip('/')
+                return JSONResponse(status_code=401, content={'error':'unauthorized','authorization_uri':base+'/oauth/authorize'})
+        elif AIRI_MCP_TOKEN and not secrets.compare_digest(token, AIRI_MCP_TOKEN):
+            return JSONResponse(status_code=401, content={'error':'unauthorized'})
     return await call_next(request)
 
 DISPLAY = os.environ.get('DISPLAY', ':99')

@@ -52,3 +52,13 @@ def test_relay_retries_failed_publish():
     assert "if curl -fsS" in text
     assert 'LAST="$U"' in text
     assert 'then\n            LAST="$U"' in text
+
+
+def test_mcp_authentication_separates_local_token_and_remote_oauth():
+    text = read("computer/server.py")
+    assert text.count("async def mcp_auth_middleware") == 1
+    assert "def _mcp_request_is_remote" in text
+    assert "if _mcp_request_is_remote(request):" in text
+    assert "elif AIRI_MCP_TOKEN and not secrets.compare_digest(token, AIRI_MCP_TOKEN):" in text
+    assert "tmp.chmod(0o600)" in text
+    assert "OAUTH_STATE.chmod(0o600)" in text
