@@ -213,7 +213,7 @@ fun AiriLiveApp() {
                 FilterBar(filter) { filter = it }
                 Spacer(Modifier.height(10.dp))
                 val shown = state.events.filter { filter == "all" || it.kind == filter }
-                if (shown.isEmpty()) EmptyState(state) else Timeline(shown, Modifier.weight(1f))
+                if (shown.isEmpty()) EmptyState(state, Modifier.weight(1f)) else Timeline(shown, Modifier.weight(1f))
                 Spacer(Modifier.height(10.dp))
                 Footer(state)
                 Spacer(Modifier.height(12.dp))
@@ -330,8 +330,8 @@ private fun EventRow(e: LiveEvent) {
 }
 
 @Composable
-private fun EmptyState(state: UiState) {
-    Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+private fun EmptyState(state: UiState, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("◉", color = Orange, fontSize = 42.sp)
             Spacer(Modifier.height(8.dp))
