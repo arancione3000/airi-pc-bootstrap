@@ -136,6 +136,7 @@ jobs:
               name='computer_judge',
           )
           jr=judge['result']['structuredContent']
+          print('JUDGE_REPORT='+json.dumps(jr, sort_keys=True))
           assert jr['verdict']=='PASS' and jr['sandboxed'] is True and jr['live_workspace_mutated_by_judge'] is False
 
           rule=post_legacy({'jsonrpc':'2.0','id':2,'method':'tools/call','params':{'name':'computer_reflex_rule_add','arguments':{
