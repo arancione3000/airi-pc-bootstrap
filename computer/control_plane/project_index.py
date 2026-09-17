@@ -1,7 +1,7 @@
 from __future__ import annotations
 import re,hashlib,ast
 from pathlib import Path
-from coding import ROOT
+from coding import ROOT, safe_path
 from .store import load_json,save_json,now
 class ProjectIndex:
     def __init__(self):
@@ -11,7 +11,7 @@ class ProjectIndex:
         targets=[]
         if paths:
             for x in paths:
-                p=(ROOT/x).resolve()
+                p=safe_path(x, missing=True)
                 if p.is_file(): targets.append(p)
                 elif p.is_dir(): targets.extend(q for q in p.rglob('*') if q.is_file())
         else: targets=[p for p in ROOT.rglob('*') if p.is_file() and '.git' not in p.parts and '.venv' not in p.parts and '__pycache__' not in p.parts]
