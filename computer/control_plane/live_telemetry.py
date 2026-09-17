@@ -96,7 +96,8 @@ def live_emit(
     dedupe_key: str | None = None,
 ) -> bool:
     """Publish redacted operational metadata without blocking the active task."""
-    if not _ENABLED:
+    # Pytest exercises task/job state heavily; never let tests publish to the public relay.
+    if not _ENABLED or os.environ.get("PYTEST_CURRENT_TEST"):
         return False
     sha = source_sha()
     event = {
