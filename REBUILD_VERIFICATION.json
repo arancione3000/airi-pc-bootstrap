@@ -1,0 +1,19 @@
+{
+  "base_commit": "77ab0a00010940a7f7aa9fa53d75f2ebfab68941",
+  "base_repository": "arancione3000/airi-pc-bootstrap",
+  "compileall": true,
+  "control_plane_import": true,
+  "control_plane_smoke": {
+    "context_pack": true,
+    "execution_strategy": true,
+    "model_router": true,
+    "project_index": true,
+    "skill_refresh": true
+  },
+  "github_write": "blocked: GitHub connector returned 403 Resource not accessible by integration on create_branch",
+  "overlay": "Airi-PC Autonomy 2026",
+  "runtime_http_end_to_end": false,
+  "runtime_http_note": "The GitHub connector does not expose repository archives as materializable files, so the very large legacy server.py/contract_server.py runtime was not fully materialized in this sandbox. Modern MCP behavior is covered by FastAPI integration tests; legacy runtime remains unchanged by the overlay except additive package bootstrap.",
+  "tests_passed": 41,
+  "tests_run": 41
+}

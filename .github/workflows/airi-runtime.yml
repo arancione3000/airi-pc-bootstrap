@@ -53,6 +53,7 @@ jobs:
           AIRI_BOOTSTRAP_SHA: ${{ github.sha }}
           AIRI_EXPECTED_SHA: ${{ github.sha }}
           AIRI_FORCE_RESTART: '1'
+          AIRI_GITHUB_WEBHOOK_SECRET: 'airi-ci-webhook-secret'
         run: |
           chmod +x scripts/airi-* computer/start.sh
           timeout 300s ./computer/start.sh
@@ -74,6 +75,94 @@ jobs:
       - name: Canonical runtime verifier
         working-directory: /home/user/airi
         run: ./scripts/airi-runtime-verify
+      - name: Modern MCP, Reflex and Judge verification
+        working-directory: /home/user/airi
+        env:
+          AIRI_GITHUB_WEBHOOK_SECRET: 'airi-ci-webhook-secret'
+        run: |
+          ./.venv/bin/python - <<'PY'
+          import hashlib, hmac, json, time, urllib.request
+          base='http://127.0.0.1:9010'
+          protocol='2026-07-28'
+          version_key='io.modelcontextprotocol/protocolVersion'
+          caps_key='io.modelcontextprotocol/clientCapabilities'
+
+          def get(path):
+              with urllib.request.urlopen(base+path, timeout=30) as r:
+                  return json.loads(r.read().decode())
+
+          def post_legacy(payload):
+              req=urllib.request.Request(base+'/mcp', data=json.dumps(payload).encode(), headers={'Content-Type':'application/json'}, method='POST')
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  return json.loads(r.read().decode())
+
+          def post_modern(method, params=None, name=None, task_capability=False):
+              params=dict(params or {})
+              caps={'extensions': {'io.modelcontextprotocol/tasks': {}}} if task_capability else {}
+              params['_meta']={version_key:protocol,caps_key:caps}
+              payload={'jsonrpc':'2.0','id':42,'method':method,'params':params}
+              headers={'Content-Type':'application/json','Mcp-Protocol-Version':protocol,'Mcp-Method':method}
+              if name is not None:
+                  headers['Mcp-Name']=name
+              req=urllib.request.Request(base+'/mcp', data=json.dumps(payload).encode(), headers=headers, method='POST')
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  return json.loads(r.read().decode())
+
+          tools=get('/tools')
+          names=[x['name'] for x in tools['tools']]
+          required={
+              'computer_reflex_status','computer_reflex_rule_add','computer_reflex_emit','computer_reflex_process',
+              'computer_resource_discover','computer_resource_stage','computer_resource_acquire_skill','computer_resource_staged',
+              'computer_judge',
+          }
+          assert tools['base_tool_count']==83 and tools['tool_count']==115 and len(names)==len(set(names))==115
+          assert required.issubset(names)
+
+          legacy=post_legacy({'jsonrpc':'2.0','id':1,'method':'initialize','params':{}})
+          assert legacy['result']['protocolVersion']=='2025-06-18'
+
+          discover=post_modern('server/discover')
+          assert discover['result']['resultType']=='complete'
+          assert discover['result']['supportedVersions']==[protocol]
+          assert discover['result']['_meta']['io.modelcontextprotocol/serverInfo']['name']=='Airi Computer'
+
+          modern_list=post_modern('tools/list')
+          assert modern_list['result']['resultType']=='complete'
+          assert len(modern_list['result']['tools'])==115
+
+          judge=post_modern(
+              'tools/call',
+              {'name':'computer_judge','arguments':{'goal':'CI independent verification','project_path':'.','checks':[{'type':'file_contains','path':'README.md','text':'Airi-PC'}]}},
+              name='computer_judge',
+          )
+          jr=judge['result']['structuredContent']
+          assert jr['verdict']=='PASS' and jr['sandboxed'] is True and jr['live_workspace_mutated_by_judge'] is False
+
+          rule=post_legacy({'jsonrpc':'2.0','id':2,'method':'tools/call','params':{'name':'computer_reflex_rule_add','arguments':{
+              'name':'ci-github-comment','source':'github','event_type':'issue_comment',
+              'action':{'type':'record_experience','goal':'CI observed {event_type}','solution':'webhook path verified'},
+              'max_retries':1,
+          }}})
+          assert rule['result']['structuredContent']['name']=='ci-github-comment'
+          body=json.dumps({'action':'created','issue':{'number':1},'comment':{'body':'CI'}}).encode()
+          sig='sha256='+hmac.new(b'airi-ci-webhook-secret',body,hashlib.sha256).hexdigest()
+          req=urllib.request.Request(base+'/events/github',data=body,headers={
+              'Content-Type':'application/json','X-Hub-Signature-256':sig,'X-GitHub-Event':'issue_comment','X-GitHub-Delivery':'airi-ci-delivery-1'
+          },method='POST')
+          with urllib.request.urlopen(req,timeout=30) as r:
+              accepted=json.loads(r.read().decode())
+          assert accepted['ok'] is True
+          completed=False
+          for _ in range(30):
+              status=post_legacy({'jsonrpc':'2.0','id':3,'method':'tools/call','params':{'name':'computer_reflex_status','arguments':{}}})
+              counts=status['result']['structuredContent']['counts']
+              if counts.get('completed',0)>=1:
+                  completed=True
+                  break
+              time.sleep(0.2)
+          assert completed, status
+          print(json.dumps({'tool_count':len(names),'legacy':legacy['result']['protocolVersion'],'modern':discover['result']['supportedVersions'],'judge':jr['verdict'],'reflex_completed':completed}, indent=2))
+          PY
       - name: Independent browser controls
         working-directory: /home/user/airi
         run: |
@@ -106,6 +195,7 @@ jobs:
           AIRI_BOOTSTRAP_SHA: ${{ github.sha }}
           AIRI_EXPECTED_SHA: ${{ github.sha }}
           AIRI_FORCE_RESTART: '1'
+          AIRI_GITHUB_WEBHOOK_SECRET: 'airi-ci-webhook-secret'
         run: |
           ./computer/start.sh
           ./scripts/airi-runtime-verify
