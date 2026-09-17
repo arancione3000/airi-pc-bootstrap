@@ -32,7 +32,7 @@ class TaskEngine:
         repositories=sorted({str(n.get('repository','.')) for n in norm})
         row={"id":tid,"goal":goal,"scope":scope or [],"repositories":repositories,"created_at":now(),"updated_at":now(),"nodes":norm,"current":norm[0]["id"] if norm else None}
         self.state["tasks"][tid]=row; self.state["active"]=tid; save_json("tasks.json",self.state)
-        live_emit("task", "Task started", goal, "running", task_id=tid, node_id=row.get("current"), dedupe_key=f"task:{tid}:start")
+        live_emit("task", "Task started", f"{len(norm)} steps", "running", task_id=tid, node_id=row.get("current"), dedupe_key=f"task:{tid}:start")
         return row
     def read(self,tid=None): return self.state["tasks"].get(tid or self.state.get("active"))
     def update(self,node_id,status,output=None,error=None,checkpoint=None,task_id=None):
@@ -47,16 +47,16 @@ class TaskEngine:
             for nxt in row["nodes"]:
                 if nxt["status"]=="pending" and all(next(m for m in row["nodes"] if m["id"]==d)["status"]=="completed" for d in nxt["depends_on"]):
                     nxt["status"]="running"; row["current"]=nxt["id"]
-                    live_emit("task", "Next step", f"{nxt.get('title',nxt['id'])} · {nxt.get('operation','analyze')}", "running", task_id=row["id"], node_id=nxt["id"], dedupe_key=f"task:{row['id']}:{nxt['id']}:running")
+                    live_emit("task", "Next step", nxt.get("operation","analyze"), "running", task_id=row["id"], node_id=nxt["id"], dedupe_key=f"task:{row['id']}:{nxt['id']}:running")
                     break
         if any(n["status"]=="failed" for n in row["nodes"]): row["status"] = "failed"
         elif all(n["status"] in {"completed","cancelled"} for n in row["nodes"]): row["status"] = "completed"; self.state["active"] = None
         else: row["status"] = row.get("status","running")
         row["updated_at"]=now(); save_json("tasks.json",self.state)
-        label = node.get("title") or node.get("operation") or node_id
-        live_emit("task", f"Step {status}", f"{label} · {node.get('operation','analyze')}", status, task_id=row["id"], node_id=node_id, dedupe_key=f"task:{row['id']}:{node_id}:{status}")
+        operation = node.get("operation","analyze")
+        live_emit("task", f"Step {status}", operation, status, task_id=row["id"], node_id=node_id, dedupe_key=f"task:{row['id']}:{node_id}:{status}")
         if row.get("status") in {"completed", "failed"}:
-            live_emit("task", f"Task {row['status']}", row.get("goal", ""), row["status"], task_id=row["id"], dedupe_key=f"task:{row['id']}:{row['status']}")
+            live_emit("task", f"Task {row['status']}", f"{len(row['nodes'])} steps", row["status"], task_id=row["id"], dedupe_key=f"task:{row['id']}:{row['status']}")
         return row
     def add_node(self, task_id, node, created_by='dynamic'):
         row=self.read(task_id)
@@ -67,7 +67,7 @@ class TaskEngine:
         if n['id'] in ids: raise ValueError('duplicate task node id')
         if any(d not in ids and d != n['id'] for d in n['depends_on']): raise ValueError('unknown task dependency')
         row['nodes'].append(n); row['repositories']=sorted({str(x.get('repository','.')) for x in row['nodes']}); row['updated_at']=now(); save_json('tasks.json',self.state)
-        live_emit("task", "Step added", f"{n.get('title',n['id'])} · {n.get('operation','analyze')}", "pending", task_id=task_id, node_id=n['id'], dedupe_key=f"task:{task_id}:{n['id']}:added")
+        live_emit("task", "Step added", n.get("operation","analyze"), "pending", task_id=task_id, node_id=n['id'], dedupe_key=f"task:{task_id}:{n['id']}:added")
         return n
     def add_dependency(self, task_id, node_id, depends_on):
         row=self.read(task_id)
@@ -85,7 +85,7 @@ class TaskEngine:
         if node is None: raise KeyError(node_id)
         if node['status']=='completed': return node
         node.update({'status':'cancelled','error':reason,'updated_at':now()}); save_json('tasks.json',self.state)
-        live_emit("task", "Step skipped", node.get("title", node_id), "cancelled", task_id=task_id, node_id=node_id, dedupe_key=f"task:{task_id}:{node_id}:cancelled")
+        live_emit("task", "Step skipped", node.get("operation","analyze"), "cancelled", task_id=task_id, node_id=node_id, dedupe_key=f"task:{task_id}:{node_id}:cancelled")
         return row
     def runnable(self, task_id=None):
         row=self.read(task_id)
@@ -101,5 +101,5 @@ class TaskEngine:
         if status == "completed" and any(n["status"] != "completed" for n in row["nodes"]): raise ValueError("cannot mark task completed while nodes are unfinished")
         if status not in STATES: raise ValueError(status)
         row["status"]=status; row["updated_at"]=now(); self.state["active"]=None; save_json("tasks.json",self.state)
-        live_emit("task", f"Task {status}", row.get("goal", ""), status, task_id=row["id"], dedupe_key=f"task:{row['id']}:{status}")
+        live_emit("task", f"Task {status}", f"{len(row['nodes'])} steps", status, task_id=row["id"], dedupe_key=f"task:{row['id']}:{status}")
         return row
