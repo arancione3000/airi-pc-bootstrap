@@ -146,15 +146,11 @@ def test_supervisor_snapshot(tmp_path, monkeypatch):
 
 def test_mcp_mutation_requires_scope(monkeypatch):
     import server
-    try:
-        server.code_write('README.md', 'BAD')
-    except Exception:
-        pass
-    else:
-        # Direct helper intentionally may remain callable; MCP path is tested below.
-        pass
+    readme = Path('README.md')
+    before = readme.read_bytes()
     result = server.mcp({'jsonrpc':'2.0','id':99,'method':'tools/call','params':{'name':'computer_file_write','arguments':{'path':'README.md','content':'BAD','scope':[]}}})
     assert result.get('error') is not None
+    assert readme.read_bytes() == before
 
 
 def test_mcp_screenshot_returns_payload(monkeypatch):
