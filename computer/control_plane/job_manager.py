@@ -3,6 +3,7 @@ import json, os, shlex, signal, subprocess, time, uuid
 from pathlib import Path
 from typing import Any
 from .store import load_json, save_json, now
+from .live_telemetry import live_emit
 from coding import ROOT, safe_path
 JOBS_FILE = 'jobs.json'; LOG_DIR = ROOT / '.ai' / 'state' / 'jobs'; ACTIVE = {'queued','running','detached'}; FINAL = {'completed','failed','cancelled','lost'}
 class JobManager:
@@ -14,6 +15,7 @@ class JobManager:
         if row is None: raise KeyError(job_id)
         return row
     def _refresh_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        before_status = row.get('status')
         if row.get('status') not in ACTIVE: return row
         exit_file = Path(row['exit_file'])
         if exit_file.exists():
@@ -33,6 +35,8 @@ class JobManager:
         if log.exists():
             try: row['last_output'] = log.read_text(errors='replace')[-20000:]
             except Exception: pass
+        if before_status != row.get('status') and row.get('status') in FINAL:
+            live_emit('job', f"Job {row['status']}", f"exit={row.get('exit_code')}", row['status'], task_id=row.get('owner_task'), node_id=row.get('id'), dedupe_key=f"job:{row.get('id')}:{row.get('status')}")
         return row
     def refresh(self):
         changed = False
@@ -52,7 +56,10 @@ class JobManager:
         quoted_log, quoted_exit = shlex.quote(str(log_file)), shlex.quote(str(exit_file)); wrapped = f"trap 'rc=$?; printf \"%s\" \"$rc\" > {quoted_exit}' EXIT; timeout --signal=TERM --kill-after=10s {int(timeout)} /bin/bash -lc {shlex.quote(command)}"
         with log_file.open('ab') as out: proc = subprocess.Popen(['/bin/bash','-lc',wrapped], cwd=str(base), env=env, stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
         row={'id':job_id,'command':command,'cwd':str(base),'status':'running','started_at':now(),'pid':proc.pid,'exit_code':None,'last_output':'','log_file':str(log_file),'exit_file':str(exit_file),'checkpoint':None,'owner_task':owner_task,'scope':list(scope or []),'timeout':int(timeout),'termination_reason':None,'detached':True,'created_at':now(),'updated_at':now()}
-        self.state['jobs'][job_id]=row; self._save(); return row
+        self.state['jobs'][job_id]=row; self._save()
+        executable = shlex.split(command)[0] if shlex.split(command) else 'command'
+        live_emit('job', 'Job started', executable, 'running', task_id=owner_task, node_id=job_id, dedupe_key=f"job:{job_id}:running")
+        return row
     def status(self, job_id: str) -> dict[str, Any]: row=self._refresh_row(self._row(job_id)); row['updated_at']=now(); self._save(); return row
     def list(self) -> dict[str, Any]:
         rows=[]
@@ -79,6 +86,8 @@ class JobManager:
                 row['status']='cancelled'; row['termination_reason']='forced_cancel'; row['finished_at']=now(); self._save()
         elif row.get('status') not in FINAL:
             row['status']='cancelled'; row['termination_reason']='already_stopped'; row['finished_at']=now(); self._save()
+        if row.get('status') == 'cancelled':
+            live_emit('job', 'Job cancelled', '', 'cancelled', task_id=row.get('owner_task'), node_id=job_id, dedupe_key=f"job:{job_id}:cancelled")
         return self.status(job_id)
     def cleanup(self, keep_final: int = 100) -> dict[str, Any]:
         self.refresh(); finals=[r for r in self.state['jobs'].values() if r.get('status') in FINAL]; finals.sort(key=lambda x:x.get('finished_at') or x.get('updated_at') or 0, reverse=True); removed=[]
