@@ -151,23 +151,38 @@ class ReflexEngine:
                     for item in event.get("results", [])
                     if item.get("ok") is True and item.get("rule")
                 }
-                pending_rules = [rule for rule in matches if rule["name"] not in completed_rules]
-                all_ok = True
-                max_retry = max((int(r.get("max_retries", 3)) for r in pending_rules), default=3)
+                def failure_count(rule_name: str) -> int:
+                    return sum(1 for item in event.get("results", []) if item.get("rule") == rule_name and item.get("ok") is False)
+                pending_rules = [
+                    rule for rule in matches
+                    if rule["name"] not in completed_rules
+                    and failure_count(rule["name"]) <= int(rule.get("max_retries", 3))
+                ]
                 for rule in pending_rules:
                     try:
                         result = dispatcher(dict(rule["action"]), redact(dict(event)))
                         with self._lock:
                             event["results"].append({"rule": rule["name"], "ok": True, "result": redact(result), "at": now()})
                     except Exception as exc:  # durable + retryable; never drop an event
-                        all_ok = False
                         with self._lock:
                             event["results"].append({"rule": rule["name"], "ok": False, "error": str(exc), "at": now()})
                 with self._lock:
                     event["attempts"] = int(event.get("attempts", 0)) + 1
-                    if all_ok:
+                    completed_rules = {
+                        str(item.get("rule"))
+                        for item in event.get("results", [])
+                        if item.get("ok") is True and item.get("rule")
+                    }
+                    retryable = [
+                        rule["name"] for rule in matches
+                        if rule["name"] not in completed_rules
+                        and failure_count(rule["name"]) <= int(rule.get("max_retries", 3))
+                    ]
+                    exhausted = [rule["name"] for rule in matches if rule["name"] not in completed_rules and rule["name"] not in retryable]
+                    event["exhausted_rules"] = exhausted
+                    if len(completed_rules) == len(matches):
                         event["status"] = "completed"
-                    elif event["attempts"] <= max_retry:
+                    elif retryable:
                         event["status"] = "retrying"
                     else:
                         event["status"] = "dead_letter"
