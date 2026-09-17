@@ -26,7 +26,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -46,9 +46,26 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+      - name: Check Maven Central connectivity
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors --retry-delay 3 \
+            --max-time 30 \
+            https://repo.maven.apache.org/maven2/com/google/code/gson/gson/2.10.1/gson-2.10.1.pom \
+            --output /dev/null
       - name: Build installable APK
         working-directory: airi-live-android
-        run: gradle :app:assembleDebug --stacktrace
+        run: |
+          set +e
+          for attempt in 1 2 3; do
+            echo "Android build attempt $attempt/3"
+            EXTRA=""
+            if [ "$attempt" -gt 1 ]; then EXTRA="--refresh-dependencies"; fi
+            gradle :app:assembleDebug --stacktrace --no-daemon $EXTRA
+            rc=$?
+            if [ "$rc" -eq 0 ]; then exit 0; fi
+            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 10)); fi
+          done
+          exit "$rc"
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
