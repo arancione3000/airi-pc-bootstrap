@@ -1,0 +1,51 @@
+name: Airi Live Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'airi-live-android/**'
+      - 'computer/control_plane/live_telemetry.py'
+      - 'computer/control_plane/task_engine.py'
+      - 'computer/control_plane/job_manager.py'
+      - 'tests/test_live_telemetry.py'
+      - '.github/workflows/airi-live-android.yml'
+  pull_request:
+    paths:
+      - 'airi-live-android/**'
+      - 'computer/control_plane/live_telemetry.py'
+      - 'computer/control_plane/task_engine.py'
+      - 'computer/control_plane/job_manager.py'
+      - 'tests/test_live_telemetry.py'
+      - '.github/workflows/airi-live-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Build installable APK
+        working-directory: airi-live-android
+        run: gradle :app:assembleDebug --stacktrace
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Airi-Live-Android
+          path: airi-live-android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
