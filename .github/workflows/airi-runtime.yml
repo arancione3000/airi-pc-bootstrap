@@ -57,24 +57,55 @@ jobs:
         run: |
           chmod +x scripts/airi-* computer/start.sh
           timeout 300s ./computer/start.sh
+          echo "AIRI_README_PROBE=after_start"
+          ls -l README.md || true
+          readlink README.md || true
+          sed -n '1,5p' README.md || true
+          git status --short -- README.md || true
+          git diff -- README.md || true
       - name: Full Python test suite
         working-directory: /home/user/airi
         run: |
           export PATH="/home/user/airi/.venv/bin:$PATH"
           .venv/bin/python -m pytest -q
+          echo "AIRI_README_PROBE=after_pytest"
+          ls -l README.md || true
+          readlink README.md || true
+          sed -n '1,5p' README.md || true
+          git status --short -- README.md || true
+          git diff -- README.md || true
       - name: Explicit coding self-test
         working-directory: /home/user/airi
         run: |
           export PATH="/home/user/airi/.venv/bin:$PATH"
           .venv/bin/python scripts/airi-coding-selftest
+          echo "AIRI_README_PROBE=after_coding_selftest"
+          ls -l README.md || true
+          readlink README.md || true
+          sed -n '1,5p' README.md || true
+          git status --short -- README.md || true
+          git diff -- README.md || true
       - name: Explicit rebuild verifier
         working-directory: /home/user/airi
         run: |
           export PATH="/home/user/airi/.venv/bin:$PATH"
           .venv/bin/python scripts/airi-rebuild-verify.py
+          echo "AIRI_README_PROBE=after_rebuild_verify"
+          ls -l README.md || true
+          readlink README.md || true
+          sed -n '1,5p' README.md || true
+          git status --short -- README.md || true
+          git diff -- README.md || true
       - name: Canonical runtime verifier
         working-directory: /home/user/airi
-        run: ./scripts/airi-runtime-verify
+        run: |
+          ./scripts/airi-runtime-verify
+          echo "AIRI_README_PROBE=after_runtime_verify"
+          ls -l README.md || true
+          readlink README.md || true
+          sed -n '1,5p' README.md || true
+          git status --short -- README.md || true
+          git diff -- README.md || true
       - name: Modern MCP, Reflex and Judge verification
         working-directory: /home/user/airi
         env:
