@@ -13,11 +13,29 @@ case "$DISPLAY_NUM" in
 esac
 export DISPLAY=":$DISPLAY_NUM"
 SERVER_PID_FILE="$LOG_DIR/computer-server.pid"
+LIVE_PID_FILE="$LOG_DIR/airi-live-runtime.pid"
+LIVE_SESSION_FILE="$ROOT/.ai/state/live_session_id"
 RUNTIME_SHA_FILE="$ROOT/.ai/.runtime_source_sha"
 server_pids() {
   pgrep -f 'uvicorn (server|contract_server):app --host 127\.0\.0\.1 --port 9010' 2>/dev/null || true
 }
+stop_live_runtime() {
+  if [ -f "$LIVE_PID_FILE" ]; then
+    PID=$(cat "$LIVE_PID_FILE" 2>/dev/null || true)
+    if [ -n "$PID" ]; then
+      kill "$PID" 2>/dev/null || true
+      for _ in $(seq 1 10); do
+        if ! kill -0 "$PID" 2>/dev/null; then break; fi
+        sleep 0.2
+      done
+      kill -9 "$PID" 2>/dev/null || true
+    fi
+    rm -f "$LIVE_PID_FILE"
+  fi
+  pkill -f '[c]ontrol_plane.live_runtime' >/dev/null 2>&1 || true
+}
 stop_server() {
+  stop_live_runtime
   if [ -f "$SERVER_PID_FILE" ]; then
     PID=$(cat "$SERVER_PID_FILE" 2>/dev/null || true)
     if [ -n "$PID" ]; then
@@ -130,13 +148,28 @@ raise SystemExit(1 if runtime_needs_restart(payload, os.environ.get("EXPECTED_SH
 '
 }
 
-# Never reuse a server merely because /status answers: /ready must prove both
-# readiness and source identity for the current checkout.
-if curl -fsS --max-time 2 http://127.0.0.1:9010/status >/dev/null 2>&1; then
-  if ! runtime_ready_matches; then
-    stop_server
+# One reconstruction owns one shared live-session identity. The HTTP server,
+# telemetry emitters and the POV daemon all use it, so Android can follow a
+# reconstructed Airi-PC without being tied to the chat that created it.
+EXISTING_MATCH=0
+if curl -fsS --max-time 2 http://127.0.0.1:9010/status >/dev/null 2>&1 && runtime_ready_matches; then
+  EXISTING_MATCH=1
+fi
+mkdir -p "$ROOT/.ai/state"
+if [ "$EXISTING_MATCH" != "1" ]; then
+  stop_server
+  AIRI_LIVE_SESSION_ID="$("$PYTHON_BIN" -c 'import uuid; print("session-" + uuid.uuid4().hex[:12])')"
+  printf '%s\n' "$AIRI_LIVE_SESSION_ID" > "$LIVE_SESSION_FILE"
+  chmod 600 "$LIVE_SESSION_FILE" 2>/dev/null || true
+else
+  AIRI_LIVE_SESSION_ID="$(cat "$LIVE_SESSION_FILE" 2>/dev/null || true)"
+  if [ -z "$AIRI_LIVE_SESSION_ID" ]; then
+    AIRI_LIVE_SESSION_ID="$("$PYTHON_BIN" -c 'import uuid; print("session-" + uuid.uuid4().hex[:12])')"
+    printf '%s\n' "$AIRI_LIVE_SESSION_ID" > "$LIVE_SESSION_FILE"
+    chmod 600 "$LIVE_SESSION_FILE" 2>/dev/null || true
   fi
 fi
+export AIRI_LIVE_SESSION_ID
 
 if ! curl -fsS --max-time 2 http://127.0.0.1:9010/status >/dev/null 2>&1; then
   cd "$ROOT/computer"
@@ -153,6 +186,21 @@ if [ "$READY" != "1" ]; then
   cat "$LOG_DIR/computer-server.log" 2>/dev/null || true
   exit 4
 fi
+
+# The live POV belongs to the runtime itself. Keep one publisher resident for
+# the entire reconstruction and let it repair its public tunnel independently.
+LIVE_PID="$(cat "$LIVE_PID_FILE" 2>/dev/null || true)"
+if [ -z "$LIVE_PID" ] || ! kill -0 "$LIVE_PID" 2>/dev/null; then
+  nohup env \
+    AIRI_ROOT="$ROOT" \
+    AIRIPC_WORKSPACE_ROOT="$ROOT" \
+    AIRI_LIVE_SESSION_ID="$AIRI_LIVE_SESSION_ID" \
+    DISPLAY="$DISPLAY" \
+    "$PYTHON_BIN" -m control_plane.live_runtime \
+    >"$LOG_DIR/airi-live-runtime.log" 2>&1 < /dev/null &
+  echo $! > "$LIVE_PID_FILE"
+fi
+
 if [ -x "$ROOT/scripts/airi-supervisor" ] && ! pgrep -f '[a]iri-supervisor' >/dev/null 2>&1; then
   nohup "$ROOT/scripts/airi-supervisor" >"$LOG_DIR/supervisor.log" 2>&1 < /dev/null &
 fi
