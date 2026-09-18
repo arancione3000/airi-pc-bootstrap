@@ -80,6 +80,9 @@ def parser():
     exp.add_argument("--torchscript", action="store_true")
     h = sub.add_parser("history"); h.add_argument("--limit", type=int, default=10)
     pred = sub.add_parser("predict"); pred.add_argument("text")
+    pred_edge = sub.add_parser("predict-edge"); pred_edge.add_argument("text")
+    drift = sub.add_parser("drift"); drift.add_argument("--window", type=int, default=100); drift.add_argument("--min-window", type=int, default=runtime.DRIFT_TRIGGER)
+    edge = sub.add_parser("edge-quantize"); edge.add_argument("--max-samples", type=int, default=64)
     ing = sub.add_parser("ingest")
     ing.add_argument("--text", required=True); ing.add_argument("--label", required=True)
     ing.add_argument("--source", default=""); ing.add_argument("--evidence", default="")
@@ -120,6 +123,11 @@ def main(argv=None):
     if args.cmd == "history": emit(runtime.history(args.limit), 0)
     if args.cmd == "predict":
         result = runtime.predict(args.text); emit(result, 0 if result.get("ok") else 2)
+    if args.cmd == "predict-edge":
+        result = runtime.predict_edge(args.text); emit(result, 0 if result.get("ok") else 2)
+    if args.cmd == "drift": emit(runtime.drift(args.window, args.min_window), 0)
+    if args.cmd == "edge-quantize":
+        result = runtime.edge_quantize(args.max_samples); emit(result, 0 if result.get("ok") else 2)
     if args.cmd == "ingest":
         result = runtime.ingest({"text": args.text, "label": args.label, "source": args.source, "evidence": args.evidence}, auto_evolve=not args.no_auto, mode=args.mode, trigger_samples=args.trigger_samples)
         emit(result, 0)

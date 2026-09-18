@@ -45,6 +45,7 @@ jobs:
           from pathlib import Path
           from evolution.data import append_verified
           from evolution.engine import EvolutionConfig, run_evolution, predict_text
+          from evolution.edge import quantize_champion
 
           state=Path(tempfile.mkdtemp(prefix='airi-evo-ci-'))
           data=state/'data'/'verified.jsonl'
@@ -61,6 +62,11 @@ jobs:
           assert len(result['promotion_trials']) == 2
           if result['promoted']:
               pred=predict_text(state,'fabricated viral hoax debunked as false')
-              assert pred['label'] in {'likely_fake','likely_real'}
+              assert pred['label'] in {'likely_fake','likely_real','uncertain'}
+              edge=quantize_champion(state,max_samples=16)
+              assert edge['ok'] is True
+              assert edge['metrics']['samples'] >= 4
+              assert (state/'edge'/'attempt.json').exists()
+              assert 0.0 <= edge['metrics']['label_agreement'] <= 1.0
           print(json.dumps({'ok':True,'promoted':result['promoted'],'candidate':result['candidate']},indent=2))
           PY

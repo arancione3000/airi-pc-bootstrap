@@ -8,7 +8,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "computer"))
 
 from evolution.data import append_verified, class_counts, encode_text, load_records, split_records, text_fingerprint
-from evolution.engine import EvolutionConfig, _metrics, _promotion_decision, fitness, pareto_front
+from evolution.engine import EvolutionConfig, _metrics, _promotion_decision, decision_from_probability, fitness, pareto_front
+from evolution.edge import edge_acceptance
+from evolution.monitoring import detect_drift
 from evolution.genome import crossover, mutate, random_genome
 
 
@@ -118,3 +120,60 @@ def test_promotion_repeat_config_is_bounded():
     cfg = EvolutionConfig.for_mode("safe", promotion_repeats=99, min_promotion_votes=99)
     assert cfg.promotion_repeats == 7
     assert cfg.min_promotion_votes == 7
+
+
+def test_prediction_can_abstain():
+    label, confidence = decision_from_probability(0.54, 0.65)
+    assert label == "uncertain"
+    assert 0.53 < confidence < 0.55
+    label, confidence = decision_from_probability(0.91, 0.65)
+    assert label == "likely_real"
+    assert confidence == 0.91
+    label, confidence = decision_from_probability(0.08, 0.65)
+    assert label == "likely_fake"
+    assert confidence == 0.92
+
+
+def test_drift_detector_flags_performance_and_distribution_changes():
+    result = detect_drift(
+        {"f1": 0.90, "brier": 0.10},
+        {"f1": 0.74, "brier": 0.24},
+        baseline_real_fraction=0.50,
+        current_real_fraction=0.82,
+    )
+    assert result["drift"] is True
+    assert "macro_f1_drop" in result["reasons"]
+    assert "calibration_degradation" in result["reasons"]
+    assert "class_distribution_shift" in result["reasons"]
+
+
+def test_edge_gate_requires_quality_and_real_efficiency_gain():
+    good = edge_acceptance(
+        float_bytes=1_000_000,
+        int8_bytes=600_000,
+        float_latency_ms=10.0,
+        int8_latency_ms=7.0,
+        mean_probability_delta=0.01,
+        label_agreement=1.0,
+    )
+    assert good["accepted"] is True
+
+    bad_quality = edge_acceptance(
+        float_bytes=1_000_000,
+        int8_bytes=500_000,
+        float_latency_ms=10.0,
+        int8_latency_ms=5.0,
+        mean_probability_delta=0.20,
+        label_agreement=0.75,
+    )
+    assert bad_quality["accepted"] is False
+
+    no_gain = edge_acceptance(
+        float_bytes=1_000_000,
+        int8_bytes=950_000,
+        float_latency_ms=10.0,
+        int8_latency_ms=9.8,
+        mean_probability_delta=0.01,
+        label_agreement=1.0,
+    )
+    assert no_gain["accepted"] is False
