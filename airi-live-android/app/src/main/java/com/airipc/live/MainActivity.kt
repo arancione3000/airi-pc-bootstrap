@@ -122,7 +122,7 @@ private fun decryptScreenOffer(ciphertextB64: String): JSONObject {
     return JSONObject(String(plain, Charsets.UTF_8))
 }
 
-class AiriLiveClient {
+class AiriLiveClient(private val configOverride: LiveConfig? = null) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -188,6 +188,7 @@ class AiriLiveClient {
     }
 
     private fun fetchLiveConfig(): LiveConfig {
+        configOverride?.let { return it }
         return runCatching {
             val req = Request.Builder()
                 .url(LIVE_CONFIG_URL)
@@ -336,7 +337,12 @@ class AiriLiveClient {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { AiriLiveApp() }
+        val relay = intent.getStringExtra("airi_relay")?.trim()?.trimEnd('/').orEmpty()
+        val topic = intent.getStringExtra("airi_topic")?.trim().orEmpty()
+        val override = if (relay.isNotBlank() && topic.isNotBlank()) {
+            LiveConfig(relayBase = relay, topic = topic, history = "24h")
+        } else null
+        setContent { AiriLiveApp(override) }
     }
 }
 
@@ -348,8 +354,8 @@ private val Good = Color(0xFF5ED390)
 private val Bad = Color(0xFFFF5D6C)
 
 @Composable
-fun AiriLiveApp() {
-    val client = remember { AiriLiveClient() }
+fun AiriLiveApp(configOverride: LiveConfig? = null) {
+    val client = remember(configOverride) { AiriLiveClient(configOverride) }
     var state by remember { mutableStateOf(UiState()) }
     var filter by remember { mutableStateOf("all") }
     DisposableEffect(Unit) {

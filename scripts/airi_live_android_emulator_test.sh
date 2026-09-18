@@ -10,7 +10,11 @@ test -n "$APK"
 
 adb install -r "$APK"
 adb shell am force-stop com.airipc.live
-adb shell am start -n com.airipc.live/.MainActivity
+test -n "${AIRI_E2E_RELAY_URL:-}"
+test -n "${AIRI_E2E_TOPIC:-}"
+adb shell am start -n com.airipc.live/.MainActivity \
+  --es airi_relay "$AIRI_E2E_RELAY_URL" \
+  --es airi_topic "$AIRI_E2E_TOPIC"
 
 found=0
 for i in $(seq 1 30); do

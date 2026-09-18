@@ -28,7 +28,11 @@ _TUNNEL_RE = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com", re.I)
 
 
 def _relay_base() -> str:
-    return os.environ.get("AIRI_LIVE_RELAY", DEFAULT_RELAY).rstrip("/")
+    return (
+        os.environ.get("AIRI_LIVE_RELAY_BASE", "").strip()
+        or os.environ.get("AIRI_LIVE_RELAY", "").strip()
+        or DEFAULT_RELAY
+    ).rstrip("/")
 
 
 def _post_json(payload: dict) -> None:
