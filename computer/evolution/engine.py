@@ -388,33 +388,61 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         population = next_population
 
     assert best_genome is not None and best_row is not None
-    finalist_model, finalist_train = train_model(best_genome, train + val, cfg.finalist_epochs, cfg.vocab_size, cfg.seed + 777_777)
-    finalist_metrics = evaluate_model(finalist_model, best_genome, test, cfg.vocab_size, latency_repeats=12)
-    finalist_fit = fitness(finalist_metrics, cfg)
-    candidate_final = {"genome_id": best_genome.genome_id, **finalist_metrics, **finalist_fit, "train": finalist_train}
 
     old_eval = None
+    old_canary = None
     old_loaded = _load_champion(champion_dir, cfg.vocab_size)
     if old_loaded is not None:
         old_genome, old_model = old_loaded
         old_eval = {"genome_id": old_genome.genome_id, **evaluate_model(old_model, old_genome, test, cfg.vocab_size, latency_repeats=12)}
         old_eval.update(fitness(old_eval, cfg))
+        if canary:
+            old_canary = evaluate_model(old_model, old_genome, canary, cfg.vocab_size, latency_repeats=3)
 
     promotion_trials = []
     votes = 0
+    trial_state_paths: dict[int, str] = {}
     for trial in range(cfg.promotion_repeats):
-        trial_model, trial_train = train_model(best_genome, train + val, cfg.finalist_epochs, cfg.vocab_size, cfg.seed + 777_777 + trial * 97)
+        trial_model, trial_train = train_model(
+            best_genome,
+            train + val,
+            cfg.finalist_epochs,
+            cfg.vocab_size,
+            cfg.seed + 777_777 + trial * 97,
+            cfg.replay_balance_power,
+        )
         trial_metrics = evaluate_model(trial_model, best_genome, test, cfg.vocab_size, latency_repeats=8)
         trial_fit = fitness(trial_metrics, cfg)
-        trial_row = {"trial": trial, "genome_id": best_genome.genome_id, **trial_metrics, **trial_fit, "train": trial_train}
-        trial_promote, trial_reason = _promotion_decision(trial_row, old_eval, cfg)
-        trial_row["promotion_vote"] = trial_promote
-        trial_row["promotion_reason"] = trial_reason
+        trial_canary = evaluate_model(trial_model, best_genome, canary, cfg.vocab_size, latency_repeats=3) if canary else {}
+        primary_ok, primary_reason = _promotion_decision({**trial_metrics, **trial_fit}, old_eval, cfg)
+        canary_ok, canary_reason = _canary_decision(trial_canary, old_canary, cfg)
+        trial_promote = primary_ok and canary_ok
+        state_path = run_dir / f"promotion-trial-{trial:02d}.pt"
+        torch.save(trial_model.to("cpu").state_dict(), state_path)
+        trial_state_paths[trial] = str(state_path)
+        trial_row = {
+            "trial": trial,
+            "genome_id": best_genome.genome_id,
+            **trial_metrics,
+            **trial_fit,
+            "train": trial_train,
+            "canary": trial_canary,
+            "promotion_vote": trial_promote,
+            "promotion_reason": f"{primary_reason}; {canary_reason}",
+            "state_path": str(state_path),
+        }
         promotion_trials.append(trial_row)
         votes += int(trial_promote)
+
     promote = votes >= cfg.min_promotion_votes
     reason = f"{votes}/{cfg.promotion_repeats} independent promotion votes; " + ("majority gate passed" if promote else "majority gate failed")
-    candidate_final = max(promotion_trials, key=lambda row: row["f1"])
+    eligible = [row for row in promotion_trials if row["promotion_vote"]] or promotion_trials
+    candidate_final = max(eligible, key=lambda row: (row["f1"], -row["brier"]))
+    best_state = torch.load(trial_state_paths[int(candidate_final["trial"])], map_location="cpu", weights_only=True)
+    selected_model = build_model(best_genome, vocab_size=cfg.vocab_size)
+    selected_model.load_state_dict(best_state)
+    selected_model.eval()
+    candidate_final["source_families"] = evaluate_source_families(selected_model, best_genome, test, cfg.vocab_size)
 
     if promote:
         champion_dir.mkdir(parents=True, exist_ok=True)
@@ -422,9 +450,19 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         tmp_dir.mkdir(parents=True)
         _save_json(tmp_dir / "genome.json", best_genome.to_dict())
-        torch.save(finalist_model.to("cpu").state_dict(), tmp_dir / "model.pt")
+        torch.save(best_state, tmp_dir / "model.pt")
         _save_json(tmp_dir / "metrics.json", candidate_final)
-        _save_json(tmp_dir / "provenance.json", {"run_id": run_id, "promoted_at": time.time(), "reason": reason, "dataset_records": len(records), "class_counts": counts, "mode": cfg.mode, "abstain_threshold": cfg.abstain_threshold})
+        _save_json(tmp_dir / "provenance.json", {
+            "run_id": run_id,
+            "promoted_at": time.time(),
+            "reason": reason,
+            "dataset_records": len(records),
+            "class_counts": counts,
+            "source_families": source_family_counts(records),
+            "canary": canary_info,
+            "mode": cfg.mode,
+            "abstain_threshold": cfg.abstain_threshold,
+        })
         backup = state_dir / ".champion-old"
         shutil.rmtree(backup, ignore_errors=True)
         if champion_dir.exists() and any(champion_dir.iterdir()):
