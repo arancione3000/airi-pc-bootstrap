@@ -41,8 +41,15 @@ class TaskEngine:
         if row is None: raise KeyError(task_id or self.state.get("active"))
         node=next((n for n in row["nodes"] if n["id"]==node_id), None)
         if node is None: raise KeyError(node_id)
-        node.update({"status":status,"output":output,"error":error,"checkpoint":checkpoint,"updated_at":now()})
-        if status=="failed": node["retry_count"]+=1
+        previous_status = node.get("status")
+        changes = {"status":status,"error":error,"updated_at":now()}
+        if output is not None:
+            changes["output"] = output
+        if checkpoint is not None:
+            changes["checkpoint"] = checkpoint
+        node.update(changes)
+        if status=="failed" and previous_status!="failed":
+            node["retry_count"]+=1
         if status == "completed":
             for nxt in row["nodes"]:
                 if nxt["status"]=="pending" and all(next(m for m in row["nodes"] if m["id"]==d)["status"]=="completed" for d in nxt["depends_on"]):
