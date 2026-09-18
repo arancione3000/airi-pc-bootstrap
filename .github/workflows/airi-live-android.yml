@@ -12,6 +12,7 @@ on:
       - 'computer/control_plane/screen_share.py'
       - 'computer/control_plane/remote_task_runner.py'
       - 'scripts/airi_live_emulator_backend.py'
+      - 'scripts/airi_live_android_emulator_test.sh'
       - 'tests/test_live_telemetry.py'
       - '.github/workflows/airi-live-android.yml'
   pull_request:
@@ -22,6 +23,7 @@ on:
       - 'computer/control_plane/task_engine.py'
       - 'computer/control_plane/job_manager.py'
       - 'tests/test_live_telemetry.py'
+      - 'scripts/airi_live_android_emulator_test.sh'
       - '.github/workflows/airi-live-android.yml'
   workflow_dispatch:
 
@@ -229,6 +231,8 @@ jobs:
             airi-live-emulator-card.png
             airi-live-emulator-fullscreen.png
             airi-ui.xml
+            airi-live-emulator-no-pov.png
+            airi-android-logcat.txt
           if-no-files-found: warn
 
       - name: Stop Airi-PC POV backend
