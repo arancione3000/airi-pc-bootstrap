@@ -97,10 +97,11 @@ def live_emit(
 ) -> bool:
     """Publish redacted operational metadata without blocking the active task."""
     # Automated tests/CI must never create user-visible live activity.
+    allow_ci = os.environ.get("AIRI_LIVE_ALLOW_CI", "").strip().lower() in {"1", "true", "yes", "on"}
     if (
         not _ENABLED
         or os.environ.get("PYTEST_CURRENT_TEST")
-        or os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
+        or (os.environ.get("GITHUB_ACTIONS", "").lower() == "true" and not allow_ci)
     ):
         return False
     sha = source_sha()
