@@ -150,10 +150,25 @@ def _ensure_display() -> None:
 
 
 def _capture_jpeg() -> bytes:
-    from server import mouse_position, screenshot_image
-
-    img = screenshot_image().convert("RGB")
+    # MSS reads the X11/Xvfb framebuffer directly. ImageGrab can return a
+    # decoded-but-black image on headless runners even while the desktop is live.
+    img = None
     try:
+        import mss
+        display = os.environ.get("DISPLAY")
+        kwargs = {"display": display} if display else {}
+        with mss.mss(**kwargs) as sct:
+            monitors = sct.monitors
+            if len(monitors) < 2:
+                raise RuntimeError("MSS found no drawable X11 monitor")
+            shot = sct.grab(monitors[1])
+            img = Image.frombytes("RGB", shot.size, shot.rgb)
+    except Exception:
+        from server import screenshot_image
+        img = screenshot_image().convert("RGB")
+
+    try:
+        from server import mouse_position
         pos = mouse_position()
         draw = ImageDraw.Draw(img)
         x, y = int(pos["x"]), int(pos["y"])
@@ -161,6 +176,7 @@ def _capture_jpeg() -> bytes:
         draw.ellipse((x - 3, y - 3, x + 3, y + 3), fill=(255, 138, 0))
     except Exception:
         pass
+
     if img.width > 960:
         scale = 960 / img.width
         img = img.resize((960, int(img.height * scale)), Image.Resampling.LANCZOS)
