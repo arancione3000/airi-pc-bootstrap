@@ -174,3 +174,51 @@ def predict(text: str) -> dict[str, Any]:
         return {"ok": False, "error": "torch_unavailable", "hint": "run airi-evolve setup"}
     from .engine import predict_text
     return {"ok": True, **predict_text(STATE, text)}
+
+
+
+def bootstrap_liar(*, auto_evolve: bool = True, mode: str = "safe") -> dict[str, Any]:
+    from .liar import bootstrap
+    result = bootstrap(STATE)
+    started = None
+    if result.get("ok") and auto_evolve:
+        st = status()
+        if st["dataset_records"] >= 40 and min(st["class_counts"].values()) >= 4 and not st["running"]:
+            started = start(mode=mode, auto_setup=True)
+    return {**result, "evolution_started": started}
+
+
+def queue_add(claim: str, metadata: dict | None = None) -> dict[str, Any]:
+    from .pipeline import queue_claim
+    return queue_claim(STATE, claim, metadata)
+
+
+def queue_items(status_filter: str | None = None, limit: int = 100) -> list[dict]:
+    from .pipeline import queue_list
+    return queue_list(STATE, status=status_filter, limit=limit)
+
+
+def queue_verify(qid: str, urls: list[str], *, min_sources: int = 2, auto_evolve: bool = True, mode: str = "safe", trigger_samples: int = DEFAULT_TRIGGER) -> dict[str, Any]:
+    from .pipeline import verify_queued_claim
+    result = verify_queued_claim(STATE, qid, urls, min_sources=min_sources, auto_ingest=True)
+    started = None
+    st = status()
+    ingest_row = result.get("ingest") or {}
+    if auto_evolve and result.get("status") == "verified" and not ingest_row.get("duplicate") and st["pending_verified_samples"] >= max(1, int(trigger_samples)) and st["dataset_records"] >= 40 and min(st["class_counts"].values()) >= 4 and not st["running"]:
+        started = start(mode=mode, auto_setup=True)
+    return {**result, "evolution_started": started, "evolution_status": st}
+
+
+def pipeline_status() -> dict[str, Any]:
+    from .pipeline import pipeline_status as read_pipeline
+    return {**read_pipeline(STATE), "evolution": status()}
+
+
+def report(history_limit: int = 20) -> dict[str, Any]:
+    from .artifacts import report as build_report
+    return build_report(STATE, history_limit=history_limit)
+
+
+def export(out_path: str | None = None, include_torchscript: bool = False) -> dict[str, Any]:
+    from .artifacts import export_bundle
+    return export_bundle(STATE, Path(out_path) if out_path else None, include_torchscript=include_torchscript)
