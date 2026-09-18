@@ -14,7 +14,7 @@ If automatic research cannot establish consensus, leave the claim pending. Use A
 
 Use `safe` mode by default. Use `experimental` only when broader architecture search and additional compute are acceptable. Champion promotion is multi-seed and majority-gated. Conflicting verified labels are quarantined instead of learned.
 
-Use `report` for macro-F1, per-class F1, parameter count, model size and CPU latency history. Use `export --torchscript` for a portable champion bundle; if TorchScript tracing is unsupported for the evolved architecture, keep the regular state-dict bundle and report the tracing error.
+Use `report` for macro-F1, per-class F1, parameter count, model size, CPU latency, drift status and edge metadata. Predictions may return `uncertain` below the champion abstention threshold; do not force an uncertain result into fake/real. Use `drift` to inspect performance on post-champion verified examples. Use `edge-quantize` before edge deployment; keep the INT8 model only when the measured gate accepts its quality/efficiency trade-off. Use `export --torchscript` for a portable champion bundle; accepted INT8 artifacts are included automatically.
 
 The output is a learned reliability estimate, not proof of factual truth. For consequential claims, surface the supporting fact-check sources to the user.
 
@@ -23,6 +23,9 @@ The output is a learned reliability estimate, not proof of factual truth. For co
 - computer_evolution_bootstrap_liar
 - computer_evolution_factcheck
 - computer_evolution_predict
+- computer_evolution_predict_edge
+- computer_evolution_drift
+- computer_evolution_edge_quantize
 - computer_evolution_report
 - computer_evolution_export
 - computer_evolution_queue_add
