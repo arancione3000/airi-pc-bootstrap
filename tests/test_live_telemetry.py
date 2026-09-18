@@ -34,3 +34,10 @@ def test_task_engine_emits_live_state(tmp_path, monkeypatch):
     assert any(args[1] == 'Task started' for args, _ in events)
     assert any(args[1] == 'Step completed' for args, _ in events)
     assert any(args[1] == 'Task completed' for args, _ in events)
+
+
+def test_live_session_id_is_non_empty():
+    from control_plane.live_telemetry import session_id
+    value = session_id()
+    assert isinstance(value, str)
+    assert len(value) >= 8

@@ -9,7 +9,7 @@ from typing import Any
 from .github_access import commit as git_commit
 from .github_access import push as git_push
 from .github_access import status as git_status
-from .live_telemetry import live_emit, live_flush
+from .live_telemetry import live_emit, live_flush, session_id
 from .orchestrator import ControlPlane
 
 ROOT = Path(os.environ.get("AIRI_ROOT") or os.environ.get("AIRIPC_WORKSPACE_ROOT") or ".").resolve()
@@ -56,6 +56,13 @@ def run_task(spec: dict[str, Any]) -> dict[str, Any]:
 
     live_emit(
         "runtime",
+        "Airi-PC session online",
+        session_id(),
+        "running",
+        dedupe_key="remote-task:session:online",
+    )
+    live_emit(
+        "runtime",
         "Airi autonomous task",
         f"{len(steps)} planned steps",
         "running",
@@ -84,6 +91,7 @@ def run_task(spec: dict[str, Any]) -> dict[str, Any]:
             "failed",
             dedupe_key="remote-task:runner:failed",
         )
+        live_flush(5.0)
         return {"ok": False, "execution": result, "task": task_snapshot}
 
     commit_paths = [str(x) for x in (spec.get("commit_paths") or scope)]

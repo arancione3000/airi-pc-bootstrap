@@ -61,6 +61,7 @@ data class UiState(
     val error: String? = null,
     val lastSeenMs: Long = 0,
     val sessionId: String = "",
+    val sessionWatermarkMs: Long = 0,
 )
 
 class AiriLiveClient {
@@ -160,13 +161,27 @@ class AiriLiveClient {
                 if (parsed.isEmpty()) continue
                 val unique = parsed.filter { seen.add(it.id) }
                 if (unique.isEmpty()) continue
-                val merged = (unique + state.events).sortedByDescending { it.ts }.take(250)
-                val newestSha = unique.firstNotNullOfOrNull { it.sourceSha }
-                val newestSession = unique.firstNotNullOfOrNull { it.sessionId }
+                val candidate = unique
+                    .filter { !it.sessionId.isNullOrBlank() }
+                    .maxByOrNull { it.ts }
+                var activeSession = state.sessionId
+                var watermark = state.sessionWatermarkMs
+                if (candidate != null && (activeSession.isBlank() || candidate.ts >= watermark)) {
+                    activeSession = candidate.sessionId.orEmpty()
+                    watermark = candidate.ts
+                }
+                val merged = (unique + state.events).sortedByDescending { it.ts }.take(500)
+                val visible = if (activeSession.isNotBlank()) {
+                    merged.filter { it.sessionId == activeSession }.take(250)
+                } else {
+                    merged.take(250)
+                }
+                val newestSha = visible.firstNotNullOfOrNull { it.sourceSha }
                 state = state.copy(
-                    events = merged,
+                    events = visible,
                     sourceSha = newestSha ?: state.sourceSha,
-                    sessionId = newestSession ?: state.sessionId,
+                    sessionId = activeSession,
+                    sessionWatermarkMs = watermark,
                     lastSeenMs = System.currentTimeMillis(),
                     connected = true,
                     error = null,
@@ -288,7 +303,7 @@ private fun CurrentCard(state: UiState) {
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                current?.title ?: if (state.connected) "Canale pronto · attendo Airi-PC…" else "Connessione al relay…",
+                current?.title ?: if (state.connected) "Canale pronto · attendo una sessione Airi-PC…" else "Connessione al relay…",
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp,
             )
@@ -378,7 +393,7 @@ private fun EmptyState(state: UiState, modifier: Modifier = Modifier) {
             Spacer(Modifier.height(8.dp))
             Text(if (state.connected) "Canale Airi Live collegato" else "Collegamento al relay…", fontWeight = FontWeight.Bold)
             Text(
-                state.error ?: if (state.connected) "Quando Airi-PC emette un evento comparirà qui." else "Riconnessione automatica.",
+                state.error ?: if (state.connected) "Ogni ricostruzione di Airi-PC viene riconosciuta automaticamente." else "Riconnessione automatica.",
                 color = Muted,
                 fontSize = 13.sp,
             )
@@ -389,8 +404,9 @@ private fun EmptyState(state: UiState, modifier: Modifier = Modifier) {
 @Composable
 private fun Footer(state: UiState) {
     val text = when {
+        state.connected && state.lastSeenMs > 0 && state.sessionId.isNotBlank() -> "LIVE · sessione ${state.sessionId.takeLast(10)}"
         state.connected && state.lastSeenMs > 0 -> "LIVE · eventi Airi-PC ricevuti"
-        state.connected -> "RELAY ONLINE · in attesa del primo evento Airi-PC"
+        state.connected -> "RELAY ONLINE · in attesa di una sessione Airi-PC"
         state.error != null -> "Riconnessione automatica"
         else -> "Connessione automatica"
     }
