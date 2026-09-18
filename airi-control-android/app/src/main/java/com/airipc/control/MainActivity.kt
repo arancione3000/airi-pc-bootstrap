@@ -15,24 +15,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -47,8 +34,10 @@ class MainActivity : ComponentActivity() {
     private val projectionLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-                val service = PhoneControlService.startIntent(this, result.resultCode, result.data!!)
-                ContextCompat.startForegroundService(this, service)
+                ContextCompat.startForegroundService(
+                    this,
+                    PhoneControlService.startIntent(this, result.resultCode, result.data!!),
+                )
             } else {
                 Toast.makeText(this, "Condivisione schermo annullata", Toast.LENGTH_SHORT).show()
             }
@@ -69,13 +58,9 @@ class MainActivity : ComponentActivity() {
                         active = active,
                         accessibilityEnabled = accessibilityEnabled,
                         pairingCode = PairingSecret.text(this),
-                        onEnableAccessibility = {
-                            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                        },
+                        onEnableAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                         onStart = { beginControl() },
-                        onStop = {
-                            startService(PhoneControlService.stopIntent(this))
-                        },
+                        onStop = { startService(PhoneControlService.stopIntent(this)) },
                         onCopyPairing = { copyPairingCode() },
                     )
                 }
@@ -99,8 +84,9 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             return
         }
-        val manager = getSystemService(MediaProjectionManager::class.java)
-        projectionLauncher.launch(manager.createScreenCaptureIntent())
+        projectionLauncher.launch(
+            getSystemService(MediaProjectionManager::class.java).createScreenCaptureIntent()
+        )
     }
 
     private fun maybeRequestNotifications() {
@@ -112,8 +98,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun copyPairingCode() {
-        val clipboard = getSystemService(ClipboardManager::class.java)
-        clipboard.setPrimaryClip(ClipData.newPlainText("Airi Control pairing", PairingSecret.text(this)))
+        getSystemService(ClipboardManager::class.java).setPrimaryClip(
+            ClipData.newPlainText("Airi Control pairing", PairingSecret.text(this))
+        )
         Toast.makeText(this, "Codice copiato", Toast.LENGTH_SHORT).show()
     }
 
@@ -130,7 +117,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun ControlScreen(
     active: Boolean,
     accessibilityEnabled: Boolean,
@@ -140,6 +127,8 @@ private fun ControlScreen(
     onStop: () -> Unit,
     onCopyPairing: () -> Unit,
 ) {
+    var targetHit by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier.fillMaxSize().padding(28.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -159,15 +148,9 @@ private fun ControlScreen(
         ) {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("ACCESSIBILITÀ", color = Color(0xFFFF8A00), fontWeight = FontWeight.Bold)
-                Text(
-                    if (accessibilityEnabled) "Abilitata ✓" else "Da abilitare",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                )
+                Text(if (accessibilityEnabled) "Abilitata ✓" else "Da abilitare", color = Color.White)
                 if (!accessibilityEnabled) {
-                    Button(onClick = onEnableAccessibility) {
-                        Text("APRI IMPOSTAZIONI ACCESSIBILITÀ")
-                    }
+                    Button(onClick = onEnableAccessibility) { Text("APRI IMPOSTAZIONI ACCESSIBILITÀ") }
                 }
             }
         }
@@ -180,11 +163,7 @@ private fun ControlScreen(
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("CODICE DI ABBINAMENTO", color = Color(0xFFFF8A00), fontWeight = FontWeight.Bold)
                 Text(pairingCode, color = Color.White, fontSize = 14.sp)
-                Text(
-                    "Tienilo privato. Serve una sola volta per autorizzare Airi-PC.",
-                    color = Color(0xFFAAA5B0),
-                    fontSize = 13.sp,
-                )
+                Text("Tienilo privato. Serve una sola volta per autorizzare Airi-PC.", color = Color(0xFFAAA5B0), fontSize = 13.sp)
                 Button(onClick = onCopyPairing) { Text("COPIA CODICE") }
             }
         }
@@ -208,19 +187,27 @@ private fun ControlScreen(
             }
         }
 
-        Spacer(Modifier.height(4.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(120.dp)
-                .background(Color(0xFF17171D), RoundedCornerShape(22.dp)),
+                .background(
+                    if (targetHit) Color(0xFF275F42) else Color(0xFF17171D),
+                    RoundedCornerShape(22.dp),
+                )
+                .clickable { targetHit = !targetHit },
             contentAlignment = Alignment.Center,
         ) {
-            Text("Area test controllo", color = Color(0xFFB7B2BD), fontSize = 18.sp)
+            Text(
+                if (targetHit) "TOCCO RICEVUTO" else "Area test controllo",
+                color = if (targetHit) Color(0xFF67D69A) else Color(0xFFB7B2BD),
+                fontSize = 18.sp,
+                fontWeight = if (targetHit) FontWeight.Bold else FontWeight.Normal,
+            )
         }
 
         Text(
-            "Quando STOP è premuto, il servizio remoto e la condivisione schermo vengono chiusi. " +
+            "STOP chiude controllo remoto e condivisione schermo. " +
                 "L'app non può sbloccare il telefono né scrivere nei campi password.",
             color = Color(0xFF8F8A95),
             fontSize = 13.sp,
