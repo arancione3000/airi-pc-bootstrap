@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 
-def test_live_topic_is_stable_across_commits():
-    from control_plane.live_telemetry import STABLE_TOPIC, topic_for
+def test_live_topic_is_stable_across_commits_and_matches_manifest():
+    import json
+    from control_plane.live_telemetry import CONFIG_PATH, STABLE_TOPIC, session_id, topic_for
+
+    manifest = json.loads(CONFIG_PATH.read_text(encoding='utf-8'))
     a = topic_for('a' * 40)
     b = topic_for('b' * 40)
-    assert a == b == STABLE_TOPIC
+    assert a == b == STABLE_TOPIC == manifest['topic']
+    assert int(manifest['protocol']) == 2
     assert a.startswith('airi-live-')
     assert len(a) >= len('airi-live-') + 32
+    assert session_id()
 
 
 def test_live_telemetry_redacts_secrets():
