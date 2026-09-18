@@ -11,6 +11,7 @@ on:
       - 'computer/control_plane/job_manager.py'
       - 'computer/control_plane/screen_share.py'
       - 'computer/control_plane/remote_task_runner.py'
+      - 'scripts/airi_live_emulator_backend.py'
       - 'tests/test_live_telemetry.py'
       - '.github/workflows/airi-live-android.yml'
   pull_request:
@@ -91,10 +92,10 @@ jobs:
           import urllib.request
           from control_plane.live_telemetry import topic_for
 
-          title = "Airi Live 1.3 ready"
+          title = "Airi Live 1.4 ready"
           payload = {
               "v": 1,
-              "id": "airi-live-v1-3-smoke",
+              "id": "airi-live-v1-4-smoke",
               "ts": int(time.time()),
               "kind": "runtime",
               "title": title,
@@ -103,7 +104,7 @@ jobs:
               "task_id": "",
               "node_id": "",
               "source_sha": "smoke-test",
-              "session_id": "ci-smoke-v1.3",
+              "session_id": "ci-smoke-v1.4",
               "protocol": 2,
           }
           topic = topic_for()
@@ -112,7 +113,7 @@ jobs:
               f"https://ntfy.sh/{topic}",
               data=body,
               method="POST",
-              headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "Airi-Live-CI/1.3"},
+              headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "Airi-Live-CI/1.4"},
           )
           with urllib.request.urlopen(req, timeout=20) as response:
               print("publish_status=", response.status)
@@ -139,21 +140,174 @@ jobs:
           assert found, "published telemetry was not readable from relay after retries"
           print("AIRI_LIVE_RELAY_SMOKE=PASS")
           PY
-      - name: Publish installable Airi Live 1.3 release
+      - name: Publish installable Airi Live 1.4 release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="airi-live-v1.3.0"
+          TAG="airi-live-v1.4.0"
           APK="airi-live-android/app/build/outputs/apk/debug/app-debug.apk"
-          OUT="Airi-Live-v1.3.0.apk"
+          OUT="Airi-Live-v1.4.0.apk"
           cp "$APK" "$OUT"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$OUT" --clobber
           else
             gh release create "$TAG" "$OUT" \
               --target "$GITHUB_SHA" \
-              --title "Airi Live v1.3.0" \
-              --notes "Encrypted no-account POV screen streaming across Airi-PC rebuilds, session-aware activity timeline, stable relay, and end-to-end verification."
+              --title "Airi Live v1.4.0" \
+              --notes "Emulator-verified encrypted Airi-PC POV, continuous MJPEG streaming around 8-10 FPS, session-aware timeline, and zero-config rebuild discovery."
           fi
+
+
+  emulator-pov-e2e:
+    name: Android emulator POV end-to-end
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      PYTHONPATH: ${{ github.workspace }}/computer
+      AIRI_ROOT: ${{ github.workspace }}
+      AIRIPC_WORKSPACE_ROOT: ${{ github.workspace }}
+      AIRI_LIVE_TELEMETRY: '1'
+      AIRI_LIVE_ALLOW_CI: '1'
+      AIRI_SCREEN_SHARE: '1'
+      AIRI_LIVE_SESSION_ID: android-emu-${{ github.run_id }}-${{ github.run_attempt }}
+      DISPLAY: ':99'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: Airi-Live-Android
+          path: emulator-apk
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Airi-PC POV dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xvfb xterm x11-xserver-utils
+
+      - name: Start graphical Airi-PC POV backend
+        run: |
+          set -euo pipefail
+          Xvfb :99 -screen 0 1280x800x24 -ac >/tmp/airi-emu-xvfb.log 2>&1 &
+          echo $! >/tmp/airi-emu-xvfb.pid
+          sleep 1
+          DISPLAY=:99 xsetroot -solid '#00ffff'
+          DISPLAY=:99 xterm -geometry 88x28+120+90 -bg '#101014' -fg '#ff8a00' -title 'Airi-PC POV E2E' \
+            -e bash -lc 'while true; do printf "\033c\n  AIRI-PC POV E2E\n\n  LIVE DESKTOP -> ANDROID\n\n  %s\n" "$(date -u +%H:%M:%S.%3N)"; sleep 0.10; done' \
+            >/tmp/airi-emu-xterm.log 2>&1 &
+          echo $! >/tmp/airi-emu-xterm.pid
+          python scripts/airi_live_emulator_backend.py >/tmp/airi-emu-backend.log 2>&1 &
+          echo $! >/tmp/airi-emu-backend.pid
+          for i in $(seq 1 90); do
+            if grep -q 'AIRI_ANDROID_EMULATOR_BACKEND=READY' /tmp/airi-emu-backend.log; then
+              cat /tmp/airi-emu-backend.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/airi-emu-backend.pid)" 2>/dev/null; then
+              cat /tmp/airi-emu-backend.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/airi-emu-backend.log
+          exit 1
+
+      - name: Enable KVM access
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+          fi
+
+      - name: Run APK in Android emulator and verify POV pixels
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            set -euo pipefail
+            APK="$(find emulator-apk -name '*.apk' -type f | head -n1)"
+            test -n "$APK"
+            adb install -r "$APK"
+            adb shell am force-stop com.airipc.live
+            adb shell am start -n com.airipc.live/.MainActivity
+
+            found=0
+            for i in $(seq 1 24); do
+              sleep 3
+              adb shell uiautomator dump /sdcard/airi.xml >/dev/null 2>&1 || true
+              adb pull /sdcard/airi.xml airi-ui.xml >/dev/null 2>&1 || true
+              if grep -q 'POV Airi-PC' airi-ui.xml 2>/dev/null; then
+                found=1
+                break
+              fi
+            done
+            test "$found" -eq 1
+
+            adb exec-out screencap -p > airi-live-emulator-card.png
+
+            python3 - <<'PY'
+            from PIL import Image
+            img = Image.open("airi-live-emulator-card.png").convert("RGB")
+            cyan = sum(1 for r,g,b in img.getdata() if r < 100 and g > 150 and b > 150)
+            print("remote_cyan_pixels=", cyan)
+            assert cyan > 800, "POV card exists but remote desktop pixels were not rendered"
+            print("AIRI_ANDROID_POV_PIXEL_SMOKE=PASS")
+            PY
+
+            adb shell uiautomator dump /sdcard/airi.xml >/dev/null 2>&1
+            adb pull /sdcard/airi.xml airi-ui.xml >/dev/null 2>&1
+            python3 - <<'PY' > /tmp/airi-tap.txt
+            import re
+            text=open("airi-ui.xml",encoding="utf-8").read()
+            m=re.search(r'text="SCHERMO INTERO"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',text)
+            if not m:
+                raise SystemExit("full-screen button not found")
+            x1,y1,x2,y2=map(int,m.groups())
+            print((x1+x2)//2, (y1+y2)//2)
+            PY
+            read X Y < /tmp/airi-tap.txt
+            adb shell input tap "$X" "$Y"
+            sleep 3
+            adb exec-out screencap -p > airi-live-emulator-fullscreen.png
+
+            python3 - <<'PY'
+            from PIL import Image
+            img = Image.open("airi-live-emulator-fullscreen.png").convert("RGB")
+            cyan = sum(1 for r,g,b in img.getdata() if r < 100 and g > 150 and b > 150)
+            print("fullscreen_remote_cyan_pixels=", cyan)
+            assert cyan > 4000, "full-screen POV did not contain the remote desktop"
+            print("AIRI_ANDROID_POV_FULLSCREEN_SMOKE=PASS")
+            PY
+
+      - name: Upload Android emulator POV screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Airi-Live-Android-POV-Screenshots
+          path: |
+            airi-live-emulator-card.png
+            airi-live-emulator-fullscreen.png
+            airi-ui.xml
+          if-no-files-found: warn
+
+      - name: Stop Airi-PC POV backend
+        if: always()
+        run: |
+          test ! -f /tmp/airi-emu-backend.log || cat /tmp/airi-emu-backend.log
+          test ! -f /tmp/airi-emu-backend.pid || kill "$(cat /tmp/airi-emu-backend.pid)" 2>/dev/null || true
+          test ! -f /tmp/airi-emu-xterm.pid || kill "$(cat /tmp/airi-emu-xterm.pid)" 2>/dev/null || true
+          test ! -f /tmp/airi-emu-xvfb.pid || kill "$(cat /tmp/airi-emu-xvfb.pid)" 2>/dev/null || true

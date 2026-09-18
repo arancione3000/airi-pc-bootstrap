@@ -126,6 +126,7 @@ class AiriLiveClient {
         .build()
     private var streamCall: Call? = null
     private var scope: CoroutineScope? = null
+    private var viewerKeyJob: Job? = null
     private val viewerIdentity by lazy { ensureViewerIdentity() }
 
     fun start(onState: (UiState) -> Unit) {
@@ -139,6 +140,14 @@ class AiriLiveClient {
                     val config = fetchLiveConfig()
                     val sha = runCatching { fetchMainSha() }.getOrDefault("")
                     publishViewerKey(config)
+                    if (viewerKeyJob?.isActive != true) {
+                        viewerKeyJob = scope?.launch {
+                            while (isActive) {
+                                delay(45_000)
+                                runCatching { publishViewerKey(config) }
+                            }
+                        }
+                    }
                     state = state.copy(sourceSha = sha, topic = config.topic, error = null)
                     onState(state)
                     state = stream(config, state, onState)
@@ -156,6 +165,8 @@ class AiriLiveClient {
     fun stop() {
         streamCall?.cancel()
         streamCall = null
+        viewerKeyJob?.cancel()
+        viewerKeyJob = null
         scope?.cancel()
         scope = null
     }
@@ -164,7 +175,7 @@ class AiriLiveClient {
         val req = Request.Builder()
             .url(GITHUB_BRANCH)
             .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "Airi-Live-Android/1.3")
+            .header("User-Agent", "Airi-Live-Android/1.4")
             .build()
         client.newCall(req).execute().use { r ->
             if (!r.isSuccessful) error("GitHub ${r.code}")
@@ -177,7 +188,7 @@ class AiriLiveClient {
         return runCatching {
             val req = Request.Builder()
                 .url(LIVE_CONFIG_URL)
-                .header("User-Agent", "Airi-Live-Android/1.3")
+                .header("User-Agent", "Airi-Live-Android/1.4")
                 .build()
             client.newCall(req).execute().use { r ->
                 if (!r.isSuccessful) error("Airi Live config ${r.code}")
@@ -201,7 +212,7 @@ class AiriLiveClient {
             .toString()
         val req = Request.Builder()
             .url("${config.relayBase}/${config.topic}")
-            .header("User-Agent", "Airi-Live-Android/1.3")
+            .header("User-Agent", "Airi-Live-Android/1.4")
             .post(payload.toRequestBody("text/plain; charset=utf-8".toMediaType()))
             .build()
         client.newCall(req).execute().use { r ->
@@ -215,7 +226,7 @@ class AiriLiveClient {
         onState(state)
         val req = Request.Builder()
             .url("${config.relayBase}/$topic/json?since=${config.history}")
-            .header("User-Agent", "Airi-Live-Android/1.3")
+            .header("User-Agent", "Airi-Live-Android/1.4")
             .build()
         val call = client.newCall(req)
         streamCall = call

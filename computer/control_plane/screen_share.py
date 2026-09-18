@@ -170,7 +170,7 @@ def _capture_jpeg() -> bytes:
 
 
 class _ViewerHandler(BaseHTTPRequestHandler):
-    server_version = "AiriScreen/1.0"
+    server_version = "AiriScreen/1.1"
 
     def _authorized(self, token: str) -> bool:
         expected = getattr(self.server, "airi_token", "")
@@ -188,7 +188,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parts = [p for p in self.path.split("?", 1)[0].split("/") if p]
-        if len(parts) != 2 or parts[0] not in {"view", "frame", "health"}:
+        if len(parts) != 2 or parts[0] not in {"view", "frame", "stream", "health"}:
             self._send(404, "text/plain; charset=utf-8", b"not found")
             return
         kind, token_part = parts
@@ -207,6 +207,33 @@ class _ViewerHandler(BaseHTTPRequestHandler):
                 return
             self._send(200, "image/jpeg", body)
             return
+        if kind == "stream":
+            boundary = b"airiframe"
+            self.send_response(200)
+            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=airiframe")
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            target_interval = 0.10
+            try:
+                while True:
+                    started = time.monotonic()
+                    body = _capture_jpeg()
+                    self.wfile.write(b"--" + boundary + b"\r\n")
+                    self.wfile.write(b"Content-Type: image/jpeg\r\n")
+                    self.wfile.write(f"Content-Length: {len(body)}\r\n\r\n".encode("ascii"))
+                    self.wfile.write(body)
+                    self.wfile.write(b"\r\n")
+                    self.wfile.flush()
+                    remaining = target_interval - (time.monotonic() - started)
+                    if remaining > 0:
+                        time.sleep(remaining)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                pass
+            except Exception:
+                pass
+            return
         html = f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Airi-PC POV</title><style>
@@ -215,15 +242,8 @@ body{{display:flex;align-items:center;justify-content:center}}
 #screen{{width:100%;height:100%;object-fit:contain;background:#050507}}
 #badge{{position:fixed;top:8px;left:8px;padding:5px 8px;border-radius:10px;background:#000a;color:#5ed390;
 font:600 12px system-ui,sans-serif;letter-spacing:.04em}}
-</style></head><body><img id="screen" alt="Airi-PC live screen"><div id="badge">AIRI-PC · LIVE POV</div>
-<script>
-const img=document.getElementById('screen');
-let timer=null;
-function tick(){{img.src='/frame/{token}.jpg?t='+Date.now();}}
-img.onload=()=>{{if(!timer)timer=setInterval(tick,320);}};
-img.onerror=()=>{{setTimeout(tick,900);}};
-tick();
-</script></body></html>"""
+</style></head><body><img id="screen" src="/stream/{token}" alt="Airi-PC live screen"><div id="badge">AIRI-PC · LIVE POV · MJPEG</div>
+</body></html>"""
         self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
 
     def log_message(self, fmt: str, *args) -> None:
@@ -285,6 +305,7 @@ class ScreenShare:
     def _external_self_test(self) -> None:
         health = f"{self.tunnel_url}/health/{self.token}"
         frame = f"{self.tunnel_url}/frame/{self.token}.jpg"
+        stream = f"{self.tunnel_url}/stream/{self.token}"
         last = None
         for _ in range(8):
             try:
@@ -297,6 +318,17 @@ class ScreenShare:
                     ctype = response.headers.get("content-type", "")
                     if response.status != 200 or "image/jpeg" not in ctype or len(data) < 2000:
                         raise RuntimeError("public frame smoke test failed")
+                with urllib.request.urlopen(stream, timeout=20) as response:
+                    ctype = response.headers.get("content-type", "")
+                    chunk = response.read(120_000)
+                    if (
+                        response.status != 200
+                        or "multipart/x-mixed-replace" not in ctype
+                        or b"--airiframe" not in chunk
+                        or b"Content-Type: image/jpeg" not in chunk
+                        or b"\xff\xd8" not in chunk
+                    ):
+                        raise RuntimeError("public MJPEG smoke test failed")
                 return
             except Exception as exc:
                 last = exc
@@ -333,6 +365,7 @@ class ScreenShare:
         self._start_tunnel()
         self._external_self_test()
         print("AIRI_POV_TUNNEL_SMOKE=PASS", flush=True)
+        print("AIRI_POV_MJPEG_SMOKE=PASS", flush=True)
         self.offer_thread = threading.Thread(target=self._offer_loop, name="airi-screen-offers", daemon=True)
         self.offer_thread.start()
         live_emit("runtime", "POV screen ready", "Encrypted live viewer available for Airi Live", "completed", dedupe_key="screen-share:ready")
