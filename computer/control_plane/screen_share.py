@@ -24,7 +24,7 @@ from .live_telemetry import DEFAULT_RELAY, live_emit, session_id, topic_for
 
 ROOT = Path(os.environ.get("AIRI_ROOT") or os.environ.get("AIRIPC_WORKSPACE_ROOT") or ".").resolve()
 CLOUDFLARED_URL = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
-_TUNNEL_RE = re.compile(r"https://[a-z0-9-]+\\.trycloudflare\\.com", re.I)
+_TUNNEL_RE = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com", re.I)
 
 
 def _relay_base() -> str:
