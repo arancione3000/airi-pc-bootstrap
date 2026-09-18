@@ -29,8 +29,15 @@ import java.util.concurrent.TimeUnit
 
 private const val REPO = "arancione3000/airi-pc-bootstrap"
 private const val GITHUB_BRANCH = "https://api.github.com/repos/$REPO/branches/main"
-private const val NTFY_BASE = "https://ntfy.sh"
-private const val LIVE_TOPIC = "airi-live-09d926b9a4207c660a5f3efa5f50505ef5ff46e8463b3beb"
+private const val FALLBACK_RELAY = "https://ntfy.sh"
+private const val FALLBACK_TOPIC = "airi-live-09d926b9a4207c660a5f3efa5f50505ef5ff46e8463b3beb"
+private const val LIVE_CONFIG_URL = "https://raw.githubusercontent.com/$REPO/main/.ai/airi_live.json"
+
+data class LiveConfig(
+    val relayBase: String = FALLBACK_RELAY,
+    val topic: String = FALLBACK_TOPIC,
+    val history: String = "24h",
+)
 
 data class LiveEvent(
     val id: String,
@@ -42,6 +49,7 @@ data class LiveEvent(
     val taskId: String? = null,
     val nodeId: String? = null,
     val sourceSha: String? = null,
+    val sessionId: String? = null,
 )
 
 data class UiState(
@@ -52,6 +60,7 @@ data class UiState(
     val events: List<LiveEvent> = emptyList(),
     val error: String? = null,
     val lastSeenMs: Long = 0,
+    val sessionId: String = "",
 )
 
 class AiriLiveClient {
@@ -70,10 +79,11 @@ class AiriLiveClient {
             onState(state)
             while (isActive) {
                 try {
+                    val config = fetchLiveConfig()
                     val sha = runCatching { fetchMainSha() }.getOrDefault("")
-                    state = state.copy(sourceSha = sha, topic = LIVE_TOPIC, error = null)
+                    state = state.copy(sourceSha = sha, topic = config.topic, error = null)
                     onState(state)
-                    state = stream(LIVE_TOPIC, state, onState)
+                    state = stream(config, state, onState)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -96,7 +106,7 @@ class AiriLiveClient {
         val req = Request.Builder()
             .url(GITHUB_BRANCH)
             .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "Airi-Live-Android/1.1")
+            .header("User-Agent", "Airi-Live-Android/1.2")
             .build()
         client.newCall(req).execute().use { r ->
             if (!r.isSuccessful) error("GitHub ${r.code}")
@@ -105,12 +115,31 @@ class AiriLiveClient {
         }
     }
 
-    private fun stream(topic: String, initial: UiState, onState: (UiState) -> Unit): UiState {
+    private fun fetchLiveConfig(): LiveConfig {
+        return runCatching {
+            val req = Request.Builder()
+                .url(LIVE_CONFIG_URL)
+                .header("User-Agent", "Airi-Live-Android/1.2")
+                .build()
+            client.newCall(req).execute().use { r ->
+                if (!r.isSuccessful) error("Airi Live config ${r.code}")
+                val obj = JSONObject(r.body?.string().orEmpty())
+                LiveConfig(
+                    relayBase = obj.optString("relay_base", FALLBACK_RELAY).trimEnd('/'),
+                    topic = obj.optString("topic", FALLBACK_TOPIC),
+                    history = obj.optString("history", "24h"),
+                )
+            }
+        }.getOrElse { LiveConfig() }
+    }
+
+    private fun stream(config: LiveConfig, initial: UiState, onState: (UiState) -> Unit): UiState {
+        val topic = config.topic
         var state = initial.copy(connecting = true, connected = false)
         onState(state)
         val req = Request.Builder()
-            .url("$NTFY_BASE/$topic/json?since=24h")
-            .header("User-Agent", "Airi-Live-Android/1.1")
+            .url("${config.relayBase}/$topic/json?since=${config.history}")
+            .header("User-Agent", "Airi-Live-Android/1.2")
             .build()
         val call = client.newCall(req)
         streamCall = call
@@ -133,9 +162,11 @@ class AiriLiveClient {
                 if (unique.isEmpty()) continue
                 val merged = (unique + state.events).sortedByDescending { it.ts }.take(250)
                 val newestSha = unique.firstNotNullOfOrNull { it.sourceSha }
+                val newestSession = unique.firstNotNullOfOrNull { it.sessionId }
                 state = state.copy(
                     events = merged,
                     sourceSha = newestSha ?: state.sourceSha,
+                    sessionId = newestSession ?: state.sessionId,
                     lastSeenMs = System.currentTimeMillis(),
                     connected = true,
                     error = null,
@@ -170,6 +201,7 @@ class AiriLiveClient {
             taskId = o.optString("task_id").ifBlank { null },
             nodeId = o.optString("node_id").ifBlank { null },
             sourceSha = o.optString("source_sha").ifBlank { null },
+            sessionId = o.optString("session_id").ifBlank { null },
         )
     }
 }
@@ -247,7 +279,12 @@ private fun CurrentCard(state: UiState) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("ADESSO", color = Orange, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Spacer(Modifier.weight(1f))
-                Text(if (state.sourceSha.isBlank()) "—" else state.sourceSha.take(8), color = Muted, fontSize = 12.sp)
+                val marker = when {
+                    state.sessionId.isNotBlank() -> state.sessionId.takeLast(12)
+                    state.sourceSha.isNotBlank() -> state.sourceSha.take(8)
+                    else -> "—"
+                }
+                Text(marker, color = Muted, fontSize = 12.sp)
             }
             Spacer(Modifier.height(10.dp))
             Text(
