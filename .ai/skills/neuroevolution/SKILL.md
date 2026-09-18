@@ -12,7 +12,7 @@ For an online claim, prefer the one-shot `scripts/airi-evolve factcheck "<claim>
 
 If automatic research cannot establish consensus, leave the claim pending. Use Airi-PC browser/research to collect additional fact-check URLs, then call `queue-verify`. Never turn the classifier's own prediction into a training label. Never force ambiguous verdicts such as mixed, half-true, misleading, unsupported or missing-context into the binary dataset.
 
-Use `safe` mode by default. Use `experimental` only when broader architecture search and additional compute are acceptable. Champion promotion is multi-seed and majority-gated. Conflicting verified labels are quarantined instead of learned.
+Use `safe` mode by default. Use `experimental` only when broader architecture search and additional compute are acceptable. Champion promotion is multi-seed, majority-gated and protected by a persistent golden canary set that is never used for training. Conflicting verified labels are quarantined instead of learned. Training replay is provenance-aware so large bootstrap corpora do not drown out newer ClaimReview evidence.
 
 Use `report` for macro-F1, per-class F1, parameter count, model size, CPU latency, drift status and edge metadata. Predictions may return `uncertain` below the champion abstention threshold; do not force an uncertain result into fake/real. Use `drift` to inspect performance on post-champion verified examples. Use `edge-quantize` before edge deployment; keep the INT8 model only when the measured gate accepts its quality/efficiency trade-off. Use `export --torchscript` for a portable champion bundle; accepted INT8 artifacts are included automatically.
 
