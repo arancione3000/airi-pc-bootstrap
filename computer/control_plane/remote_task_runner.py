@@ -11,6 +11,7 @@ from .github_access import push as git_push
 from .github_access import status as git_status
 from .live_telemetry import live_emit, live_flush, session_id
 from .orchestrator import ControlPlane
+from .live_runtime import managed_runtime_active
 from .screen_share import start_screen_share
 
 ROOT = Path(os.environ.get("AIRI_ROOT") or os.environ.get("AIRIPC_WORKSPACE_ROOT") or ".").resolve()
@@ -54,7 +55,10 @@ def run_task(spec: dict[str, Any]) -> dict[str, Any]:
     steps = list(spec["steps"])
     limits = dict(spec.get("limits") or {})
     cp = ControlPlane()
-    start_screen_share()
+    # Normal Airi-PC sessions already own one resident POV daemon. Avoid a
+    # second short-lived tunnel that could replace Android's working URL.
+    if not managed_runtime_active():
+        start_screen_share()
 
     live_emit(
         "runtime",
