@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+printf '\nAiri OS runtime status\n'
+printf '%s\n' '----------------------'
+printf 'Release: '
+readlink -f /opt/airi-pc/current 2>/dev/null || true
+printf 'Service: '
+systemctl is-active airi-pc.service 2>/dev/null || true
+printf 'Ready:   '
+if curl -fsS --max-time 3 http://127.0.0.1:9010/ready; then
+  printf '\n'
+else
+  printf 'not ready\n'
+fi
+printf 'Logs:    /var/lib/airi-pc/logs\n'

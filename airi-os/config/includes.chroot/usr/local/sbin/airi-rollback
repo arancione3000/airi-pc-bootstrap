@@ -1,0 +1,26 @@
+#!/bin/bash
+set -euo pipefail
+
+[ "$(id -u)" -eq 0 ] || { echo "airi-rollback must run as root" >&2; exit 1; }
+
+BASE=/opt/airi-pc
+PREV=$(readlink -f "$BASE/previous" 2>/dev/null || true)
+PREV_VENV=$(readlink -f "$BASE/venv-previous" 2>/dev/null || true)
+CUR=$(readlink -f "$BASE/current" 2>/dev/null || true)
+CUR_VENV=$(readlink -f "$BASE/venv-current" 2>/dev/null || true)
+
+[ -n "$PREV" ] && [ -d "$PREV" ] || { echo "No previous Airi-PC release available." >&2; exit 2; }
+[ -n "$PREV_VENV" ] && [ -d "$PREV_VENV" ] || { echo "No previous Airi-PC environment available." >&2; exit 2; }
+
+ln -sfn "$PREV" "$BASE/.current-next"
+mv -Tf "$BASE/.current-next" "$BASE/current"
+ln -sfn "$PREV_VENV" "$BASE/.venv-next"
+mv -Tf "$BASE/.venv-next" "$BASE/venv-current"
+
+[ -z "$CUR" ] || ln -sfn "$CUR" "$BASE/previous"
+[ -z "$CUR_VENV" ] || ln -sfn "$CUR_VENV" "$BASE/venv-previous"
+
+systemctl restart airi-pc.service
+sleep 2
+airi-status
+echo "[Airi OS] Rollback complete."

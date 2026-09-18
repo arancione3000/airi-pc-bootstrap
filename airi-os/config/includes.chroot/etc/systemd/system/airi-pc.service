@@ -1,0 +1,29 @@
+[Unit]
+Description=Airi-PC autonomous execution runtime
+After=network-online.target graphical.target
+Wants=network-online.target
+ConditionPathExists=/opt/airi-pc/current/computer/start.sh
+
+[Service]
+Type=forking
+User=airi-pc
+Group=airi-pc
+WorkingDirectory=/opt/airi-pc/current
+Environment=AIRI_ROOT=/opt/airi-pc/current
+Environment=AIRIPC_WORKSPACE_ROOT=/opt/airi-pc/current
+Environment=AIRIPC_VENV=/opt/airi-pc/venv-current
+Environment=AIRI_LOG_DIR=/var/lib/airi-pc/logs
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/airi-pc/playwright
+Environment=AIRI_LIVE_TELEMETRY=1
+PIDFile=/var/lib/airi-pc/logs/computer-server.pid
+ExecStart=/bin/sh /opt/airi-pc/current/computer/start.sh
+ExecStop=/bin/sh /opt/airi-pc/current/scripts/airi-stop
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=180
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

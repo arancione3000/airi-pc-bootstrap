@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+lb config noauto \
+  --mode debian \
+  --architectures amd64 \
+  --distribution trixie \
+  --archive-areas "main contrib non-free non-free-firmware" \
+  --binary-images iso-hybrid \
+  --security false \
+  --debian-installer none \
+  --apt-recommends true \
+  --memtest none \
+  --bootappend-live "boot=live components username=airi hostname=airi-os locales=it_IT.UTF-8 keyboard-layouts=it timezone=Europe/Rome" \
+  "$@"
