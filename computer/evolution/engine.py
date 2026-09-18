@@ -438,7 +438,11 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
     reason = f"{votes}/{cfg.promotion_repeats} independent promotion votes; " + ("majority gate passed" if promote else "majority gate failed")
     eligible = [row for row in promotion_trials if row["promotion_vote"]] or promotion_trials
     candidate_final = max(eligible, key=lambda row: (row["f1"], -row["brier"]))
-    best_state = torch.load(trial_state_paths[int(candidate_final["trial"])], map_location="cpu", weights_only=True)
+    selected_trial = int(candidate_final["trial"])
+    best_state = torch.load(trial_state_paths[selected_trial], map_location="cpu", weights_only=True)
+    candidate_final = dict(candidate_final)
+    candidate_final.pop("state_path", None)
+    candidate_final["selected_trial"] = selected_trial
     selected_model = build_model(best_genome, vocab_size=cfg.vocab_size)
     selected_model.load_state_dict(best_state)
     selected_model.eval()
@@ -478,6 +482,9 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         "mode": cfg.mode,
         "dataset_records": len(records),
         "class_counts": counts,
+        "source_families": source_family_counts(records),
+        "canary": canary_info,
+        "old_canary": old_canary,
         "best_search_candidate": best_row,
         "candidate": candidate_final,
         "previous_champion": old_eval,
