@@ -19,6 +19,7 @@ STATUS = STATE / "status.json"
 PID = STATE / "evolution.pid"
 LOG = STATE / "evolution.log"
 DEFAULT_TRIGGER = int(os.environ.get("AIRI_EVOLUTION_TRIGGER_SAMPLES", "20"))
+DRIFT_TRIGGER = int(os.environ.get("AIRI_EVOLUTION_DRIFT_TRIGGER_SAMPLES", "10"))
 
 
 def _json_read(path: Path, default):
@@ -274,12 +275,51 @@ def factcheck(claim: str, *, max_sources: int = 8, min_sources: int = 2, auto_ev
     }
 
 
+def drift(window: int = 100, min_window: int = DRIFT_TRIGGER) -> dict[str, Any]:
+    from .monitoring import drift_report
+    return drift_report(STATE, window=window, min_window=min_window)
+
+
+def edge_quantize(max_samples: int = 64) -> dict[str, Any]:
+    if not torch_status().get("available"):
+        return {"ok": False, "error": "torch_unavailable", "hint": "run airi-evolve setup"}
+    from .edge import quantize_champion
+    return quantize_champion(STATE, max_samples=max_samples)
+
+
+def predict_edge(text: str) -> dict[str, Any]:
+    if not torch_status().get("available"):
+        return {"ok": False, "error": "torch_unavailable", "hint": "run airi-evolve setup"}
+    from .edge import predict_edge_text
+    try:
+        return {"ok": True, **predict_edge_text(STATE, text)}
+    except Exception as exc:
+        return {"ok": False, "error": repr(exc)}
+
+
 def maintenance(*, mode: str = "safe") -> dict[str, Any]:
     st = status()
+    drift_state = {"ok": True, "ready": False, "drift": False}
+    if st["champion"] and st["pending_verified_samples"] >= max(1, DRIFT_TRIGGER):
+        try:
+            drift_state = drift(min_window=DRIFT_TRIGGER)
+        except Exception as exc:
+            drift_state = {"ok": False, "ready": False, "drift": False, "error": repr(exc)}
     started = None
-    if st["evolution_due"] and st["dataset_records"] >= 40 and min(st["class_counts"].values()) >= 4 and not st["running"]:
+    should_evolve = st["evolution_due"] or (
+        drift_state.get("ready") and drift_state.get("drift") and
+        st["pending_verified_samples"] >= max(1, DRIFT_TRIGGER)
+    )
+    if should_evolve and st["dataset_records"] >= 40 and min(st["class_counts"].values()) >= 4 and not st["running"]:
         started = start(mode=mode, auto_setup=True)
-    return {"ok": True, "status": st, "evolution_started": started, "pipeline": pipeline_status()}
+    return {
+        "ok": True,
+        "status": st,
+        "drift": drift_state,
+        "evolution_started": started,
+        "trigger": "drift" if drift_state.get("drift") and started else ("new_verified_samples" if started else None),
+        "pipeline": pipeline_status(),
+    }
 
 
 
