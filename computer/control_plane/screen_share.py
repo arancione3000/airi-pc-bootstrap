@@ -161,11 +161,11 @@ def _capture_jpeg() -> bytes:
         draw.ellipse((x - 3, y - 3, x + 3, y + 3), fill=(255, 138, 0))
     except Exception:
         pass
-    if img.width > 1100:
-        scale = 1100 / img.width
-        img = img.resize((1100, int(img.height * scale)), Image.Resampling.LANCZOS)
+    if img.width > 1024:
+        scale = 1024 / img.width
+        img = img.resize((1024, int(img.height * scale)), Image.Resampling.LANCZOS)
     out = io.BytesIO()
-    img.save(out, format="JPEG", quality=62, optimize=True)
+    img.save(out, format="JPEG", quality=56, optimize=True)
     return out.getvalue()
 
 
@@ -242,10 +242,52 @@ body{{display:flex;align-items:center;justify-content:center}}
 #screen{{width:100%;height:100%;object-fit:contain;background:#050507}}
 #badge{{position:fixed;top:8px;left:8px;padding:5px 8px;border-radius:10px;background:#000a;color:#5ed390;
 font:600 12px system-ui,sans-serif;letter-spacing:.04em}}
-</style></head><body><img id="screen" src="/stream/{token}" alt="Airi-PC live screen"><div id="badge">AIRI-PC · LIVE POV · MJPEG</div>
+</style></head><body><img id="screen" alt="Airi-PC live screen"><div id="badge">AIRI-PC · LIVE POV · <span id="fps">0 FPS</span></div>
 <script>
 const img=document.getElementById('screen');
-img.onerror=()=>setTimeout(()=>{{img.src='/stream/{token}?t='+Date.now()}},1200);
+const fps=document.getElementById('fps');
+let previous=null, frames=0, windowStart=performance.now(), stopped=false;
+
+function sleep(ms){{return new Promise(resolve=>setTimeout(resolve,ms));}}
+
+async function showBlob(blob){{
+  const next=URL.createObjectURL(blob);
+  await new Promise((resolve,reject)=>{{
+    img.onload=resolve;
+    img.onerror=reject;
+    img.src=next;
+  }});
+  if(previous) URL.revokeObjectURL(previous);
+  previous=next;
+}}
+
+async function pump(){{
+  while(!stopped){{
+    try{{
+      const response=await fetch('/frame/{self.token}.jpg?t='+Date.now(), {{
+        cache:'no-store',
+        credentials:'omit'
+      }});
+      if(!response.ok) throw new Error('HTTP '+response.status);
+      await showBlob(await response.blob());
+      frames++;
+      const now=performance.now();
+      const elapsed=now-windowStart;
+      if(elapsed>=1000){{
+        fps.textContent=(frames*1000/elapsed).toFixed(1)+' FPS';
+        frames=0;
+        windowStart=now;
+      }}
+      await new Promise(requestAnimationFrame);
+    }}catch(error){{
+      fps.textContent='reconnect…';
+      await sleep(180);
+    }}
+  }}
+}}
+
+window.addEventListener('beforeunload',()=>{{stopped=true;if(previous)URL.revokeObjectURL(previous);}});
+pump();
 </script></body></html>"""
         self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
 
