@@ -13,7 +13,6 @@ TOKEN_RE = re.compile(r"[\wÀ-ÿ']+|[^\w\s]", re.UNICODE)
 
 
 def token_id(token: str, vocab_size: int = 8192) -> int:
-    # IDs 0 and 1 are reserved for PAD and UNK/special use.
     digest = hashlib.blake2b(token.lower().encode("utf-8"), digest_size=8).digest()
     return 2 + (int.from_bytes(digest, "little") % (vocab_size - 2))
 
@@ -42,23 +41,38 @@ def normalize_label(value) -> int:
     raise ValueError("label must identify verified real=1 or fake=0")
 
 
+def _canonical_text(text: str) -> str:
+    return " ".join(str(text).strip().lower().split())
+
+
+def text_fingerprint(text: str) -> str:
+    return hashlib.sha256(_canonical_text(text).encode("utf-8")).hexdigest()[:24]
+
+
 def append_verified(path: Path, record: dict) -> dict:
     text = str(record.get("text", "")).strip()
     if len(text) < 8:
         raise ValueError("text is too short")
+    label = normalize_label(record.get("label"))
+    text_id = text_fingerprint(text)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing = load_records(path) if path.exists() else []
+    same_text = [r for r in existing if r.get("text_id") == text_id or text_fingerprint(r.get("text", "")) == text_id]
+    if any(normalize_label(r.get("label")) != label for r in same_text):
+        raise ValueError("conflicting verified labels for the same normalized text")
+    if any(normalize_label(r.get("label")) == label for r in same_text):
+        row = dict(same_text[0])
+        row["duplicate"] = True
+        return row
     row = {
         "text": text,
-        "label": normalize_label(record.get("label")),
+        "text_id": text_id,
+        "label": label,
         "source": str(record.get("source", "")).strip()[:1000],
         "evidence": str(record.get("evidence", "")).strip()[:4000],
         "added_at": float(record.get("added_at") or time.time()),
     }
-    # Stable duplicate protection on the normalized text + label.
-    row["id"] = hashlib.sha256((text.strip().lower() + "\0" + str(row["label"])).encode("utf-8")).hexdigest()[:20]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    existing = {r.get("id") for r in load_records(path)} if path.exists() else set()
-    if row["id"] in existing:
-        return {**row, "duplicate": True}
+    row["id"] = hashlib.sha256((text_id + "\0" + str(label)).encode("utf-8")).hexdigest()[:20]
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
     return {**row, "duplicate": False}
@@ -76,7 +90,9 @@ def load_records(path: Path) -> list[dict]:
             try:
                 row = json.loads(line)
                 row["label"] = normalize_label(row.get("label"))
-                if str(row.get("text", "")).strip():
+                text = str(row.get("text", "")).strip()
+                if text:
+                    row.setdefault("text_id", text_fingerprint(text))
                     out.append(row)
             except Exception:
                 continue
@@ -91,16 +107,16 @@ def class_counts(records: Iterable[dict]) -> dict[str, int]:
 
 
 def split_records(records: list[dict], seed: int = 1337) -> tuple[list[dict], list[dict], list[dict]]:
-    """Deterministic class-stratified 70/15/15-ish split.
-
-    Every class needs at least 4 examples. Tiny datasets are intentionally
-    rejected instead of producing misleading fitness numbers.
-    """
     by_label = {0: [], 1: []}
+    seen_text: set[str] = set()
     for row in records:
+        tid = row.get("text_id") or text_fingerprint(row.get("text", ""))
+        if tid in seen_text:
+            continue
+        seen_text.add(tid)
         by_label[normalize_label(row["label"])].append(row)
     if min(len(by_label[0]), len(by_label[1])) < 4:
-        raise ValueError("need at least 4 verified samples for each class")
+        raise ValueError("need at least 4 unique verified samples for each class")
     train: list[dict] = []
     val: list[dict] = []
     test: list[dict] = []
