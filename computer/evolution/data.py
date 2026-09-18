@@ -138,6 +138,79 @@ def split_records(records: list[dict], seed: int = 1337) -> tuple[list[dict], li
     return train, val, test
 
 
+def source_family(record: dict) -> str:
+    source = str(record.get("source", "")).strip().lower()
+    if source.startswith("liar:"):
+        return "liar"
+    if source.startswith("claimreview consensus:"):
+        return "claimreview"
+    if source.startswith("manual:"):
+        return "manual"
+    return "other" if source else "unknown"
+
+
+def source_family_counts(records: Iterable[dict]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in records:
+        family = source_family(row)
+        counts[family] = counts.get(family, 0) + 1
+    return counts
+
+
+def ensure_canary_partition(
+    state_dir: Path,
+    records: list[dict],
+    *,
+    seed: int = 1337,
+    fraction: float = 0.05,
+    min_per_class: int = 2,
+) -> tuple[list[dict], list[dict], dict]:
+    state_dir = Path(state_dir)
+    canary_path = state_dir / "data" / "canary_ids.json"
+    existing: set[str] = set()
+    if canary_path.exists():
+        try:
+            raw = json.loads(canary_path.read_text(encoding="utf-8"))
+            existing = {str(x) for x in raw.get("ids", [])}
+        except Exception:
+            existing = set()
+
+    by_label = {0: [], 1: []}
+    for row in records:
+        by_label[normalize_label(row["label"])].append(row)
+
+    selected = {row.get("text_id") for row in records if row.get("text_id") in existing}
+    for label, rows in by_label.items():
+        max_canary = max(0, len(rows) - 4)
+        target = min(max_canary, max(int(min_per_class), round(len(rows) * float(fraction))))
+        have = [row for row in rows if row.get("text_id") in selected]
+        need = max(0, target - len(have))
+        if need:
+            candidates = [row for row in rows if row.get("text_id") not in selected]
+            candidates.sort(
+                key=lambda row: hashlib.sha256(
+                    f"{seed}:{row.get('text_id') or text_fingerprint(row.get('text',''))}".encode("utf-8")
+                ).hexdigest()
+            )
+            for row in candidates[:need]:
+                selected.add(row.get("text_id") or text_fingerprint(row.get("text", "")))
+
+    canary = [row for row in records if (row.get("text_id") or text_fingerprint(row.get("text", ""))) in selected]
+    remaining = [row for row in records if (row.get("text_id") or text_fingerprint(row.get("text", ""))) not in selected]
+    payload = {
+        "version": 1,
+        "ids": sorted(selected),
+        "records": len(canary),
+        "class_counts": class_counts(canary),
+        "source_families": source_family_counts(canary),
+    }
+    canary_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = canary_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.replace(canary_path)
+    return remaining, canary, payload
+
+
 @dataclass
 class DatasetView:
     records: list[dict]
