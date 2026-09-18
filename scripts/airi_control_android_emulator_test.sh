@@ -82,12 +82,17 @@ diagnostics() {
 trap 'rc=$?; diagnostics "$rc"; exit "$rc"' ERR
 
 bound=0
-for _ in $(seq 1 30); do
+for attempt in $(seq 1 40); do
   enabled="$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')"
   adb shell dumpsys accessibility > "$OUT/accessibility-before.txt" 2>&1 || true
   if echo "$enabled" | grep -q "$PKG" && grep -q 'AiriAccessibilityService' "$OUT/accessibility-before.txt"; then
     bound=1
     break
+  fi
+  if [ $((attempt % 4)) -eq 0 ]; then
+    adb shell settings put secure enabled_accessibility_services "$PKG/$PKG.AiriAccessibilityService"
+    adb shell settings put secure accessibility_enabled 1
+    adb shell am start -n "$ACTIVITY" >/dev/null 2>&1 || true
   fi
   sleep 0.5
 done
