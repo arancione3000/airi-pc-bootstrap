@@ -257,16 +257,24 @@ jobs:
             done
             test "$found" -eq 1
 
-            adb exec-out screencap -p > airi-live-emulator-card.png
-
-            python3 - <<'PY'
+            pixels_ok=0
+            for i in $(seq 1 20); do
+              adb exec-out screencap -p > airi-live-emulator-card.png
+              if python3 - <<'PY'
             from PIL import Image
             img = Image.open("airi-live-emulator-card.png").convert("RGB")
             cyan = sum(1 for r,g,b in img.getdata() if r < 100 and g > 150 and b > 150)
             print("remote_cyan_pixels=", cyan)
-            assert cyan > 800, "POV card exists but remote desktop pixels were not rendered"
-            print("AIRI_ANDROID_POV_PIXEL_SMOKE=PASS")
+            raise SystemExit(0 if cyan > 800 else 1)
             PY
+              then
+                pixels_ok=1
+                break
+              fi
+              sleep 3
+            done
+            test "$pixels_ok" -eq 1
+            echo "AIRI_ANDROID_POV_PIXEL_SMOKE=PASS"
 
             adb shell uiautomator dump /sdcard/airi.xml >/dev/null 2>&1
             adb pull /sdcard/airi.xml airi-ui.xml >/dev/null 2>&1

@@ -5,7 +5,9 @@ import android.net.Uri
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
@@ -405,6 +407,20 @@ private fun PovWebView(url: String, modifier: Modifier = Modifier) {
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val next = request?.url ?: return true
                     return next.scheme != "https" || next.host != host
+                }
+
+                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                    super.onReceivedError(view, request, error)
+                    if (request?.isForMainFrame == true) {
+                        view?.postDelayed({ view.reload() }, 1500)
+                    }
+                }
+
+                override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, response: WebResourceResponse?) {
+                    super.onReceivedHttpError(view, request, response)
+                    if (request?.isForMainFrame == true && (response?.statusCode ?: 0) >= 500) {
+                        view?.postDelayed({ view.reload() }, 1500)
+                    }
                 }
             }
             loadUrl(url)
