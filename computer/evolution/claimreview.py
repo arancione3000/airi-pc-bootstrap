@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
+import socket
 import urllib.parse
 import urllib.request
 from difflib import SequenceMatcher
@@ -78,10 +80,32 @@ def verdict_to_binary(verdict: Any) -> int | None:
     return None
 
 
+def _public_http_url(url: str) -> tuple[str, str]:
+    parsed = urllib.parse.urlparse(str(url))
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("only public http/https fact-check URLs are allowed")
+    if parsed.username or parsed.password:
+        raise ValueError("credential-bearing URLs are not allowed")
+    host = parsed.hostname.strip(".").lower()
+    if host in {"localhost", "localhost.localdomain"}:
+        raise ValueError("local fact-check URLs are not allowed")
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ValueError(f"fact-check hostname cannot be resolved: {host}") from exc
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+            raise ValueError("fact-check URL resolves to a non-public address")
+    domain = host[4:] if host.startswith("www.") else host
+    return parsed.geturl(), domain
+
+
 def extract_claimreviews(html: str, url: str = "") -> list[dict[str, Any]]:
     parser = JsonLdParser()
     parser.feed(html)
-    domain = (urllib.parse.urlparse(url).hostname or "").lower()
+    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    domain = host[4:] if host.startswith("www.") else host
     results = []
     for payload in parser.payloads:
         try:
@@ -110,7 +134,8 @@ def extract_claimreviews(html: str, url: str = "") -> list[dict[str, Any]]:
 
 
 def fetch_claimreviews(url: str, timeout: int = 25, max_bytes: int = 4_000_000) -> list[dict[str, Any]]:
-    request = urllib.request.Request(url, headers={"User-Agent": "Airi-PC-NeuroEvolution/1.0"})
+    safe_url, _domain = _public_http_url(url)
+    request = urllib.request.Request(safe_url, headers={"User-Agent": "Airi-PC-NeuroEvolution/1.0"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         content_type = (response.headers.get("Content-Type") or "").lower()
         data = response.read(max_bytes + 1)
