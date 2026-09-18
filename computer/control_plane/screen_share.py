@@ -332,6 +332,7 @@ class ScreenShare:
         self._start_http()
         self._start_tunnel()
         self._external_self_test()
+        print("AIRI_POV_TUNNEL_SMOKE=PASS", flush=True)
         self.offer_thread = threading.Thread(target=self._offer_loop, name="airi-screen-offers", daemon=True)
         self.offer_thread.start()
         live_emit("runtime", "POV screen ready", "Encrypted live viewer available for Airi Live", "completed", dedupe_key="screen-share:ready")
