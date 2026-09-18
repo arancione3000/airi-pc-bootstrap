@@ -146,6 +146,7 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
                         "client config override=${configOverride != null} relayHost=${runCatching { Uri.parse(config.relayBase).host }.getOrNull()} topic=${config.topic.take(24)}",
                     )
                     val sha = runCatching { fetchMainSha() }.getOrDefault("")
+                    val viewerKeyPublishedAt = System.currentTimeMillis() / 1000
                     publishViewerKey(config)
                     if (viewerKeyJob?.isActive != true) {
                         viewerKeyJob = scope?.launch {
@@ -157,6 +158,12 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
                     }
                     state = state.copy(sourceSha = sha, topic = config.topic, error = null)
                     onState(state)
+                    val initialOffer = awaitInitialScreenOffer(config, viewerKeyPublishedAt)
+                    if (initialOffer != null) {
+                        state = applyScreenOffer(state, initialOffer)
+                        Log.i("AiriLivePOV", "screen offer decrypted via initial rendezvous poll")
+                        onState(state)
+                    }
                     state = stream(config, state, onState)
                 } catch (e: CancellationException) {
                     throw e
@@ -229,6 +236,50 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
         }
     }
 
+    private fun awaitInitialScreenOffer(config: LiveConfig, notBeforeSec: Long): JSONObject? {
+        repeat(7) { attempt ->
+            val req = Request.Builder()
+                .url("${config.relayBase}/${config.topic}/json?poll=1&since=10m")
+                .header("User-Agent", "Airi-Live-Android/1.4")
+                .build()
+            runCatching {
+                client.newCall(req).execute().use { r ->
+                    if (!r.isSuccessful) return@use
+                    val lines = r.body?.string().orEmpty().lineSequence()
+                    var newestTs = 0L
+                    var newest: JSONObject? = null
+                    for (line in lines) {
+                        val outer = runCatching { JSONObject(line) }.getOrNull() ?: continue
+                        if (outer.optString("event") != "message") continue
+                        val control = runCatching { JSONObject(outer.optString("message")) }.getOrNull() ?: continue
+                        if (control.optString("kind") != "screen_offer") continue
+                        if (control.optString("key_id") != viewerIdentity.keyId) continue
+                        val ts = control.optLong("ts", 0L)
+                        if (ts + 1 < notBeforeSec || ts < newestTs) continue
+                        newestTs = ts
+                        newest = control
+                    }
+                    if (newest != null) return newest
+                }
+            }.onFailure {
+                Log.w("AiriLivePOV", "initial offer poll failed attempt=${attempt + 1}", it)
+            }
+            if (attempt < 6) Thread.sleep(650L + attempt * 150L)
+        }
+        return null
+    }
+
+    private fun applyScreenOffer(state: UiState, control: JSONObject): UiState {
+        val offerTs = control.optLong("ts", 0L) * 1000
+        val descriptor = decryptScreenOffer(control.getString("ciphertext_b64"))
+        return state.copy(
+            screenUrl = descriptor.getString("u"),
+            screenSessionId = descriptor.optString("s"),
+            screenOfferTs = offerTs,
+            lastSeenMs = System.currentTimeMillis(),
+        )
+    }
+
     private fun stream(config: LiveConfig, initial: UiState, onState: (UiState) -> Unit): UiState {
         val topic = config.topic
         var state = initial.copy(connecting = true, connected = false)
@@ -265,13 +316,7 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
                         val offerTs = control.optLong("ts", 0L) * 1000
                         if (offerTs >= state.screenOfferTs) {
                             runCatching {
-                                val descriptor = decryptScreenOffer(control.getString("ciphertext_b64"))
-                                state = state.copy(
-                                    screenUrl = descriptor.getString("u"),
-                                    screenSessionId = descriptor.optString("s"),
-                                    screenOfferTs = offerTs,
-                                    lastSeenMs = System.currentTimeMillis(),
-                                )
+                                state = applyScreenOffer(state, control)
                                 Log.i("AiriLivePOV", "screen offer decrypted")
                                 onState(state)
                             }.onFailure {
