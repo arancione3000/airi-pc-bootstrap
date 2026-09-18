@@ -22,20 +22,44 @@ adb shell am start -S -W -n com.airipc.live/.MainActivity \
   --es airi_relay "$AIRI_E2E_RELAY_URL" \
   --es airi_topic "$AIRI_E2E_TOPIC"
 
-config_ok=0
-for i in $(seq 1 15); do
-  sleep 1
-  if adb logcat -d -t 400 | grep -q 'AiriLivePOV.*client config override=true'; then
-    config_ok=1
-    break
-  fi
-done
-if [ "$config_ok" -ne 1 ]; then
-  adb logcat -d -t 1000 | grep -E 'AiriLivePOV|com.airipc.live|AndroidRuntime' > "$SHOT_DIR/airi-android-logcat.txt" || true
-  echo "Android test configuration override was not applied" >&2
-  exit 1
-fi
-echo "AIRI_ANDROID_CONFIG_OVERRIDE=PASS"
+python3 - <<'PY'
+import json
+import os
+import time
+import urllib.request
+
+relay = os.environ["AIRI_E2E_RELAY_URL"].rstrip("/")
+topic = os.environ["AIRI_E2E_TOPIC"]
+deadline = time.monotonic() + 35
+found = False
+
+while time.monotonic() < deadline:
+    try:
+        req = urllib.request.Request(
+            f"{relay}/{topic}/json?poll=1&since=10m",
+            headers={"User-Agent": "Airi-Live-Android-E2E/1.5"},
+        )
+        with urllib.request.urlopen(req, timeout=12) as response:
+            lines = response.read().decode("utf-8", errors="replace").splitlines()
+        for line in lines:
+            try:
+                outer = json.loads(line)
+                payload = json.loads(outer.get("message") or "{}")
+            except Exception:
+                continue
+            if payload.get("kind") == "viewer_key" and payload.get("key_id"):
+                found = True
+                break
+    except Exception:
+        pass
+    if found:
+        break
+    time.sleep(1)
+
+if not found:
+    raise SystemExit("Android APK never published viewer_key to isolated relay")
+print("AIRI_ANDROID_CONFIG_OVERRIDE=PASS")
+PY
 
 # Wait for the real cryptographic rendezvous instead of repeatedly invoking
 # uiautomator, which can hang when the launcher is unhealthy.
