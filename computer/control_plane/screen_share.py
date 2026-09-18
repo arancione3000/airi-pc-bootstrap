@@ -320,11 +320,22 @@ class ScreenShare:
                         raise RuntimeError("public frame smoke test failed")
                 with urllib.request.urlopen(stream, timeout=20) as response:
                     ctype = response.headers.get("content-type", "")
-                    chunk = response.read(120_000)
+                    chunk = bytearray()
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline and len(chunk) < 300_000:
+                        piece = response.read1(65_536)
+                        if piece:
+                            chunk.extend(piece)
+                        if (
+                            chunk.count(b"--airiframe") >= 2
+                            and b"Content-Type: image/jpeg" in chunk
+                            and b"\xff\xd8" in chunk
+                        ):
+                            break
                     if (
                         response.status != 200
                         or "multipart/x-mixed-replace" not in ctype
-                        or b"--airiframe" not in chunk
+                        or chunk.count(b"--airiframe") < 2
                         or b"Content-Type: image/jpeg" not in chunk
                         or b"\xff\xd8" not in chunk
                     ):
@@ -361,8 +372,11 @@ class ScreenShare:
 
     def start(self):
         _ensure_display()
+        print("AIRI_POV_STAGE=display", flush=True)
         self._start_http()
+        print("AIRI_POV_STAGE=http", flush=True)
         self._start_tunnel()
+        print("AIRI_POV_STAGE=tunnel", flush=True)
         self._external_self_test()
         print("AIRI_POV_TUNNEL_SMOKE=PASS", flush=True)
         print("AIRI_POV_MJPEG_SMOKE=PASS", flush=True)
