@@ -367,10 +367,12 @@ def start_screen_share():
         return None
     if _ACTIVE is not None:
         return _ACTIVE
+    share = ScreenShare()
     try:
-        _ACTIVE = ScreenShare().start()
+        _ACTIVE = share.start()
         atexit.register(_ACTIVE.close)
         return _ACTIVE
     except Exception as exc:
+        share.close()
         live_emit("runtime", "POV screen unavailable", str(exc)[:240], "failed", dedupe_key="screen-share:failed")
         return None
