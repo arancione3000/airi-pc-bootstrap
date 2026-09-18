@@ -222,3 +222,39 @@ def report(history_limit: int = 20) -> dict[str, Any]:
 def export(out_path: str | None = None, include_torchscript: bool = False) -> dict[str, Any]:
     from .artifacts import export_bundle
     return export_bundle(STATE, Path(out_path) if out_path else None, include_torchscript=include_torchscript)
+
+
+
+def factcheck(claim: str, *, max_sources: int = 8, min_sources: int = 2, auto_evolve: bool = True, mode: str = "safe") -> dict[str, Any]:
+    from advanced import research
+    queued = queue_add(claim, {"origin": "airi_factcheck"})
+    collected = []
+    research_runs = []
+    queries = [f'"{claim}" fact check', f'{claim} factcheck true false']
+    for query in queries:
+        try:
+            rr = research(query, None, max(2, min(10, int(max_sources))))
+            research_runs.append(rr)
+            for source in rr.get("sources", []):
+                url = source.get("url")
+                if url and url not in collected:
+                    collected.append(url)
+        except Exception as exc:
+            research_runs.append({"ok": False, "topic": query, "error": repr(exc), "sources": []})
+    result = queue_verify(queued["id"], collected, min_sources=min_sources, auto_evolve=auto_evolve, mode=mode)
+    return {
+        "ok": result.get("status") == "verified",
+        "claim": claim,
+        "queue_id": queued["id"],
+        "research": research_runs,
+        "candidate_urls": collected,
+        "verification": result,
+    }
+
+
+def maintenance(*, mode: str = "safe") -> dict[str, Any]:
+    st = status()
+    started = None
+    if st["evolution_due"] and st["dataset_records"] >= 40 and min(st["class_counts"].values()) >= 4 and not st["running"]:
+        started = start(mode=mode, auto_setup=True)
+    return {"ok": True, "status": st, "evolution_started": started, "pipeline": pipeline_status()}
