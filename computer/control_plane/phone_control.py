@@ -71,6 +71,12 @@ def _config() -> dict[str, str]:
                     data[key] = str(row[key])
     except Exception:
         pass
+    env_relay = os.environ.get("AIRI_CONTROL_RELAY_BASE", "").strip()
+    env_topic = os.environ.get("AIRI_CONTROL_TOPIC", "").strip()
+    if env_relay:
+        data["relay_base"] = env_relay
+    if env_topic:
+        data["topic"] = env_topic
     return data
 
 
@@ -298,6 +304,7 @@ def screenshot(path: str, *, timeout: float = 60.0, secret_text: str | None = No
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="airi-phone-control")
     parser.add_argument("--secret", default=None)
+    parser.add_argument("--timeout", type=float, default=45.0)
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_pair = sub.add_parser("pair")
@@ -332,19 +339,20 @@ def main(argv: list[str] | None = None) -> int:
         if ns.command == "pair":
             result = save_pair_secret(ns.code)
         elif ns.command == "tap":
-            result = send("tap", {"x": ns.x, "y": ns.y}, secret_text=ns.secret)
+            result = send("tap", {"x": ns.x, "y": ns.y}, timeout=ns.timeout, secret_text=ns.secret)
         elif ns.command == "swipe":
             result = send(
                 "swipe",
                 {"x1": ns.x1, "y1": ns.y1, "x2": ns.x2, "y2": ns.y2, "duration_ms": ns.duration_ms},
+                timeout=ns.timeout,
                 secret_text=ns.secret,
             )
         elif ns.command == "text":
-            result = send("text", {"text": ns.value}, secret_text=ns.secret)
+            result = send("text", {"text": ns.value}, timeout=ns.timeout, secret_text=ns.secret)
         elif ns.command == "screenshot":
-            result = screenshot(ns.path, secret_text=ns.secret)
+            result = screenshot(ns.path, timeout=ns.timeout, secret_text=ns.secret)
         else:
-            result = send(ns.command, secret_text=ns.secret)
+            result = send(ns.command, timeout=ns.timeout, secret_text=ns.secret)
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0 if result.get("ok", True) else 2
     except Exception as exc:

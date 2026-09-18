@@ -8,6 +8,7 @@ on:
       - '.ai/airi_control.json'
       - 'computer/control_plane/phone_control.py'
       - 'scripts/airi-phone-control'
+      - 'scripts/airi_control_android_emulator_test.sh'
       - 'tests/test_phone_control.py'
       - 'computer/requirements.txt'
       - '.github/workflows/airi-control-android.yml'
@@ -15,9 +16,14 @@ on:
     paths:
       - 'airi-control-android/**'
       - 'computer/control_plane/phone_control.py'
+      - 'scripts/airi_control_android_emulator_test.sh'
       - 'tests/test_phone_control.py'
       - '.github/workflows/airi-control-android.yml'
   workflow_dispatch:
+
+concurrency:
+  group: airi-control-android-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -61,3 +67,95 @@ jobs:
           path: airi-control-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+  emulator-e2e:
+    name: Android emulator remote-control end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      AIRI_CONTROL_RELAY_BASE: https://ntfy.sh
+      AIRI_CONTROL_TOPIC: airi-control-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install controller crypto dependency
+        run: python -m pip install 'cryptography>=44'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK packages
+        run: |
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Build isolated-topic E2E APK
+        working-directory: airi-control-android
+        run: |
+          gradle :app:assembleDebug --stacktrace --no-daemon \
+            -PairiControlRelay="$AIRI_CONTROL_RELAY_BASE" \
+            -PairiControlTopic="$AIRI_CONTROL_TOPIC"
+      - name: Enable KVM access
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Run encrypted remote control in Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash "$GITHUB_WORKSPACE/scripts/airi_control_android_emulator_test.sh"
+      - name: Upload Airi Control E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Airi-Control-E2E-Evidence
+          path: ${{ runner.temp }}/airi-control-e2e/
+          if-no-files-found: warn
+          retention-days: 30
+
+  publish-tested-release:
+    name: Publish emulator-verified Airi Control APK
+    needs: [build, emulator-e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Airi-Control-Android
+          path: release-apk
+      - name: Publish installable Airi Control release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="$(awk -F'"' '/^[[:space:]]*versionName = "/ {print $2; exit}' airi-control-android/app/build.gradle.kts)"
+          test -n "$VERSION"
+          TAG="airi-control-v$VERSION"
+          APK="$(find release-apk -name '*.apk' -type f | head -n1)"
+          test -n "$APK"
+          OUT="Airi-Control-v$VERSION.apk"
+          cp "$APK" "$OUT"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$OUT" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "$OUT" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Airi Control v$VERSION" \
+              --notes "Consent-based Android remote control for Airi-PC with explicit Accessibility and MediaProjection approval, encrypted command/result transport, visible foreground notification, lock-screen/password protections, and a local emergency STOP."
+          fi

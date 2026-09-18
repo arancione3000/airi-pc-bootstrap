@@ -88,7 +88,17 @@ class ControlClient(
 
     fun deviceKeyId(): String = identity.keyId
 
-    private fun fetchConfig(): ControlConfig = runCatching {
+    private fun fetchConfig(): ControlConfig {
+        val relayOverride = BuildConfig.CONTROL_RELAY_OVERRIDE.trim()
+        val topicOverride = BuildConfig.CONTROL_TOPIC_OVERRIDE.trim()
+        if (relayOverride.isNotBlank() && topicOverride.isNotBlank()) {
+            return ControlConfig(
+                relayBase = relayOverride.trimEnd('/'),
+                topic = topicOverride,
+                history = "30m",
+            )
+        }
+        return runCatching {
         val request = Request.Builder()
             .url(CONTROL_CONFIG_URL)
             .header("User-Agent", "Airi-Control-Android/0.1")
@@ -102,7 +112,8 @@ class ControlClient(
                 history = obj.optString("history", "30m"),
             )
         }
-    }.getOrElse { ControlConfig() }
+        }.getOrElse { ControlConfig() }
+    }
 
     private fun publishDeviceKey() {
         val payload = JSONObject()

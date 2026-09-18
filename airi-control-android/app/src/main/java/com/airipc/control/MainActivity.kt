@@ -128,6 +128,7 @@ private fun ControlScreen(
     onCopyPairing: () -> Unit,
 ) {
     var targetHit by remember { mutableStateOf(false) }
+    var testText by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(28.dp),
@@ -205,6 +206,24 @@ private fun ControlScreen(
                 fontWeight = if (targetHit) FontWeight.Bold else FontWeight.Normal,
             )
         }
+
+        OutlinedTextField(
+            value = testText,
+            onValueChange = { testText = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Campo test testo") },
+            singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 16.sp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = Color(0xFFFF8A00),
+                unfocusedBorderColor = Color(0xFF6F6975),
+                focusedLabelColor = Color(0xFFFF8A00),
+                unfocusedLabelColor = Color(0xFFAAA5B0),
+                cursorColor = Color(0xFFFF8A00),
+            ),
+        )
 
         Text(
             "STOP chiude controllo remoto e condivisione schermo. " +
