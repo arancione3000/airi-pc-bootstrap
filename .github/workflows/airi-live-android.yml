@@ -81,11 +81,12 @@ jobs:
         env:
           AIRI_LIVE_TELEMETRY: '1'
           AIRI_LIVE_ALLOW_CI: '1'
+          PYTHONPATH: ${{ github.workspace }}/computer
         run: |
           python3 - <<'PY'
           import json
           import urllib.request
-          from computer.control_plane.live_telemetry import live_emit, live_flush, topic_for
+          from control_plane.live_telemetry import live_emit, live_flush, topic_for
 
           title = "Airi Live 1.1 ready"
           assert live_emit("runtime", title, "stable relay verified", "completed", dedupe_key="airi-live-1.1-smoke")
