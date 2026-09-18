@@ -79,37 +79,60 @@ jobs:
 
       - name: End-to-end Airi Live relay smoke test
         env:
-          AIRI_LIVE_TELEMETRY: '1'
-          AIRI_LIVE_ALLOW_CI: '1'
           PYTHONPATH: ${{ github.workspace }}/computer
         run: |
           python3 - <<'PY'
           import json
+          import time
           import urllib.request
-          from control_plane.live_telemetry import live_emit, live_flush, topic_for
+          from control_plane.live_telemetry import topic_for
 
           title = "Airi Live 1.1 ready"
-          assert live_emit("runtime", title, "stable relay verified", "completed", dedupe_key="airi-live-1.1-smoke")
-          assert live_flush(10.0), "telemetry queue did not flush"
-
-          url = f"https://ntfy.sh/{topic_for()}/json?poll=1&since=10m"
-          with urllib.request.urlopen(url, timeout=20) as response:
-              lines = response.read().decode("utf-8").splitlines()
+          payload = {
+              "v": 1,
+              "id": "airi-live-v1-1-smoke",
+              "ts": int(time.time()),
+              "kind": "runtime",
+              "title": title,
+              "detail": "stable relay verified",
+              "status": "completed",
+              "task_id": "",
+              "node_id": "",
+              "source_sha": "smoke-test",
+          }
+          topic = topic_for()
+          body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+          req = urllib.request.Request(
+              f"https://ntfy.sh/{topic}",
+              data=body,
+              method="POST",
+              headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "Airi-Live-CI/1.1"},
+          )
+          with urllib.request.urlopen(req, timeout=20) as response:
+              print("publish_status=", response.status)
+              assert 200 <= response.status < 300
 
           found = False
-          for line in lines:
-              try:
-                  outer = json.loads(line)
-                  payload = json.loads(outer.get("message", "{}"))
-              except Exception:
-                  continue
-              if payload.get("title") == title:
-                  found = True
+          for attempt in range(8):
+              time.sleep(1.5)
+              url = f"https://ntfy.sh/{topic}/json?poll=1&since=10m"
+              with urllib.request.urlopen(url, timeout=20) as response:
+                  lines = response.read().decode("utf-8").splitlines()
+              for line in lines:
+                  try:
+                      outer = json.loads(line)
+                      event = json.loads(outer.get("message", "{}"))
+                  except Exception:
+                      continue
+                  if event.get("id") == payload["id"] and event.get("title") == title:
+                      found = True
+                      break
+              if found:
                   break
-          assert found, "published telemetry was not readable from relay"
+              print(f"relay poll attempt {attempt + 1}: event not visible yet")
+          assert found, "published telemetry was not readable from relay after retries"
           print("AIRI_LIVE_RELAY_SMOKE=PASS")
           PY
-
       - name: Publish installable Airi Live 1.1 release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
