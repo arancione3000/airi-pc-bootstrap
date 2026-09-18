@@ -105,6 +105,8 @@ def status() -> dict[str, Any]:
         "running": running,
         "pid": pid if running else None,
         "champion": champion_metrics,
+        "champion_abstain_threshold": (_json_read(STATE / "champion" / "provenance.json", {}) or {}).get("abstain_threshold", 0.65) if champion_metrics else None,
+        "edge_available": (STATE / "edge" / "model-int8.pt").exists() and (STATE / "edge" / "metadata.json").exists(),
         "last_run_status": _json_read(STATUS, None),
         "torch": torch_status(),
     }
