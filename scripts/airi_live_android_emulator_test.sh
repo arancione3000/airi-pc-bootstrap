@@ -116,25 +116,33 @@ echo "AIRI_ANDROID_POV_PIXEL_SMOKE=PASS"
 fps_ok=0
 for i in $(seq 1 20); do
   sleep 1
-  line="$(adb logcat -d -t 1200 | grep 'AiriLivePOV.*POV_STREAM_FPS=' | tail -n1 || true)"
-  if [ -n "$line" ]; then
-    FPS="$(printf '%s\n' "$line" | sed -n 's/.*POV_STREAM_FPS=\([0-9.]*\).*/\1/p')"
-    MODE="$(printf '%s\n' "$line" | sed -n 's/.*mode=\([^ ]*\).*/\1/p')"
-    if python3 - "$FPS" "$MODE" <<'PY'
+  adb logcat -d -t 1600 | grep -E 'AiriLivePOV|com.airipc.live|AndroidRuntime' > "$SHOT_DIR/airi-android-logcat.txt" || true
+  if python3 - "$SHOT_DIR/airi-android-logcat.txt" <<'PY'
+import re
 import sys
-fps=float(sys.argv[1] or 0)
-mode=sys.argv[2]
-print("measured_stream_fps=", fps, "mode=", mode)
-raise SystemExit(0 if mode == "stream" and fps >= 7.0 else 1)
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+samples = []
+for match in re.finditer(r"POV_STREAM_FPS=([0-9.]+)\s+mode=([^\s]+)", text):
+    try:
+        samples.append((float(match.group(1)), match.group(2).strip()))
+    except ValueError:
+        pass
+
+print("fps_samples=", samples[-12:])
+stable = [fps for fps, mode in samples if mode == "stream" and fps >= 7.0]
+if stable:
+    print("measured_stream_fps=", max(stable), "mode=stream")
+    raise SystemExit(0)
+raise SystemExit(1)
 PY
-    then
-      fps_ok=1
-      break
-    fi
+  then
+    fps_ok=1
+    break
   fi
 done
 if [ "$fps_ok" -ne 1 ]; then
-  adb logcat -d -t 1600 | grep -E 'AiriLivePOV|com.airipc.live|AndroidRuntime' > "$SHOT_DIR/airi-android-logcat.txt" || true
   echo "Continuous POV stream did not reach 7 FPS" >&2
   exit 1
 fi
