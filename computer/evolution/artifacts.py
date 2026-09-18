@@ -56,11 +56,25 @@ def report(state_dir: Path, history_limit: int = 20) -> dict[str, Any]:
             "latency_ms": cand.get("latency_ms"),
             "model_bytes": cand.get("model_bytes"),
         })
+    edge = None
+    edge_meta = state_dir / "edge" / "metadata.json"
+    if edge_meta.exists():
+        try:
+            edge = json.loads(edge_meta.read_text(encoding="utf-8"))
+        except Exception:
+            edge = {"error": "invalid edge metadata"}
+    try:
+        from .monitoring import drift_report
+        drift = drift_report(state_dir, min_window=10)
+    except Exception as exc:
+        drift = {"ok": False, "drift": False, "error": repr(exc)}
     return {
         "ok": True,
         "dataset_records": len(records),
         "class_counts": class_counts(records),
         "champion": {"metrics": metrics or None, "provenance": provenance or None, "genome": genome or None},
+        "edge": edge,
+        "drift": drift,
         "recent_runs": trends,
     }
 
@@ -85,6 +99,11 @@ def export_bundle(state_dir: Path, out_path: Path | None = None, include_torchsc
         dst = work / src.name
         shutil.copy2(src, dst)
         files.append(dst)
+    for src in (state_dir / "edge" / "model-int8.pt", state_dir / "edge" / "metadata.json"):
+        if src.exists():
+            dst = work / src.name
+            shutil.copy2(src, dst)
+            files.append(dst)
     torchscript_error = None
     if include_torchscript:
         try:
