@@ -245,14 +245,19 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
             onState(state)
             val source = response.body?.source() ?: error("Stream vuoto")
             val seen = state.events.mapTo(mutableSetOf()) { it.id }
-            while (!source.exhausted()) {
+            while (true) {
                 val line = source.readUtf8Line() ?: break
                 if (line.isBlank()) continue
                 val outer = runCatching { JSONObject(line) }.getOrNull() ?: continue
-                if (outer.optString("event") != "message") continue
+                val relayEvent = outer.optString("event")
+                if (relayEvent != "message") {
+                    Log.d("AiriLivePOV", "relay event=$relayEvent")
+                    continue
+                }
                 val ntfyId = outer.optString("id", UUID.randomUUID().toString())
                 val payload = outer.optString("message")
                 val control = runCatching { JSONObject(payload) }.getOrNull()
+                Log.d("AiriLivePOV", "relay message kind=${control?.optString("kind").orEmpty()}")
                 if (control?.optString("kind") == "viewer_key") continue
                 if (control?.optString("kind") == "screen_offer") {
                     if (control.optString("key_id") == viewerIdentity.keyId) {
@@ -311,6 +316,7 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
                 onState(state)
             }
         }
+        Log.w("AiriLivePOV", "relay stream ended; reconnecting")
         return state.copy(connected = false)
     }
 
