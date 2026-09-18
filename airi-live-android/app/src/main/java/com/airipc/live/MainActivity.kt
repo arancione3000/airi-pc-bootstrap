@@ -1,19 +1,17 @@
 package com.airipc.live
 
 import android.os.Bundle
+import android.graphics.BitmapFactory
+import android.os.SystemClock
 import android.net.Uri
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,16 +21,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.*
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -391,54 +389,102 @@ fun AiriLiveApp() {
     }
 }
 
+private fun povFrameUrl(viewUrl: String): String {
+    val uri = Uri.parse(viewUrl)
+    val token = uri.lastPathSegment?.takeIf { it.isNotBlank() }
+        ?: error("Invalid Airi POV viewer URL")
+    return uri.buildUpon()
+        .path("/frame/" + token + ".jpg")
+        .clearQuery()
+        .fragment(null)
+        .build()
+        .toString()
+}
+
 @Composable
-private fun PovWebView(url: String, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val host = remember(url) { runCatching { Uri.parse(url).host }.getOrNull() }
-    val webView = remember(url) {
-        WebView(context).apply {
-            setBackgroundColor(android.graphics.Color.BLACK)
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = false
-            settings.allowFileAccess = false
-            settings.allowContentAccess = false
-            settings.mediaPlaybackRequiresUserGesture = true
-            isHorizontalScrollBarEnabled = false
-            isVerticalScrollBarEnabled = false
-            webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                    val next = request?.url ?: return true
-                    return next.scheme != "https" || next.host != host
-                }
+private fun PovFrameView(url: String, modifier: Modifier = Modifier) {
+    val frameUrl = remember(url) { povFrameUrl(url) }
+    val frameClient = remember {
+        OkHttpClient.Builder()
+            .connectTimeout(12, TimeUnit.SECONDS)
+            .readTimeout(12, TimeUnit.SECONDS)
+            .callTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
+    var image by remember(url) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var fps by remember(url) { mutableStateOf(0.0) }
+    var status by remember(url) { mutableStateOf("connessione…") }
 
-                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                    super.onReceivedError(view, request, error)
-                    if (request?.isForMainFrame == true) {
-                        view?.postDelayed({ view.reload() }, 1500)
+    LaunchedEffect(frameUrl) {
+        var frames = 0
+        var windowStart = SystemClock.elapsedRealtime()
+        while (isActive) {
+            try {
+                val bitmap = withContext(Dispatchers.IO) {
+                    val request = Request.Builder()
+                        .url(frameUrl + "?t=" + System.nanoTime())
+                        .header("Cache-Control", "no-cache, no-store")
+                        .header("Pragma", "no-cache")
+                        .header("User-Agent", "Airi-Live-Android/1.4-native")
+                        .build()
+                    frameClient.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) error("POV frame HTTP " + response.code)
+                        val bytes = response.body?.bytes() ?: error("Empty POV frame")
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            ?: error("Invalid POV JPEG")
                     }
                 }
-
-                override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, response: WebResourceResponse?) {
-                    super.onReceivedHttpError(view, request, response)
-                    if (request?.isForMainFrame == true && (response?.statusCode ?: 0) >= 500) {
-                        view?.postDelayed({ view.reload() }, 1500)
-                    }
+                image = bitmap.asImageBitmap()
+                frames += 1
+                status = "live"
+                val now = SystemClock.elapsedRealtime()
+                val elapsed = now - windowStart
+                if (elapsed >= 1000) {
+                    fps = frames * 1000.0 / elapsed
+                    frames = 0
+                    windowStart = now
                 }
+                delay(8)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                status = "riconnessione…"
+                delay(180)
             }
-            loadUrl(url)
         }
     }
-    DisposableEffect(webView) {
-        onDispose {
-            webView.stopLoading()
-            webView.destroy()
+
+    Box(modifier = modifier.background(Color.Black), contentAlignment = Alignment.Center) {
+        val current = image
+        if (current != null) {
+            Image(
+                bitmap = current,
+                contentDescription = "Airi-PC live desktop",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit,
+            )
+        } else {
+            CircularProgressIndicator(color = Good, strokeWidth = 2.dp)
+        }
+        Surface(
+            color = Color(0xCC000000),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+        ) {
+            val label = if (fps > 0.0) {
+                "AIRI-PC · LIVE POV · " + "%.1f".format(Locale.US, fps) + " FPS"
+            } else {
+                "AIRI-PC · POV · " + status
+            }
+            Text(
+                label,
+                color = Good,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+            )
         }
     }
-    AndroidView(
-        factory = { webView },
-        modifier = modifier,
-        update = { if (it.url != url) it.loadUrl(url) },
-    )
 }
 
 @Composable
@@ -452,7 +498,7 @@ private fun LivePovCard(state: UiState, onFullScreen: () -> Unit) {
                 Spacer(Modifier.weight(1f))
                 Text(state.screenSessionId.takeLast(10), color = Muted, fontSize = 11.sp)
             }
-            PovWebView(
+            PovFrameView(
                 state.screenUrl,
                 Modifier.fillMaxWidth().aspectRatio(1.6f).background(Color.Black)
             )
@@ -472,7 +518,7 @@ private fun LivePovCard(state: UiState, onFullScreen: () -> Unit) {
 @Composable
 private fun FullScreenPov(url: String, onClose: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        PovWebView(url, Modifier.fillMaxSize())
+        PovFrameView(url, Modifier.fillMaxSize())
         FilledTonalButton(
             onClick = onClose,
             modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
