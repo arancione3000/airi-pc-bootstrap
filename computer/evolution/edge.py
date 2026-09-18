@@ -168,9 +168,16 @@ def load_edge_model(state_dir: Path):
     import torch
     state_dir = Path(state_dir)
     edge_path = state_dir / "edge" / "model-int8.pt"
-    if not edge_path.exists():
+    meta_path = state_dir / "edge" / "metadata.json"
+    if not edge_path.exists() or not meta_path.exists():
         raise FileNotFoundError("no accepted INT8 edge model; run edge-quantize first")
     genome, float_model = load_champion_for_prediction(state_dir)
+    try:
+        metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise RuntimeError("invalid INT8 edge metadata") from exc
+    if metadata.get("genome_id") != genome.genome_id:
+        raise RuntimeError("INT8 edge model is stale for the current champion")
     qmodel = _dynamic_quantize(float_model)
     qmodel.load_state_dict(torch.load(edge_path, map_location="cpu", weights_only=True))
     qmodel.eval()
