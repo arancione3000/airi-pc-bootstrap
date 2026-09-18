@@ -300,7 +300,7 @@
       "operation": "write",
       "args": {
         "path": "airi-os/build.sh",
-        "content": "#!/bin/bash\nset -euo pipefail\n\nOS_DIR=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\nROOT=$(CDPATH= cd -- \"$OS_DIR/..\" && pwd)\nWORK=$OS_DIR/build-work\nOUT=$OS_DIR/out\nISO_NAME=Airi-OS-0.1-amd64.iso\n\ncommand -v lb >/dev/null || { echo \"live-build (lb) is required\" >&2; exit 2; }\ncommand -v xorriso >/dev/null || { echo \"xorriso is required\" >&2; exit 2; }\n[ \"$(id -u)\" -eq 0 ] || { echo \"Run build.sh as root (sudo).\" >&2; exit 2; }\n\nrm -rf \"$WORK\" \"$OUT\"\nmkdir -p \"$WORK\" \"$OUT\"\ncp -a \"$OS_DIR/auto\" \"$WORK/\"\ncp -a \"$OS_DIR/config\" \"$WORK/\"\n\nDEST=$WORK/config/includes.chroot/opt/airi-pc/releases/builtin\nmkdir -p \"$DEST\"\ngit -C \"$ROOT\" archive --format=tar HEAD | tar -xf - -C \"$DEST\"\nmkdir -p \"$DEST/.ai\"\ngit -C \"$ROOT\" rev-parse HEAD > \"$DEST/.ai/.runtime_source_sha\"\n\nchmod +x \"$WORK/auto/config\"\nfind \"$WORK/config/hooks\" -type f -name '*.hook.chroot' -exec chmod +x {} +\n\ncd \"$WORK\"\nbash auto/config\nlb build\n\nSOURCE_ISO=live-image-amd64.hybrid.iso\n[ -s \"$SOURCE_ISO\" ] || { echo \"live-build did not produce $SOURCE_ISO\" >&2; exit 3; }\ncp \"$SOURCE_ISO\" \"$OUT/$ISO_NAME\"\nsha256sum \"$OUT/$ISO_NAME\" > \"$OUT/$ISO_NAME.sha256\"\n\necho \"AIRI_OS_ISO=$OUT/$ISO_NAME\"\ncat \"$OUT/$ISO_NAME.sha256\"\n",
+        "content": "#!/bin/bash\nset -euo pipefail\n\nOS_DIR=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\nROOT=$(CDPATH= cd -- \"$OS_DIR/..\" && pwd)\nWORK=$OS_DIR/build-work\nOUT=$OS_DIR/out\nISO_NAME=Airi-OS-0.1-amd64.iso\n\ncommand -v lb >/dev/null || { echo \"live-build (lb) is required\" >&2; exit 2; }\ncommand -v xorriso >/dev/null || { echo \"xorriso is required\" >&2; exit 2; }\n[ \"$(id -u)\" -eq 0 ] || { echo \"Run build.sh as root (sudo).\" >&2; exit 2; }\n\nrm -rf \"$WORK\" \"$OUT\"\nmkdir -p \"$WORK\" \"$OUT\"\ncp -a \"$OS_DIR/auto\" \"$WORK/\"\ncp -a \"$OS_DIR/config\" \"$WORK/\"\n\nDEST=$WORK/config/includes.chroot/opt/airi-pc/releases/builtin\nmkdir -p \"$DEST\"\ngit -C \"$ROOT\" archive --format=tar HEAD | tar -xf - -C \"$DEST\"\nmkdir -p \"$DEST/.ai\"\ngit -C \"$ROOT\" rev-parse HEAD > \"$DEST/.ai/.runtime_source_sha\"\n\nchmod +x \"$WORK/auto/config\"\nfind \"$WORK/config/hooks\" -type f -name '*.hook.chroot' -exec chmod +x {} +\n\ncd \"$WORK\"\nbash auto/config\nlb build\n\nSOURCE_ISO=live-image-amd64.hybrid.iso\n[ -s \"$SOURCE_ISO\" ] || { echo \"live-build did not produce $SOURCE_ISO\" >&2; exit 3; }\ncp \"$SOURCE_ISO\" \"$OUT/$ISO_NAME\"\n(\n  cd \"$OUT\"\n  sha256sum \"$ISO_NAME\" > \"$ISO_NAME.sha256\"\n)\n\necho \"AIRI_OS_ISO=$OUT/$ISO_NAME\"\ncat \"$OUT/$ISO_NAME.sha256\"\n",
         "scope": [
           "airi-os"
         ]
@@ -405,6 +405,6 @@
       }
     }
   ],
-  "revision": 8,
-  "notes": "ISO build isolated in Debian Trixie container after host package-manager failure."
+  "revision": 9,
+  "notes": "ISO build isolated in Debian Trixie container; checksum manifest made portable across container/host boundary."
 }
