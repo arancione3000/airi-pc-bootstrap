@@ -1,0 +1,66 @@
+name: NeuroEvolution verification
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'computer/evolution/**'
+      - 'computer/server.py'
+      - 'computer/advanced.py'
+      - 'tests/test_evolution_*.py'
+      - '.ai/skills/neuroevolution/**'
+      - '.github/workflows/neuroevolution.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evolution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build focused test environment
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --disable-pip-version-check pytest
+          .venv/bin/pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Compile evolution and integration sources
+        run: |
+          .venv/bin/python -m compileall -q computer/evolution computer/server.py computer/advanced.py tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py
+
+      - name: Focused evolution tests
+        run: |
+          .venv/bin/python -m pytest -q tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py
+
+      - name: PyTorch end-to-end evolution smoke test
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+        run: |
+          .venv/bin/python - <<'PY'
+          import json, tempfile
+          from pathlib import Path
+          from evolution.data import append_verified
+          from evolution.engine import EvolutionConfig, run_evolution, predict_text
+
+          state=Path(tempfile.mkdtemp(prefix='airi-evo-ci-'))
+          data=state/'data'/'verified.jsonl'
+          for i in range(24):
+              append_verified(data, {'text':f'official audited evidence confirms report number {i}', 'label':1, 'source':'ci'})
+              append_verified(data, {'text':f'fabricated viral hoax debunked as false number {i}', 'label':0, 'source':'ci'})
+          cfg=EvolutionConfig.for_mode(
+              'safe', population=4, generations=1, candidate_epochs=1,
+              finalist_epochs=1, promotion_repeats=2, min_promotion_votes=1,
+              min_f1_first_champion=0.0,
+          )
+          result=run_evolution(state,cfg)
+          assert result['ok'] is True
+          assert len(result['promotion_trials']) == 2
+          if result['promoted']:
+              pred=predict_text(state,'fabricated viral hoax debunked as false')
+              assert pred['label'] in {'likely_fake','likely_real'}
+          print(json.dumps({'ok':True,'promoted':result['promoted'],'candidate':result['candidate']},indent=2))
+          PY
