@@ -18,9 +18,24 @@ adb shell am force-stop com.google.android.apps.nexuslauncher >/dev/null 2>&1 ||
 adb shell am force-stop com.airipc.live
 adb logcat -c || true
 
-adb shell am start -n com.airipc.live/.MainActivity \
+adb shell am start -S -W -n com.airipc.live/.MainActivity \
   --es airi_relay "$AIRI_E2E_RELAY_URL" \
   --es airi_topic "$AIRI_E2E_TOPIC"
+
+config_ok=0
+for i in $(seq 1 15); do
+  sleep 1
+  if adb logcat -d -t 400 | grep -q 'AiriLivePOV.*client config override=true'; then
+    config_ok=1
+    break
+  fi
+done
+if [ "$config_ok" -ne 1 ]; then
+  adb logcat -d -t 1000 | grep -E 'AiriLivePOV|com.airipc.live|AndroidRuntime' > "$SHOT_DIR/airi-android-logcat.txt" || true
+  echo "Android test configuration override was not applied" >&2
+  exit 1
+fi
+echo "AIRI_ANDROID_CONFIG_OVERRIDE=PASS"
 
 # Wait for the real cryptographic rendezvous instead of repeatedly invoking
 # uiautomator, which can hang when the launcher is unhealthy.

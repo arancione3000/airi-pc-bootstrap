@@ -141,6 +141,10 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
             while (isActive) {
                 try {
                     val config = fetchLiveConfig()
+                    Log.i(
+                        "AiriLivePOV",
+                        "client config override=${configOverride != null} relayHost=${runCatching { Uri.parse(config.relayBase).host }.getOrNull()} topic=${config.topic.take(24)}",
+                    )
                     val sha = runCatching { fetchMainSha() }.getOrDefault("")
                     publishViewerKey(config)
                     if (viewerKeyJob?.isActive != true) {
@@ -347,6 +351,10 @@ class MainActivity : ComponentActivity() {
         val override = if (relay.isNotBlank() && topic.isNotBlank()) {
             LiveConfig(relayBase = relay, topic = topic, history = "24h")
         } else null
+        Log.i(
+            "AiriLivePOV",
+            "activity config override=${override != null} relayHost=${runCatching { Uri.parse(override?.relayBase ?: FALLBACK_RELAY).host }.getOrNull()} topic=${(override?.topic ?: FALLBACK_TOPIC).take(24)}",
+        )
         setContent { AiriLiveApp(override) }
     }
 }

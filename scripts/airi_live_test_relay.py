@@ -91,6 +91,7 @@ class Handler(BaseHTTPRequestHandler):
             print(f"AIRI_TEST_RELAY_POLL topic={topic} rows={len(rows)}", flush=True)
             return
 
+        print(f"AIRI_TEST_RELAY_STREAM topic={topic} rows={len(STORE.snapshot(topic))}", flush=True)
         self.send_response(200)
         self.send_header("Content-Type", "application/x-ndjson")
         self.send_header("Cache-Control", "no-store")
