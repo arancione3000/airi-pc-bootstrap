@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -50,12 +51,18 @@ def setup() -> dict[str, Any]:
     if current.get("available"):
         return {"ok": True, "installed": False, "torch": current}
     req = Path(__file__).with_name("requirements.txt")
-    cmd = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-r", str(req)]
+    if shutil.which("nvidia-smi"):
+        cmd = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-r", str(req)]
+        install_profile = "default-gpu-capable"
+    else:
+        cmd = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "torch>=2.7,<3", "--index-url", "https://download.pytorch.org/whl/cpu"]
+        install_profile = "cpu-only"
     p = subprocess.run(cmd, text=True, capture_output=True, timeout=1800)
     after = torch_status()
     return {
         "ok": p.returncode == 0 and after.get("available", False),
         "installed": p.returncode == 0,
+        "install_profile": install_profile,
         "torch": after,
         "returncode": p.returncode,
         "stdout": p.stdout[-3000:],
