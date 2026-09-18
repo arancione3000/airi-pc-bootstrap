@@ -7,6 +7,8 @@ on:
       - 'airi-live-android/**'
       - '.ai/airi_live.json'
       - 'computer/control_plane/live_telemetry.py'
+      - 'computer/control_plane/live_runtime.py'
+      - 'computer/start.sh'
       - 'computer/control_plane/task_engine.py'
       - 'computer/control_plane/job_manager.py'
       - 'computer/control_plane/screen_share.py'
@@ -21,6 +23,8 @@ on:
       - 'airi-live-android/**'
       - '.ai/airi_live.json'
       - 'computer/control_plane/live_telemetry.py'
+      - 'computer/control_plane/live_runtime.py'
+      - 'computer/start.sh'
       - 'computer/control_plane/task_engine.py'
       - 'computer/control_plane/job_manager.py'
       - 'computer/control_plane/screen_share.py'
@@ -88,10 +92,11 @@ jobs:
           path: airi-live-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-      - name: Public ntfy relay advisory smoke test
+      - name: Isolated ntfy relay advisory smoke test
         continue-on-error: true
         env:
           PYTHONPATH: ${{ github.workspace }}/computer
+          AIRI_LIVE_TOPIC: airi-live-ci-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           python3 - <<'PY'
           import json
