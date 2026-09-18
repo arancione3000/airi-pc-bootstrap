@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 
-def test_live_topic_is_deterministic_and_commit_scoped():
-    from control_plane.live_telemetry import topic_for
+def test_live_topic_is_stable_across_commits():
+    from control_plane.live_telemetry import STABLE_TOPIC, topic_for
     a = topic_for('a' * 40)
     b = topic_for('b' * 40)
-    assert a == topic_for('a' * 40)
-    assert a.startswith('airi-live-') and len(a) == len('airi-live-') + 24
-    assert a != b
+    assert a == b == STABLE_TOPIC
+    assert a.startswith('airi-live-')
+    assert len(a) >= len('airi-live-') + 32
 
 
 def test_live_telemetry_redacts_secrets():
