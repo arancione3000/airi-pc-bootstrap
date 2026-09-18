@@ -24,6 +24,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -145,7 +147,7 @@ class AiriLiveClient {
                     if (viewerKeyJob?.isActive != true) {
                         viewerKeyJob = scope?.launch {
                             while (isActive) {
-                                delay(45_000)
+                                delay(30 * 60 * 1000L)
                                 runCatching { publishViewerKey(config) }
                             }
                         }
@@ -454,7 +456,13 @@ private fun LivePovCard(state: UiState, onFullScreen: () -> Unit) {
                 state.screenUrl,
                 Modifier.fillMaxWidth().aspectRatio(1.6f).background(Color.Black)
             )
-            TextButton(onClick = onFullScreen, modifier = Modifier.align(Alignment.End).padding(end = 8.dp)) {
+            TextButton(
+                onClick = onFullScreen,
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .padding(end = 8.dp)
+                    .semantics { contentDescription = "Airi POV fullscreen" },
+            ) {
                 Text("SCHERMO INTERO")
             }
         }

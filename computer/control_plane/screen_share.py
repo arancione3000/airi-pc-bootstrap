@@ -54,7 +54,7 @@ def _post_json(payload: dict) -> None:
     raise RuntimeError(str(last or "relay publish failed"))
 
 
-def _viewer_keys(since: str = "2h") -> list[dict]:
+def _viewer_keys(since: str = "24h") -> list[dict]:
     url = f"{_relay_base()}/{topic_for()}/json?poll=1&since={since}"
     req = urllib.request.Request(url, headers={"User-Agent": "Airi-PC-Screen/1.0"})
     with urllib.request.urlopen(req, timeout=15) as response:
@@ -72,7 +72,7 @@ def _viewer_keys(since: str = "2h") -> list[dict]:
         key_id = str(inner.get("key_id") or "").strip()
         public_key_b64 = str(inner.get("public_key_b64") or "").strip()
         ts = int(inner.get("ts") or 0)
-        if not key_id or not public_key_b64 or ts <= 0 or now - ts > 3 * 3600:
+        if not key_id or not public_key_b64 or ts <= 0 or now - ts > 24 * 3600:
             continue
         row = {"key_id": key_id, "public_key_b64": public_key_b64, "ts": ts}
         previous = latest.get(key_id)
@@ -161,11 +161,11 @@ def _capture_jpeg() -> bytes:
         draw.ellipse((x - 3, y - 3, x + 3, y + 3), fill=(255, 138, 0))
     except Exception:
         pass
-    if img.width > 1024:
-        scale = 1024 / img.width
-        img = img.resize((1024, int(img.height * scale)), Image.Resampling.LANCZOS)
+    if img.width > 960:
+        scale = 960 / img.width
+        img = img.resize((960, int(img.height * scale)), Image.Resampling.LANCZOS)
     out = io.BytesIO()
-    img.save(out, format="JPEG", quality=56, optimize=True)
+    img.save(out, format="JPEG", quality=55, optimize=False)
     return out.getvalue()
 
 

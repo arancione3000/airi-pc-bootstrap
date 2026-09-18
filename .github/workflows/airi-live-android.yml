@@ -22,6 +22,9 @@ on:
       - 'computer/control_plane/live_telemetry.py'
       - 'computer/control_plane/task_engine.py'
       - 'computer/control_plane/job_manager.py'
+      - 'computer/control_plane/screen_share.py'
+      - 'computer/control_plane/remote_task_runner.py'
+      - 'scripts/airi_live_emulator_backend.py'
       - 'tests/test_live_telemetry.py'
       - 'scripts/airi_live_android_emulator_test.sh'
       - '.github/workflows/airi-live-android.yml'
@@ -227,12 +230,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Airi-Live-Android-POV-Screenshots
-          path: |
-            airi-live-emulator-card.png
-            airi-live-emulator-fullscreen.png
-            airi-ui.xml
-            airi-live-emulator-no-pov.png
-            airi-android-logcat.txt
+          path: ${{ runner.temp }}/airi-live-pov/
           if-no-files-found: warn
 
       - name: Stop Airi-PC POV backend
