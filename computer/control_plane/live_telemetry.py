@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import queue
@@ -15,6 +14,9 @@ from pathlib import Path
 REPO = "arancione3000/airi-pc-bootstrap"
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RELAY = "https://ntfy.sh"
+# Stable, high-entropy topic. Telemetry contains operational metadata only; no prompts,
+# file contents, screenshots, credentials, or command output are published.
+STABLE_TOPIC = "airi-live-09d926b9a4207c660a5f3efa5f50505ef5ff46e8463b3beb"
 _ENABLED = os.environ.get("AIRI_LIVE_TELEMETRY", "1").strip().lower() not in {"0", "false", "no", "off"}
 _RELAY = os.environ.get("AIRI_LIVE_RELAY_BASE", DEFAULT_RELAY).rstrip("/")
 _QUEUE: queue.Queue[dict] = queue.Queue(maxsize=256)
@@ -44,8 +46,12 @@ def source_sha() -> str:
 
 
 def topic_for(sha: str | None = None) -> str:
-    digest = hashlib.sha256(f"{REPO}:{sha or source_sha()}".encode()).hexdigest()[:24]
-    return f"airi-live-{digest}"
+    """Return the protocol-v2 stable topic.
+
+    The optional sha argument is intentionally ignored for backwards API compatibility.
+    Airi Live must survive normal repository commits without changing channels.
+    """
+    return STABLE_TOPIC
 
 
 def _safe(value: object, limit: int = 180) -> str:
@@ -59,14 +65,21 @@ def _worker() -> None:
         event = _QUEUE.get()
         try:
             body = json.dumps(event, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-            req = urllib.request.Request(
-                f"{_RELAY}/{topic_for(event.get('source_sha'))}",
-                data=body,
-                method="POST",
-                headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "Airi-PC-Live/1.0"},
-            )
-            with urllib.request.urlopen(req, timeout=3) as response:
-                response.read(1)
+            for attempt in range(3):
+                try:
+                    req = urllib.request.Request(
+                        f"{_RELAY}/{topic_for()}",
+                        data=body,
+                        method="POST",
+                        headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "Airi-PC-Live/2.0"},
+                    )
+                    with urllib.request.urlopen(req, timeout=5) as response:
+                        response.read(1)
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    time.sleep(0.4 * (attempt + 1))
         except Exception:
             # Telemetry must never be able to break an Airi-PC task.
             pass
@@ -130,3 +143,11 @@ def live_emit(
         return True
     except queue.Full:
         return False
+
+
+def live_flush(timeout: float = 5.0) -> bool:
+    """Wait briefly for queued telemetry to reach the relay."""
+    deadline = time.monotonic() + max(0.0, timeout)
+    while _QUEUE.unfinished_tasks and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return _QUEUE.unfinished_tasks == 0
