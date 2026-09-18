@@ -1,10 +1,18 @@
 package com.airipc.live
 
 import android.os.Bundle
+import android.net.Uri
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,17 +21,28 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.*
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
+import java.security.KeyPairGenerator
+import java.security.KeyStore
+import java.security.MessageDigest
+import java.security.spec.MGF1ParameterSpec
+import javax.crypto.Cipher
+import javax.crypto.spec.OAEPParameterSpec
+import javax.crypto.spec.PSource
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -62,7 +81,43 @@ data class UiState(
     val lastSeenMs: Long = 0,
     val sessionId: String = "",
     val sessionWatermarkMs: Long = 0,
+    val screenUrl: String = "",
+    val screenSessionId: String = "",
+    val screenOfferTs: Long = 0,
 )
+
+data class ViewerIdentity(val keyId: String, val publicKeyB64: String)
+
+private const val VIEWER_KEY_ALIAS = "airi_live_screen_viewer_v1"
+
+private fun ensureViewerIdentity(): ViewerIdentity {
+    val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+    if (!store.containsAlias(VIEWER_KEY_ALIAS)) {
+        val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA, "AndroidKeyStore")
+        generator.initialize(
+            KeyGenParameterSpec.Builder(VIEWER_KEY_ALIAS, KeyProperties.PURPOSE_DECRYPT)
+                .setKeySize(3072)
+                .setDigests(KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA512)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_RSA_OAEP)
+                .build()
+        )
+        generator.generateKeyPair()
+    }
+    val publicBytes = store.getCertificate(VIEWER_KEY_ALIAS).publicKey.encoded
+    val digest = MessageDigest.getInstance("SHA-256").digest(publicBytes)
+    val keyId = digest.take(12).joinToString("") { "%02x".format(it) }
+    return ViewerIdentity(keyId, Base64.encodeToString(publicBytes, Base64.NO_WRAP))
+}
+
+private fun decryptScreenOffer(ciphertextB64: String): JSONObject {
+    val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+    val privateKey = store.getKey(VIEWER_KEY_ALIAS, null)
+    val cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
+    val spec = OAEPParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA1, PSource.PSpecified.DEFAULT)
+    cipher.init(Cipher.DECRYPT_MODE, privateKey, spec)
+    val plain = cipher.doFinal(Base64.decode(ciphertextB64, Base64.NO_WRAP))
+    return JSONObject(String(plain, Charsets.UTF_8))
+}
 
 class AiriLiveClient {
     private val client = OkHttpClient.Builder()
@@ -71,6 +126,7 @@ class AiriLiveClient {
         .build()
     private var streamCall: Call? = null
     private var scope: CoroutineScope? = null
+    private val viewerIdentity by lazy { ensureViewerIdentity() }
 
     fun start(onState: (UiState) -> Unit) {
         stop()
@@ -82,6 +138,7 @@ class AiriLiveClient {
                 try {
                     val config = fetchLiveConfig()
                     val sha = runCatching { fetchMainSha() }.getOrDefault("")
+                    publishViewerKey(config)
                     state = state.copy(sourceSha = sha, topic = config.topic, error = null)
                     onState(state)
                     state = stream(config, state, onState)
@@ -107,7 +164,7 @@ class AiriLiveClient {
         val req = Request.Builder()
             .url(GITHUB_BRANCH)
             .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "Airi-Live-Android/1.2")
+            .header("User-Agent", "Airi-Live-Android/1.3")
             .build()
         client.newCall(req).execute().use { r ->
             if (!r.isSuccessful) error("GitHub ${r.code}")
@@ -120,7 +177,7 @@ class AiriLiveClient {
         return runCatching {
             val req = Request.Builder()
                 .url(LIVE_CONFIG_URL)
-                .header("User-Agent", "Airi-Live-Android/1.2")
+                .header("User-Agent", "Airi-Live-Android/1.3")
                 .build()
             client.newCall(req).execute().use { r ->
                 if (!r.isSuccessful) error("Airi Live config ${r.code}")
@@ -134,13 +191,31 @@ class AiriLiveClient {
         }.getOrElse { LiveConfig() }
     }
 
+    private fun publishViewerKey(config: LiveConfig) {
+        val payload = JSONObject()
+            .put("kind", "viewer_key")
+            .put("key_id", viewerIdentity.keyId)
+            .put("public_key_b64", viewerIdentity.publicKeyB64)
+            .put("ts", System.currentTimeMillis() / 1000)
+            .put("protocol", 3)
+            .toString()
+        val req = Request.Builder()
+            .url("${config.relayBase}/${config.topic}")
+            .header("User-Agent", "Airi-Live-Android/1.3")
+            .post(payload.toRequestBody("text/plain; charset=utf-8".toMediaType()))
+            .build()
+        client.newCall(req).execute().use { r ->
+            if (!r.isSuccessful) error("viewer key publish ${r.code}")
+        }
+    }
+
     private fun stream(config: LiveConfig, initial: UiState, onState: (UiState) -> Unit): UiState {
         val topic = config.topic
         var state = initial.copy(connecting = true, connected = false)
         onState(state)
         val req = Request.Builder()
             .url("${config.relayBase}/$topic/json?since=${config.history}")
-            .header("User-Agent", "Airi-Live-Android/1.2")
+            .header("User-Agent", "Airi-Live-Android/1.3")
             .build()
         val call = client.newCall(req)
         streamCall = call
@@ -157,6 +232,26 @@ class AiriLiveClient {
                 if (outer.optString("event") != "message") continue
                 val ntfyId = outer.optString("id", UUID.randomUUID().toString())
                 val payload = outer.optString("message")
+                val control = runCatching { JSONObject(payload) }.getOrNull()
+                if (control?.optString("kind") == "viewer_key") continue
+                if (control?.optString("kind") == "screen_offer") {
+                    if (control.optString("key_id") == viewerIdentity.keyId) {
+                        val offerTs = control.optLong("ts", 0L) * 1000
+                        if (offerTs >= state.screenOfferTs) {
+                            runCatching {
+                                val descriptor = decryptScreenOffer(control.getString("ciphertext_b64"))
+                                state = state.copy(
+                                    screenUrl = descriptor.getString("u"),
+                                    screenSessionId = descriptor.optString("s"),
+                                    screenOfferTs = offerTs,
+                                    lastSeenMs = System.currentTimeMillis(),
+                                )
+                                onState(state)
+                            }
+                        }
+                    }
+                    continue
+                }
                 val parsed = parsePayload(payload, ntfyId)
                 if (parsed.isEmpty()) continue
                 val unique = parsed.filter { seen.add(it.id) }
@@ -177,11 +272,14 @@ class AiriLiveClient {
                     merged.take(250)
                 }
                 val newestSha = visible.firstNotNullOfOrNull { it.sourceSha }
+                val keepScreen = state.screenSessionId.isBlank() || activeSession.isBlank() || state.screenSessionId == activeSession
                 state = state.copy(
                     events = visible,
                     sourceSha = newestSha ?: state.sourceSha,
                     sessionId = activeSession,
                     sessionWatermarkMs = watermark,
+                    screenUrl = if (keepScreen) state.screenUrl else "",
+                    screenSessionId = if (keepScreen) state.screenSessionId else "",
                     lastSeenMs = System.currentTimeMillis(),
                     connected = true,
                     error = null,
@@ -248,24 +346,102 @@ fun AiriLiveApp() {
     MaterialTheme(
         colorScheme = darkColorScheme(primary = Orange, background = Bg, surface = Card, onBackground = Color.White, onSurface = Color.White)
     ) {
+        var fullScreen by remember { mutableStateOf(false) }
         Surface(modifier = Modifier.fillMaxSize(), color = Bg) {
-            Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
-                Spacer(Modifier.height(20.dp))
-                Header(state)
-                Spacer(Modifier.height(18.dp))
-                CurrentCard(state)
-                Spacer(Modifier.height(14.dp))
-                Metrics(state)
-                Spacer(Modifier.height(16.dp))
-                FilterBar(filter) { filter = it }
-                Spacer(Modifier.height(10.dp))
-                val shown = state.events.filter { filter == "all" || it.kind == filter }
-                if (shown.isEmpty()) EmptyState(state, Modifier.weight(1f)) else Timeline(shown, Modifier.weight(1f))
-                Spacer(Modifier.height(10.dp))
-                Footer(state)
-                Spacer(Modifier.height(12.dp))
+            if (fullScreen && state.screenUrl.isNotBlank()) {
+                FullScreenPov(state.screenUrl) { fullScreen = false }
+            } else {
+                Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
+                    Spacer(Modifier.height(20.dp))
+                    Header(state)
+                    Spacer(Modifier.height(18.dp))
+                    if (state.screenUrl.isNotBlank()) {
+                        LivePovCard(state) { fullScreen = true }
+                    } else {
+                        CurrentCard(state)
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Metrics(state)
+                    Spacer(Modifier.height(16.dp))
+                    FilterBar(filter) { filter = it }
+                    Spacer(Modifier.height(10.dp))
+                    val shown = state.events.filter { filter == "all" || it.kind == filter }
+                    if (shown.isEmpty()) EmptyState(state, Modifier.weight(1f)) else Timeline(shown, Modifier.weight(1f))
+                    Spacer(Modifier.height(10.dp))
+                    Footer(state)
+                    Spacer(Modifier.height(12.dp))
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun PovWebView(url: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val host = remember(url) { runCatching { Uri.parse(url).host }.getOrNull() }
+    val webView = remember(url) {
+        WebView(context).apply {
+            setBackgroundColor(android.graphics.Color.BLACK)
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = false
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
+            settings.mediaPlaybackRequiresUserGesture = true
+            isHorizontalScrollBarEnabled = false
+            isVerticalScrollBarEnabled = false
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                    val next = request?.url ?: return true
+                    return next.scheme != "https" || next.host != host
+                }
+            }
+            loadUrl(url)
+        }
+    }
+    DisposableEffect(webView) {
+        onDispose {
+            webView.stopLoading()
+            webView.destroy()
+        }
+    }
+    AndroidView(
+        factory = { webView },
+        modifier = modifier,
+        update = { if (it.url != url) it.loadUrl(url) },
+    )
+}
+
+@Composable
+private fun LivePovCard(state: UiState, onFullScreen: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = Card), shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
+        Column {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).background(Good, CircleShape))
+                Spacer(Modifier.width(8.dp))
+                Text("POV Airi-PC · LIVE", color = Good, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Spacer(Modifier.weight(1f))
+                Text(state.screenSessionId.takeLast(10), color = Muted, fontSize = 11.sp)
+            }
+            PovWebView(
+                state.screenUrl,
+                Modifier.fillMaxWidth().aspectRatio(1.6f).background(Color.Black)
+            )
+            TextButton(onClick = onFullScreen, modifier = Modifier.align(Alignment.End).padding(end = 8.dp)) {
+                Text("SCHERMO INTERO")
+            }
+        }
+    }
+}
+
+@Composable
+private fun FullScreenPov(url: String, onClose: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        PovWebView(url, Modifier.fillMaxSize())
+        FilledTonalButton(
+            onClick = onClose,
+            modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+        ) { Text("×  CHIUDI") }
     }
 }
 
@@ -404,6 +580,7 @@ private fun EmptyState(state: UiState, modifier: Modifier = Modifier) {
 @Composable
 private fun Footer(state: UiState) {
     val text = when {
+        state.screenUrl.isNotBlank() -> "POV LIVE · sessione ${state.screenSessionId.takeLast(10)}"
         state.connected && state.lastSeenMs > 0 && state.sessionId.isNotBlank() -> "LIVE · sessione ${state.sessionId.takeLast(10)}"
         state.connected && state.lastSeenMs > 0 -> "LIVE · eventi Airi-PC ricevuti"
         state.connected -> "RELAY ONLINE · in attesa di una sessione Airi-PC"

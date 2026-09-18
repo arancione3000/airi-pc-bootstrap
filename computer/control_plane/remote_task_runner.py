@@ -11,6 +11,7 @@ from .github_access import push as git_push
 from .github_access import status as git_status
 from .live_telemetry import live_emit, live_flush, session_id
 from .orchestrator import ControlPlane
+from .screen_share import start_screen_share
 
 ROOT = Path(os.environ.get("AIRI_ROOT") or os.environ.get("AIRIPC_WORKSPACE_ROOT") or ".").resolve()
 ALLOWED_OPERATIONS = {
@@ -53,6 +54,7 @@ def run_task(spec: dict[str, Any]) -> dict[str, Any]:
     steps = list(spec["steps"])
     limits = dict(spec.get("limits") or {})
     cp = ControlPlane()
+    start_screen_share()
 
     live_emit(
         "runtime",

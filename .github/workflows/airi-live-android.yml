@@ -9,6 +9,8 @@ on:
       - 'computer/control_plane/live_telemetry.py'
       - 'computer/control_plane/task_engine.py'
       - 'computer/control_plane/job_manager.py'
+      - 'computer/control_plane/screen_share.py'
+      - 'computer/control_plane/remote_task_runner.py'
       - 'tests/test_live_telemetry.py'
       - '.github/workflows/airi-live-android.yml'
   pull_request:
@@ -89,10 +91,10 @@ jobs:
           import urllib.request
           from control_plane.live_telemetry import topic_for
 
-          title = "Airi Live 1.2 ready"
+          title = "Airi Live 1.3 ready"
           payload = {
               "v": 1,
-              "id": "airi-live-v1-2-smoke",
+              "id": "airi-live-v1-3-smoke",
               "ts": int(time.time()),
               "kind": "runtime",
               "title": title,
@@ -101,7 +103,7 @@ jobs:
               "task_id": "",
               "node_id": "",
               "source_sha": "smoke-test",
-              "session_id": "ci-smoke-v1.2",
+              "session_id": "ci-smoke-v1.3",
               "protocol": 2,
           }
           topic = topic_for()
@@ -110,7 +112,7 @@ jobs:
               f"https://ntfy.sh/{topic}",
               data=body,
               method="POST",
-              headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "Airi-Live-CI/1.2"},
+              headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "Airi-Live-CI/1.3"},
           )
           with urllib.request.urlopen(req, timeout=20) as response:
               print("publish_status=", response.status)
@@ -137,21 +139,21 @@ jobs:
           assert found, "published telemetry was not readable from relay after retries"
           print("AIRI_LIVE_RELAY_SMOKE=PASS")
           PY
-      - name: Publish installable Airi Live 1.2 release
+      - name: Publish installable Airi Live 1.3 release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="airi-live-v1.2.0"
+          TAG="airi-live-v1.3.0"
           APK="airi-live-android/app/build/outputs/apk/debug/app-debug.apk"
-          OUT="Airi-Live-v1.2.0.apk"
+          OUT="Airi-Live-v1.3.0.apk"
           cp "$APK" "$OUT"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$OUT" --clobber
           else
             gh release create "$TAG" "$OUT" \
               --target "$GITHUB_SHA" \
-              --title "Airi Live v1.2.0" \
-              --notes "Persistent protocol manifest, stable channel across rebuilds/sessions, per-run session identity, and end-to-end relay verification."
+              --title "Airi Live v1.3.0" \
+              --notes "Encrypted no-account POV screen streaming across Airi-PC rebuilds, session-aware activity timeline, stable relay, and end-to-end verification."
           fi
