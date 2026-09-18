@@ -238,7 +238,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            set -euo pipefail
+            set -eu
             APK="$(find emulator-apk -name '*.apk' -type f | head -n1)"
             test -n "$APK"
             adb install -r "$APK"
