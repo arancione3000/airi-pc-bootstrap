@@ -1,0 +1,63 @@
+name: Airi Control Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'airi-control-android/**'
+      - '.ai/airi_control.json'
+      - 'computer/control_plane/phone_control.py'
+      - 'scripts/airi-phone-control'
+      - 'tests/test_phone_control.py'
+      - 'computer/requirements.txt'
+      - '.github/workflows/airi-control-android.yml'
+  pull_request:
+    paths:
+      - 'airi-control-android/**'
+      - 'computer/control_plane/phone_control.py'
+      - 'tests/test_phone_control.py'
+      - '.github/workflows/airi-control-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test Airi-PC phone controller
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pytest -q tests/test_phone_control.py
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK packages
+        run: |
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Build installable Airi Control APK
+        working-directory: airi-control-android
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Airi-Control-Android
+          path: airi-control-android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
