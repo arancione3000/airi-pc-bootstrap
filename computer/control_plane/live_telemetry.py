@@ -14,11 +14,39 @@ from pathlib import Path
 REPO = "arancione3000/airi-pc-bootstrap"
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RELAY = "https://ntfy.sh"
-# Stable, high-entropy topic. Telemetry contains operational metadata only; no prompts,
-# file contents, screenshots, credentials, or command output are published.
-STABLE_TOPIC = "airi-live-09d926b9a4207c660a5f3efa5f50505ef5ff46e8463b3beb"
+DEFAULT_TOPIC = "airi-live-09d926b9a4207c660a5f3efa5f50505ef5ff46e8463b3beb"
+CONFIG_PATH = ROOT / ".ai" / "airi_live.json"
+
+
+def _load_protocol_config() -> dict:
+    data = {"protocol": 2, "relay_base": DEFAULT_RELAY, "topic": DEFAULT_TOPIC, "history": "24h"}
+    try:
+        raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            data.update({k: raw[k] for k in ("protocol", "relay_base", "topic", "history") if k in raw})
+    except Exception:
+        pass
+    env_topic = os.environ.get("AIRI_LIVE_TOPIC", "").strip()
+    env_relay = os.environ.get("AIRI_LIVE_RELAY_BASE", "").strip()
+    if env_topic:
+        data["topic"] = env_topic
+    if env_relay:
+        data["relay_base"] = env_relay
+    return data
+
+
+_PROTOCOL = _load_protocol_config()
+STABLE_TOPIC = str(_PROTOCOL.get("topic") or DEFAULT_TOPIC)
 _ENABLED = os.environ.get("AIRI_LIVE_TELEMETRY", "1").strip().lower() not in {"0", "false", "no", "off"}
-_RELAY = os.environ.get("AIRI_LIVE_RELAY_BASE", DEFAULT_RELAY).rstrip("/")
+_RELAY = str(_PROTOCOL.get("relay_base") or DEFAULT_RELAY).rstrip("/")
+_SESSION_ID = (
+    os.environ.get("AIRI_LIVE_SESSION_ID", "").strip()
+    or (
+        f"gh-{os.environ.get('GITHUB_RUN_ID')}-{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}"
+        if os.environ.get("GITHUB_RUN_ID")
+        else f"session-{uuid.uuid4().hex[:12]}"
+    )
+)
 _QUEUE: queue.Queue[dict] = queue.Queue(maxsize=256)
 _STARTED = False
 _LOCK = threading.Lock()
@@ -46,12 +74,18 @@ def source_sha() -> str:
 
 
 def topic_for(sha: str | None = None) -> str:
-    """Return the protocol-v2 stable topic.
+    """Return the persistent Airi Live topic.
 
-    The optional sha argument is intentionally ignored for backwards API compatibility.
-    Airi Live must survive normal repository commits without changing channels.
+    The optional sha argument is intentionally ignored for backwards compatibility.
+    Rebuilds, new commits, new chat sessions and new runners all publish to the same
+    protocol topic configured in .ai/airi_live.json.
     """
     return STABLE_TOPIC
+
+
+def session_id() -> str:
+    """Return the stable identifier for this one Airi-PC runtime execution."""
+    return _SESSION_ID
 
 
 def _safe(value: object, limit: int = 180) -> str:
@@ -129,6 +163,8 @@ def live_emit(
         "task_id": _safe(task_id, 32) if task_id else "",
         "node_id": _safe(node_id, 64) if node_id else "",
         "source_sha": sha,
+        "session_id": session_id(),
+        "protocol": int(_PROTOCOL.get("protocol") or 2),
     }
     key = dedupe_key or f"{event['kind']}:{event['title']}:{event['status']}:{event['task_id']}:{event['node_id']}"
     fingerprint = json.dumps(event, sort_keys=True, separators=(",", ":"))
