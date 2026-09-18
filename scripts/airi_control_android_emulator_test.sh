@@ -20,7 +20,6 @@ fi
 
 adb shell settings put secure enabled_accessibility_services "$PKG/.AiriAccessibilityService"
 adb shell settings put secure accessibility_enabled 1
-adb shell am force-stop "$PKG"
 adb shell am start -n "$ACTIVITY"
 sleep 1
 
