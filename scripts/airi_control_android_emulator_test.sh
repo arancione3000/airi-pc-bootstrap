@@ -18,7 +18,7 @@ if adb shell pm list permissions -g 2>/dev/null | grep -q 'android.permission.PO
   adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 fi
 
-adb shell settings put secure enabled_accessibility_services "$PKG/.AiriAccessibilityService"
+adb shell settings put secure enabled_accessibility_services "$PKG/$PKG.AiriAccessibilityService"
 adb shell settings put secure accessibility_enabled 1
 adb shell am start -n "$ACTIVITY"
 sleep 1
