@@ -222,7 +222,15 @@ def report(history_limit: int = 20) -> dict[str, Any]:
 
 def export(out_path: str | None = None, include_torchscript: bool = False) -> dict[str, Any]:
     from .artifacts import export_bundle
-    return export_bundle(STATE, Path(out_path) if out_path else None, include_torchscript=include_torchscript)
+    allowed = (STATE / "exports").resolve()
+    target = None
+    if out_path:
+        raw = Path(out_path)
+        target = raw if raw.is_absolute() else allowed / raw
+        target = target.resolve()
+        if target != allowed and allowed not in target.parents:
+            return {"ok": False, "error": "export path must stay inside the evolution exports directory", "exports_dir": str(allowed)}
+    return export_bundle(STATE, target, include_torchscript=include_torchscript)
 
 
 
