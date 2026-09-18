@@ -177,7 +177,7 @@ def predict(text: str) -> dict[str, Any]:
 
 
 
-def bootstrap_liar(*, auto_evolve: bool = True, mode: str = "safe") -> dict[str, Any]:
+def bootstrap_liar(*, auto_evolve: bool = True, mode: str = "safe", enable_autopilot: bool = True) -> dict[str, Any]:
     from .liar import bootstrap
     result = bootstrap(STATE)
     started = None
@@ -185,7 +185,8 @@ def bootstrap_liar(*, auto_evolve: bool = True, mode: str = "safe") -> dict[str,
         st = status()
         if st["dataset_records"] >= 40 and min(st["class_counts"].values()) >= 4 and not st["running"]:
             started = start(mode=mode, auto_setup=True)
-    return {**result, "evolution_started": started}
+    autopilot_result = autopilot(True) if result.get("ok") and enable_autopilot else None
+    return {**result, "evolution_started": started, "autopilot": autopilot_result}
 
 
 def queue_add(claim: str, metadata: dict | None = None) -> dict[str, Any]:
@@ -242,6 +243,11 @@ def factcheck(claim: str, *, max_sources: int = 8, min_sources: int = 2, auto_ev
         except Exception as exc:
             research_runs.append({"ok": False, "topic": query, "error": repr(exc), "sources": []})
     result = queue_verify(queued["id"], collected, min_sources=min_sources, auto_evolve=auto_evolve, mode=mode)
+    model_prediction = None
+    try:
+        model_prediction = predict(claim)
+    except Exception as exc:
+        model_prediction = {"ok": False, "error": repr(exc)}
     return {
         "ok": result.get("status") == "verified",
         "claim": claim,
@@ -249,6 +255,7 @@ def factcheck(claim: str, *, max_sources: int = 8, min_sources: int = 2, auto_ev
         "research": research_runs,
         "candidate_urls": collected,
         "verification": result,
+        "model_prediction": model_prediction,
     }
 
 
@@ -258,3 +265,18 @@ def maintenance(*, mode: str = "safe") -> dict[str, Any]:
     if st["evolution_due"] and st["dataset_records"] >= 40 and min(st["class_counts"].values()) >= 4 and not st["running"]:
         started = start(mode=mode, auto_setup=True)
     return {"ok": True, "status": st, "evolution_started": started, "pipeline": pipeline_status()}
+
+
+
+def autopilot(enable: bool = True, interval_seconds: int = 3600) -> dict[str, Any]:
+    from advanced import cancel_job, schedule_job, scheduler_status
+    name = "neuroevolution-maintenance"
+    if enable:
+        interval = max(300, int(interval_seconds))
+        job = schedule_job(name, "evolution_maintenance", interval, run_now=False)
+        return {"ok": True, "enabled": True, "job": job}
+    jobs = {job.get("name"): job for job in scheduler_status().get("jobs", [])}
+    if name not in jobs:
+        return {"ok": True, "enabled": False, "already_disabled": True}
+    cancelled = cancel_job(name)
+    return {"ok": True, "enabled": False, "cancelled": cancelled}
