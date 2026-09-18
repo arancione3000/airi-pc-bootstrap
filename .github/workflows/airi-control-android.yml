@@ -69,7 +69,7 @@ jobs:
           retention-days: 30
 
   emulator-e2e:
-    name: Android emulator remote-control end-to-end
+    name: Android one-tap remote-control end-to-end
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
@@ -106,7 +106,7 @@ jobs:
       - name: Enable KVM access
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
-      - name: Run encrypted remote control in Android emulator
+      - name: Run one-tap encrypted control in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -157,5 +157,5 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "Airi Control v$VERSION" \
-              --notes "Consent-based Android remote control for Airi-PC with explicit Accessibility and MediaProjection approval, encrypted command/result transport, visible foreground notification, lock-screen/password protections, and a local emergency STOP."
+              --notes "One-tap Android remote control for Airi-PC. Accessibility is authorized once; starting a session requires one tap, pairing is automatic, screenshots use the Accessibility service instead of MediaProjection, commands/results are encrypted and signed, lock-screen/password safeguards remain active, and STOP ends remote control while keeping the one-time Accessibility permission for easy restart."
           fi

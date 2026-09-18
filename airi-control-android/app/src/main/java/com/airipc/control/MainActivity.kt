@@ -1,12 +1,8 @@
 package com.airipc.control
 
 import android.Manifest
-import android.app.Activity
-import android.content.ClipboardManager
-import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -16,52 +12,62 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
     private var accessibilityEnabled by mutableStateOf(false)
-
-    private val projectionLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-                ContextCompat.startForegroundService(
-                    this,
-                    PhoneControlService.startIntent(this, result.resultCode, result.data!!),
-                )
-            } else {
-                Toast.makeText(this, "Condivisione schermo annullata", Toast.LENGTH_SHORT).show()
-            }
-        }
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        PairingSecret.text(this)
         maybeRequestNotifications()
         setContent {
-            val active by PhoneControlService.active.collectAsState()
+            val active by AiriAccessibilityService.active.collectAsState()
+            val controllerConnected by AiriAccessibilityService.controllerConnected.collectAsState()
             MaterialTheme {
                 Surface(color = Color(0xFF0C0C0F), modifier = Modifier.fillMaxSize()) {
                     ControlScreen(
                         active = active,
+                        controllerConnected = controllerConnected,
                         accessibilityEnabled = accessibilityEnabled,
-                        pairingCode = PairingSecret.text(this),
-                        onEnableAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+                        onEnableAccessibility = {
+                            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        },
                         onStart = { beginControl() },
-                        onStop = { startService(PhoneControlService.stopIntent(this)) },
-                        onCopyPairing = { copyPairingCode() },
+                        onStop = { AiriAccessibilityService.stopSession() },
+                        onRevoke = {
+                            AiriAccessibilityService.disableFromApp()
+                            accessibilityEnabled = false
+                        },
                     )
                 }
             }
@@ -70,38 +76,39 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        accessibilityEnabled = AiriAccessibilityService.connected() || isAccessibilityEnabled()
+        accessibilityEnabled =
+            AiriAccessibilityService.connected() || isAccessibilityEnabled()
     }
 
     private fun beginControl() {
-        accessibilityEnabled = AiriAccessibilityService.connected() || isAccessibilityEnabled()
+        accessibilityEnabled =
+            AiriAccessibilityService.connected() || isAccessibilityEnabled()
         if (!accessibilityEnabled) {
             Toast.makeText(
                 this,
-                "Prima abilita Airi Control nelle impostazioni Accessibilità",
+                "Autorizza Airi Control una sola volta in Accessibilita",
                 Toast.LENGTH_LONG,
             ).show()
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             return
         }
-        projectionLauncher.launch(
-            getSystemService(MediaProjectionManager::class.java).createScreenCaptureIntent()
-        )
-    }
-
-    private fun maybeRequestNotifications() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        if (!AiriAccessibilityService.startSession()) {
+            Toast.makeText(
+                this,
+                "Il servizio si sta collegando. Torna qui tra un secondo e riprova.",
+                Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 
-    private fun copyPairingCode() {
-        getSystemService(ClipboardManager::class.java).setPrimaryClip(
-            ClipData.newPlainText("Airi Control pairing", PairingSecret.text(this))
-        )
-        Toast.makeText(this, "Codice copiato", Toast.LENGTH_SHORT).show()
+    private fun maybeRequestNotifications() {
+        if (
+            Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     private fun isAccessibilityEnabled(): Boolean {
@@ -112,7 +119,8 @@ class MainActivity : ComponentActivity() {
         val expected = packageName + "/" + AiriAccessibilityService::class.java.name
         val shortExpected = packageName + "/.AiriAccessibilityService"
         return enabled.split(':').any {
-            it.equals(expected, ignoreCase = true) || it.equals(shortExpected, ignoreCase = true)
+            it.equals(expected, ignoreCase = true) ||
+                it.equals(shortExpected, ignoreCase = true)
         }
     }
 }
@@ -120,12 +128,12 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun ControlScreen(
     active: Boolean,
+    controllerConnected: Boolean,
     accessibilityEnabled: Boolean,
-    pairingCode: String,
     onEnableAccessibility: () -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
-    onCopyPairing: () -> Unit,
+    onRevoke: () -> Unit,
 ) {
     var targetHit by remember { mutableStateOf(false) }
     var testText by remember { mutableStateOf("") }
@@ -134,10 +142,24 @@ private fun ControlScreen(
         modifier = Modifier.fillMaxSize().padding(28.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        Text("Airi Control", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
         Text(
-            if (active) "CONTROLLO ATTIVO" else "Controllo disattivato",
-            color = if (active) Color(0xFF67D69A) else Color(0xFFB7B2BD),
+            "Airi Control",
+            color = Color.White,
+            fontSize = 34.sp,
+            fontWeight = FontWeight.Bold,
+        )
+
+        Text(
+            when {
+                active && controllerConnected -> "Airi-PC collegata"
+                active -> "In attesa di Airi-PC..."
+                else -> "Controllo disattivato"
+            },
+            color = when {
+                active && controllerConnected -> Color(0xFF67D69A)
+                active -> Color(0xFFFFB04A)
+                else -> Color(0xFFB7B2BD)
+            },
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -147,11 +169,24 @@ private fun ControlScreen(
             shape = RoundedCornerShape(22.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("ACCESSIBILITÀ", color = Color(0xFFFF8A00), fontWeight = FontWeight.Bold)
-                Text(if (accessibilityEnabled) "Abilitata ✓" else "Da abilitare", color = Color.White)
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    "ACCESSIBILITA",
+                    color = Color(0xFFFF8A00),
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    if (accessibilityEnabled) "Abilitata ✓" else "Da autorizzare una sola volta",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                )
                 if (!accessibilityEnabled) {
-                    Button(onClick = onEnableAccessibility) { Text("APRI IMPOSTAZIONI ACCESSIBILITÀ") }
+                    Button(onClick = onEnableAccessibility) {
+                        Text("AUTORIZZA ACCESSIBILITA")
+                    }
                 }
             }
         }
@@ -161,11 +196,28 @@ private fun ControlScreen(
             shape = RoundedCornerShape(22.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("CODICE DI ABBINAMENTO", color = Color(0xFFFF8A00), fontWeight = FontWeight.Bold)
-                Text(pairingCode, color = Color.White, fontSize = 14.sp)
-                Text("Tienilo privato. Serve una sola volta per autorizzare Airi-PC.", color = Color(0xFFAAA5B0), fontSize = 13.sp)
-                Button(onClick = onCopyPairing) { Text("COPIA CODICE") }
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "ABBINAMENTO AUTOMATICO",
+                    color = Color(0xFFFF8A00),
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    if (active) {
+                        if (controllerConnected) {
+                            "Fatto. Airi-PC si e collegata da sola."
+                        } else {
+                            "Nessun codice: sto cercando Airi-PC automaticamente."
+                        }
+                    } else {
+                        "Premi Avvia controllo: non servono codici, QR o copia/incolla."
+                    },
+                    color = Color(0xFFCBC6CF),
+                    fontSize = 14.sp,
+                )
             }
         }
 
@@ -173,18 +225,32 @@ private fun ControlScreen(
             Button(
                 onClick = onStart,
                 enabled = accessibilityEnabled,
-                modifier = Modifier.fillMaxWidth().height(58.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF8A00)),
+                modifier = Modifier.fillMaxWidth().height(62.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFF8A00),
+                ),
             ) {
-                Text("AVVIA CONTROLLO", color = Color.Black, fontWeight = FontWeight.Bold)
+                Text(
+                    "AVVIA CONTROLLO",
+                    color = Color.Black,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                )
             }
         } else {
             Button(
                 onClick = onStop,
-                modifier = Modifier.fillMaxWidth().height(68.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD83A3A)),
+                modifier = Modifier.fillMaxWidth().height(72.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFD83A3A),
+                ),
             ) {
-                Text("STOP IMMEDIATO", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "STOP IMMEDIATO",
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
 
@@ -213,7 +279,7 @@ private fun ControlScreen(
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Campo test testo") },
             singleLine = true,
-            textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 16.sp),
+            textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White,
@@ -226,10 +292,25 @@ private fun ControlScreen(
         )
 
         Text(
-            "STOP chiude controllo remoto e condivisione schermo. " +
-                "L'app non può sbloccare il telefono né scrivere nei campi password.",
+            if (active) {
+                "STOP interrompe subito la sessione remota. Il permesso Accessibilita resta autorizzato, cosi la prossima volta basta un tap."
+            } else {
+                "Airi Control non puo sbloccare il telefono e non inserisce testo nei campi password."
+            },
             color = Color(0xFF8F8A95),
             fontSize = 13.sp,
         )
+
+        if (!active && accessibilityEnabled) {
+            Button(
+                onClick = onRevoke,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF29272D),
+                ),
+            ) {
+                Text("REVOCA ACCESSIBILITA", color = Color(0xFFCBC6CF))
+            }
+        }
     }
 }

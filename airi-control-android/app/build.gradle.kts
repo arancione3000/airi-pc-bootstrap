@@ -7,31 +7,40 @@ plugins {
 val airiControlRelay = providers.gradleProperty("airiControlRelay").orElse("").get()
 val airiControlTopic = providers.gradleProperty("airiControlTopic").orElse("").get()
 fun quotedBuildConfig(value: String): String =
-    "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    """ + value.replace("\", "\\").replace(""", "\"") + """
 
 android {
     namespace = "com.airipc.control"
     compileSdk = 35
+
     defaultConfig {
         applicationId = "com.airipc.control"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         buildConfigField("String", "CONTROL_RELAY_OVERRIDE", quotedBuildConfig(airiControlRelay))
         buildConfigField("String", "CONTROL_TOPIC_OVERRIDE", quotedBuildConfig(airiControlTopic))
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
     buildFeatures {
         compose = true
         buildConfig = true
     }
-    packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+
+    packaging {
+        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
 }
-kotlin { jvmToolchain(17) }
+
+kotlin {
+    jvmToolchain(17)
+}
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.05.01"))

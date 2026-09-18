@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
-import hmac
 import json
 import os
 import secrets
@@ -17,86 +16,67 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-ROOT = Path(os.environ.get("AIRI_ROOT") or os.environ.get("AIRIPC_WORKSPACE_ROOT") or Path(__file__).resolve().parents[2]).resolve()
+ROOT = Path(
+    os.environ.get("AIRI_ROOT")
+    or os.environ.get("AIRIPC_WORKSPACE_ROOT")
+    or Path(__file__).resolve().parents[2]
+).resolve()
 CONFIG_PATH = ROOT / ".ai" / "airi_control.json"
-PAIR_PATH = ROOT / ".ai" / "state" / "phone_pair_secret"
+SESSION_PATH = ROOT / ".ai" / "state" / "phone_control_controller.json"
 
-
-def _b64u_decode(value: str) -> bytes:
-    value = value.strip()
-    value += "=" * ((4 - len(value) % 4) % 4)
-    return base64.urlsafe_b64decode(value.encode())
+DEFAULT_RELAY = "https://ntfy.sh"
+DEFAULT_BOOTSTRAP = "airi-control-bootstrap-2e6a6f6c97314f2ba8d6c41e2fa1e4d2"
 
 
 def _b64(data: bytes) -> str:
     return base64.b64encode(data).decode()
 
 
-def pair_secret(value: str | None = None) -> bytes:
-    raw = value or os.environ.get("AIRI_PHONE_PAIR_SECRET", "").strip()
-    if not raw:
-        try:
-            raw = PAIR_PATH.read_text(encoding="utf-8").strip()
-        except OSError:
-            raw = ""
-    if not raw:
-        raise RuntimeError("Airi Control is not paired. Run: python -m computer.control_plane.phone_control pair <code>")
-    decoded = _b64u_decode(raw)
-    if len(decoded) != 32:
-        raise ValueError("pairing code must decode to exactly 32 bytes")
-    return decoded
+def _canonical(*fields: str) -> bytes:
+    return "\n".join(fields).encode("utf-8")
 
 
-def save_pair_secret(value: str) -> dict[str, Any]:
-    decoded = _b64u_decode(value)
-    if len(decoded) != 32:
-        raise ValueError("pairing code must decode to exactly 32 bytes")
-    PAIR_PATH.parent.mkdir(parents=True, exist_ok=True)
-    PAIR_PATH.write_text(value.strip() + "\n", encoding="utf-8")
-    PAIR_PATH.chmod(0o600)
-    return {"ok": True, "auth_id": hashlib.sha256(decoded).digest()[:8].hex(), "path": str(PAIR_PATH)}
+def _key_id(public_der: bytes) -> str:
+    return hashlib.sha256(public_der).digest()[:12].hex()
 
 
 def _config() -> dict[str, str]:
     data = {
-        "relay_base": "https://ntfy.sh",
-        "topic": "airi-control-6f4ea987afbe4cc9b71c11f0421e4d88555ee508c97a4102",
-        "history": "30m",
+        "relay_base": DEFAULT_RELAY,
+        "bootstrap_topic": DEFAULT_BOOTSTRAP,
     }
     try:
         row = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
         if isinstance(row, dict):
-            for key in data:
-                if row.get(key):
-                    data[key] = str(row[key])
+            if row.get("relay_base"):
+                data["relay_base"] = str(row["relay_base"])
+            if row.get("bootstrap_topic"):
+                data["bootstrap_topic"] = str(row["bootstrap_topic"])
+            elif row.get("topic"):
+                data["bootstrap_topic"] = str(row["topic"])
     except Exception:
         pass
+
     env_relay = os.environ.get("AIRI_CONTROL_RELAY_BASE", "").strip()
     env_topic = os.environ.get("AIRI_CONTROL_TOPIC", "").strip()
     if env_relay:
         data["relay_base"] = env_relay
     if env_topic:
-        data["topic"] = env_topic
+        data["bootstrap_topic"] = env_topic
     return data
 
 
-def _auth_id(secret: bytes) -> str:
-    return hashlib.sha256(secret).digest()[:8].hex()
-
-
-def _tag(secret: bytes, *fields: str) -> str:
-    raw = "\n".join(fields).encode()
-    return base64.urlsafe_b64encode(hmac.new(secret, raw, hashlib.sha256).digest()).decode().rstrip("=")
-
-
-def _publish(payload: dict[str, Any]) -> dict[str, Any]:
+def _publish(topic: str, payload: dict[str, Any]) -> dict[str, Any]:
     cfg = _config()
     body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
     req = urllib.request.Request(
-        f"{cfg['relay_base'].rstrip('/')}/{cfg['topic']}",
+        f"{cfg['relay_base'].rstrip('/')}/{topic}",
         data=body,
         method="POST",
-        headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "Airi-PC-Phone-Control/0.1"},
+        headers={
+            "Content-Type": "text/plain; charset=utf-8",
+            "User-Agent": "Airi-PC-Phone-Control/0.2",
+        },
     )
     with urllib.request.urlopen(req, timeout=20) as response:
         text = response.read().decode("utf-8", errors="replace")
@@ -106,13 +86,17 @@ def _publish(payload: dict[str, Any]) -> dict[str, Any]:
         return {"raw": text}
 
 
-def _messages(since: str = "30m") -> list[dict[str, Any]]:
+def _messages(topic: str, since: str = "2m") -> list[dict[str, Any]]:
     cfg = _config()
-    url = f"{cfg['relay_base'].rstrip('/')}/{cfg['topic']}/json?poll=1&since={since}"
-    req = urllib.request.Request(url, headers={"User-Agent": "Airi-PC-Phone-Control/0.1"})
+    url = f"{cfg['relay_base'].rstrip('/')}/{topic}/json?poll=1&since={since}"
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Airi-PC-Phone-Control/0.2"},
+    )
     with urllib.request.urlopen(req, timeout=20) as response:
         lines = response.read().decode("utf-8", errors="replace").splitlines()
-    out = []
+
+    out: list[dict[str, Any]] = []
     for line in lines:
         try:
             outer = json.loads(line)
@@ -126,32 +110,37 @@ def _messages(since: str = "30m") -> list[dict[str, Any]]:
     return out
 
 
-def _discover_device(secret: bytes, timeout: float = 30.0) -> dict[str, Any]:
-    aid = _auth_id(secret)
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        candidates = [
-            m for m in _messages("30m")
-            if m.get("kind") == "phone_device_key"
-            and m.get("auth_id") == aid
-            and m.get("device_key_id")
-            and m.get("public_key_b64")
-        ]
-        if candidates:
-            return max(candidates, key=lambda x: int(x.get("ts") or x.get("_relay_time") or 0))
-        time.sleep(1.0)
-    raise TimeoutError("paired phone not found on the control relay")
-
-
-def _controller_keypair() -> tuple[Any, str, str]:
+def _generate_controller() -> tuple[Any, str, str]:
     private = rsa.generate_private_key(public_exponent=65537, key_size=3072)
     public_der = private.public_key().public_bytes(
         serialization.Encoding.DER,
         serialization.PublicFormat.SubjectPublicKeyInfo,
     )
-    public_b64 = _b64(public_der)
-    key_id = hashlib.sha256(public_der).digest()[:12].hex()
-    return private, key_id, public_b64
+    return private, _key_id(public_der), _b64(public_der)
+
+
+def _sign(private: Any, data: bytes) -> str:
+    return _b64(
+        private.sign(
+            data,
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+    )
+
+
+def _verify(public_b64: str, data: bytes, signature_b64: str) -> bool:
+    try:
+        public = serialization.load_der_public_key(base64.b64decode(public_b64))
+        public.verify(
+            base64.b64decode(signature_b64),
+            data,
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+        return True
+    except Exception:
+        return False
 
 
 def _hybrid_encrypt(public_b64: str, plain: bytes) -> dict[str, str]:
@@ -190,104 +179,291 @@ def _hybrid_decrypt(private: Any, packet: dict[str, Any]) -> bytes:
     )
 
 
-def _verify_result_tag(secret: bytes, packet: dict[str, Any]) -> bool:
-    expected = _tag(
-        secret,
-        "phone_result",
-        str(packet.get("device_key_id") or ""),
-        str(packet.get("controller_key_id") or ""),
-        str(packet.get("command_id") or ""),
-        str(packet.get("wrapped_key_b64") or ""),
-        str(packet.get("nonce_b64") or ""),
-        str(packet.get("ciphertext_b64") or ""),
-        str(packet.get("ts") or ""),
-        str(packet.get("auth_id") or ""),
+def _verify_ready(row: dict[str, Any]) -> bool:
+    try:
+        signed = _canonical(
+            "phone_ready",
+            str(row["session_id"]),
+            str(row["device_key_id"]),
+            str(row["encryption_public_key_b64"]),
+            str(row["signing_public_key_b64"]),
+            str(row["session_topic"]),
+            str(row["ts"]),
+            str(row["expires_at"]),
+        )
+        return _verify(
+            str(row["signing_public_key_b64"]),
+            signed,
+            str(row["device_signature_b64"]),
+        )
+    except Exception:
+        return False
+
+
+def _discover_ready(timeout: float = 30.0) -> dict[str, Any]:
+    cfg = _config()
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        now = int(time.time())
+        rows = [
+            row
+            for row in _messages(cfg["bootstrap_topic"], "2m")
+            if row.get("kind") == "phone_ready"
+            and int(row.get("expires_at") or 0) >= now
+            and row.get("session_id")
+            and row.get("session_topic")
+            and row.get("device_key_id")
+            and row.get("encryption_public_key_b64")
+            and row.get("signing_public_key_b64")
+            and _verify_ready(row)
+        ]
+        if rows:
+            return max(
+                rows,
+                key=lambda x: int(x.get("ts") or x.get("_relay_time") or 0),
+            )
+        time.sleep(0.8)
+    raise TimeoutError(
+        "Airi Control non trovato. Premi AVVIA CONTROLLO sul telefono."
     )
-    return hmac.compare_digest(expected, str(packet.get("auth_tag") or ""))
 
 
-def send(op: str, args: dict[str, Any] | None = None, *, timeout: float = 45.0, secret_text: str | None = None) -> dict[str, Any]:
-    secret = pair_secret(secret_text)
-    device = _discover_device(secret, timeout=min(timeout, 30.0))
-    private, controller_id, controller_public = _controller_keypair()
-    now = int(time.time())
-    aid = _auth_id(secret)
-    controller = {
-        "kind": "phone_controller_key",
+def _save_session(
+    ready: dict[str, Any],
+    private: Any,
+    controller_id: str,
+    controller_public_b64: str,
+) -> dict[str, Any]:
+    pem = private.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+    row = {
+        "session_id": str(ready["session_id"]),
+        "session_topic": str(ready["session_topic"]),
+        "device_key_id": str(ready["device_key_id"]),
+        "device_encryption_public_key_b64": str(
+            ready["encryption_public_key_b64"]
+        ),
+        "device_signing_public_key_b64": str(
+            ready["signing_public_key_b64"]
+        ),
         "controller_key_id": controller_id,
-        "public_key_b64": controller_public,
-        "auth_id": aid,
-        "ts": now,
-        "protocol": 1,
+        "controller_public_key_b64": controller_public_b64,
+        "controller_private_pem": pem,
+        "saved_at": int(time.time()),
     }
-    controller["auth_tag"] = _tag(
-        secret,
-        "phone_controller_key",
-        controller_id,
-        controller_public,
-        str(now),
-        aid,
-    )
-    _publish(controller)
-    time.sleep(0.7)
+    SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SESSION_PATH.write_text(json.dumps(row), encoding="utf-8")
+    SESSION_PATH.chmod(0o600)
+    return row
 
+
+def _load_session() -> dict[str, Any] | None:
+    try:
+        row = json.loads(SESSION_PATH.read_text(encoding="utf-8"))
+        if not isinstance(row, dict):
+            return None
+        private = serialization.load_pem_private_key(
+            row["controller_private_pem"].encode(),
+            password=None,
+        )
+        row["_private"] = private
+        return row
+    except Exception:
+        return None
+
+
+def _clear_session() -> None:
+    try:
+        SESSION_PATH.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _pair(ready: dict[str, Any], timeout: float = 30.0) -> dict[str, Any]:
+    private, controller_id, controller_public = _generate_controller()
+    now = int(time.time())
+    request = {
+        "kind": "phone_pair_request",
+        "session_id": str(ready["session_id"]),
+        "device_key_id": str(ready["device_key_id"]),
+        "controller_key_id": controller_id,
+        "controller_public_key_b64": controller_public,
+        "ts": now,
+        "protocol": 2,
+    }
+    _publish(str(ready["session_topic"]), request)
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for ack in reversed(_messages(str(ready["session_topic"]), "2m")):
+            if (
+                ack.get("kind") != "phone_pair_ack"
+                or ack.get("session_id") != ready["session_id"]
+                or ack.get("device_key_id") != ready["device_key_id"]
+                or ack.get("controller_key_id") != controller_id
+            ):
+                continue
+
+            signed = _canonical(
+                "phone_pair_ack",
+                str(ack["session_id"]),
+                str(ack["device_key_id"]),
+                str(ack["controller_key_id"]),
+                str(ack["wrapped_key_b64"]),
+                str(ack["nonce_b64"]),
+                str(ack["ciphertext_b64"]),
+                str(ack["ts"]),
+            )
+            if not _verify(
+                str(ready["signing_public_key_b64"]),
+                signed,
+                str(ack.get("device_signature_b64") or ""),
+            ):
+                continue
+
+            plain = json.loads(_hybrid_decrypt(private, ack).decode("utf-8"))
+            if plain.get("ok") is not True:
+                continue
+            row = _save_session(
+                ready,
+                private,
+                controller_id,
+                controller_public,
+            )
+            row["_private"] = private
+            return row
+        time.sleep(0.7)
+    raise TimeoutError("Airi-PC non e riuscita ad abbinarsi automaticamente.")
+
+
+def _session(timeout: float = 30.0, force_new: bool = False) -> dict[str, Any]:
+    if not force_new:
+        cached = _load_session()
+        if cached is not None:
+            return cached
+    ready = _discover_ready(timeout=min(timeout, 30.0))
+    return _pair(ready, timeout=min(timeout, 30.0))
+
+
+def _verify_result(session: dict[str, Any], packet: dict[str, Any]) -> bool:
+    try:
+        signed = _canonical(
+            "phone_result",
+            str(packet["session_id"]),
+            str(packet["device_key_id"]),
+            str(packet["controller_key_id"]),
+            str(packet["command_id"]),
+            str(packet["wrapped_key_b64"]),
+            str(packet["nonce_b64"]),
+            str(packet["ciphertext_b64"]),
+            str(packet["ts"]),
+        )
+        return _verify(
+            str(session["device_signing_public_key_b64"]),
+            signed,
+            str(packet.get("device_signature_b64") or ""),
+        )
+    except Exception:
+        return False
+
+
+def _send_once(
+    session: dict[str, Any],
+    op: str,
+    args: dict[str, Any] | None,
+    timeout: float,
+) -> dict[str, Any]:
+    private = session["_private"]
     command_id = uuid.uuid4().hex[:20]
+    now = int(time.time())
     inner = {
         "id": command_id,
         "op": op,
         "args": args or {},
-        "issued_at": int(time.time()),
-        "expires_at": int(time.time()) + min(120, max(20, int(timeout) + 10)),
+        "issued_at": now,
+        "expires_at": now + min(120, max(20, int(timeout) + 10)),
     }
-    envelope = _hybrid_encrypt(device["public_key_b64"], json.dumps(inner, separators=(",", ":")).encode())
+    envelope = _hybrid_encrypt(
+        str(session["device_encryption_public_key_b64"]),
+        json.dumps(inner, separators=(",", ":")).encode(),
+    )
     ts = int(time.time())
+    signed = _canonical(
+        "phone_cmd",
+        str(session["session_id"]),
+        str(session["device_key_id"]),
+        str(session["controller_key_id"]),
+        envelope["wrapped_key_b64"],
+        envelope["nonce_b64"],
+        envelope["ciphertext_b64"],
+        str(ts),
+    )
     packet = {
         "kind": "phone_cmd",
-        "device_key_id": device["device_key_id"],
-        "controller_key_id": controller_id,
-        "auth_id": aid,
-        "ts": ts,
-        "protocol": 1,
+        "session_id": session["session_id"],
+        "device_key_id": session["device_key_id"],
+        "controller_key_id": session["controller_key_id"],
         **envelope,
+        "ts": ts,
+        "controller_signature_b64": _sign(private, signed),
+        "protocol": 2,
     }
-    packet["auth_tag"] = _tag(
-        secret,
-        "phone_cmd",
-        packet["device_key_id"],
-        controller_id,
-        packet["wrapped_key_b64"],
-        packet["nonce_b64"],
-        packet["ciphertext_b64"],
-        str(ts),
-        aid,
-    )
-    _publish(packet)
+    _publish(str(session["session_topic"]), packet)
 
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        for result in reversed(_messages("10m")):
+        for result in reversed(_messages(str(session["session_topic"]), "2m")):
             if (
                 result.get("kind") != "phone_result"
                 or result.get("command_id") != command_id
-                or result.get("controller_key_id") != controller_id
-                or result.get("auth_id") != aid
-                or not _verify_result_tag(secret, result)
+                or result.get("session_id") != session["session_id"]
+                or result.get("device_key_id") != session["device_key_id"]
+                or result.get("controller_key_id")
+                != session["controller_key_id"]
+                or not _verify_result(session, result)
             ):
                 continue
-            plain = json.loads(_hybrid_decrypt(private, result).decode("utf-8"))
+            plain = json.loads(
+                _hybrid_decrypt(private, result).decode("utf-8")
+            )
             return plain
-        time.sleep(0.8)
+        time.sleep(0.7)
     raise TimeoutError(f"phone command timed out: {op}")
 
 
-def screenshot(path: str, *, timeout: float = 60.0, secret_text: str | None = None) -> dict[str, Any]:
-    result = send("screenshot", timeout=timeout, secret_text=secret_text)
+def send(
+    op: str,
+    args: dict[str, Any] | None = None,
+    *,
+    timeout: float = 45.0,
+) -> dict[str, Any]:
+    session = _session(timeout=timeout)
+    try:
+        result = _send_once(session, op, args, timeout)
+    except TimeoutError:
+        _clear_session()
+        session = _session(timeout=timeout, force_new=True)
+        result = _send_once(session, op, args, timeout)
+
+    if op == "stop" and result.get("ok"):
+        _clear_session()
+    return result
+
+
+def screenshot(path: str, *, timeout: float = 60.0) -> dict[str, Any]:
+    result = send("screenshot", timeout=timeout)
     if not result.get("ok"):
         return result
     url = result.get("frame_url")
     if not url:
         raise RuntimeError("phone returned no frame URL")
-    req = urllib.request.Request(str(url), headers={"User-Agent": "Airi-PC-Phone-Control/0.1"})
+    req = urllib.request.Request(
+        str(url),
+        headers={"User-Agent": "Airi-PC-Phone-Control/0.2"},
+    )
     with urllib.request.urlopen(req, timeout=30) as response:
         encrypted = response.read()
     key = base64.b64decode(result["frame_key_b64"])
@@ -303,12 +479,8 @@ def screenshot(path: str, *, timeout: float = 60.0, secret_text: str | None = No
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="airi-phone-control")
-    parser.add_argument("--secret", default=None)
     parser.add_argument("--timeout", type=float, default=45.0)
     sub = parser.add_subparsers(dest="command", required=True)
-
-    p_pair = sub.add_parser("pair")
-    p_pair.add_argument("code")
 
     sub.add_parser("status")
     sub.add_parser("observe")
@@ -336,27 +508,45 @@ def main(argv: list[str] | None = None) -> int:
 
     ns = parser.parse_args(argv)
     try:
-        if ns.command == "pair":
-            result = save_pair_secret(ns.code)
-        elif ns.command == "tap":
-            result = send("tap", {"x": ns.x, "y": ns.y}, timeout=ns.timeout, secret_text=ns.secret)
+        if ns.command == "tap":
+            result = send(
+                "tap",
+                {"x": ns.x, "y": ns.y},
+                timeout=ns.timeout,
+            )
         elif ns.command == "swipe":
             result = send(
                 "swipe",
-                {"x1": ns.x1, "y1": ns.y1, "x2": ns.x2, "y2": ns.y2, "duration_ms": ns.duration_ms},
+                {
+                    "x1": ns.x1,
+                    "y1": ns.y1,
+                    "x2": ns.x2,
+                    "y2": ns.y2,
+                    "duration_ms": ns.duration_ms,
+                },
                 timeout=ns.timeout,
-                secret_text=ns.secret,
             )
         elif ns.command == "text":
-            result = send("text", {"text": ns.value}, timeout=ns.timeout, secret_text=ns.secret)
+            result = send(
+                "text",
+                {"text": ns.value},
+                timeout=ns.timeout,
+            )
         elif ns.command == "screenshot":
-            result = screenshot(ns.path, timeout=ns.timeout, secret_text=ns.secret)
+            result = screenshot(ns.path, timeout=ns.timeout)
         else:
-            result = send(ns.command, timeout=ns.timeout, secret_text=ns.secret)
+            result = send(ns.command, timeout=ns.timeout)
+
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0 if result.get("ok", True) else 2
     except Exception as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}, indent=2, ensure_ascii=False))
+        print(
+            json.dumps(
+                {"ok": False, "error": str(exc)},
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
         return 1
 
 

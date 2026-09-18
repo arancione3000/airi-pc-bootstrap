@@ -18,11 +18,6 @@ if adb shell pm list permissions -g 2>/dev/null | grep -q 'android.permission.PO
   adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 fi
 
-adb shell settings put secure enabled_accessibility_services "$PKG/$PKG.AiriAccessibilityService"
-adb shell settings put secure accessibility_enabled 1
-adb shell am start -n "$ACTIVITY"
-sleep 1
-
 dump_ui() {
   adb shell uiautomator dump /sdcard/airi-control-window.xml >/dev/null 2>&1 || true
   adb exec-out cat /sdcard/airi-control-window.xml > "$OUT/window.xml"
@@ -74,12 +69,16 @@ diagnostics() {
   echo "AIRI_CONTROL_E2E_DIAGNOSTIC rc=$rc" >&2
   adb shell settings get secure enabled_accessibility_services > "$OUT/enabled-accessibility.txt" 2>&1 || true
   adb shell dumpsys accessibility > "$OUT/accessibility-failure.txt" 2>&1 || true
-  adb shell dumpsys activity services "$PKG" > "$OUT/services-failure.txt" 2>&1 || true
   adb logcat -d -t 1200 > "$OUT/logcat.txt" 2>&1 || true
   dump_ui || true
   adb exec-out screencap -p > "$OUT/failure-screen.png" 2>/dev/null || true
 }
 trap 'rc=$?; diagnostics "$rc"; exit "$rc"' ERR
+
+adb shell settings put secure enabled_accessibility_services "$PKG/$PKG.AiriAccessibilityService"
+adb shell settings put secure accessibility_enabled 1
+adb shell am start -n "$ACTIVITY"
+sleep 1
 
 bound=0
 for attempt in $(seq 1 40); do
@@ -96,14 +95,9 @@ for attempt in $(seq 1 40); do
   fi
   sleep 0.5
 done
-if [ "$bound" -ne 1 ]; then
-  echo "Accessibility service did not bind" >&2
-  false
-fi
+test "$bound" -eq 1
 echo "AIRI_CONTROL_ACCESSIBILITY_BOUND=PASS"
 
-# Simulate the real user flow: return from Android Accessibility settings to the app
-# so MainActivity.onResume() refreshes the enabled state and unlocks START.
 adb shell input keyevent KEYCODE_HOME
 sleep 0.4
 adb shell am start -n "$ACTIVITY" >/dev/null
@@ -113,59 +107,21 @@ for _ in $(seq 1 20); do
   fi
   sleep 0.4
 done
-if ! coords_for 'Abilitata' >/dev/null 2>&1; then
-  echo "Airi Control UI did not refresh accessibility state" >&2
-  false
-fi
+coords_for 'Abilitata' >/dev/null
 echo "AIRI_CONTROL_ACCESSIBILITY_UI=PASS"
 
-PAIR_XML=""
-for _ in $(seq 1 30); do
-  PAIR_XML="$(adb exec-out run-as "$PKG" cat shared_prefs/airi_control_pairing.xml 2>/dev/null || true)"
-  if printf '%s' "$PAIR_XML" | grep -q '<map'; then
+rm -f "$ROOT/.ai/state/phone_control_controller.json"
+tap_matching '^AVVIA CONTROLLO$'
+for _ in $(seq 1 20); do
+  if coords_for 'In attesa di Airi-PC' >/dev/null 2>&1; then
     break
   fi
   sleep 0.4
 done
-printf '%s\n' "$PAIR_XML" > "$OUT/pairing.xml"
-PAIR="$(python3 - "$OUT/pairing.xml" <<'PY'
-import sys, xml.etree.ElementTree as ET
-root = ET.parse(sys.argv[1]).getroot()
-for node in root.findall("string"):
-    if node.attrib.get("name") == "pairing_secret_v1" and (node.text or "").strip():
-        print((node.text or "").strip())
-        break
-else:
-    raise SystemExit("pairing secret not found")
-PY
-)"
-test -n "$PAIR"
-echo "AIRI_CONTROL_PAIRING_READY=PASS"
+coords_for 'In attesa di Airi-PC' >/dev/null
+echo "AIRI_CONTROL_ONE_TAP_START=PASS"
 
-tap_matching '^AVVIA CONTROLLO$'
-sleep 1
-
-# Android 14/15 may default to sharing a single app. Force full-screen sharing.
-if coords_for '(A single app|Singola app|Una singola app)' >/tmp/airi-share-spinner 2>/dev/null; then
-  adb shell input tap $(cat /tmp/airi-share-spinner)
-  sleep 0.5
-  tap_matching '^(Entire screen|Full screen|Intero schermo|Schermo intero)$' 12
-  sleep 0.5
-fi
-
-tap_matching '^(START|Start now|Share|Share screen|Avvia|Avvia ora|Condividi|Condividi schermo)$' 24
-
-for _ in $(seq 1 30); do
-  if adb shell dumpsys activity services "$PKG" | grep -q 'PhoneControlService'; then
-    break
-  fi
-  sleep 0.5
-done
-adb shell dumpsys activity services "$PKG" > "$OUT/services-active.txt"
-grep -q 'PhoneControlService' "$OUT/services-active.txt"
-echo "AIRI_CONTROL_FOREGROUND_SERVICE=PASS"
-
-CTL=(python3 "$ROOT/computer/control_plane/phone_control.py" --secret "$PAIR" --timeout 30)
+CTL=(python3 "$ROOT/computer/control_plane/phone_control.py" --timeout 30)
 
 "${CTL[@]}" status > "$OUT/status.json"
 python3 - "$OUT/status.json" <<'PY'
@@ -173,8 +129,10 @@ import json, sys
 x=json.load(open(sys.argv[1]))
 assert x.get("ok") is True, x
 assert x.get("active") is True, x
+assert x.get("controller_connected") is True, x
 assert x.get("accessibility") is True, x
 assert x.get("screen_capture") is True, x
+print("AIRI_CONTROL_AUTO_PAIR=PASS")
 print("AIRI_CONTROL_REMOTE_STATUS=PASS")
 PY
 
@@ -185,7 +143,7 @@ p=pathlib.Path(sys.argv[1])
 data=p.read_bytes()
 assert len(data) > 5000, len(data)
 assert data[:2] == b'\xff\xd8', data[:8]
-print("AIRI_CONTROL_ENCRYPTED_SCREENSHOT=PASS", len(data))
+print("AIRI_CONTROL_ACCESSIBILITY_SCREENSHOT=PASS", len(data))
 PY
 
 TARGET="$(coords_for '^Area test controllo$')"
@@ -208,37 +166,26 @@ sleep 0.5
 grep -q 'AIRI_PHONE_OK' "$OUT/observe-text.json"
 echo "AIRI_CONTROL_REMOTE_TEXT=PASS"
 
-# Hide the keyboard so the local emergency stop remains directly tappable.
 adb shell input keyevent KEYCODE_BACK || true
 sleep 0.5
 tap_matching '^STOP IMMEDIATO$'
 
-for _ in $(seq 1 30); do
-  if ! adb shell dumpsys activity services "$PKG" | grep -q 'PhoneControlService'; then
-    break
-  fi
-  sleep 0.4
-done
-if adb shell dumpsys activity services "$PKG" | grep -q 'PhoneControlService'; then
-  echo "PhoneControlService still active after STOP" >&2
-  exit 1
-fi
-
 for _ in $(seq 1 20); do
-  enabled="$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')"
-  if ! echo "$enabled" | grep -q "$PKG"; then
+  if coords_for 'Controllo disattivato' >/dev/null 2>&1; then
     break
   fi
   sleep 0.4
 done
+coords_for 'Controllo disattivato' >/dev/null
+
 enabled="$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')"
-if echo "$enabled" | grep -q "$PKG"; then
-  echo "Accessibility still enabled after STOP" >&2
-  exit 1
-fi
+echo "$enabled" | grep -q "$PKG"
+adb shell dumpsys accessibility > "$OUT/accessibility-after-stop.txt"
+grep -q 'AiriAccessibilityService' "$OUT/accessibility-after-stop.txt"
+echo "AIRI_CONTROL_STOP_KEEPS_PERMISSION=PASS"
 
 if "${CTL[@]}" --timeout 5 status > "$OUT/status-after-stop.json" 2>&1; then
-  echo "Remote control unexpectedly answered after STOP" >&2
+  echo "Remote control unexpectedly answered after local STOP" >&2
   exit 1
 fi
 
