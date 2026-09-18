@@ -31,6 +31,8 @@ class EvolutionConfig:
     min_f1_first_champion: float = 0.55
     min_f1_improvement: float = 0.002
     max_f1_regression: float = 0.01
+    promotion_repeats: int = 3
+    min_promotion_votes: int = 2
     crossover_probability: float = 0.60
     elite_count: int = 2
 
@@ -52,6 +54,8 @@ class EvolutionConfig:
         base.candidate_epochs = max(1, min(30, int(base.candidate_epochs)))
         base.finalist_epochs = max(base.candidate_epochs, min(50, int(base.finalist_epochs)))
         base.elite_count = max(1, min(base.population - 1, int(base.elite_count)))
+        base.promotion_repeats = max(1, min(7, int(base.promotion_repeats)))
+        base.min_promotion_votes = max(1, min(base.promotion_repeats, int(base.min_promotion_votes)))
         return base
 
 
@@ -313,7 +317,22 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         old_genome, old_model = old_loaded
         old_eval = {"genome_id": old_genome.genome_id, **evaluate_model(old_model, old_genome, test, cfg.vocab_size, latency_repeats=12)}
         old_eval.update(fitness(old_eval, cfg))
-    promote, reason = _promotion_decision(candidate_final, old_eval, cfg)
+
+    promotion_trials = []
+    votes = 0
+    for trial in range(cfg.promotion_repeats):
+        trial_model, trial_train = train_model(best_genome, train + val, cfg.finalist_epochs, cfg.vocab_size, cfg.seed + 777_777 + trial * 97)
+        trial_metrics = evaluate_model(trial_model, best_genome, test, cfg.vocab_size, latency_repeats=8)
+        trial_fit = fitness(trial_metrics, cfg)
+        trial_row = {"trial": trial, "genome_id": best_genome.genome_id, **trial_metrics, **trial_fit, "train": trial_train}
+        trial_promote, trial_reason = _promotion_decision(trial_row, old_eval, cfg)
+        trial_row["promotion_vote"] = trial_promote
+        trial_row["promotion_reason"] = trial_reason
+        promotion_trials.append(trial_row)
+        votes += int(trial_promote)
+    promote = votes >= cfg.min_promotion_votes
+    reason = f"{votes}/{cfg.promotion_repeats} independent promotion votes; " + ("majority gate passed" if promote else "majority gate failed")
+    candidate_final = max(promotion_trials, key=lambda row: row["f1"])
 
     if promote:
         champion_dir.mkdir(parents=True, exist_ok=True)
@@ -340,6 +359,7 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         "best_search_candidate": best_row,
         "candidate": candidate_final,
         "previous_champion": old_eval,
+        "promotion_trials": promotion_trials,
         "promoted": promote,
         "promotion_reason": reason,
         "run_dir": str(run_dir),
