@@ -245,7 +245,7 @@ font:600 12px system-ui,sans-serif;letter-spacing:.04em}}
 </style></head><body><img id="screen" src="/stream/{token}" alt="Airi-PC live screen"><div id="badge">AIRI-PC · LIVE POV · MJPEG</div>
 <script>
 const img=document.getElementById('screen');
-img.onerror=()=>setTimeout(()=>{img.src='/stream/{token}?t='+Date.now()},1200);
+img.onerror=()=>setTimeout(()=>{{img.src='/stream/{token}?t='+Date.now()}},1200);
 </script></body></html>"""
         self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
 
