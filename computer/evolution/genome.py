@@ -136,6 +136,7 @@ def mutate(parent: Genome, rng: random.Random, new_id: str, mode: str = "safe") 
     widths = WIDTHS_EXPERIMENTAL if mode == "experimental" else WIDTHS_SAFE
     max_blocks = 7 if mode == "experimental" else 4
 
+    # Self-adaptation is deliberately stronger in experimental mode.
     if mode == "experimental" and rng.random() < 0.45:
         g.mutation_rate *= rng.uniform(0.75, 1.35)
         g.structural_rate *= rng.uniform(0.70, 1.45)
