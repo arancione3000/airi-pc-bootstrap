@@ -314,12 +314,22 @@ def maintenance(*, mode: str = "safe") -> dict[str, Any]:
     )
     if should_evolve and st["dataset_records"] >= 40 and min(st["class_counts"].values()) >= 4 and not st["running"]:
         started = start(mode=mode, auto_setup=True)
+
+    edge_result = None
+    edge_attempt = STATE / "edge" / "attempt.json"
+    if st["champion"] and not st["running"] and not started and not st.get("edge_available") and not edge_attempt.exists():
+        try:
+            edge_result = edge_quantize(64)
+        except Exception as exc:
+            edge_result = {"ok": False, "error": repr(exc)}
+
     return {
         "ok": True,
         "status": st,
         "drift": drift_state,
         "evolution_started": started,
         "trigger": "drift" if drift_state.get("drift") and started else ("new_verified_samples" if started else None),
+        "edge_optimization": edge_result,
         "pipeline": pipeline_status(),
     }
 
