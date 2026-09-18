@@ -31,6 +31,7 @@ The output is a learned reliability estimate, not proof of factual truth. For co
 - computer_evolution_start
 - computer_evolution_stop
 - computer_evolution_maintenance
+- computer_evolution_autopilot
 - computer_research
 - computer_browser_open
 - computer_browser_text
