@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "computer"))
 
-from evolution import claimreview
+from evolution import claimreview, runtime
 from evolution.artifacts import report
 from evolution.data import load_records
 from evolution.liar import import_tsv
@@ -96,3 +96,18 @@ def test_report_works_before_first_champion(tmp_path: Path):
     assert result["ok"] is True
     assert result["dataset_records"] == 0
     assert result["champion"]["metrics"] is None
+
+
+def test_claimreview_fetch_rejects_local_and_non_http_urls():
+    import pytest
+    with pytest.raises(ValueError, match="public http/https"):
+        claimreview.fetch_claimreviews("file:///etc/passwd")
+    with pytest.raises(ValueError, match="non-public"):
+        claimreview.fetch_claimreviews("http://127.0.0.1/internal")
+
+
+def test_runtime_export_is_confined_to_evolution_state(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(runtime, "STATE", tmp_path)
+    result = runtime.export("/tmp/escape.zip")
+    assert result["ok"] is False
+    assert "exports directory" in result["error"]
