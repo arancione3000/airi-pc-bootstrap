@@ -63,9 +63,9 @@ class MainActivity : ComponentActivity() {
                             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         },
                         onStart = { beginControl() },
-                        onStop = { AiriAccessibilityService.stopSession() },
+                        onStop = { AiriAccessibilityService.stopSession(this) },
                         onRevoke = {
-                            AiriAccessibilityService.disableFromApp()
+                            AiriAccessibilityService.disableFromApp(this)
                             accessibilityEnabled = false
                         },
                     )
@@ -92,13 +92,7 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             return
         }
-        if (!AiriAccessibilityService.startSession()) {
-            Toast.makeText(
-                this,
-                "Il servizio si sta collegando. Torna qui tra un secondo e riprova.",
-                Toast.LENGTH_SHORT,
-            ).show()
-        }
+        AiriAccessibilityService.requestSession(this)
     }
 
     private fun maybeRequestNotifications() {

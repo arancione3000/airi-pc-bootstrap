@@ -33,6 +33,8 @@ class AiriAccessibilityService : AccessibilityService() {
     companion object {
         private const val CHANNEL_ID = "airi_control_active_v2"
         private const val NOTIFICATION_ID = 4302
+        private const val PREFS = "airi_control_state_v2"
+        private const val KEY_SESSION_REQUESTED = "session_requested"
 
         @Volatile var instance: AiriAccessibilityService? = null
             private set
@@ -45,20 +47,27 @@ class AiriAccessibilityService : AccessibilityService() {
 
         fun connected(): Boolean = instance != null
 
-        fun startSession(): Boolean {
-            val service = instance ?: return false
-            service.startSessionInternal()
+        fun requestSession(context: android.content.Context): Boolean {
+            context.getSharedPreferences(PREFS, MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_SESSION_REQUESTED, true)
+                .apply()
+            instance?.startSessionInternal()
             return true
         }
 
-        fun stopSession(): Boolean {
-            val service = instance ?: return false
-            service.stopSessionInternal()
-            return true
-        }
-
-        fun disableFromApp() {
+        fun stopSession(context: android.content.Context? = null): Boolean {
+            val ctx = context ?: instance
+            ctx?.getSharedPreferences(PREFS, MODE_PRIVATE)
+                ?.edit()
+                ?.putBoolean(KEY_SESSION_REQUESTED, false)
+                ?.apply()
             instance?.stopSessionInternal()
+            return true
+        }
+
+        fun disableFromApp(context: android.content.Context) {
+            stopSession(context)
             runCatching { instance?.disableSelf() }
         }
     }
@@ -70,6 +79,11 @@ class AiriAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         ensureNotificationChannel()
+        val requested = getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getBoolean(KEY_SESSION_REQUESTED, false)
+        if (requested) {
+            startSessionInternal()
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
@@ -192,7 +206,7 @@ class AiriAccessibilityService : AccessibilityService() {
         client?.publishResult(command, result)
         if (command.op == "stop") {
             delay(200)
-            stopSessionInternal()
+            stopSession(this@AiriAccessibilityService)
         }
     }
 
