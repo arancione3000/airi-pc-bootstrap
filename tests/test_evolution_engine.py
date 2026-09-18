@@ -7,8 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "computer"))
 
-from evolution.data import append_verified, class_counts, encode_text, load_records, split_records, text_fingerprint
-from evolution.engine import EvolutionConfig, _metrics, _promotion_decision, decision_from_probability, fitness, pareto_front
+from evolution.data import append_verified, class_counts, encode_text, ensure_canary_partition, load_records, source_family, source_family_counts, split_records, text_fingerprint
+from evolution.engine import EvolutionConfig, _canary_decision, _metrics, _promotion_decision, decision_from_probability, fitness, pareto_front
 from evolution.edge import edge_acceptance
 from evolution.monitoring import detect_drift
 from evolution.genome import crossover, mutate, random_genome
@@ -177,3 +177,46 @@ def test_edge_gate_requires_quality_and_real_efficiency_gain():
         label_agreement=1.0,
     )
     assert no_gain["accepted"] is False
+
+
+def test_source_families_are_stable():
+    rows = [
+        {"source": "LIAR:123"},
+        {"source": "ClaimReview consensus: a.example, b.example"},
+        {"source": "manual:teacher"},
+        {"source": ""},
+    ]
+    assert [source_family(row) for row in rows] == ["liar", "claimreview", "manual", "unknown"]
+    assert source_family_counts(rows) == {"liar": 1, "claimreview": 1, "manual": 1, "unknown": 1}
+
+
+def test_canary_partition_is_persistent_and_excluded(tmp_path: Path):
+    rows = []
+    for label in (0, 1):
+        for i in range(20):
+            text = f"persistent canary class {label} sample {i}"
+            rows.append({
+                "id": f"{label}-{i}",
+                "text": text,
+                "text_id": text_fingerprint(text),
+                "label": label,
+                "source": "LIAR:test",
+            })
+    remaining1, canary1, info1 = ensure_canary_partition(tmp_path, rows, seed=7)
+    remaining2, canary2, info2 = ensure_canary_partition(tmp_path, rows, seed=7)
+    ids1 = {row["text_id"] for row in canary1}
+    ids2 = {row["text_id"] for row in canary2}
+    assert ids1 == ids2
+    assert ids1.isdisjoint({row["text_id"] for row in remaining1})
+    assert len(canary1) >= 4
+    assert info1["created_now"] is True
+    assert info2["created_now"] is False
+
+
+def test_canary_gate_blocks_hidden_regression():
+    cfg = EvolutionConfig.for_mode("safe")
+    old = {"f1": 0.90, "f1_real": 0.92, "f1_fake": 0.88}
+    candidate = {"f1": 0.78, "f1_real": 0.90, "f1_fake": 0.66}
+    ok, reason = _canary_decision(candidate, old, cfg)
+    assert ok is False
+    assert "canary" in reason

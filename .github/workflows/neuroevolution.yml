@@ -41,7 +41,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/computer
         run: |
           .venv/bin/python - <<'PY'
-          import json, tempfile
+          import json, tempfile, torch
           from pathlib import Path
           from evolution.data import append_verified
           from evolution.engine import EvolutionConfig, run_evolution, predict_text
@@ -55,11 +55,19 @@ jobs:
           cfg=EvolutionConfig.for_mode(
               'safe', population=4, generations=1, candidate_epochs=1,
               finalist_epochs=1, promotion_repeats=2, min_promotion_votes=1,
-              min_f1_first_champion=0.0,
+              min_f1_first_champion=0.0, min_first_canary_f1=0.0,
+              max_params=5_000_000, max_latency_ms=1000.0,
           )
           result=run_evolution(state,cfg)
           assert result['ok'] is True
           assert len(result['promotion_trials']) == 2
+          assert result['canary']['records'] >= 4
+          assert result['promoted'] is True
+          selected=result['candidate']['selected_trial']
+          champion_state=torch.load(state/'champion'/'model.pt',map_location='cpu',weights_only=True)
+          trial_state=torch.load(Path(result['run_dir'])/f'promotion-trial-{selected:02d}.pt',map_location='cpu',weights_only=True)
+          assert champion_state.keys() == trial_state.keys()
+          assert all(torch.equal(champion_state[k], trial_state[k]) for k in champion_state)
           if result['promoted']:
               pred=predict_text(state,'fabricated viral hoax debunked as false')
               assert pred['label'] in {'likely_fake','likely_real','uncertain'}

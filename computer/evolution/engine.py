@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 import os
 import random
 import shutil
@@ -11,7 +12,16 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from .data import DatasetView, class_counts, encode_text, load_records, split_records
+from .data import (
+    DatasetView,
+    class_counts,
+    encode_text,
+    ensure_canary_partition,
+    load_records,
+    source_family,
+    source_family_counts,
+    split_records,
+)
 from .genome import Genome, crossover, mutate, random_genome
 from .model import build_model, parameter_count
 
@@ -36,6 +46,10 @@ class EvolutionConfig:
     crossover_probability: float = 0.60
     elite_count: int = 2
     abstain_threshold: float = 0.65
+    replay_balance_power: float = 0.65
+    min_first_canary_f1: float = 0.45
+    max_canary_f1_regression: float = 0.05
+    max_canary_class_regression: float = 0.10
 
     @classmethod
     def for_mode(cls, mode: str, **overrides):
@@ -56,6 +70,10 @@ class EvolutionConfig:
         base.finalist_epochs = max(base.candidate_epochs, min(50, int(base.finalist_epochs)))
         base.elite_count = max(1, min(base.population - 1, int(base.elite_count)))
         base.abstain_threshold = min(0.95, max(0.50, float(base.abstain_threshold)))
+        base.replay_balance_power = min(1.0, max(0.0, float(base.replay_balance_power)))
+        base.min_first_canary_f1 = min(1.0, max(0.0, float(base.min_first_canary_f1)))
+        base.max_canary_f1_regression = min(0.5, max(0.0, float(base.max_canary_f1_regression)))
+        base.max_canary_class_regression = min(0.5, max(0.0, float(base.max_canary_class_regression)))
         base.promotion_repeats = max(1, min(7, int(base.promotion_repeats)))
         base.min_promotion_votes = max(1, min(base.promotion_repeats, int(base.min_promotion_votes)))
         return base
@@ -87,12 +105,26 @@ def _metrics(y_true: list[int], probs: list[float]) -> dict[str, float]:
     }
 
 
-def _loader(records: list[dict], genome: Genome, vocab_size: int, shuffle: bool):
-    from torch.utils.data import DataLoader
-    return DataLoader(DatasetView(records, genome.max_len, vocab_size), batch_size=genome.batch_size, shuffle=shuffle)
+def _loader(records: list[dict], genome: Genome, vocab_size: int, shuffle: bool, balance_power: float = 0.65):
+    import torch
+    from torch.utils.data import DataLoader, WeightedRandomSampler
+
+    dataset = DatasetView(records, genome.max_len, vocab_size)
+    if shuffle and records:
+        families = [source_family(row) for row in records]
+        counts = Counter(families)
+        if len(counts) > 1 and balance_power > 0:
+            weights = [1.0 / (counts[family] ** float(balance_power)) for family in families]
+            sampler = WeightedRandomSampler(
+                torch.tensor(weights, dtype=torch.double),
+                num_samples=len(records),
+                replacement=True,
+            )
+            return DataLoader(dataset, batch_size=genome.batch_size, sampler=sampler)
+    return DataLoader(dataset, batch_size=genome.batch_size, shuffle=shuffle)
 
 
-def train_model(genome: Genome, train_records: list[dict], epochs: int, vocab_size: int, seed: int):
+def train_model(genome: Genome, train_records: list[dict], epochs: int, vocab_size: int, seed: int, balance_power: float = 0.65):
     import torch
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -102,7 +134,7 @@ def train_model(genome: Genome, train_records: list[dict], epochs: int, vocab_si
     model.to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=genome.learning_rate, weight_decay=genome.weight_decay)
     loss_fn = torch.nn.CrossEntropyLoss()
-    loader = _loader(train_records, genome, vocab_size, True)
+    loader = _loader(train_records, genome, vocab_size, True, balance_power)
     model.train()
     losses = []
     for _ in range(epochs):
@@ -158,6 +190,45 @@ def evaluate_model(model, genome: Genome, records: list[dict], vocab_size: int, 
     finally:
         tmp_path.unlink(missing_ok=True)
     return {**m, "params": params, "model_bytes": bytes_size, "latency_ms": latency_ms}
+
+
+def evaluate_source_families(model, genome: Genome, records: list[dict], vocab_size: int) -> dict[str, Any]:
+    import torch
+    grouped: dict[str, list[dict]] = {}
+    for row in records:
+        grouped.setdefault(source_family(row), []).append(row)
+    device = next(model.parameters()).device
+    model.eval()
+    result: dict[str, Any] = {}
+    with torch.inference_mode():
+        for family, rows in sorted(grouped.items()):
+            ys: list[int] = []
+            probs: list[float] = []
+            for ids, mask, y in _loader(rows, genome, vocab_size, False):
+                logits = model(ids.to(device), mask.to(device))
+                pr = torch.softmax(logits, dim=-1)[:, 1].detach().cpu().tolist()
+                probs.extend(float(p) for p in pr)
+                ys.extend(int(v) for v in y.tolist())
+            result[family] = {
+                "records": len(rows),
+                "class_counts": class_counts(rows),
+                **_metrics(ys, probs),
+            }
+    return result
+
+
+def _canary_decision(candidate: dict, old: dict | None, cfg: EvolutionConfig) -> tuple[bool, str]:
+    if not candidate:
+        return True, "no canary configured"
+    if old is None:
+        ok = float(candidate.get("f1", 0.0)) >= cfg.min_first_canary_f1
+        return ok, "first champion canary threshold met" if ok else "first champion canary macro-F1 below threshold"
+    if float(candidate.get("f1", 0.0)) < float(old.get("f1", 0.0)) - cfg.max_canary_f1_regression:
+        return False, "canary macro-F1 regression exceeds gate"
+    for key in ("f1_real", "f1_fake"):
+        if float(candidate.get(key, 0.0)) < float(old.get(key, 0.0)) - cfg.max_canary_class_regression:
+            return False, f"canary {key} regression exceeds gate"
+    return True, "canary gate passed"
 
 
 def fitness(metrics: dict[str, Any], cfg: EvolutionConfig) -> dict[str, Any]:
@@ -247,12 +318,21 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         raise ValueError(f"need at least {cfg.min_samples} verified samples; found {len(records)}")
     if min(counts.values()) < 4:
         raise ValueError("need at least 4 verified samples in each class")
-    train, val, test = split_records(records, cfg.seed)
+    remaining, canary, canary_info = ensure_canary_partition(state_dir, records, seed=cfg.seed)
+    train, val, test = split_records(remaining, cfg.seed)
     run_id = time.strftime("run-%Y%m%d-%H%M%S") + f"-{os.getpid()}"
     run_dir = state_dir / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     _save_json(run_dir / "config.json", asdict(cfg))
-    _save_json(run_dir / "dataset.json", {"records": len(records), "class_counts": counts, "train": len(train), "val": len(val), "test": len(test)})
+    _save_json(run_dir / "dataset.json", {
+        "records": len(records),
+        "class_counts": counts,
+        "source_families": source_family_counts(records),
+        "train": len(train),
+        "val": len(val),
+        "test": len(test),
+        "canary": canary_info,
+    })
 
     rng = random.Random(cfg.seed + int(time.time()) % 100_000)
     population = [random_genome(rng, f"g0-{i:03d}", cfg.mode, 0) for i in range(cfg.population)]
@@ -265,7 +345,7 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         for idx, genome in enumerate(population):
             candidate_seed = cfg.seed + generation * 10_000 + idx
             try:
-                model, train_info = train_model(genome, train, cfg.candidate_epochs, cfg.vocab_size, candidate_seed)
+                model, train_info = train_model(genome, train, cfg.candidate_epochs, cfg.vocab_size, candidate_seed, cfg.replay_balance_power)
                 metrics = evaluate_model(model, genome, val, cfg.vocab_size)
                 fit = fitness(metrics, cfg)
                 row = {"generation": generation, "genome_id": genome.genome_id, **metrics, **fit, "train": train_info, "genome": genome.to_dict()}
@@ -308,33 +388,65 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         population = next_population
 
     assert best_genome is not None and best_row is not None
-    finalist_model, finalist_train = train_model(best_genome, train + val, cfg.finalist_epochs, cfg.vocab_size, cfg.seed + 777_777)
-    finalist_metrics = evaluate_model(finalist_model, best_genome, test, cfg.vocab_size, latency_repeats=12)
-    finalist_fit = fitness(finalist_metrics, cfg)
-    candidate_final = {"genome_id": best_genome.genome_id, **finalist_metrics, **finalist_fit, "train": finalist_train}
 
     old_eval = None
+    old_canary = None
     old_loaded = _load_champion(champion_dir, cfg.vocab_size)
     if old_loaded is not None:
         old_genome, old_model = old_loaded
         old_eval = {"genome_id": old_genome.genome_id, **evaluate_model(old_model, old_genome, test, cfg.vocab_size, latency_repeats=12)}
         old_eval.update(fitness(old_eval, cfg))
+        if canary:
+            old_canary = evaluate_model(old_model, old_genome, canary, cfg.vocab_size, latency_repeats=3)
 
     promotion_trials = []
     votes = 0
+    trial_state_paths: dict[int, str] = {}
     for trial in range(cfg.promotion_repeats):
-        trial_model, trial_train = train_model(best_genome, train + val, cfg.finalist_epochs, cfg.vocab_size, cfg.seed + 777_777 + trial * 97)
+        trial_model, trial_train = train_model(
+            best_genome,
+            train + val,
+            cfg.finalist_epochs,
+            cfg.vocab_size,
+            cfg.seed + 777_777 + trial * 97,
+            cfg.replay_balance_power,
+        )
         trial_metrics = evaluate_model(trial_model, best_genome, test, cfg.vocab_size, latency_repeats=8)
         trial_fit = fitness(trial_metrics, cfg)
-        trial_row = {"trial": trial, "genome_id": best_genome.genome_id, **trial_metrics, **trial_fit, "train": trial_train}
-        trial_promote, trial_reason = _promotion_decision(trial_row, old_eval, cfg)
-        trial_row["promotion_vote"] = trial_promote
-        trial_row["promotion_reason"] = trial_reason
+        trial_canary = evaluate_model(trial_model, best_genome, canary, cfg.vocab_size, latency_repeats=3) if canary else {}
+        primary_ok, primary_reason = _promotion_decision({**trial_metrics, **trial_fit}, old_eval, cfg)
+        canary_ok, canary_reason = _canary_decision(trial_canary, old_canary, cfg)
+        trial_promote = primary_ok and canary_ok
+        state_path = run_dir / f"promotion-trial-{trial:02d}.pt"
+        torch.save(trial_model.to("cpu").state_dict(), state_path)
+        trial_state_paths[trial] = str(state_path)
+        trial_row = {
+            "trial": trial,
+            "genome_id": best_genome.genome_id,
+            **trial_metrics,
+            **trial_fit,
+            "train": trial_train,
+            "canary": trial_canary,
+            "promotion_vote": trial_promote,
+            "promotion_reason": f"{primary_reason}; {canary_reason}",
+            "state_path": str(state_path),
+        }
         promotion_trials.append(trial_row)
         votes += int(trial_promote)
+
     promote = votes >= cfg.min_promotion_votes
     reason = f"{votes}/{cfg.promotion_repeats} independent promotion votes; " + ("majority gate passed" if promote else "majority gate failed")
-    candidate_final = max(promotion_trials, key=lambda row: row["f1"])
+    eligible = [row for row in promotion_trials if row["promotion_vote"]] or promotion_trials
+    candidate_final = max(eligible, key=lambda row: (row["f1"], -row["brier"]))
+    selected_trial = int(candidate_final["trial"])
+    best_state = torch.load(trial_state_paths[selected_trial], map_location="cpu", weights_only=True)
+    candidate_final = dict(candidate_final)
+    candidate_final.pop("state_path", None)
+    candidate_final["selected_trial"] = selected_trial
+    selected_model = build_model(best_genome, vocab_size=cfg.vocab_size)
+    selected_model.load_state_dict(best_state)
+    selected_model.eval()
+    candidate_final["source_families"] = evaluate_source_families(selected_model, best_genome, test, cfg.vocab_size)
 
     if promote:
         champion_dir.mkdir(parents=True, exist_ok=True)
@@ -342,9 +454,19 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         tmp_dir.mkdir(parents=True)
         _save_json(tmp_dir / "genome.json", best_genome.to_dict())
-        torch.save(finalist_model.to("cpu").state_dict(), tmp_dir / "model.pt")
+        torch.save(best_state, tmp_dir / "model.pt")
         _save_json(tmp_dir / "metrics.json", candidate_final)
-        _save_json(tmp_dir / "provenance.json", {"run_id": run_id, "promoted_at": time.time(), "reason": reason, "dataset_records": len(records), "class_counts": counts, "mode": cfg.mode, "abstain_threshold": cfg.abstain_threshold})
+        _save_json(tmp_dir / "provenance.json", {
+            "run_id": run_id,
+            "promoted_at": time.time(),
+            "reason": reason,
+            "dataset_records": len(records),
+            "class_counts": counts,
+            "source_families": source_family_counts(records),
+            "canary": canary_info,
+            "mode": cfg.mode,
+            "abstain_threshold": cfg.abstain_threshold,
+        })
         backup = state_dir / ".champion-old"
         shutil.rmtree(backup, ignore_errors=True)
         if champion_dir.exists() and any(champion_dir.iterdir()):
@@ -360,6 +482,9 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         "mode": cfg.mode,
         "dataset_records": len(records),
         "class_counts": counts,
+        "source_families": source_family_counts(records),
+        "canary": canary_info,
+        "old_canary": old_canary,
         "best_search_candidate": best_row,
         "candidate": candidate_final,
         "previous_champion": old_eval,

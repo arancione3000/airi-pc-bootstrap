@@ -131,3 +131,14 @@ Native MCP equivalents are available as:
 - `computer_evolution_drift`
 - `computer_evolution_edge_quantize`
 - `computer_evolution_predict_edge`
+
+
+## V5: golden canary and provenance-aware replay
+
+A persistent golden canary set is reserved before NAS/training and never enters the training, validation or normal test pools. Challenger promotion now requires both the normal multi-seed gate and the hidden canary gate. The canary IDs persist across later generations so a model cannot gradually train on its own promotion exam.
+
+The training sampler is provenance-aware. When multiple source families exist (for example LIAR bootstrap plus online ClaimReview consensus), sampling weights reduce domination by the largest family while preserving broad replay of older data. This gives new verified evidence meaningful training influence without replacing long-term memory.
+
+Final evaluation records per-source-family metrics. Champion provenance also stores source-family counts and canary metadata.
+
+Promotion trials are now auditable artifacts. The exact state dict of each independent trial is saved under the run directory, and if a challenger wins, the deployed `champion/model.pt` is copied from the selected evaluated trial itself. This guarantees that published champion metrics correspond to the actual deployed weights.
