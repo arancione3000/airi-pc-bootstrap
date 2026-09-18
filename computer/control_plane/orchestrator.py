@@ -201,6 +201,8 @@ class ControlPlane:
         payload=result.get('result')
         if isinstance(payload,dict):
             if payload.get('ok') is False: return {'ok':False,'level':'L0','error':'tool reported unsuccessful result'}
+            if 'returncode' in payload and int(payload.get('returncode') or 0) != 0:
+                return {'ok':False,'level':'L0','error':f"command exited with {payload.get('returncode')}"}
             note=str(payload.get('note','')).lower()
             if note and 'no source was modified' in note: return {'ok':False,'level':'L0','error':'planning_only_no_source_change'}
             if payload.get('status') in {'SKIPPED','STOP_SAFELY'}: return {'ok':False,'level':'L0','error':str(payload.get('status'))}
