@@ -294,20 +294,24 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: Airi-Live-Android
           path: release-apk
 
-      - name: Publish installable Airi Live 1.5 release
+      - name: Publish installable Airi Live release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="airi-live-v1.5.0"
+          VERSION="$(sed -n 's/^[[:space:]]*versionName = "\\([^"]*\\)".*/\\1/p' airi-live-android/app/build.gradle.kts | head -n1)"
+          test -n "$VERSION"
+          TAG="airi-live-v$VERSION"
           APK="$(find release-apk -name '*.apk' -type f | head -n1)"
           test -n "$APK"
-          OUT="Airi-Live-v1.5.0.apk"
+          OUT="Airi-Live-v$VERSION.apk"
           cp "$APK" "$OUT"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" "$OUT" --clobber --repo "$GITHUB_REPOSITORY"
@@ -315,6 +319,6 @@ jobs:
             gh release create "$TAG" "$OUT" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
-              --title "Airi Live v1.5.0" \
-              --notes "Emulator-verified encrypted Airi-PC POV with native single-connection MJPEG streaming, measured FPS gate, session-aware timeline, and zero-config rebuild discovery."
+              --title "Airi Live v$VERSION" \
+              --notes "Emulator-verified encrypted Airi-PC POV with native single-connection MJPEG streaming, measured FPS gate, session-aware timeline, stale-CI filtering, and zero-config rebuild discovery."
           fi
