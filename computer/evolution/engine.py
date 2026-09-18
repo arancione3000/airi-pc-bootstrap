@@ -35,6 +35,7 @@ class EvolutionConfig:
     min_promotion_votes: int = 2
     crossover_probability: float = 0.60
     elite_count: int = 2
+    abstain_threshold: float = 0.65
 
     @classmethod
     def for_mode(cls, mode: str, **overrides):
@@ -54,6 +55,7 @@ class EvolutionConfig:
         base.candidate_epochs = max(1, min(30, int(base.candidate_epochs)))
         base.finalist_epochs = max(base.candidate_epochs, min(50, int(base.finalist_epochs)))
         base.elite_count = max(1, min(base.population - 1, int(base.elite_count)))
+        base.abstain_threshold = min(0.95, max(0.50, float(base.abstain_threshold)))
         base.promotion_repeats = max(1, min(7, int(base.promotion_repeats)))
         base.min_promotion_votes = max(1, min(base.promotion_repeats, int(base.min_promotion_votes)))
         return base
@@ -342,7 +344,7 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         _save_json(tmp_dir / "genome.json", best_genome.to_dict())
         torch.save(finalist_model.to("cpu").state_dict(), tmp_dir / "model.pt")
         _save_json(tmp_dir / "metrics.json", candidate_final)
-        _save_json(tmp_dir / "provenance.json", {"run_id": run_id, "promoted_at": time.time(), "reason": reason, "dataset_records": len(records), "class_counts": counts, "mode": cfg.mode})
+        _save_json(tmp_dir / "provenance.json", {"run_id": run_id, "promoted_at": time.time(), "reason": reason, "dataset_records": len(records), "class_counts": counts, "mode": cfg.mode, "abstain_threshold": cfg.abstain_threshold})
         backup = state_dir / ".champion-old"
         shutil.rmtree(backup, ignore_errors=True)
         if champion_dir.exists() and any(champion_dir.iterdir()):
@@ -377,8 +379,18 @@ def load_champion_for_prediction(state_dir: Path, vocab_size: int = 8192):
     return loaded
 
 
+def decision_from_probability(p_real: float, threshold: float = 0.65) -> tuple[str, float]:
+    p_real = min(1.0, max(0.0, float(p_real)))
+    threshold = min(0.95, max(0.50, float(threshold)))
+    confidence = max(p_real, 1.0 - p_real)
+    if confidence < threshold:
+        return "uncertain", confidence
+    return ("likely_real" if p_real >= 0.5 else "likely_fake"), confidence
+
+
 def predict_text(state_dir: Path, text: str, vocab_size: int = 8192) -> dict[str, Any]:
     import torch
+    state_dir = Path(state_dir)
     genome, model = load_champion_for_prediction(state_dir, vocab_size)
     ids, mask = encode_text(text, genome.max_len, vocab_size)
     model.eval()
@@ -386,13 +398,21 @@ def predict_text(state_dir: Path, text: str, vocab_size: int = 8192) -> dict[str
         logits = model(torch.tensor([ids], dtype=torch.long), torch.tensor([mask], dtype=torch.bool))
         p_real = float(torch.softmax(logits, dim=-1)[0, 1])
     p_fake = 1.0 - p_real
-    label = "likely_real" if p_real >= 0.5 else "likely_fake"
+    provenance = {}
+    try:
+        provenance = json.loads((state_dir / "champion" / "provenance.json").read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    threshold = float(provenance.get("abstain_threshold", 0.65))
+    label, confidence = decision_from_probability(p_real, threshold)
     return {
         "label": label,
+        "binary_preference": "likely_real" if p_real >= 0.5 else "likely_fake",
         "real_probability": p_real,
         "fake_probability": p_fake,
-        "confidence": max(p_real, p_fake),
+        "confidence": confidence,
+        "abstain_threshold": threshold,
         "genome_id": genome.genome_id,
         "architecture": genome.to_dict(),
-        "warning": "This is a learned reliability estimate, not proof that a claim is true or false. Verify important claims against primary evidence.",
+        "warning": "This is a learned reliability estimate, not proof that a claim is true or false. 'uncertain' means confidence is below the champion abstention threshold.",
     }
