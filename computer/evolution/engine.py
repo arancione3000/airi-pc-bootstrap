@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 import os
 import random
 import shutil
@@ -11,7 +12,16 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from .data import DatasetView, class_counts, encode_text, load_records, split_records
+from .data import (
+    DatasetView,
+    class_counts,
+    encode_text,
+    ensure_canary_partition,
+    load_records,
+    source_family,
+    source_family_counts,
+    split_records,
+)
 from .genome import Genome, crossover, mutate, random_genome
 from .model import build_model, parameter_count
 
@@ -36,6 +46,10 @@ class EvolutionConfig:
     crossover_probability: float = 0.60
     elite_count: int = 2
     abstain_threshold: float = 0.65
+    replay_balance_power: float = 0.65
+    min_first_canary_f1: float = 0.45
+    max_canary_f1_regression: float = 0.05
+    max_canary_class_regression: float = 0.10
 
     @classmethod
     def for_mode(cls, mode: str, **overrides):
@@ -56,6 +70,10 @@ class EvolutionConfig:
         base.finalist_epochs = max(base.candidate_epochs, min(50, int(base.finalist_epochs)))
         base.elite_count = max(1, min(base.population - 1, int(base.elite_count)))
         base.abstain_threshold = min(0.95, max(0.50, float(base.abstain_threshold)))
+        base.replay_balance_power = min(1.0, max(0.0, float(base.replay_balance_power)))
+        base.min_first_canary_f1 = min(1.0, max(0.0, float(base.min_first_canary_f1)))
+        base.max_canary_f1_regression = min(0.5, max(0.0, float(base.max_canary_f1_regression)))
+        base.max_canary_class_regression = min(0.5, max(0.0, float(base.max_canary_class_regression)))
         base.promotion_repeats = max(1, min(7, int(base.promotion_repeats)))
         base.min_promotion_votes = max(1, min(base.promotion_repeats, int(base.min_promotion_votes)))
         return base
@@ -87,9 +105,23 @@ def _metrics(y_true: list[int], probs: list[float]) -> dict[str, float]:
     }
 
 
-def _loader(records: list[dict], genome: Genome, vocab_size: int, shuffle: bool):
-    from torch.utils.data import DataLoader
-    return DataLoader(DatasetView(records, genome.max_len, vocab_size), batch_size=genome.batch_size, shuffle=shuffle)
+def _loader(records: list[dict], genome: Genome, vocab_size: int, shuffle: bool, balance_power: float = 0.65):
+    import torch
+    from torch.utils.data import DataLoader, WeightedRandomSampler
+
+    dataset = DatasetView(records, genome.max_len, vocab_size)
+    if shuffle and records:
+        families = [source_family(row) for row in records]
+        counts = Counter(families)
+        if len(counts) > 1 and balance_power > 0:
+            weights = [1.0 / (counts[family] ** float(balance_power)) for family in families]
+            sampler = WeightedRandomSampler(
+                torch.tensor(weights, dtype=torch.double),
+                num_samples=len(records),
+                replacement=True,
+            )
+            return DataLoader(dataset, batch_size=genome.batch_size, sampler=sampler)
+    return DataLoader(dataset, batch_size=genome.batch_size, shuffle=shuffle)
 
 
 def train_model(genome: Genome, train_records: list[dict], epochs: int, vocab_size: int, seed: int):
