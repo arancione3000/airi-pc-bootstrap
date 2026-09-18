@@ -23,7 +23,6 @@ import kotlinx.coroutines.*
 import okhttp3.*
 import org.json.JSONArray
 import org.json.JSONObject
-import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -31,6 +30,7 @@ import java.util.concurrent.TimeUnit
 private const val REPO = "arancione3000/airi-pc-bootstrap"
 private const val GITHUB_BRANCH = "https://api.github.com/repos/$REPO/branches/main"
 private const val NTFY_BASE = "https://ntfy.sh"
+private const val LIVE_TOPIC = "airi-live-09d926b9a4207c660a5f3efa5f50505ef5ff46e8463b3beb"
 
 data class LiveEvent(
     val id: String,
@@ -70,11 +70,10 @@ class AiriLiveClient {
             onState(state)
             while (isActive) {
                 try {
-                    val sha = fetchMainSha()
-                    val topic = topicFor(sha)
-                    state = state.copy(sourceSha = sha, topic = topic, error = null)
+                    val sha = runCatching { fetchMainSha() }.getOrDefault("")
+                    state = state.copy(sourceSha = sha, topic = LIVE_TOPIC, error = null)
                     onState(state)
-                    state = stream(topic, state, onState)
+                    state = stream(LIVE_TOPIC, state, onState)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -97,7 +96,7 @@ class AiriLiveClient {
         val req = Request.Builder()
             .url(GITHUB_BRANCH)
             .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "Airi-Live-Android/1.0")
+            .header("User-Agent", "Airi-Live-Android/1.1")
             .build()
         client.newCall(req).execute().use { r ->
             if (!r.isSuccessful) error("GitHub ${r.code}")
@@ -106,18 +105,12 @@ class AiriLiveClient {
         }
     }
 
-    private fun topicFor(sha: String): String {
-        val bytes = MessageDigest.getInstance("SHA-256").digest("$REPO:$sha".toByteArray())
-        val hex = bytes.joinToString("") { "%02x".format(it) }
-        return "airi-live-${hex.take(24)}"
-    }
-
     private fun stream(topic: String, initial: UiState, onState: (UiState) -> Unit): UiState {
         var state = initial.copy(connecting = true, connected = false)
         onState(state)
         val req = Request.Builder()
-            .url("$NTFY_BASE/$topic/json?since=all")
-            .header("User-Agent", "Airi-Live-Android/1.0")
+            .url("$NTFY_BASE/$topic/json?since=24h")
+            .header("User-Agent", "Airi-Live-Android/1.1")
             .build()
         val call = client.newCall(req)
         streamCall = call
@@ -139,7 +132,14 @@ class AiriLiveClient {
                 val unique = parsed.filter { seen.add(it.id) }
                 if (unique.isEmpty()) continue
                 val merged = (unique + state.events).sortedByDescending { it.ts }.take(250)
-                state = state.copy(events = merged, lastSeenMs = System.currentTimeMillis(), connected = true, error = null)
+                val newestSha = unique.firstNotNullOfOrNull { it.sourceSha }
+                state = state.copy(
+                    events = merged,
+                    sourceSha = newestSha ?: state.sourceSha,
+                    lastSeenMs = System.currentTimeMillis(),
+                    connected = true,
+                    error = null,
+                )
                 onState(state)
             }
         }
@@ -250,7 +250,11 @@ private fun CurrentCard(state: UiState) {
                 Text(if (state.sourceSha.isBlank()) "—" else state.sourceSha.take(8), color = Muted, fontSize = 12.sp)
             }
             Spacer(Modifier.height(10.dp))
-            Text(current?.title ?: if (state.connected) "In attesa di una task…" else "Connessione ad Airi-PC…", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text(
+                current?.title ?: if (state.connected) "Canale pronto · attendo Airi-PC…" else "Connessione al relay…",
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp,
+            )
             if (!current?.detail.isNullOrBlank()) {
                 Spacer(Modifier.height(5.dp))
                 Text(current!!.detail, color = Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -335,8 +339,12 @@ private fun EmptyState(state: UiState, modifier: Modifier = Modifier) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("◉", color = Orange, fontSize = 42.sp)
             Spacer(Modifier.height(8.dp))
-            Text(if (state.connected) "Sto ascoltando Airi-PC" else "Cerco Airi-PC…", fontWeight = FontWeight.Bold)
-            Text(state.error ?: "Appena parte una task comparirà qui, in live.", color = Muted, fontSize = 13.sp)
+            Text(if (state.connected) "Canale Airi Live collegato" else "Collegamento al relay…", fontWeight = FontWeight.Bold)
+            Text(
+                state.error ?: if (state.connected) "Quando Airi-PC emette un evento comparirà qui." else "Riconnessione automatica.",
+                color = Muted,
+                fontSize = 13.sp,
+            )
         }
     }
 }
@@ -344,7 +352,8 @@ private fun EmptyState(state: UiState, modifier: Modifier = Modifier) {
 @Composable
 private fun Footer(state: UiState) {
     val text = when {
-        state.connected -> "LIVE · nessun server da configurare"
+        state.connected && state.lastSeenMs > 0 -> "LIVE · eventi Airi-PC ricevuti"
+        state.connected -> "RELAY ONLINE · in attesa del primo evento Airi-PC"
         state.error != null -> "Riconnessione automatica"
         else -> "Connessione automatica"
     }
