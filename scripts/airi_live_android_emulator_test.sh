@@ -88,6 +88,34 @@ if [ "$pixels_ok" -ne 1 ]; then
 fi
 echo "AIRI_ANDROID_POV_PIXEL_SMOKE=PASS"
 
+# Require the continuous stream to beat the old ~4-5 FPS polling path.
+fps_ok=0
+for i in $(seq 1 20); do
+  sleep 1
+  line="$(adb logcat -d -t 1200 | grep 'AiriLivePOV.*POV_STREAM_FPS=' | tail -n1 || true)"
+  if [ -n "$line" ]; then
+    FPS="$(printf '%s\n' "$line" | sed -n 's/.*POV_STREAM_FPS=\([0-9.]*\).*/\1/p')"
+    MODE="$(printf '%s\n' "$line" | sed -n 's/.*mode=\([^ ]*\).*/\1/p')"
+    if python3 - "$FPS" "$MODE" <<'PY'
+import sys
+fps=float(sys.argv[1] or 0)
+mode=sys.argv[2]
+print("measured_stream_fps=", fps, "mode=", mode)
+raise SystemExit(0 if mode == "stream" and fps >= 7.0 else 1)
+PY
+    then
+      fps_ok=1
+      break
+    fi
+  fi
+done
+if [ "$fps_ok" -ne 1 ]; then
+  adb logcat -d -t 1600 | grep -E 'AiriLivePOV|com.airipc.live|AndroidRuntime' > "$SHOT_DIR/airi-android-logcat.txt" || true
+  echo "Continuous POV stream did not reach 7 FPS" >&2
+  exit 1
+fi
+echo "AIRI_ANDROID_POV_FPS_SMOKE=PASS"
+
 # Prove the displayed remote browser is moving/updating.
 sleep 1.6
 adb exec-out screencap -p > "$SHOT_DIR/airi-live-emulator-card-2.png"

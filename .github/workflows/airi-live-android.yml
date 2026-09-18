@@ -99,10 +99,10 @@ jobs:
           import urllib.request
           from control_plane.live_telemetry import topic_for
 
-          title = "Airi Live 1.4 ready"
+          title = "Airi Live 1.5 ready"
           payload = {
               "v": 1,
-              "id": "airi-live-v1-4-smoke",
+              "id": "airi-live-v1-5-smoke",
               "ts": int(time.time()),
               "kind": "runtime",
               "title": title,
@@ -111,7 +111,7 @@ jobs:
               "task_id": "",
               "node_id": "",
               "source_sha": "smoke-test",
-              "session_id": "ci-smoke-v1.4",
+              "session_id": "ci-smoke-v1.5",
               "protocol": 2,
           }
           topic = topic_for()
@@ -120,7 +120,7 @@ jobs:
               f"https://ntfy.sh/{topic}",
               data=body,
               method="POST",
-              headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "Airi-Live-CI/1.4"},
+              headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "Airi-Live-CI/1.5"},
           )
           with urllib.request.urlopen(req, timeout=20) as response:
               print("publish_status=", response.status)
@@ -294,15 +294,15 @@ jobs:
           name: Airi-Live-Android
           path: release-apk
 
-      - name: Publish installable Airi Live 1.4 release
+      - name: Publish installable Airi Live 1.5 release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="airi-live-v1.4.0"
+          TAG="airi-live-v1.5.0"
           APK="$(find release-apk -name '*.apk' -type f | head -n1)"
           test -n "$APK"
-          OUT="Airi-Live-v1.4.0.apk"
+          OUT="Airi-Live-v1.5.0.apk"
           cp "$APK" "$OUT"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" "$OUT" --clobber --repo "$GITHUB_REPOSITORY"
@@ -310,6 +310,6 @@ jobs:
             gh release create "$TAG" "$OUT" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
-              --title "Airi Live v1.4.0" \
-              --notes "Emulator-verified encrypted Airi-PC POV, continuous MJPEG streaming around 8-10 FPS, session-aware timeline, and zero-config rebuild discovery."
+              --title "Airi Live v1.5.0" \
+              --notes "Emulator-verified encrypted Airi-PC POV with native single-connection MJPEG streaming, measured FPS gate, session-aware timeline, and zero-config rebuild discovery."
           fi

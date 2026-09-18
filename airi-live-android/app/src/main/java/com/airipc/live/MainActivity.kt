@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -189,7 +190,7 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
         val req = Request.Builder()
             .url(GITHUB_BRANCH)
             .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "Airi-Live-Android/1.4")
+            .header("User-Agent", "Airi-Live-Android/1.5")
             .build()
         client.newCall(req).execute().use { r ->
             if (!r.isSuccessful) error("GitHub ${r.code}")
@@ -203,7 +204,7 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
         return runCatching {
             val req = Request.Builder()
                 .url(LIVE_CONFIG_URL)
-                .header("User-Agent", "Airi-Live-Android/1.4")
+                .header("User-Agent", "Airi-Live-Android/1.5")
                 .build()
             client.newCall(req).execute().use { r ->
                 if (!r.isSuccessful) error("Airi Live config ${r.code}")
@@ -227,7 +228,7 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
             .toString()
         val req = Request.Builder()
             .url("${config.relayBase}/${config.topic}")
-            .header("User-Agent", "Airi-Live-Android/1.4")
+            .header("User-Agent", "Airi-Live-Android/1.5")
             .post(payload.toRequestBody("text/plain; charset=utf-8".toMediaType()))
             .build()
         client.newCall(req).execute().use { r ->
@@ -240,7 +241,7 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
         repeat(7) { attempt ->
             val req = Request.Builder()
                 .url("${config.relayBase}/${config.topic}/json?poll=1&since=10m")
-                .header("User-Agent", "Airi-Live-Android/1.4")
+                .header("User-Agent", "Airi-Live-Android/1.5")
                 .build()
             runCatching {
                 client.newCall(req).execute().use { r ->
@@ -286,7 +287,7 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
         onState(state)
         val req = Request.Builder()
             .url("${config.relayBase}/$topic/json?since=${config.history}")
-            .header("User-Agent", "Airi-Live-Android/1.4")
+            .header("User-Agent", "Airi-Live-Android/1.5")
             .build()
         val call = client.newCall(req)
         streamCall = call
@@ -460,10 +461,15 @@ fun AiriLiveApp(configOverride: LiveConfig? = null) {
     }
 }
 
-private fun povFrameUrl(viewUrl: String): String {
+private fun povToken(viewUrl: String): Pair<Uri, String> {
     val uri = Uri.parse(viewUrl)
     val token = uri.lastPathSegment?.takeIf { it.isNotBlank() }
         ?: error("Invalid Airi POV viewer URL")
+    return uri to token
+}
+
+private fun povFrameUrl(viewUrl: String): String {
+    val (uri, token) = povToken(viewUrl)
     return uri.buildUpon()
         .path("/frame/" + token + ".jpg")
         .clearQuery()
@@ -472,57 +478,140 @@ private fun povFrameUrl(viewUrl: String): String {
         .toString()
 }
 
+private fun povStreamUrl(viewUrl: String): String {
+    val (uri, token) = povToken(viewUrl)
+    return uri.buildUpon()
+        .path("/stream/" + token)
+        .clearQuery()
+        .fragment(null)
+        .build()
+        .toString()
+}
+
+private fun readMjpegFrame(source: okio.BufferedSource): ByteArray? {
+    while (true) {
+        val boundary = source.readUtf8Line() ?: return null
+        if (!boundary.startsWith("--airiframe")) continue
+        var length = -1
+        while (true) {
+            val header = source.readUtf8Line() ?: return null
+            if (header.isEmpty()) break
+            if (header.startsWith("Content-Length:", ignoreCase = true)) {
+                length = header.substringAfter(':').trim().toIntOrNull() ?: -1
+            }
+        }
+        if (length <= 0) continue
+        val jpeg = source.readByteArray(length.toLong())
+        source.readUtf8Line()
+        return jpeg
+    }
+}
+
 @Composable
 private fun PovFrameView(url: String, modifier: Modifier = Modifier) {
     val frameUrl = remember(url) { povFrameUrl(url) }
+    val streamUrl = remember(url) { povStreamUrl(url) }
     val frameClient = remember {
         OkHttpClient.Builder()
             .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(12, TimeUnit.SECONDS)
-            .callTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.MILLISECONDS)
             .build()
     }
     var image by remember(url) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var fps by remember(url) { mutableStateOf(0.0) }
     var status by remember(url) { mutableStateOf("connessione…") }
 
-    LaunchedEffect(frameUrl) {
-        var frames = 0
-        var windowStart = SystemClock.elapsedRealtime()
-        while (isActive) {
-            try {
-                val bitmap = withContext(Dispatchers.IO) {
+    LaunchedEffect(streamUrl, frameUrl) {
+        val frames = Channel<Pair<android.graphics.Bitmap, String>>(Channel.CONFLATED)
+        val reader = launch(Dispatchers.IO) {
+            var streamFailures = 0
+            while (isActive) {
+                var activeCall: Call? = null
+                try {
                     val request = Request.Builder()
-                        .url(frameUrl + "?t=" + System.nanoTime())
+                        .url(streamUrl)
                         .header("Cache-Control", "no-cache, no-store")
                         .header("Pragma", "no-cache")
-                        .header("User-Agent", "Airi-Live-Android/1.4-native")
+                        .header("User-Agent", "Airi-Live-Android/1.5-stream")
                         .build()
-                    frameClient.newCall(request).execute().use { response ->
-                        if (!response.isSuccessful) error("POV frame HTTP " + response.code)
-                        val bytes = response.body?.bytes() ?: error("Empty POV frame")
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            ?: error("Invalid POV JPEG")
+                    val call = frameClient.newCall(request)
+                    activeCall = call
+                    call.execute().use { response ->
+                        if (!response.isSuccessful) error("POV stream HTTP " + response.code)
+                        val type = response.header("Content-Type").orEmpty()
+                        if (!type.contains("multipart/x-mixed-replace", ignoreCase = true)) {
+                            error("POV stream content type " + type)
+                        }
+                        val source = response.body?.source() ?: error("Empty POV stream")
+                        streamFailures = 0
+                        while (isActive) {
+                            val bytes = readMjpegFrame(source) ?: error("POV stream ended")
+                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                ?: error("Invalid POV JPEG")
+                            frames.trySend(bitmap to "stream")
+                        }
                     }
+                } catch (e: CancellationException) {
+                    activeCall?.cancel()
+                    throw e
+                } catch (e: Exception) {
+                    activeCall?.cancel()
+                    streamFailures += 1
+                    Log.w("AiriLivePOV", "continuous stream failed: " + e.javaClass.simpleName + ": " + (e.message ?: ""))
+                    if (streamFailures >= 2) {
+                        repeat(12) {
+                            if (!isActive) return@repeat
+                            try {
+                                val request = Request.Builder()
+                                    .url(frameUrl + "?t=" + System.nanoTime())
+                                    .header("Cache-Control", "no-cache, no-store")
+                                    .header("Pragma", "no-cache")
+                                    .header("User-Agent", "Airi-Live-Android/1.5-fallback")
+                                    .build()
+                                frameClient.newCall(request).execute().use { response ->
+                                    if (!response.isSuccessful) error("POV frame HTTP " + response.code)
+                                    val bytes = response.body?.bytes() ?: error("Empty POV frame")
+                                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                        ?: error("Invalid POV JPEG")
+                                    frames.trySend(bitmap to "fallback")
+                                }
+                                delay(20)
+                            } catch (_: Exception) {
+                                delay(180)
+                            }
+                        }
+                    } else {
+                        delay(220)
+                    }
+                } finally {
+                    activeCall?.cancel()
                 }
+            }
+        }
+
+        var count = 0
+        var windowStart = SystemClock.elapsedRealtime()
+        try {
+            for ((bitmap, mode) in frames) {
                 image = bitmap.asImageBitmap()
-                frames += 1
-                status = "live"
+                status = mode
+                count += 1
                 val now = SystemClock.elapsedRealtime()
                 val elapsed = now - windowStart
                 if (elapsed >= 1000) {
-                    fps = frames * 1000.0 / elapsed
-                    frames = 0
+                    fps = count * 1000.0 / elapsed
+                    Log.i(
+                        "AiriLivePOV",
+                        "POV_STREAM_FPS=" + "%.1f".format(Locale.US, fps) + " mode=" + mode,
+                    )
+                    count = 0
                     windowStart = now
                 }
-                delay(8)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w("AiriLivePOV", "frame fetch failed: " + e.javaClass.simpleName + ": " + (e.message ?: ""), e)
-                status = "riconnessione…"
-                delay(180)
             }
+        } finally {
+            reader.cancelAndJoin()
+            frames.close()
         }
     }
 

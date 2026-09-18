@@ -25,6 +25,7 @@ from .live_telemetry import DEFAULT_RELAY, live_emit, session_id, topic_for
 ROOT = Path(os.environ.get("AIRI_ROOT") or os.environ.get("AIRIPC_WORKSPACE_ROOT") or ".").resolve()
 CLOUDFLARED_URL = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
 _TUNNEL_RE = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com", re.I)
+_MSS_LOCAL = threading.local()
 
 
 def _relay_base() -> str:
@@ -160,13 +161,16 @@ def _capture_jpeg() -> bytes:
     try:
         import mss
         display = os.environ.get("DISPLAY")
-        kwargs = {"display": display} if display else {}
-        with mss.mss(**kwargs) as sct:
-            monitors = sct.monitors
-            if len(monitors) < 2:
-                raise RuntimeError("MSS found no drawable X11 monitor")
-            shot = sct.grab(monitors[1])
-            img = Image.frombytes("RGB", shot.size, shot.rgb)
+        sct = getattr(_MSS_LOCAL, "capture", None)
+        if sct is None:
+            kwargs = {"display": display} if display else {}
+            sct = mss.mss(**kwargs)
+            _MSS_LOCAL.capture = sct
+        monitors = sct.monitors
+        if len(monitors) < 2:
+            raise RuntimeError("MSS found no drawable X11 monitor")
+        shot = sct.grab(monitors[1])
+        img = Image.frombytes("RGB", shot.size, shot.rgb)
     except Exception:
         from server import screenshot_image
         img = screenshot_image().convert("RGB")
@@ -190,7 +194,8 @@ def _capture_jpeg() -> bytes:
 
 
 class _ViewerHandler(BaseHTTPRequestHandler):
-    server_version = "AiriScreen/1.1"
+    server_version = "AiriScreen/1.2"
+    protocol_version = "HTTP/1.1"
 
     def _authorized(self, token: str) -> bool:
         expected = getattr(self.server, "airi_token", "")
@@ -234,16 +239,24 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
             self.send_header("Pragma", "no-cache")
             self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Accel-Buffering", "no")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.send_header("Connection", "keep-alive")
             self.end_headers()
             target_interval = 0.08
             try:
                 while True:
                     started = time.monotonic()
                     body = _capture_jpeg()
-                    self.wfile.write(b"--" + boundary + b"\r\n")
-                    self.wfile.write(b"Content-Type: image/jpeg\r\n")
-                    self.wfile.write(f"Content-Length: {len(body)}\r\n\r\n".encode("ascii"))
-                    self.wfile.write(body)
+                    packet = (
+                        b"--" + boundary + b"\r\n"
+                        + b"Content-Type: image/jpeg\r\n"
+                        + f"Content-Length: {len(body)}\r\n\r\n".encode("ascii")
+                        + body
+                        + b"\r\n"
+                    )
+                    self.wfile.write(f"{len(packet):X}\r\n".encode("ascii"))
+                    self.wfile.write(packet)
                     self.wfile.write(b"\r\n")
                     self.wfile.flush()
                     remaining = target_interval - (time.monotonic() - started)
