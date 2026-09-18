@@ -273,6 +273,7 @@ jobs:
         if: always()
         run: |
           test ! -f /tmp/airi-emu-backend.log || cat /tmp/airi-emu-backend.log
+          test ! -f /tmp/airi-test-relay.log || tail -n 200 /tmp/airi-test-relay.log
           test ! -f /tmp/airi-emu-backend.pid || kill "$(cat /tmp/airi-emu-backend.pid)" 2>/dev/null || true
           test ! -f /tmp/airi-relay-tunnel.pid || kill "$(cat /tmp/airi-relay-tunnel.pid)" 2>/dev/null || true
           test ! -f /tmp/airi-test-relay.pid || kill "$(cat /tmp/airi-test-relay.pid)" 2>/dev/null || true

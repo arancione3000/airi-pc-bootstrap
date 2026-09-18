@@ -447,6 +447,7 @@ class ScreenShare:
                     key_id = row["key_id"]
                     if key_id in self.offered:
                         continue
+                    print(f"AIRI_POV_VIEWER_KEY_FOUND={key_id[:10]}", flush=True)
                     cipher = _encrypt_descriptor(row["public_key_b64"], descriptor)
                     _post_json({
                         "kind": "screen_offer",
@@ -457,6 +458,7 @@ class ScreenShare:
                         "protocol": 3,
                     })
                     self.offered.add(key_id)
+                    print("AIRI_POV_SCREEN_OFFER_SENT=PASS", flush=True)
                 if self.stop_event.wait(3.0):
                     break
             except Exception:

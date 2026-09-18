@@ -16,9 +16,34 @@ adb shell am start -n com.airipc.live/.MainActivity \
   --es airi_relay "$AIRI_E2E_RELAY_URL" \
   --es airi_topic "$AIRI_E2E_TOPIC"
 
+dismiss_system_dialogs() {
+  adb shell uiautomator dump /sdcard/airi-dialog.xml >/dev/null 2>&1 || true
+  adb pull /sdcard/airi-dialog.xml "$SHOT_DIR/airi-dialog.xml" >/dev/null 2>&1 || true
+  python3 - <<'PY' > /tmp/airi-dialog-tap.txt || true
+import os,re
+from pathlib import Path
+p=Path(os.environ["RUNNER_TEMP"])/"airi-live-pov"/"airi-dialog.xml"
+if not p.exists():
+    raise SystemExit
+text=p.read_text(encoding="utf-8",errors="ignore")
+for label in ("Wait","Attendi"):
+    m=re.search(r'text="'+re.escape(label)+r'"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',text)
+    if m:
+        x1,y1,x2,y2=map(int,m.groups())
+        print((x1+x2)//2,(y1+y2)//2)
+        break
+PY
+  if [ -s /tmp/airi-dialog-tap.txt ]; then
+    read -r DX DY < /tmp/airi-dialog-tap.txt
+    adb shell input tap "$DX" "$DY" || true
+    sleep 1
+  fi
+}
+
 found=0
 for i in $(seq 1 30); do
   sleep 3
+  dismiss_system_dialogs
   adb shell uiautomator dump /sdcard/airi.xml >/dev/null 2>&1 || true
   adb pull /sdcard/airi.xml "$SHOT_DIR/airi-ui.xml" >/dev/null 2>&1 || true
   if grep -q 'POV Airi-PC' "$SHOT_DIR/airi-ui.xml" 2>/dev/null; then
@@ -29,7 +54,7 @@ done
 if [ "$found" -ne 1 ]; then
   adb exec-out screencap -p > "$SHOT_DIR/airi-live-emulator-no-pov.png" || true
   adb shell dumpsys activity activities | tail -n 80 || true
-  adb logcat -d -t 300 | grep -E 'com.airipc.live|chromium|WebView|AndroidRuntime' > "$SHOT_DIR/airi-android-logcat.txt" || true
+  adb logcat -d -t 1000 | grep -E 'AiriLivePOV|com.airipc.live|AndroidRuntime' > "$SHOT_DIR/airi-android-logcat.txt" || true
   echo "POV card never appeared" >&2
   exit 1
 fi
@@ -52,7 +77,7 @@ PY
   sleep 3
 done
 if [ "$pixels_ok" -ne 1 ]; then
-  adb logcat -d -t 400 | grep -E 'com.airipc.live|chromium|WebView|AndroidRuntime' > "$SHOT_DIR/airi-android-logcat.txt" || true
+  adb logcat -d -t 1000 | grep -E 'AiriLivePOV|com.airipc.live|AndroidRuntime' > "$SHOT_DIR/airi-android-logcat.txt" || true
   echo "POV card appeared but remote pixels never rendered" >&2
   exit 1
 fi

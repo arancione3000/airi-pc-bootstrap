@@ -221,6 +221,7 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
             .build()
         client.newCall(req).execute().use { r ->
             if (!r.isSuccessful) error("viewer key publish ${r.code}")
+            Log.i("AiriLivePOV", "viewer key published")
         }
     }
 
@@ -251,6 +252,7 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
                 if (control?.optString("kind") == "viewer_key") continue
                 if (control?.optString("kind") == "screen_offer") {
                     if (control.optString("key_id") == viewerIdentity.keyId) {
+                        Log.i("AiriLivePOV", "screen offer received")
                         val offerTs = control.optLong("ts", 0L) * 1000
                         if (offerTs >= state.screenOfferTs) {
                             runCatching {
@@ -261,7 +263,10 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
                                     screenOfferTs = offerTs,
                                     lastSeenMs = System.currentTimeMillis(),
                                 )
+                                Log.i("AiriLivePOV", "screen offer decrypted")
                                 onState(state)
+                            }.onFailure {
+                                Log.e("AiriLivePOV", "screen offer decrypt failed", it)
                             }
                         }
                     }

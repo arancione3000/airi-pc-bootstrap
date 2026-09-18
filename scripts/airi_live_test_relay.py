@@ -55,6 +55,11 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("content-length", "0") or "0")
         message = self.rfile.read(length).decode("utf-8", errors="replace")
         row = STORE.publish(topic, message)
+        try:
+            kind = json.loads(message).get("kind", "event")
+        except Exception:
+            kind = "event"
+        print(f"AIRI_TEST_RELAY_POST topic={topic} kind={kind}", flush=True)
         body = json.dumps(row, separators=(",", ":")).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -70,11 +75,27 @@ class Handler(BaseHTTPRequestHandler):
             return
         topic = parts[0]
         poll = parse_qs(parsed.query).get("poll", ["0"])[0] == "1"
+
+        if poll:
+            rows = STORE.snapshot(topic)
+            body = "".join(json.dumps(x, separators=(",", ":")) + "\n" for x in rows).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+            self.wfile.flush()
+            self.close_connection = True
+            print(f"AIRI_TEST_RELAY_POLL topic={topic} rows={len(rows)}", flush=True)
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", "application/x-ndjson")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "keep-alive")
         self.end_headers()
-
         sent = 0
         try:
             while True:
@@ -83,11 +104,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.wfile.write((json.dumps(rows[sent], separators=(",", ":")) + "\n").encode())
                     self.wfile.flush()
                     sent += 1
-                if poll:
-                    return
                 with STORE.cv:
                     STORE.cv.wait(timeout=15)
-                    # Send a harmless keepalive event that the client ignores.
                     if sent == len(STORE.snapshot(topic)):
                         keep = {"id": uuid.uuid4().hex[:12], "time": int(time.time()), "event": "keepalive", "topic": topic}
                         self.wfile.write((json.dumps(keep, separators=(",", ":")) + "\n").encode())
