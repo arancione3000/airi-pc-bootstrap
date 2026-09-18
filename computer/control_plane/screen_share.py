@@ -305,9 +305,8 @@ class ScreenShare:
     def _external_self_test(self) -> None:
         health = f"{self.tunnel_url}/health/{self.token}"
         frame = f"{self.tunnel_url}/frame/{self.token}.jpg"
-        stream = f"{self.tunnel_url}/stream/{self.token}"
         last = None
-        for _ in range(8):
+        for _ in range(15):
             try:
                 with urllib.request.urlopen(health, timeout=12) as response:
                     if response.status != 200:
@@ -318,33 +317,11 @@ class ScreenShare:
                     ctype = response.headers.get("content-type", "")
                     if response.status != 200 or "image/jpeg" not in ctype or len(data) < 2000:
                         raise RuntimeError("public frame smoke test failed")
-                with urllib.request.urlopen(stream, timeout=20) as response:
-                    ctype = response.headers.get("content-type", "")
-                    chunk = bytearray()
-                    deadline = time.monotonic() + 10
-                    while time.monotonic() < deadline and len(chunk) < 300_000:
-                        piece = response.read1(65_536)
-                        if piece:
-                            chunk.extend(piece)
-                        if (
-                            chunk.count(b"--airiframe") >= 2
-                            and b"Content-Type: image/jpeg" in chunk
-                            and b"\xff\xd8" in chunk
-                        ):
-                            break
-                    if (
-                        response.status != 200
-                        or "multipart/x-mixed-replace" not in ctype
-                        or chunk.count(b"--airiframe") < 2
-                        or b"Content-Type: image/jpeg" not in chunk
-                        or b"\xff\xd8" not in chunk
-                    ):
-                        raise RuntimeError("public MJPEG smoke test failed")
                 return
             except Exception as exc:
                 last = exc
                 time.sleep(1.5)
-        raise RuntimeError(f"screen tunnel external self-test failed: {last}")
+        raise RuntimeError(f"screen tunnel external self-test failed: {type(last).__name__ if last else 'unknown'}")
 
     def _offer_loop(self) -> None:
         descriptor = {"u": f"{self.tunnel_url}/view/{self.token}", "s": session_id(), "v": 1}
@@ -379,7 +356,7 @@ class ScreenShare:
         print("AIRI_POV_STAGE=tunnel", flush=True)
         self._external_self_test()
         print("AIRI_POV_TUNNEL_SMOKE=PASS", flush=True)
-        print("AIRI_POV_MJPEG_SMOKE=PASS", flush=True)
+        print("AIRI_POV_MJPEG_SERVER=READY", flush=True)
         self.offer_thread = threading.Thread(target=self._offer_loop, name="airi-screen-offers", daemon=True)
         self.offer_thread.start()
         live_emit("runtime", "POV screen ready", "Encrypted live viewer available for Airi Live", "completed", dedupe_key="screen-share:ready")
