@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "computer"))
 
-from evolution.data import append_verified, class_counts, encode_text, load_records, split_records
+from evolution.data import append_verified, class_counts, encode_text, load_records, split_records, text_fingerprint
 from evolution.engine import EvolutionConfig, _metrics, _promotion_decision, fitness, pareto_front
 from evolution.genome import crossover, mutate, random_genome
 
@@ -91,3 +91,30 @@ def test_model_forward_for_all_block_types():
         mask = torch.ones((3, 16), dtype=torch.bool)
         out = m(ids, mask)
         assert tuple(out.shape) == (3, 2)
+
+
+def test_conflicting_labels_are_rejected(tmp_path: Path):
+    path = tmp_path / "verified.jsonl"
+    append_verified(path, {"text": "The same verified claim appears here", "label": 1})
+    import pytest
+    with pytest.raises(ValueError, match="conflicting verified labels"):
+        append_verified(path, {"text": "  the same verified claim appears here  ", "label": 0})
+
+
+def test_split_never_leaks_same_normalized_text():
+    rows = []
+    for label in (0, 1):
+        for i in range(8):
+            text = f"unique class {label} verified sample {i}"
+            rows.append({"id": f"{label}-{i}", "text": text, "text_id": text_fingerprint(text), "label": label})
+    tr, va, te = split_records(rows, 99)
+    groups = [{r["text_id"] for r in part} for part in (tr, va, te)]
+    assert groups[0].isdisjoint(groups[1])
+    assert groups[0].isdisjoint(groups[2])
+    assert groups[1].isdisjoint(groups[2])
+
+
+def test_promotion_repeat_config_is_bounded():
+    cfg = EvolutionConfig.for_mode("safe", promotion_repeats=99, min_promotion_votes=99)
+    assert cfg.promotion_repeats == 7
+    assert cfg.min_promotion_votes == 7
