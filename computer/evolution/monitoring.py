@@ -52,13 +52,21 @@ def drift_report(
 ) -> dict[str, Any]:
     state_dir = Path(state_dir)
     records = load_records(state_dir / "data" / "verified.jsonl")
-    if len(records) < max(1, int(min_window)):
+    provenance = {}
+    try:
+        provenance = json.loads((state_dir / "champion" / "provenance.json").read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    trained_count = max(0, int(provenance.get("dataset_records", 0) or 0))
+    unseen = records[trained_count:]
+    if len(unseen) < max(1, int(min_window)):
         return {
             "ok": True,
             "ready": False,
             "drift": False,
-            "reason": "insufficient_recent_verified_samples",
+            "reason": "insufficient_post_champion_verified_samples",
             "records": len(records),
+            "post_champion_records": len(unseen),
             "required": max(1, int(min_window)),
         }
 
@@ -68,21 +76,17 @@ def drift_report(
     except Exception as exc:
         return {"ok": False, "ready": False, "drift": False, "error": repr(exc)}
 
-    recent = sorted(records, key=lambda r: float(r.get("added_at", 0.0)))[-max(1, int(window)):]
+    recent = sorted(unseen, key=lambda r: float(r.get("added_at", 0.0)))[-max(1, int(window)):]
     current = evaluate_model(model, genome, recent, 8192, latency_repeats=3)
 
     baseline = None
     baseline_counts = None
     metrics_path = state_dir / "champion" / "metrics.json"
-    prov_path = state_dir / "champion" / "provenance.json"
     try:
         baseline = json.loads(metrics_path.read_text(encoding="utf-8"))
     except Exception:
         baseline = None
-    try:
-        baseline_counts = json.loads(prov_path.read_text(encoding="utf-8")).get("class_counts")
-    except Exception:
-        baseline_counts = None
+    baseline_counts = provenance.get("class_counts") if isinstance(provenance, dict) else None
 
     recent_counts = class_counts(recent)
     current_real_fraction = recent_counts["real"] / max(1, sum(recent_counts.values()))
