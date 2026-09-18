@@ -60,7 +60,7 @@
       "operation": "write",
       "args": {
         "path": "airi-os/auto/config",
-        "content": "#!/bin/sh\nset -eu\n\nlb config noauto \\\n  --mode debian \\\n  --architectures amd64 \\\n  --distribution trixie \\\n  --archive-areas \"main contrib non-free-firmware\" \\\n  --binary-images iso-hybrid \\\n  --debian-installer none \\\n  --apt-recommends true \\\n  --memtest none \\\n  --bootappend-live \"boot=live components username=airi hostname=airi-os locales=it_IT.UTF-8 keyboard-layouts=it timezone=Europe/Rome\" \\\n  \"$@\"\n",
+        "content": "#!/bin/sh\nset -eu\n\nlb config noauto \\\n  --mode debian \\\n  --architectures amd64 \\\n  --distribution trixie \\\n  --archive-areas \"main contrib non-free non-free-firmware\" \\\n  --binary-images iso-hybrid \\\n  --security false \\\n  --debian-installer none \\\n  --apt-recommends true \\\n  --memtest none \\\n  --bootappend-live \"boot=live components username=airi hostname=airi-os locales=it_IT.UTF-8 keyboard-layouts=it timezone=Europe/Rome\" \\\n  \"$@\"\n",
         "scope": [
           "airi-os"
         ]
@@ -95,6 +95,46 @@
       }
     },
     {
+      "id": "write-security-chroot",
+      "title": "Configure Debian 13 security repository for image build",
+      "operation": "write",
+      "args": {
+        "path": "airi-os/config/archives/trixie-security.list.chroot",
+        "content": "deb http://security.debian.org/ trixie-security main contrib non-free non-free-firmware\n",
+        "scope": [
+          "airi-os"
+        ]
+      },
+      "depends_on": [
+        "write-4"
+      ],
+      "repository": ".",
+      "workspace": ".",
+      "verification": {
+        "required": true
+      }
+    },
+    {
+      "id": "write-security-binary",
+      "title": "Persist Debian 13 security repository in live system",
+      "operation": "write",
+      "args": {
+        "path": "airi-os/config/archives/trixie-security.list.binary",
+        "content": "deb http://security.debian.org/ trixie-security main contrib non-free non-free-firmware\n",
+        "scope": [
+          "airi-os"
+        ]
+      },
+      "depends_on": [
+        "write-security-chroot"
+      ],
+      "repository": ".",
+      "workspace": ".",
+      "verification": {
+        "required": true
+      }
+    },
+    {
       "id": "write-5",
       "title": "Create airi-os/config/includes.chroot/etc/systemd/system/airi-pc.service",
       "operation": "write",
@@ -106,7 +146,7 @@
         ]
       },
       "depends_on": [
-        "write-4"
+        "write-security-binary"
       ],
       "repository": ".",
       "workspace": ".",
@@ -299,7 +339,7 @@
       "title": "Verify Airi OS source tree",
       "operation": "test",
       "args": {
-        "command": "bash airi-os/verify.sh",
+        "command": "bash airi-os/verify.sh && grep -q -- '--security false' airi-os/auto/config && grep -q 'trixie-security' airi-os/config/archives/trixie-security.list.chroot airi-os/config/archives/trixie-security.list.binary",
         "cwd": ".",
         "timeout": 120
       },
@@ -365,5 +405,9 @@
       }
     }
   ],
-  "revision": 4
+  "revision": 5,
+  "notes": [
+    "GitHub runner live-build generated legacy trixie/updates security suite.",
+    "Use --security false to disable that legacy source and add Debian 13 trixie-security explicitly for chroot and live runtime."
+  ]
 }
