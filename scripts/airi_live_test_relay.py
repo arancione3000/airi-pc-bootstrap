@@ -95,22 +95,30 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/x-ndjson")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Transfer-Encoding", "chunked")
         self.send_header("Connection", "keep-alive")
         self.end_headers()
+
+        def send_chunk(payload: bytes) -> None:
+            self.wfile.write(f"{len(payload):X}\r\n".encode("ascii"))
+            self.wfile.write(payload)
+            self.wfile.write(b"\r\n")
+            self.wfile.flush()
+
         sent = 0
         try:
             while True:
                 rows = STORE.snapshot(topic)
                 while sent < len(rows):
-                    self.wfile.write((json.dumps(rows[sent], separators=(",", ":")) + "\n").encode())
-                    self.wfile.flush()
+                    payload = (json.dumps(rows[sent], separators=(",", ":")) + "\n").encode()
+                    send_chunk(payload)
+                    print(f"AIRI_TEST_RELAY_STREAM_SEND topic={topic} index={sent}", flush=True)
                     sent += 1
                 with STORE.cv:
-                    STORE.cv.wait(timeout=15)
+                    STORE.cv.wait(timeout=10)
                     if sent == len(STORE.snapshot(topic)):
                         keep = {"id": uuid.uuid4().hex[:12], "time": int(time.time()), "event": "keepalive", "topic": topic}
-                        self.wfile.write((json.dumps(keep, separators=(",", ":")) + "\n").encode())
-                        self.wfile.flush()
+                        send_chunk((json.dumps(keep, separators=(",", ":")) + "\n").encode())
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return
 
