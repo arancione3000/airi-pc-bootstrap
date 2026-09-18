@@ -7,7 +7,7 @@ plugins {
 val airiControlRelay = providers.gradleProperty("airiControlRelay").orElse("").get()
 val airiControlTopic = providers.gradleProperty("airiControlTopic").orElse("").get()
 fun quotedBuildConfig(value: String): String =
-    """ + value.replace("\", "\\").replace(""", "\"") + """
+    "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 android {
     namespace = "com.airipc.control"
