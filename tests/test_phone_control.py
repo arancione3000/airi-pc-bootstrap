@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import base64
 import os
+import sys
+from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from computer.control_plane import phone_control as pc
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "computer"))
+from control_plane import phone_control as pc
 
 
 def test_pair_secret_roundtrip(tmp_path, monkeypatch):
