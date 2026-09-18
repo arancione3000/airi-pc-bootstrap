@@ -102,6 +102,23 @@ if [ "$bound" -ne 1 ]; then
 fi
 echo "AIRI_CONTROL_ACCESSIBILITY_BOUND=PASS"
 
+# Simulate the real user flow: return from Android Accessibility settings to the app
+# so MainActivity.onResume() refreshes the enabled state and unlocks START.
+adb shell input keyevent KEYCODE_HOME
+sleep 0.4
+adb shell am start -n "$ACTIVITY" >/dev/null
+for _ in $(seq 1 20); do
+  if coords_for 'Abilitata' >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.4
+done
+if ! coords_for 'Abilitata' >/dev/null 2>&1; then
+  echo "Airi Control UI did not refresh accessibility state" >&2
+  false
+fi
+echo "AIRI_CONTROL_ACCESSIBILITY_UI=PASS"
+
 PAIR_XML=""
 for _ in $(seq 1 30); do
   PAIR_XML="$(adb exec-out run-as "$PKG" cat shared_prefs/airi_control_pairing.xml 2>/dev/null || true)"
