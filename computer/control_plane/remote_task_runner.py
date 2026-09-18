@@ -75,6 +75,8 @@ def run_task(spec: dict[str, Any]) -> dict[str, Any]:
     )
     ready = (result.get("result") or {}).get("status") == "READY"
     if not ready:
+        task_id = (result.get("result") or {}).get("task_id") or result.get("task_id")
+        task_snapshot = cp.tasks.read(task_id) if task_id else None
         live_emit(
             "runtime",
             "Airi autonomous task failed",
@@ -82,7 +84,7 @@ def run_task(spec: dict[str, Any]) -> dict[str, Any]:
             "failed",
             dedupe_key="remote-task:runner:failed",
         )
-        return {"ok": False, "execution": result}
+        return {"ok": False, "execution": result, "task": task_snapshot}
 
     commit_paths = [str(x) for x in (spec.get("commit_paths") or scope)]
     message = str(spec.get("commit_message") or "feat: persist verified Airi-PC autonomous task")
