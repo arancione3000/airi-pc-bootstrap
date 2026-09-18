@@ -32,7 +32,7 @@ object PairingSecret {
         prefs.getString(KEY, null)?.let { return it }
         val raw = ByteArray(32).also { SecureRandom().nextBytes(it) }
         val encoded = Base64.encodeToString(raw, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-        prefs.edit().putString(KEY, encoded).apply()
+        check(prefs.edit().putString(KEY, encoded).commit()) { "Unable to persist pairing secret" }
         return encoded
     }
 

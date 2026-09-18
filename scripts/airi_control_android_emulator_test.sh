@@ -97,13 +97,21 @@ if [ "$bound" -ne 1 ]; then
 fi
 echo "AIRI_CONTROL_ACCESSIBILITY_BOUND=PASS"
 
-PAIR_XML="$(adb exec-out run-as "$PKG" cat shared_prefs/airi_control_pairing.xml)"
-PAIR="$(python3 - <<'PY' "$PAIR_XML"
+PAIR_XML=""
+for _ in $(seq 1 30); do
+  PAIR_XML="$(adb exec-out run-as "$PKG" cat shared_prefs/airi_control_pairing.xml 2>/dev/null || true)"
+  if printf '%s' "$PAIR_XML" | grep -q '<map'; then
+    break
+  fi
+  sleep 0.4
+done
+printf '%s\n' "$PAIR_XML" > "$OUT/pairing.xml"
+PAIR="$(python3 - "$OUT/pairing.xml" <<'PY'
 import sys, xml.etree.ElementTree as ET
-root = ET.fromstring(sys.argv[1])
+root = ET.parse(sys.argv[1]).getroot()
 for node in root.findall("string"):
-    if node.attrib.get("name") == "pairing_secret_v1":
-        print(node.text or "")
+    if node.attrib.get("name") == "pairing_secret_v1" and (node.text or "").strip():
+        print((node.text or "").strip())
         break
 else:
     raise SystemExit("pairing secret not found")
