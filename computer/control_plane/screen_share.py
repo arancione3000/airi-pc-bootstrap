@@ -264,7 +264,7 @@ async function showBlob(blob){{
 async function pump(){{
   while(!stopped){{
     try{{
-      const response=await fetch('/frame/{self.token}.jpg?t='+Date.now(), {{
+      const response=await fetch('/frame/{token}.jpg?t='+Date.now(), {{
         cache:'no-store',
         credentials:'omit'
       }});
