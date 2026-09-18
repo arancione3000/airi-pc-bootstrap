@@ -21,7 +21,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: airi-live-android-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -72,3 +76,54 @@ jobs:
           name: Airi-Live-Android
           path: airi-live-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: End-to-end Airi Live relay smoke test
+        env:
+          AIRI_LIVE_TELEMETRY: '1'
+          AIRI_LIVE_ALLOW_CI: '1'
+        run: |
+          python3 - <<'PY'
+          import json
+          import urllib.request
+          from computer.control_plane.live_telemetry import live_emit, live_flush, topic_for
+
+          title = "Airi Live 1.1 ready"
+          assert live_emit("runtime", title, "stable relay verified", "completed", dedupe_key="airi-live-1.1-smoke")
+          assert live_flush(10.0), "telemetry queue did not flush"
+
+          url = f"https://ntfy.sh/{topic_for()}/json?poll=1&since=10m"
+          with urllib.request.urlopen(url, timeout=20) as response:
+              lines = response.read().decode("utf-8").splitlines()
+
+          found = False
+          for line in lines:
+              try:
+                  outer = json.loads(line)
+                  payload = json.loads(outer.get("message", "{}"))
+              except Exception:
+                  continue
+              if payload.get("title") == title:
+                  found = True
+                  break
+          assert found, "published telemetry was not readable from relay"
+          print("AIRI_LIVE_RELAY_SMOKE=PASS")
+          PY
+
+      - name: Publish installable Airi Live 1.1 release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="airi-live-v1.1.0"
+          APK="airi-live-android/app/build/outputs/apk/debug/app-debug.apk"
+          OUT="Airi-Live-v1.1.0.apk"
+          cp "$APK" "$OUT"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$OUT" --clobber
+          else
+            gh release create "$TAG" "$OUT" \
+              --target "$GITHUB_SHA" \
+              --title "Airi Live v1.1.0" \
+              --notes "Stable live channel, end-to-end relay verification, and improved connection status."
+          fi
