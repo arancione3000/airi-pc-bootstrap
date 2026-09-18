@@ -26,7 +26,7 @@ jobs:
         run: |
           python3 -m venv .venv
           .venv/bin/pip install --disable-pip-version-check pytest
-          .venv/bin/pip install --disable-pip-version-check -r computer/evolution/requirements.txt
+          .venv/bin/pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
 
       - name: Compile evolution and integration sources
         run: |
