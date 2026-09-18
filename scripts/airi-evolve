@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT="${AIRI_ROOT:-$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)}"
+PY="${AIRIPC_VENV:-$ROOT/.venv}/bin/python"
+if [ ! -x "$PY" ]; then PY="$(command -v python3)"; fi
+export AIRI_ROOT="$ROOT"
+export PYTHONPATH="$ROOT/computer${PYTHONPATH:+:$PYTHONPATH}"
+exec "$PY" -m evolution.cli "$@"
