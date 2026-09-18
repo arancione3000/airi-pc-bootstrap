@@ -318,12 +318,21 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         raise ValueError(f"need at least {cfg.min_samples} verified samples; found {len(records)}")
     if min(counts.values()) < 4:
         raise ValueError("need at least 4 verified samples in each class")
-    train, val, test = split_records(records, cfg.seed)
+    remaining, canary, canary_info = ensure_canary_partition(state_dir, records, seed=cfg.seed)
+    train, val, test = split_records(remaining, cfg.seed)
     run_id = time.strftime("run-%Y%m%d-%H%M%S") + f"-{os.getpid()}"
     run_dir = state_dir / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     _save_json(run_dir / "config.json", asdict(cfg))
-    _save_json(run_dir / "dataset.json", {"records": len(records), "class_counts": counts, "train": len(train), "val": len(val), "test": len(test)})
+    _save_json(run_dir / "dataset.json", {
+        "records": len(records),
+        "class_counts": counts,
+        "source_families": source_family_counts(records),
+        "train": len(train),
+        "val": len(val),
+        "test": len(test),
+        "canary": canary_info,
+    })
 
     rng = random.Random(cfg.seed + int(time.time()) % 100_000)
     population = [random_genome(rng, f"g0-{i:03d}", cfg.mode, 0) for i in range(cfg.population)]
@@ -336,7 +345,7 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         for idx, genome in enumerate(population):
             candidate_seed = cfg.seed + generation * 10_000 + idx
             try:
-                model, train_info = train_model(genome, train, cfg.candidate_epochs, cfg.vocab_size, candidate_seed)
+                model, train_info = train_model(genome, train, cfg.candidate_epochs, cfg.vocab_size, candidate_seed, cfg.replay_balance_power)
                 metrics = evaluate_model(model, genome, val, cfg.vocab_size)
                 fit = fitness(metrics, cfg)
                 row = {"generation": generation, "genome_id": genome.genome_id, **metrics, **fit, "train": train_info, "genome": genome.to_dict()}
