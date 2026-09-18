@@ -66,6 +66,7 @@ jobs:
               edge=quantize_champion(state,max_samples=16)
               assert edge['ok'] is True
               assert edge['metrics']['samples'] >= 4
+              assert (state/'edge'/'attempt.json').exists()
               assert 0.0 <= edge['metrics']['label_agreement'] <= 1.0
           print(json.dumps({'ok':True,'promoted':result['promoted'],'candidate':result['candidate']},indent=2))
           PY
