@@ -124,7 +124,7 @@ def _loader(records: list[dict], genome: Genome, vocab_size: int, shuffle: bool,
     return DataLoader(dataset, batch_size=genome.batch_size, shuffle=shuffle)
 
 
-def train_model(genome: Genome, train_records: list[dict], epochs: int, vocab_size: int, seed: int):
+def train_model(genome: Genome, train_records: list[dict], epochs: int, vocab_size: int, seed: int, balance_power: float = 0.65):
     import torch
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -134,7 +134,7 @@ def train_model(genome: Genome, train_records: list[dict], epochs: int, vocab_si
     model.to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=genome.learning_rate, weight_decay=genome.weight_decay)
     loss_fn = torch.nn.CrossEntropyLoss()
-    loader = _loader(train_records, genome, vocab_size, True)
+    loader = _loader(train_records, genome, vocab_size, True, balance_power)
     model.train()
     losses = []
     for _ in range(epochs):
@@ -190,6 +190,45 @@ def evaluate_model(model, genome: Genome, records: list[dict], vocab_size: int, 
     finally:
         tmp_path.unlink(missing_ok=True)
     return {**m, "params": params, "model_bytes": bytes_size, "latency_ms": latency_ms}
+
+
+def evaluate_source_families(model, genome: Genome, records: list[dict], vocab_size: int) -> dict[str, Any]:
+    import torch
+    grouped: dict[str, list[dict]] = {}
+    for row in records:
+        grouped.setdefault(source_family(row), []).append(row)
+    device = next(model.parameters()).device
+    model.eval()
+    result: dict[str, Any] = {}
+    with torch.inference_mode():
+        for family, rows in sorted(grouped.items()):
+            ys: list[int] = []
+            probs: list[float] = []
+            for ids, mask, y in _loader(rows, genome, vocab_size, False):
+                logits = model(ids.to(device), mask.to(device))
+                pr = torch.softmax(logits, dim=-1)[:, 1].detach().cpu().tolist()
+                probs.extend(float(p) for p in pr)
+                ys.extend(int(v) for v in y.tolist())
+            result[family] = {
+                "records": len(rows),
+                "class_counts": class_counts(rows),
+                **_metrics(ys, probs),
+            }
+    return result
+
+
+def _canary_decision(candidate: dict, old: dict | None, cfg: EvolutionConfig) -> tuple[bool, str]:
+    if not candidate:
+        return True, "no canary configured"
+    if old is None:
+        ok = float(candidate.get("f1", 0.0)) >= cfg.min_first_canary_f1
+        return ok, "first champion canary threshold met" if ok else "first champion canary macro-F1 below threshold"
+    if float(candidate.get("f1", 0.0)) < float(old.get("f1", 0.0)) - cfg.max_canary_f1_regression:
+        return False, "canary macro-F1 regression exceeds gate"
+    for key in ("f1_real", "f1_fake"):
+        if float(candidate.get(key, 0.0)) < float(old.get(key, 0.0)) - cfg.max_canary_class_regression:
+            return False, f"canary {key} regression exceeds gate"
+    return True, "canary gate passed"
 
 
 def fitness(metrics: dict[str, Any], cfg: EvolutionConfig) -> dict[str, Any]:
