@@ -124,7 +124,7 @@ Edge optimization is measured, not assumed. `edge-quantize` applies dynamic INT8
 ./scripts/airi-evolve predict-edge "claim"
 ```
 
-Every edge artifact is tied to the current champion `genome_id`. Promoting a new champion automatically deletes the previous edge artifact, and stale INT8 metadata is rejected on load.
+Every edge artifact is tied to the current champion `genome_id`. Promoting a new champion automatically deletes the previous edge artifact, and stale INT8 metadata is rejected on load. Autopilot attempts edge optimization once for each new champion; rejected attempts are recorded so the system does not waste time retrying every maintenance cycle.
 
 Native MCP equivalents are available as:
 
