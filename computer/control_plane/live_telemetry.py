@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RELAY = "https://ntfy.sh"
 DEFAULT_TOPIC = "airi-live-09d926b9a4207c660a5f3efa5f50505ef5ff46e8463b3beb"
 CONFIG_PATH = ROOT / ".ai" / "airi_live.json"
+SESSION_PATH = ROOT / ".ai" / "state" / "live_session_id"
 
 
 def _load_protocol_config() -> dict:
@@ -39,14 +40,40 @@ _PROTOCOL = _load_protocol_config()
 STABLE_TOPIC = str(_PROTOCOL.get("topic") or DEFAULT_TOPIC)
 _ENABLED = os.environ.get("AIRI_LIVE_TELEMETRY", "1").strip().lower() not in {"0", "false", "no", "off"}
 _RELAY = str(_PROTOCOL.get("relay_base") or DEFAULT_RELAY).rstrip("/")
-_SESSION_ID = (
-    os.environ.get("AIRI_LIVE_SESSION_ID", "").strip()
-    or (
-        f"gh-{os.environ.get('GITHUB_RUN_ID')}-{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}"
-        if os.environ.get("GITHUB_RUN_ID")
-        else f"session-{uuid.uuid4().hex[:12]}"
-    )
-)
+def _session_identity() -> str:
+    explicit = os.environ.get("AIRI_LIVE_SESSION_ID", "").strip()
+    if explicit:
+        return explicit
+    if os.environ.get("GITHUB_RUN_ID"):
+        return f"gh-{os.environ.get('GITHUB_RUN_ID')}-{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}"
+
+    try:
+        existing = SESSION_PATH.read_text(encoding="utf-8").strip()
+        if existing:
+            return existing
+    except OSError:
+        pass
+
+    value = f"session-{uuid.uuid4().hex[:12]}"
+    try:
+        SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(SESSION_PATH), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(value + "\n")
+        return value
+    except FileExistsError:
+        try:
+            existing = SESSION_PATH.read_text(encoding="utf-8").strip()
+            if existing:
+                return existing
+        except OSError:
+            pass
+    except OSError:
+        pass
+    return value
+
+
+_SESSION_ID = _session_identity()
 _QUEUE: queue.Queue[dict] = queue.Queue(maxsize=256)
 _STARTED = False
 _LOCK = threading.Lock()
