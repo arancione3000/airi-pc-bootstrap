@@ -185,11 +185,11 @@ def _capture_jpeg() -> bytes:
     except Exception:
         pass
 
-    if img.width > 960:
-        scale = 960 / img.width
-        img = img.resize((960, int(img.height * scale)), Image.Resampling.LANCZOS)
+    if img.width > 864:
+        scale = 864 / img.width
+        img = img.resize((864, int(img.height * scale)), Image.Resampling.BILINEAR)
     out = io.BytesIO()
-    img.save(out, format="JPEG", quality=52, optimize=False)
+    img.save(out, format="JPEG", quality=45, optimize=False)
     return out.getvalue()
 
 
@@ -243,7 +243,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             self.send_header("Transfer-Encoding", "chunked")
             self.send_header("Connection", "keep-alive")
             self.end_headers()
-            target_interval = 0.08
+            target_interval = 1.0 / 15.0
             try:
                 while True:
                     started = time.monotonic()
@@ -275,11 +275,13 @@ body{{display:flex;align-items:center;justify-content:center}}
 #screen{{width:100%;height:100%;object-fit:contain;background:#050507}}
 #badge{{position:fixed;top:8px;left:8px;padding:5px 8px;border-radius:10px;background:#000b;color:#5ed390;
 font:600 12px system-ui,sans-serif;letter-spacing:.04em}}
-</style></head><body><img id="screen" alt="Airi-PC live screen"><div id="badge">AIRI-PC · LIVE POV · <span id="fps">connecting…</span></div>
+</style></head><body><canvas id="screen"></canvas><div id="badge">AIRI-PC · LIVE POV · <span id="fps">connecting…</span></div>
 <script>
-const img=document.getElementById('screen');
+const canvas=document.getElementById('screen');
+const ctx=canvas.getContext('2d',{{alpha:false,desynchronized:true}});
 const fps=document.getElementById('fps');
-let previous=null, frames=0, windowStart=performance.now(), stopped=false;
+let frames=0, windowStart=performance.now(), stopped=false;
+let pending=null, rendering=false;
 
 function sleep(ms){{return new Promise(resolve=>setTimeout(resolve,ms));}}
 function concat(a,b){{
@@ -289,19 +291,39 @@ function marker(buf,a,b,from=0){{
   for(let i=from;i+1<buf.length;i++) if(buf[i]===a&&buf[i+1]===b) return i;
   return -1;
 }}
-async function showBytes(bytes){{
-  const next=URL.createObjectURL(new Blob([bytes],{{type:'image/jpeg'}}));
-  await new Promise((resolve,reject)=>{{
-    img.onload=resolve; img.onerror=reject; img.src=next;
-  }});
-  if(previous) URL.revokeObjectURL(previous);
-  previous=next;
+function noteFrame(){{
   frames++;
   const now=performance.now(), elapsed=now-windowStart;
   if(elapsed>=1000){{
     fps.textContent=(frames*1000/elapsed).toFixed(1)+' FPS';
     frames=0; windowStart=now;
   }}
+}}
+async function renderLatest(){{
+  if(rendering) return;
+  rendering=true;
+  try{{
+    while(pending && !stopped){{
+      const bytes=pending;
+      pending=null;
+      const bitmap=await createImageBitmap(new Blob([bytes],{{type:'image/jpeg'}}));
+      if(canvas.width!==bitmap.width||canvas.height!==bitmap.height){{
+        canvas.width=bitmap.width; canvas.height=bitmap.height;
+      }}
+      ctx.drawImage(bitmap,0,0);
+      bitmap.close();
+      noteFrame();
+    }}
+  }}catch(e){{
+    fps.textContent='decode…';
+  }}finally{{
+    rendering=false;
+    if(pending && !stopped) queueMicrotask(renderLatest);
+  }}
+}}
+function enqueue(bytes){{
+  pending=bytes;
+  renderLatest();
 }}
 async function continuous(){{
   const response=await fetch('/stream/{self.token}',{{cache:'no-store',credentials:'omit'}});
@@ -313,13 +335,12 @@ async function continuous(){{
     if(packet.done) throw new Error('stream ended');
     buf=concat(buf,packet.value);
     while(true){{
-      const start=marker(buf,0xff,0xd8);
-      if(start<0){{ if(buf.length>1048576) buf=buf.slice(-2); break; }}
-      const end=marker(buf,0xff,0xd9,start+2);
-      if(end<0){{ if(start>0) buf=buf.slice(start); break; }}
-      const jpg=buf.slice(start,end+2);
-      buf=buf.slice(end+2);
-      await showBytes(jpg);
+      const s=marker(buf,0xff,0xd8);
+      if(s<0){{if(buf.length>1048576)buf=buf.slice(-2);break;}}
+      const e=marker(buf,0xff,0xd9,s+2);
+      if(e<0){{if(s>0)buf=buf.slice(s);break;}}
+      enqueue(buf.slice(s,e+2));
+      buf=buf.slice(e+2);
     }}
   }}
 }}
@@ -327,8 +348,8 @@ async function polling(){{
   while(!stopped){{
     const response=await fetch('/frame/{self.token}.jpg?t='+Date.now(),{{cache:'no-store',credentials:'omit'}});
     if(!response.ok) throw new Error('frame HTTP '+response.status);
-    await showBytes(new Uint8Array(await response.arrayBuffer()));
-    await sleep(35);
+    enqueue(new Uint8Array(await response.arrayBuffer()));
+    await sleep(30);
   }}
 }}
 async function run(){{
@@ -340,7 +361,7 @@ async function run(){{
     }}
   }}
 }}
-window.addEventListener('beforeunload',()=>{{stopped=true;if(previous)URL.revokeObjectURL(previous);}});
+window.addEventListener('beforeunload',()=>{{stopped=true;pending=null;}});
 run();
 </script></body></html>"""
         self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
