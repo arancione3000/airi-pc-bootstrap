@@ -375,9 +375,9 @@
       "title": "Inspect ISO boot metadata and checksum",
       "operation": "test",
       "args": {
-        "command": "test -s airi-os/out/Airi-OS-0.1-amd64.iso && cd airi-os/out && sha256sum -c Airi-OS-0.1-amd64.iso.sha256 && xorriso -indev Airi-OS-0.1-amd64.iso -report_el_torito plain >/tmp/airi-os-el-torito.txt 2>&1 && grep -qi 'El Torito' /tmp/airi-os-el-torito.txt",
+        "command": "test -s airi-os/out/Airi-OS-0.1-amd64.iso && cd airi-os/out && sha256sum -c Airi-OS-0.1-amd64.iso.sha256 && cd ../.. && docker run --rm -e DEBIAN_FRONTEND=noninteractive -v \"$PWD/airi-os/out:/out:ro\" debian:trixie bash -lc 'apt-get update >/dev/null && apt-get install -y xorriso >/dev/null && xorriso -indev /out/Airi-OS-0.1-amd64.iso -report_el_torito plain 2>&1 | grep -qi \"El Torito\"'",
         "cwd": ".",
-        "timeout": 180
+        "timeout": 300
       },
       "depends_on": [
         "build-iso"
@@ -405,6 +405,6 @@
       }
     }
   ],
-  "revision": 9,
-  "notes": "ISO build isolated in Debian Trixie container; checksum manifest made portable across container/host boundary."
+  "revision": 10,
+  "notes": "ISO build and El Torito verification isolated in Debian Trixie; checksum manifest portable across container/host boundary."
 }
