@@ -160,6 +160,7 @@ jobs:
       AIRI_LIVE_TELEMETRY: '1'
       AIRI_LIVE_ALLOW_CI: '1'
       AIRI_SCREEN_SHARE: '1'
+      AIRI_BROWSER_HEADLESS: '0'
       AIRI_LIVE_SESSION_ID: android-emu-${{ github.run_id }}-${{ github.run_attempt }}
       DISPLAY: ':99'
     steps:
@@ -178,6 +179,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
+          python -m playwright install chromium
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xvfb xterm x11-xserver-utils
 
@@ -187,8 +189,8 @@ jobs:
           Xvfb :99 -screen 0 1280x800x24 -ac >/tmp/airi-emu-xvfb.log 2>&1 &
           echo $! >/tmp/airi-emu-xvfb.pid
           sleep 1
-          DISPLAY=:99 xsetroot -solid '#00ffff'
-          DISPLAY=:99 xterm -geometry 104x32+70+55 -bg '#00ffff' -fg '#101014' -title 'Airi-PC POV E2E' \
+          DISPLAY=:99 xsetroot -solid cyan
+          DISPLAY=:99 xterm -geometry 104x32+70+55 -bg cyan -fg black -title 'Airi-PC POV E2E' \
             -e bash -lc 'while true; do printf "\033c\n  AIRI-PC POV E2E\n\n  LIVE DESKTOP -> ANDROID\n\n  %s\n" "$(date -u +%H:%M:%S.%3N)"; sleep 0.10; done' \
             >/tmp/airi-emu-xterm.log 2>&1 &
           echo $! >/tmp/airi-emu-xterm.pid

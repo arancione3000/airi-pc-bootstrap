@@ -181,7 +181,7 @@ def _capture_jpeg() -> bytes:
         scale = 960 / img.width
         img = img.resize((960, int(img.height * scale)), Image.Resampling.LANCZOS)
     out = io.BytesIO()
-    img.save(out, format="JPEG", quality=55, optimize=False)
+    img.save(out, format="JPEG", quality=52, optimize=False)
     return out.getvalue()
 
 
@@ -231,7 +231,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             self.send_header("Pragma", "no-cache")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
-            target_interval = 0.10
+            target_interval = 0.08
             try:
                 while True:
                     started = time.monotonic()
@@ -256,54 +256,75 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 html,body{{margin:0;width:100%;height:100%;background:#050507;overflow:hidden}}
 body{{display:flex;align-items:center;justify-content:center}}
 #screen{{width:100%;height:100%;object-fit:contain;background:#050507}}
-#badge{{position:fixed;top:8px;left:8px;padding:5px 8px;border-radius:10px;background:#000a;color:#5ed390;
+#badge{{position:fixed;top:8px;left:8px;padding:5px 8px;border-radius:10px;background:#000b;color:#5ed390;
 font:600 12px system-ui,sans-serif;letter-spacing:.04em}}
-</style></head><body><img id="screen" alt="Airi-PC live screen"><div id="badge">AIRI-PC · LIVE POV · <span id="fps">0 FPS</span></div>
+</style></head><body><img id="screen" alt="Airi-PC live screen"><div id="badge">AIRI-PC · LIVE POV · <span id="fps">connecting…</span></div>
 <script>
 const img=document.getElementById('screen');
 const fps=document.getElementById('fps');
 let previous=null, frames=0, windowStart=performance.now(), stopped=false;
 
 function sleep(ms){{return new Promise(resolve=>setTimeout(resolve,ms));}}
-
-async function showBlob(blob){{
-  const next=URL.createObjectURL(blob);
+function concat(a,b){{
+  const out=new Uint8Array(a.length+b.length); out.set(a,0); out.set(b,a.length); return out;
+}}
+function marker(buf,a,b,from=0){{
+  for(let i=from;i+1<buf.length;i++) if(buf[i]===a&&buf[i+1]===b) return i;
+  return -1;
+}}
+async function showBytes(bytes){{
+  const next=URL.createObjectURL(new Blob([bytes],{{type:'image/jpeg'}}));
   await new Promise((resolve,reject)=>{{
-    img.onload=resolve;
-    img.onerror=reject;
-    img.src=next;
+    img.onload=resolve; img.onerror=reject; img.src=next;
   }});
   if(previous) URL.revokeObjectURL(previous);
   previous=next;
+  frames++;
+  const now=performance.now(), elapsed=now-windowStart;
+  if(elapsed>=1000){{
+    fps.textContent=(frames*1000/elapsed).toFixed(1)+' FPS';
+    frames=0; windowStart=now;
+  }}
 }}
-
-async function pump(){{
+async function continuous(){{
+  const response=await fetch('/stream/{self.token}',{{cache:'no-store',credentials:'omit'}});
+  if(!response.ok||!response.body) throw new Error('stream HTTP '+response.status);
+  const reader=response.body.getReader();
+  let buf=new Uint8Array(0);
   while(!stopped){{
-    try{{
-      const response=await fetch('/frame/{token}.jpg?t='+Date.now(), {{
-        cache:'no-store',
-        credentials:'omit'
-      }});
-      if(!response.ok) throw new Error('HTTP '+response.status);
-      await showBlob(await response.blob());
-      frames++;
-      const now=performance.now();
-      const elapsed=now-windowStart;
-      if(elapsed>=1000){{
-        fps.textContent=(frames*1000/elapsed).toFixed(1)+' FPS';
-        frames=0;
-        windowStart=now;
-      }}
-      await new Promise(requestAnimationFrame);
-    }}catch(error){{
-      fps.textContent='reconnect…';
-      await sleep(180);
+    const packet=await reader.read();
+    if(packet.done) throw new Error('stream ended');
+    buf=concat(buf,packet.value);
+    while(true){{
+      const start=marker(buf,0xff,0xd8);
+      if(start<0){{ if(buf.length>1048576) buf=buf.slice(-2); break; }}
+      const end=marker(buf,0xff,0xd9,start+2);
+      if(end<0){{ if(start>0) buf=buf.slice(start); break; }}
+      const jpg=buf.slice(start,end+2);
+      buf=buf.slice(end+2);
+      await showBytes(jpg);
     }}
   }}
 }}
-
+async function polling(){{
+  while(!stopped){{
+    const response=await fetch('/frame/{self.token}.jpg?t='+Date.now(),{{cache:'no-store',credentials:'omit'}});
+    if(!response.ok) throw new Error('frame HTTP '+response.status);
+    await showBytes(new Uint8Array(await response.arrayBuffer()));
+    await sleep(35);
+  }}
+}}
+async function run(){{
+  try{{await continuous();}}
+  catch(error){{
+    fps.textContent='fallback';
+    while(!stopped){{
+      try{{await polling();}}catch(e){{fps.textContent='reconnect…';await sleep(250);}}
+    }}
+  }}
+}}
 window.addEventListener('beforeunload',()=>{{stopped=true;if(previous)URL.revokeObjectURL(previous);}});
-pump();
+run();
 </script></body></html>"""
         self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
 
@@ -364,7 +385,16 @@ class ScreenShare:
         raise TimeoutError("cloudflared quick tunnel URL was not created in time")
 
     def _stop_tunnel_only(self) -> None:
-        self._stop_tunnel_only()
+        try:
+            if self.tunnel is not None and self.tunnel.poll() is None:
+                self.tunnel.terminate()
+                self.tunnel.wait(timeout=5)
+        except Exception:
+            try:
+                if self.tunnel is not None and self.tunnel.poll() is None:
+                    self.tunnel.kill()
+            except Exception:
+                pass
         self.tunnel = None
         self.tunnel_url = ""
 
