@@ -1,21 +1,42 @@
 # Airi Live for Android
 
-A zero-configuration Android dashboard for watching Airi-PC task activity in near real time.
+Airi Live is the zero-configuration Android viewer for the current Airi-PC
+runtime. Its primary purpose is to let the user see the real graphical Airi-PC
+desktop while a task is running, even when Airi-PC was reconstructed from a
+different ChatGPT conversation.
 
-## How it works
+## Rebuild-safe discovery
 
-- Airi-PC emits **operational metadata only** (task state, step title/operation, job lifecycle).
-- The relay is `ntfy.sh`; there is no server for the user to configure or pay for.
-- The topic is derived automatically from the canonical repository name + the current `main` commit SHA.
-- The app resolves `main`, derives the same topic, and opens ntfy's streaming JSON endpoint.
-- When `main` changes, reconnecting the app automatically follows the new channel.
+- The app and every Airi-PC reconstruction use one stable rendezvous topic
+  configured in `.ai/airi_live.json`.
+- A reconstruction owns one session ID shared by the runtime, telemetry and POV
+  publisher.
+- `computer/start.sh` launches the resident live runtime automatically.
+- If the public POV tunnel dies, the live runtime recreates it and publishes a
+  fresh offer without user setup.
+- CI and emulator tests use isolated topics and cannot become the production
+  session. The Android client also rejects historical `ci-smoke` events from
+  older builds.
 
-No prompts, file contents, screenshots, command output, cookies, credentials, API keys, or auth tokens are intentionally published by the telemetry layer. The public relay can be disabled with `AIRI_LIVE_TELEMETRY=0`.
+## POV transport
 
-## Build
+The Android app creates an RSA key in Android Keystore and publishes only the
+viewer public key. Airi-PC starts a read-only graphical POV endpoint and sends
+the temporary viewer descriptor encrypted for that key. Frames are rendered
+natively in the app over a persistent MJPEG connection, with frame polling only
+as a fallback.
 
-```bash
-gradle :app:assembleDebug
-```
+The rendezvous relay is `ntfy.sh`; there is no account or paid server to
+configure. Telemetry does not intentionally publish prompts, file contents,
+cookies, credentials, API keys or auth tokens. The graphical frames themselves
+are transported by the temporary POV endpoint rather than embedded in ntfy
+messages.
 
-The repository workflow `.github/workflows/airi-live-android.yml` builds an installable debug APK and uploads it as a GitHub Actions artifact.
+Set `AIRI_LIVE_TELEMETRY=0` to disable public live announcements.
+
+## Verification
+
+The GitHub Actions workflow `.github/workflows/airi-live-android.yml` builds
+the APK and runs an Android-emulator end-to-end test that verifies encrypted
+viewer rendezvous, real remote pixels, continuous-stream FPS, visible motion and
+full-screen POV before the APK is published.

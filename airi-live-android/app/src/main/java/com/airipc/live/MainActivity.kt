@@ -380,8 +380,21 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
 
     private fun parseEvent(o: JSONObject, fallbackId: String): LiveEvent? {
         if (o.optInt("v", 0) != 1) return null
+
+        // CI used the production rendezvous topic in early Airi Live builds.
+        // Ignore those historical smoke messages defensively so a retained
+        // ci-smoke event can never masquerade as a real Airi-PC session.
+        val eventId = o.optString("id", fallbackId)
+        val sourceSha = o.optString("source_sha").ifBlank { null }
+        val sessionId = o.optString("session_id").ifBlank { null }
+        if (
+            sourceSha == "smoke-test" ||
+            sessionId?.startsWith("ci-smoke-") == true ||
+            eventId == "airi-live-v1-5-smoke"
+        ) return null
+
         return LiveEvent(
-            id = o.optString("id", fallbackId),
+            id = eventId,
             ts = o.optLong("ts", System.currentTimeMillis() / 1000) * 1000,
             kind = o.optString("kind", "event"),
             title = o.optString("title", "Airi-PC"),
@@ -389,8 +402,8 @@ class AiriLiveClient(private val configOverride: LiveConfig? = null) {
             status = o.optString("status", "info"),
             taskId = o.optString("task_id").ifBlank { null },
             nodeId = o.optString("node_id").ifBlank { null },
-            sourceSha = o.optString("source_sha").ifBlank { null },
-            sessionId = o.optString("session_id").ifBlank { null },
+            sourceSha = sourceSha,
+            sessionId = sessionId,
         )
     }
 }

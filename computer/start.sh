@@ -151,6 +151,8 @@ raise SystemExit(1 if runtime_needs_restart(payload, os.environ.get("EXPECTED_SH
 # One reconstruction owns one shared live-session identity. The HTTP server,
 # telemetry emitters and the POV daemon all use it, so Android can follow a
 # reconstructed Airi-PC without being tied to the chat that created it.
+# Never reuse a server merely because /status answers; /ready must also match
+# the source SHA of this reconstruction before an existing runtime is accepted.
 EXISTING_MATCH=0
 if curl -fsS --max-time 2 http://127.0.0.1:9010/status >/dev/null 2>&1 && runtime_ready_matches; then
   EXISTING_MATCH=1
