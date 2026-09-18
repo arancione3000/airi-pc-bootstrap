@@ -306,7 +306,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          VERSION="$(sed -n 's/^[[:space:]]*versionName = "\\([^"]*\\)".*/\\1/p' airi-live-android/app/build.gradle.kts | head -n1)"
+          VERSION="$(awk -F'"' '/^[[:space:]]*versionName = "/ {print $2; exit}' airi-live-android/app/build.gradle.kts)"
           test -n "$VERSION"
           TAG="airi-live-v$VERSION"
           APK="$(find release-apk -name '*.apk' -type f | head -n1)"
