@@ -18,11 +18,11 @@ if adb shell pm list permissions -g 2>/dev/null | grep -q 'android.permission.PO
   adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 fi
 
-adb shell settings put secure enabled_accessibility_services "$PKG/$PKG.AiriAccessibilityService"
+adb shell settings put secure enabled_accessibility_services "$PKG/.AiriAccessibilityService"
 adb shell settings put secure accessibility_enabled 1
 adb shell am force-stop "$PKG"
 adb shell am start -n "$ACTIVITY"
-sleep 2
+sleep 1
 
 dump_ui() {
   adb shell uiautomator dump /sdcard/airi-control-window.xml >/dev/null 2>&1 || true
@@ -70,10 +70,33 @@ tap_matching() {
   return 1
 }
 
-enabled="$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')"
-echo "$enabled" | grep -q "$PKG"
-adb shell dumpsys accessibility > "$OUT/accessibility-before.txt"
-grep -q "$PKG" "$OUT/accessibility-before.txt"
+diagnostics() {
+  local rc="$1"
+  echo "AIRI_CONTROL_E2E_DIAGNOSTIC rc=$rc" >&2
+  adb shell settings get secure enabled_accessibility_services > "$OUT/enabled-accessibility.txt" 2>&1 || true
+  adb shell dumpsys accessibility > "$OUT/accessibility-failure.txt" 2>&1 || true
+  adb shell dumpsys activity services "$PKG" > "$OUT/services-failure.txt" 2>&1 || true
+  adb logcat -d -t 1200 > "$OUT/logcat.txt" 2>&1 || true
+  dump_ui || true
+  adb exec-out screencap -p > "$OUT/failure-screen.png" 2>/dev/null || true
+}
+trap 'rc=$?; diagnostics "$rc"; exit "$rc"' ERR
+
+bound=0
+for _ in $(seq 1 30); do
+  enabled="$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')"
+  adb shell dumpsys accessibility > "$OUT/accessibility-before.txt" 2>&1 || true
+  if echo "$enabled" | grep -q "$PKG" && grep -q 'AiriAccessibilityService' "$OUT/accessibility-before.txt"; then
+    bound=1
+    break
+  fi
+  sleep 0.5
+done
+if [ "$bound" -ne 1 ]; then
+  echo "Accessibility service did not bind" >&2
+  false
+fi
+echo "AIRI_CONTROL_ACCESSIBILITY_BOUND=PASS"
 
 PAIR_XML="$(adb exec-out run-as "$PKG" cat shared_prefs/airi_control_pairing.xml)"
 PAIR="$(python3 - <<'PY' "$PAIR_XML"
