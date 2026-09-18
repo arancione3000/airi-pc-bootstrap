@@ -143,9 +143,20 @@ def quantize_champion(
         "label_agreement": sum(agreements) / max(1, len(agreements)),
         **gate,
     }
+    edge_dir = state_dir / "edge"
+    edge_dir.mkdir(parents=True, exist_ok=True)
+    attempt = {
+        "format": "airi-pc-dynamic-int8-attempt-v1",
+        "created_at": time.time(),
+        "genome_id": genome.genome_id,
+        "accepted": bool(gate["accepted"]),
+        "metrics": metrics,
+    }
+    (edge_dir / "attempt.json").write_text(
+        json.dumps(attempt, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     if gate["accepted"]:
-        edge_dir = state_dir / "edge"
-        edge_dir.mkdir(parents=True, exist_ok=True)
         torch.save(int8_model.state_dict(), edge_dir / "model-int8.pt")
         (edge_dir / "metadata.json").write_text(
             json.dumps(
@@ -161,7 +172,7 @@ def quantize_champion(
             ),
             encoding="utf-8",
         )
-    return {"ok": True, "saved": gate["accepted"], "metrics": metrics}
+    return {"ok": True, "saved": gate["accepted"], "attempt": str(edge_dir / "attempt.json"), "metrics": metrics}
 
 
 def load_edge_model(state_dir: Path):
