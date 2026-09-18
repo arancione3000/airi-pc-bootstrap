@@ -104,3 +104,30 @@ Airi-PC also exposes the same operations as native MCP tools named `computer_evo
 `export` creates an integrity-checked ZIP containing the champion genome, state dict, metrics, provenance and SHA-256 manifest. `--torchscript` additionally attempts a traced model; tracing failure does not destroy the normal bundle and is reported in the manifest.
 
 The classifier remains a learned reliability estimator, not proof of truth. Consequential claims should be shown together with the external fact-check evidence.
+
+
+## V4: uncertainty, drift and measured edge optimization
+
+Champion predictions now support an abstention state. By default a prediction below 0.65 confidence returns `uncertain` while still exposing the underlying binary preference and probabilities. The threshold is stored with champion provenance and can evolve independently from the model code.
+
+Drift monitoring evaluates only verified examples that arrived **after** the current champion was promoted. It compares recent macro-F1, Brier score and class balance against the champion baseline. A drift signal plus enough new verified examples can trigger evolution earlier than the normal sample-count threshold.
+
+```sh
+./scripts/airi-evolve drift
+./scripts/airi-evolve predict "claim"
+```
+
+Edge optimization is measured, not assumed. `edge-quantize` applies dynamic INT8 quantization to supported Linear/GRU layers, then benchmarks serialized size, CPU latency, probability delta and binary-label agreement against the float champion. The INT8 model is saved only when quality stays inside the configured tolerance and it demonstrates a real size or latency gain.
+
+```sh
+./scripts/airi-evolve edge-quantize
+./scripts/airi-evolve predict-edge "claim"
+```
+
+Every edge artifact is tied to the current champion `genome_id`. Promoting a new champion automatically deletes the previous edge artifact, and stale INT8 metadata is rejected on load.
+
+Native MCP equivalents are available as:
+
+- `computer_evolution_drift`
+- `computer_evolution_edge_quantize`
+- `computer_evolution_predict_edge`
