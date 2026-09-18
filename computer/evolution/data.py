@@ -167,8 +167,9 @@ def ensure_canary_partition(
 ) -> tuple[list[dict], list[dict], dict]:
     state_dir = Path(state_dir)
     canary_path = state_dir / "data" / "canary_ids.json"
+    existed_before = canary_path.exists()
     existing: set[str] = set()
-    if canary_path.exists():
+    if existed_before:
         try:
             raw = json.loads(canary_path.read_text(encoding="utf-8"))
             existing = {str(x) for x in raw.get("ids", [])}
@@ -203,6 +204,7 @@ def ensure_canary_partition(
         "records": len(canary),
         "class_counts": class_counts(canary),
         "source_families": source_family_counts(canary),
+        "created_now": not existed_before,
     }
     canary_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = canary_path.with_suffix(".tmp")
