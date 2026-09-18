@@ -6,7 +6,7 @@ This optional subsystem evolves compact text-classification architectures for **
 
 The model is not a truth oracle. Predictions are statistical estimates learned from verified examples. Online learning accepts only labelled examples that include an externally verified label; the system never treats its own prediction as ground truth.
 
-A champion/challenger gate protects the deployed model. A challenger is promoted only when it is within the configured macro-F1 regression bound and either improves macro-F1 or is materially smaller/faster at essentially the same macro-F1.
+A champion/challenger gate protects the deployed model. A challenger is promoted only after multiple independent retraining seeds vote for promotion, and only when it stays within the configured macro-F1 regression bound while improving macro-F1 or becoming materially smaller/faster at essentially the same macro-F1. Normalized duplicate texts are kept in a single split and conflicting verified labels are rejected.
 
 ## Search space
 
