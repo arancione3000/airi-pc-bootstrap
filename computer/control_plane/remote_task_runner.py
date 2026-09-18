@@ -9,7 +9,7 @@ from typing import Any
 from .github_access import commit as git_commit
 from .github_access import push as git_push
 from .github_access import status as git_status
-from .live_telemetry import live_emit
+from .live_telemetry import live_emit, live_flush
 from .orchestrator import ControlPlane
 
 ROOT = Path(os.environ.get("AIRI_ROOT") or os.environ.get("AIRIPC_WORKSPACE_ROOT") or ".").resolve()
@@ -115,6 +115,7 @@ def run_task(spec: dict[str, Any]) -> dict[str, Any]:
         "completed",
         dedupe_key="remote-task:runner:done",
     )
+    live_flush(5.0)
     return {"ok": True, "execution": result, "before": before, "commit": sha, "push": pushed}
 
 
@@ -130,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result.get("ok") else 2
     except Exception as exc:
         live_emit("runtime", "Airi runner crashed", str(exc), "failed", dedupe_key="remote-task:runner:crash")
+        live_flush(3.0)
         print(json.dumps({"ok": False, "error": str(exc)}, indent=2, ensure_ascii=False), file=sys.stderr)
         return 1
 
