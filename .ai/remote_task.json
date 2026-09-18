@@ -357,7 +357,7 @@
       "title": "Build bootable Airi OS ISO",
       "operation": "build",
       "args": {
-        "command": "sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y debootstrap cpio xorriso wget && wget -q https://deb.debian.org/debian/pool/main/l/live-build/live-build_20250505+deb13u1_all.deb -O /tmp/live-build.deb && echo '58e09779881cbcc631c49ceb703413e0247a87db01823e597b2a1c40a2afd8f4  /tmp/live-build.deb' | sha256sum -c - && sudo dpkg -i /tmp/live-build.deb && lb --version && sudo bash airi-os/build.sh",
+        "command": "sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y debootstrap cpio xorriso wget && wget -q https://deb.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2025.1_all.deb -O /tmp/debian-keyring.deb && echo '9ea7778e443144ca490668737a8ab22dd3e748bb99e805e22ec055abeb3c7fac  /tmp/debian-keyring.deb' | sha256sum -c - && sudo dpkg -i /tmp/debian-keyring.deb && wget -q https://deb.debian.org/debian/pool/main/l/live-build/live-build_20250505+deb13u1_all.deb -O /tmp/live-build.deb && echo '58e09779881cbcc631c49ceb703413e0247a87db01823e597b2a1c40a2afd8f4  /tmp/live-build.deb' | sha256sum -c - && sudo dpkg -i /tmp/live-build.deb && lb --version && sudo bash airi-os/build.sh",
         "cwd": ".",
         "timeout": 2400
       },
@@ -405,10 +405,11 @@
       }
     }
   ],
-  "revision": 6,
+  "revision": 7,
   "notes": [
     "GitHub runner live-build generated legacy trixie/updates security suite.",
     "Use --security false to disable that legacy source and add Debian 13 trixie-security explicitly for chroot and live runtime.",
-    "Use Debian 13 live-build 1:20250505+deb13u1 on the Ubuntu GitHub runner; Ubuntu's older live-build expects obsolete Contents-amd64.gz layout."
+    "Use Debian 13 live-build 1:20250505+deb13u1 on the Ubuntu GitHub runner; Ubuntu's older live-build expects obsolete Contents-amd64.gz layout.",
+    "Install Debian 13 debian-archive-keyring 2025.1 with pinned SHA-256 before debootstrap signature verification."
   ]
 }
