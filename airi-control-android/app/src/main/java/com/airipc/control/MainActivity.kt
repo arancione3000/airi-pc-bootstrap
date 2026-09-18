@@ -51,8 +51,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         maybeRequestNotifications()
         setContent {
-            val active by AiriAccessibilityService.active.collectAsState()
-            val controllerConnected by AiriAccessibilityService.controllerConnected.collectAsState()
+            val active by ControlSessionManager.active.collectAsState()
+            val controllerConnected by ControlSessionManager.controllerConnected.collectAsState()
             MaterialTheme {
                 Surface(color = Color(0xFF0C0C0F), modifier = Modifier.fillMaxSize()) {
                     ControlScreen(
@@ -63,9 +63,9 @@ class MainActivity : ComponentActivity() {
                             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         },
                         onStart = { beginControl() },
-                        onStop = { AiriAccessibilityService.stopSession(this) },
+                        onStop = { ControlSessionManager.stop(this) },
                         onRevoke = {
-                            AiriAccessibilityService.disableFromApp(this)
+                            AiriAccessibilityService.disableFromApp()
                             accessibilityEnabled = false
                         },
                     )
@@ -92,7 +92,7 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             return
         }
-        AiriAccessibilityService.requestSession(this)
+        ControlSessionManager.start(this)
     }
 
     private fun maybeRequestNotifications() {

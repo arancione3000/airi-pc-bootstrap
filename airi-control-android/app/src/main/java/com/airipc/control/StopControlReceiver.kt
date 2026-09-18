@@ -6,6 +6,6 @@ import android.content.Intent
 
 class StopControlReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        AiriAccessibilityService.stopSession(context)
+        ControlSessionManager.stop(context)
     }
 }
