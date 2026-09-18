@@ -351,6 +351,8 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
             champion_dir.rename(backup)
         tmp_dir.rename(champion_dir)
         shutil.rmtree(backup, ignore_errors=True)
+        # Edge artifacts are champion-specific; never keep an INT8 model from an older genome.
+        shutil.rmtree(state_dir / "edge", ignore_errors=True)
 
     result = {
         "ok": True,
