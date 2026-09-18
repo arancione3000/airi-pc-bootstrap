@@ -188,7 +188,7 @@ jobs:
           echo $! >/tmp/airi-emu-xvfb.pid
           sleep 1
           DISPLAY=:99 xsetroot -solid '#00ffff'
-          DISPLAY=:99 xterm -geometry 88x28+120+90 -bg '#101014' -fg '#ff8a00' -title 'Airi-PC POV E2E' \
+          DISPLAY=:99 xterm -geometry 104x32+70+55 -bg '#00ffff' -fg '#101014' -title 'Airi-PC POV E2E' \
             -e bash -lc 'while true; do printf "\033c\n  AIRI-PC POV E2E\n\n  LIVE DESKTOP -> ANDROID\n\n  %s\n" "$(date -u +%H:%M:%S.%3N)"; sleep 0.10; done' \
             >/tmp/airi-emu-xterm.log 2>&1 &
           echo $! >/tmp/airi-emu-xterm.pid
