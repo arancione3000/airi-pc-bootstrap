@@ -13,6 +13,7 @@ TOKEN_RE = re.compile(r"[\wÀ-ÿ']+|[^\w\s]", re.UNICODE)
 
 
 def token_id(token: str, vocab_size: int = 8192) -> int:
+    # IDs 0 and 1 are reserved for PAD and UNK/special use.
     digest = hashlib.blake2b(token.lower().encode("utf-8"), digest_size=8).digest()
     return 2 + (int.from_bytes(digest, "little") % (vocab_size - 2))
 
@@ -52,6 +53,7 @@ def append_verified(path: Path, record: dict) -> dict:
         "evidence": str(record.get("evidence", "")).strip()[:4000],
         "added_at": float(record.get("added_at") or time.time()),
     }
+    # Stable duplicate protection on the normalized text + label.
     row["id"] = hashlib.sha256((text.strip().lower() + "\0" + str(row["label"])).encode("utf-8")).hexdigest()[:20]
     path.parent.mkdir(parents=True, exist_ok=True)
     existing = {r.get("id") for r in load_records(path)} if path.exists() else set()
@@ -89,6 +91,11 @@ def class_counts(records: Iterable[dict]) -> dict[str, int]:
 
 
 def split_records(records: list[dict], seed: int = 1337) -> tuple[list[dict], list[dict], list[dict]]:
+    """Deterministic class-stratified 70/15/15-ish split.
+
+    Every class needs at least 4 examples. Tiny datasets are intentionally
+    rejected instead of producing misleading fitness numbers.
+    """
     by_label = {0: [], 1: []}
     for row in records:
         by_label[normalize_label(row["label"])].append(row)
