@@ -94,6 +94,17 @@ def run_task(spec: dict[str, Any]) -> dict[str, Any]:
         live_flush(5.0)
         return {"ok": False, "execution": result, "task": task_snapshot}
 
+    if spec.get("persist", True) is False:
+        live_emit(
+            "runtime",
+            "Airi task completed",
+            "Temporary session finished; repository unchanged",
+            "completed",
+            dedupe_key="remote-task:runner:temporary-done",
+        )
+        live_flush(5.0)
+        return {"ok": True, "execution": result, "persisted": False}
+
     commit_paths = [str(x) for x in (spec.get("commit_paths") or scope)]
     message = str(spec.get("commit_message") or "feat: persist verified Airi-PC autonomous task")
 
