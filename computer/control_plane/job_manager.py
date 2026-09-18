@@ -22,7 +22,14 @@ class JobManager:
             try: rc = int(exit_file.read_text().strip())
             except Exception: rc = None
             if rc is not None:
-                row['exit_code'] = rc; row['status'] = 'completed' if rc == 0 else 'failed'; row['finished_at'] = row.get('finished_at') or now(); row['termination_reason'] = 'exit_0' if rc == 0 else 'nonzero_exit'
+                row['exit_code'] = rc
+                if row.get('cancel_requested_at'):
+                    row['status'] = 'cancelled'
+                    row['termination_reason'] = 'cancelled_by_request'
+                else:
+                    row['status'] = 'completed' if rc == 0 else 'failed'
+                    row['termination_reason'] = 'exit_0' if rc == 0 else 'nonzero_exit'
+                row['finished_at'] = row.get('finished_at') or now()
         else:
             pid = int(row.get('pid') or 0); alive = False
             if pid > 0:
@@ -30,7 +37,13 @@ class JobManager:
                 except ProcessLookupError: alive = False
                 except PermissionError: alive = True
             if not alive and row.get('status') in ACTIVE:
-                row['status'] = 'lost'; row['finished_at'] = row.get('finished_at') or now(); row['termination_reason'] = 'process_missing_without_exit_record'
+                if row.get('cancel_requested_at'):
+                    row['status'] = 'cancelled'
+                    row['termination_reason'] = 'cancelled_process_gone'
+                else:
+                    row['status'] = 'lost'
+                    row['termination_reason'] = 'process_missing_without_exit_record'
+                row['finished_at'] = row.get('finished_at') or now()
         log = Path(row['log_file'])
         if log.exists():
             try: row['last_output'] = log.read_text(errors='replace')[-20000:]
@@ -72,23 +85,31 @@ class JobManager:
         if row.get('status')=='running': row['status']='detached'; row['updated_at']=now(); self._save()
         return row
     def cancel(self, job_id: str, grace: int = 5) -> dict[str, Any]:
-        row=self.status(job_id); pid=int(row.get('pid') or 0)
-        if row.get('status') in ACTIVE and pid>0:
-            try: os.killpg(pid, signal.SIGTERM)
-            except ProcessLookupError: pass
+        row=self._row(job_id)
+        if row.get('status') in FINAL:
+            return self.status(job_id)
+        pid=int(row.get('pid') or 0)
+        row['cancel_requested_at']=row.get('cancel_requested_at') or now()
+        row['updated_at']=now()
+        self._save()
+        if pid>0:
+            try:
+                os.killpg(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                row['status']='cancelled'; row['termination_reason']='cancelled_process_gone'; row['finished_at']=now(); self._save()
             deadline=time.monotonic()+max(1,int(grace))
-            while time.monotonic()<deadline:
+            while time.monotonic()<deadline and row.get('status') not in FINAL:
                 time.sleep(0.1); row=self.status(job_id)
-                if row.get('status') in FINAL: break
             if row.get('status') in ACTIVE:
                 try: os.killpg(pid, signal.SIGKILL)
                 except ProcessLookupError: pass
                 row['status']='cancelled'; row['termination_reason']='forced_cancel'; row['finished_at']=now(); self._save()
-        elif row.get('status') not in FINAL:
-            row['status']='cancelled'; row['termination_reason']='already_stopped'; row['finished_at']=now(); self._save()
+        else:
+            row['status']='cancelled'; row['termination_reason']='cancelled_without_pid'; row['finished_at']=now(); self._save()
+        row=self.status(job_id)
         if row.get('status') == 'cancelled':
             live_emit('job', 'Job cancelled', '', 'cancelled', task_id=row.get('owner_task'), node_id=job_id, dedupe_key=f"job:{job_id}:cancelled")
-        return self.status(job_id)
+        return row
     def cleanup(self, keep_final: int = 100) -> dict[str, Any]:
         self.refresh(); finals=[r for r in self.state['jobs'].values() if r.get('status') in FINAL]; finals.sort(key=lambda x:x.get('finished_at') or x.get('updated_at') or 0, reverse=True); removed=[]
         for row in finals[max(0,int(keep_final)):]:
