@@ -41,3 +41,15 @@ def test_live_session_id_is_non_empty():
     value = session_id()
     assert isinstance(value, str)
     assert len(value) >= 8
+
+
+def test_live_session_identity_is_persisted(tmp_path, monkeypatch):
+    import control_plane.live_telemetry as mod
+    session_path = tmp_path / "live_session_id"
+    monkeypatch.setattr(mod, "SESSION_PATH", session_path)
+    monkeypatch.delenv("AIRI_LIVE_SESSION_ID", raising=False)
+    monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
+    first = mod._session_identity()
+    second = mod._session_identity()
+    assert first == second
+    assert session_path.read_text(encoding="utf-8").strip() == first
