@@ -7,6 +7,7 @@ import android.net.Uri
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
@@ -447,7 +448,8 @@ private fun PovFrameView(url: String, modifier: Modifier = Modifier) {
                 delay(8)
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.w("AiriLivePOV", "frame fetch failed: " + e.javaClass.simpleName + ": " + (e.message ?: ""), e)
                 status = "riconnessione…"
                 delay(180)
             }

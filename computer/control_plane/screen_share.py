@@ -363,17 +363,38 @@ class ScreenShare:
                 return
         raise TimeoutError("cloudflared quick tunnel URL was not created in time")
 
+    def _stop_tunnel_only(self) -> None:
+        self._stop_tunnel_only()
+        self.tunnel = None
+        self.tunnel_url = ""
+
+    def _start_verified_tunnel(self) -> None:
+        last = None
+        for attempt in range(3):
+            try:
+                self._start_tunnel()
+                print(f"AIRI_POV_TUNNEL_ATTEMPT={attempt + 1}", flush=True)
+                self._external_self_test()
+                print("AIRI_POV_TUNNEL_SMOKE=PASS", flush=True)
+                return
+            except Exception as exc:
+                last = exc
+                print(f"AIRI_POV_TUNNEL_RETRY={attempt + 1}", flush=True)
+                self._stop_tunnel_only()
+                time.sleep(1.0 + attempt)
+        raise RuntimeError(f"unable to establish verified public POV tunnel: {type(last).__name__ if last else 'unknown'}")
+
     def _external_self_test(self) -> None:
         health = f"{self.tunnel_url}/health/{self.token}"
         frame = f"{self.tunnel_url}/frame/{self.token}.jpg"
         last = None
-        for _ in range(15):
+        for _ in range(8):
             try:
-                with urllib.request.urlopen(health, timeout=12) as response:
+                with urllib.request.urlopen(health, timeout=8) as response:
                     if response.status != 200:
                         raise RuntimeError(f"health HTTP {response.status}")
                     response.read()
-                with urllib.request.urlopen(frame, timeout=20) as response:
+                with urllib.request.urlopen(frame, timeout=10) as response:
                     data = response.read(1_500_000)
                     ctype = response.headers.get("content-type", "")
                     if response.status != 200 or "image/jpeg" not in ctype or len(data) < 2000:
@@ -413,17 +434,8 @@ class ScreenShare:
         print("AIRI_POV_STAGE=display", flush=True)
         self._start_http()
         print("AIRI_POV_STAGE=http", flush=True)
-        self._start_tunnel()
-        print("AIRI_POV_STAGE=tunnel", flush=True)
-
-        def verify_public_path() -> None:
-            try:
-                self._external_self_test()
-                print("AIRI_POV_TUNNEL_SMOKE=PASS", flush=True)
-            except Exception:
-                print("AIRI_POV_TUNNEL_SMOKE=DEFERRED", flush=True)
-
-        threading.Thread(target=verify_public_path, name="airi-screen-public-smoke", daemon=True).start()
+        self._start_verified_tunnel()
+        print("AIRI_POV_STAGE=tunnel_verified", flush=True)
         print("AIRI_POV_MJPEG_SERVER=READY", flush=True)
         self.offer_thread = threading.Thread(target=self._offer_loop, name="airi-screen-offers", daemon=True)
         self.offer_thread.start()
