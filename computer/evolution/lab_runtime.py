@@ -16,7 +16,7 @@ STATE = lab.LAB_STATE
 PID = STATE / "worker.pid"
 LOG = STATE / "worker.log"
 AUTOPILOT_DISABLED = STATE / "autopilot.disabled"
-DEFAULT_TRIGGER = max(10, int(os.environ.get("AIRI_EVOLUTION_LAB_TRIGGER", "20")))
+DEFAULT_TRIGGER = max(40, int(os.environ.get("AIRI_EVOLUTION_LAB_TRIGGER", "40")))
 DEFAULT_INTERVAL = max(300, int(os.environ.get("AIRI_EVOLUTION_LAB_INTERVAL", "900")))
 
 
