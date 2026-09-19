@@ -196,18 +196,41 @@ def compact_raw_observations(max_rows: int = 50_000) -> dict[str, Any]:
     ensure_state_boundary()
     limit = max(1000, int(max_rows))
     with _dataset_lock(RAW, timeout=10.0, stale_after=900.0):
-        rows = _read_observations()
-        if len(rows) <= limit:
-            return {"compacted": False, "rows": len(rows)}
-        kept = rows[-limit:]
+        safe_rows: list[dict[str, Any]] = []
+        total_rows = 0
+        if RAW.exists():
+            with RAW.open("r", encoding="utf-8", errors="replace") as handle:
+                for line in handle:
+                    if not line.strip():
+                        continue
+                    total_rows += 1
+                    try:
+                        row = json.loads(line)
+                    except Exception:
+                        continue
+                    if (
+                        isinstance(row, dict)
+                        and row.get("feature")
+                        and row.get("label") in (0, 1)
+                        and int(row.get("feature_schema", 0) or 0) == FEATURE_SCHEMA
+                    ):
+                        safe_rows.append(row)
+        kept = safe_rows[-limit:]
+        needs_rewrite = total_rows != len(kept) or len(safe_rows) > limit
+        if not needs_rewrite:
+            return {"compacted": False, "rows": len(kept), "purged_legacy": 0}
         tmp = RAW.with_suffix(".compact.tmp")
         tmp.parent.mkdir(parents=True, exist_ok=True)
         with tmp.open("w", encoding="utf-8") as handle:
             for row in kept:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
         tmp.replace(RAW)
-    return {"compacted": True, "rows": len(kept), "dropped": len(rows) - len(kept)}
-
+    return {
+        "compacted": True,
+        "rows": len(kept),
+        "dropped": max(0, len(safe_rows) - len(kept)),
+        "purged_legacy": max(0, total_rows - len(safe_rows)),
+    }
 
 def prune_lab_storage(max_runs: int = 50, max_history_lines: int = 200) -> dict[str, Any]:
     root = ensure_state_boundary()
