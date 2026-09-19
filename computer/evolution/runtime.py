@@ -113,6 +113,14 @@ def status() -> dict[str, Any]:
 
 
 def ingest(record: dict, *, auto_evolve: bool = True, mode: str = "safe", trigger_samples: int = DEFAULT_TRIGGER) -> dict[str, Any]:
+    source = str(record.get("source", "")).strip()
+    evidence = str(record.get("evidence", "")).strip()
+    if not source or not evidence:
+        return {
+            "ok": False,
+            "error": "verification_metadata_required",
+            "message": "manual ingest requires both source and evidence",
+        }
     row = append_verified(DATA, record)
     st = status()
     started = None
