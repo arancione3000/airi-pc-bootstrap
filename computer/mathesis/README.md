@@ -274,3 +274,10 @@ The symbolic-depth promotion bonus is tied to the explicit
 `search:symbolic_depth` verification result, not to a positional task index.
 This prevents anti-forgetting replay tasks from accidentally changing the
 meaning of architecture scores.
+
+
+Legacy Faulhaber discoveries created before the nontrivial-induction gate are
+automatically re-proved from their stored polynomial. Their base case, exact
+sample points and a structurally nontrivial finite-difference recurrence are
+checked again. A legacy result remains active only if that upgrade succeeds;
+otherwise it is archived outside the active theorem corpus.
