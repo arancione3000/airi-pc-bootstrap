@@ -179,3 +179,24 @@ def test_self_audit_detects_canary_split_overlap(tmp_path: Path):
     broken = audit_state(tmp_path)
     assert broken["ok"] is False
     assert any("golden-canary" in msg for msg in broken["errors"])
+
+
+def test_self_audit_detects_malformed_raw_jsonl(tmp_path: Path):
+    data = tmp_path / "data" / "verified.jsonl"
+    data.parent.mkdir(parents=True)
+    data.write_text('{"text":"valid enough sample","label":1}\n{broken\n', encoding="utf-8")
+    result = audit_state(tmp_path)
+    assert result["ok"] is False
+    assert result["checks"]["dataset_malformed_lines"] == 1
+
+
+def test_runtime_start_blocks_on_hard_audit_error(monkeypatch):
+    monkeypatch.setattr(runtime, "status", lambda: {
+        "running": False,
+        "dataset_records": 40,
+        "class_counts": {"fake": 20, "real": 20},
+    })
+    monkeypatch.setattr(runtime, "audit", lambda: {"ok": False, "errors": ["partition overlap"], "warnings": [], "checks": {}})
+    result = runtime.start(auto_setup=False)
+    assert result["ok"] is False
+    assert result["reason"] == "state_audit_failed"
