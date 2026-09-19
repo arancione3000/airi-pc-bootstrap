@@ -89,7 +89,8 @@ def _apply_resource_limits(pid: int) -> dict[str, Any]:
 
 
 def audit() -> dict[str, Any]:
-    root = STATE.resolve()
+    root = STATE.resolve(strict=False)
+    workspace = lab.ROOT.resolve(strict=False)
     errors: list[str] = []
     warnings: list[str] = []
     symlinks = []
@@ -105,7 +106,7 @@ def audit() -> dict[str, Any]:
             symlinks.append(row)
             if target is None or (target != root and root not in target.parents):
                 errors.append(f"sandbox symlink escapes lab root: {path}")
-    if STATE == lab.ROOT or lab.ROOT not in STATE.parents:
+    if root == workspace or workspace not in root.parents:
         errors.append("lab state directory is not isolated under the Airi workspace")
     worker = _pid()
     return {
