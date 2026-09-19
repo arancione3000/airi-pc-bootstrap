@@ -1,6 +1,6 @@
 {
   "curriculum": {
-    "cursor": 0,
+    "cursor": 1,
     "domains": [
       "algebra",
       "polynomials",
@@ -18,29 +18,37 @@
       "discrete_math",
       "optimization"
     ],
-    "last": null,
+    "last": {
+      "at": 1789853655.4267187,
+      "domain": "algebra",
+      "query": "algebra mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+      "sources": [],
+      "status": "no_sources",
+      "web_truth_policy": "source evidence is not a formal proof"
+    },
     "ok": true,
-    "studies": 0
+    "studies": 1
   },
   "discovery": {
-    "cycle": 2,
-    "discovery_beam": 2,
+    "cycle": 3,
+    "discovery_beam": 3,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 2,
+    "stored": 3,
     "strategies": {
       "binomial_expansion": 1,
+      "difference_of_powers": 1,
       "faulhaber_interpolation": 1
     },
-    "symbolic_depth": 3,
-    "verified": 2
+    "symbolic_depth": 4,
+    "verified": 3
   },
   "evolution": {
     "benchmark": {
-      "capability_score": 0.62963,
-      "complexity_penalty": 0.004942,
+      "capability_score": 0.678571,
+      "complexity_penalty": 0.005652000000000001,
       "critical_failures": [],
       "learned_theorems_replayed": [
         {
@@ -51,11 +59,20 @@
           "ok": true,
           "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
           "status": "verified"
+        },
+        {
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "x^4-y^4 = x**4 - y**4",
+          "status": "verified"
         }
       ],
       "neural_accuracy": 0.818182,
       "ok": true,
-      "score": 66.969065,
+      "score": 70.963699,
       "tasks": [
         {
           "critical": true,
@@ -113,7 +130,7 @@
         },
         {
           "critical": true,
-          "detail": 98.999712,
+          "detail": 98.999619,
           "name": "program:gcd",
           "ok": true
         },
@@ -167,9 +184,9 @@
         },
         {
           "critical": false,
-          "detail": "expert not present",
+          "detail": "verified capability",
           "name": "domain:sequences",
-          "ok": false
+          "ok": true
         },
         {
           "critical": false,
@@ -204,7 +221,7 @@
         {
           "critical": false,
           "detail": {
-            "tested_exponent": 5
+            "tested_exponent": 6
           },
           "name": "search:symbolic_depth",
           "ok": true
@@ -216,19 +233,24 @@
           "ok": true
         },
         {
+          "critical": true,
+          "detail": "verified",
+          "name": "learned_theorem:1",
+          "ok": true
+        },
+        {
           "critical": false,
           "detail": 0.8182,
           "name": "neural:intent_router",
           "ok": true
         }
       ],
-      "verified_symbolic_depth": 3,
+      "verified_symbolic_depth": 4,
       "weaknesses": [
         "domain:linear_algebra",
         "domain:combinatorics",
         "domain:equations",
         "domain:inequalities",
-        "domain:sequences",
         "domain:special_functions",
         "domain:geometry",
         "domain:probability",
@@ -242,7 +264,7 @@
     },
     "champion": {
       "architecture_graph": {
-        "discovery_beam": 2,
+        "discovery_beam": 3,
         "edges": [
           [
             "formalization",
@@ -273,6 +295,10 @@
             "trigonometry"
           ],
           [
+            "trigonometry",
+            "sequences"
+          ],
+          [
             "program_synthesis",
             "counterexample"
           ],
@@ -291,6 +317,10 @@
           [
             "trigonometry",
             "counterexample"
+          ],
+          [
+            "sequences",
+            "counterexample"
           ]
         ],
         "nodes": [
@@ -301,7 +331,8 @@
           "number_theory",
           "research",
           "calculus",
-          "trigonometry"
+          "trigonometry",
+          "sequences"
         ],
         "research_budget": 2,
         "strategy_portfolio": [
@@ -310,14 +341,15 @@
           "counterexample",
           "lean",
           "conjecture_discovery",
-          "specific_normal_forms"
+          "specific_normal_forms",
+          "finite_difference"
         ],
-        "symbolic_depth": 3
+        "symbolic_depth": 4
       },
-      "fingerprint": "e8602460b6eab4a0",
+      "fingerprint": "37f55afbb6f77b12",
       "genome": {
         "counterexample_radius": 9,
-        "discovery_beam": 2,
+        "discovery_beam": 3,
         "experts": [
           "formalization",
           "algebra",
@@ -326,13 +358,14 @@
           "number_theory",
           "research",
           "calculus",
-          "trigonometry"
+          "trigonometry",
+          "sequences"
         ],
-        "generation": 4,
-        "genome_id": "omega-4-50fff62b",
-        "max_proof_cells": 80,
+        "generation": 5,
+        "genome_id": "omega-5-4e0701af",
+        "max_proof_cells": 96,
         "neural_hidden": 22,
-        "parent_id": "omega-3-4b709a6b",
+        "parent_id": "omega-4-50fff62b",
         "proof_order": [
           "symbolic",
           "smt",
@@ -346,9 +379,10 @@
           "counterexample",
           "lean",
           "conjecture_discovery",
-          "specific_normal_forms"
+          "specific_normal_forms",
+          "finite_difference"
         ],
-        "symbolic_depth": 3,
+        "symbolic_depth": 4,
         "topology": [
           [
             "formalization",
@@ -379,6 +413,10 @@
             "trigonometry"
           ],
           [
+            "trigonometry",
+            "sequences"
+          ],
+          [
             "program_synthesis",
             "counterexample"
           ],
@@ -396,6 +434,10 @@
           ],
           [
             "trigonometry",
+            "counterexample"
+          ],
+          [
+            "sequences",
             "counterexample"
           ]
         ]
@@ -418,7 +460,7 @@
           "candidate_result",
           "verification_status"
         ],
-        "max_cells": 80
+        "max_cells": 96
       }
     },
     "kernel": {
@@ -427,31 +469,39 @@
       "verifiers.py": "cc123cb352d2e06d190cb16960b2dfd82a620973fb8565bf4d527291b1701c90"
     },
     "learned_theorems_replayed": [
-      "(x+y)^2 = x**2 + 2*x*y + y**2"
+      "(x+y)^2 = x**2 + 2*x*y + y**2",
+      "x^4-y^4 = x**4 - y**4"
     ],
     "ok": true,
     "self_rewrite_scope": "architecture DSL/router state only",
     "state_dir": "/tmp/mathesis-runtime-state"
   },
   "experience": {
-    "champion": "omega-4-50fff62b",
+    "champion": "omega-5-4e0701af",
     "ok": true,
     "policy": "experience proposes bounded architecture hints; it never edits verifier code",
-    "reasons": [],
-    "weaknesses": []
+    "reasons": [
+      {
+        "reason": "persistent verified discovery used binomial_expansion but champion still lacks combinatorics",
+        "signal": "combinatorics"
+      }
+    ],
+    "weaknesses": [
+      "missing_combinatorics_expert"
+    ]
   },
   "guarantee": "proof-gated evolving system; not an infallibility or human-novelty guarantee",
   "knowledge": {
-    "nodes": 2,
+    "nodes": 3,
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/knowledge.json",
     "status_counts": {
-      "verified": 2
+      "verified": 3
     }
   },
   "model": {
     "architecture_graph": {
-      "discovery_beam": 2,
+      "discovery_beam": 3,
       "edges": [
         [
           "formalization",
@@ -482,6 +532,10 @@
           "trigonometry"
         ],
         [
+          "trigonometry",
+          "sequences"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -500,6 +554,10 @@
         [
           "trigonometry",
           "counterexample"
+        ],
+        [
+          "sequences",
+          "counterexample"
         ]
       ],
       "nodes": [
@@ -510,7 +568,8 @@
         "number_theory",
         "research",
         "calculus",
-        "trigonometry"
+        "trigonometry",
+        "sequences"
       ],
       "research_budget": 2,
       "strategy_portfolio": [
@@ -519,14 +578,15 @@
         "counterexample",
         "lean",
         "conjecture_discovery",
-        "specific_normal_forms"
+        "specific_normal_forms",
+        "finite_difference"
       ],
-      "symbolic_depth": 3
+      "symbolic_depth": 4
     },
-    "fingerprint": "e8602460b6eab4a0",
+    "fingerprint": "37f55afbb6f77b12",
     "genome": {
       "counterexample_radius": 9,
-      "discovery_beam": 2,
+      "discovery_beam": 3,
       "experts": [
         "formalization",
         "algebra",
@@ -535,13 +595,14 @@
         "number_theory",
         "research",
         "calculus",
-        "trigonometry"
+        "trigonometry",
+        "sequences"
       ],
-      "generation": 4,
-      "genome_id": "omega-4-50fff62b",
-      "max_proof_cells": 80,
+      "generation": 5,
+      "genome_id": "omega-5-4e0701af",
+      "max_proof_cells": 96,
       "neural_hidden": 22,
-      "parent_id": "omega-3-4b709a6b",
+      "parent_id": "omega-4-50fff62b",
       "proof_order": [
         "symbolic",
         "smt",
@@ -555,9 +616,10 @@
         "counterexample",
         "lean",
         "conjecture_discovery",
-        "specific_normal_forms"
+        "specific_normal_forms",
+        "finite_difference"
       ],
-      "symbolic_depth": 3,
+      "symbolic_depth": 4,
       "topology": [
         [
           "formalization",
@@ -588,6 +650,10 @@
           "trigonometry"
         ],
         [
+          "trigonometry",
+          "sequences"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -605,6 +671,10 @@
         ],
         [
           "trigonometry",
+          "counterexample"
+        ],
+        [
+          "sequences",
           "counterexample"
         ]
       ]
@@ -627,7 +697,7 @@
         "candidate_result",
         "verification_status"
       ],
-      "max_cells": 80
+      "max_cells": 96
     }
   },
   "ok": true,

@@ -1,10 +1,49 @@
 {
-  "cycle": 2,
+  "cycle": 3,
   "strategy_counts": {
     "binomial_expansion": 1,
+    "difference_of_powers": 1,
     "faulhaber_interpolation": 1
   },
   "theorems": {
+    "74e3201b8ab35ca45614": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "x^4-y^4 = x**4 - y**4",
+        "status": "verified"
+      },
+      "complexity": 4,
+      "discovered_at": 1789853655.271518,
+      "human_novelty": "unassessed",
+      "id": "74e3201b8ab35ca45614",
+      "internal_novelty": true,
+      "statement": "x^4-y^4 = x**4 - y**4",
+      "strategy": "difference_of_powers",
+      "verified": true
+    },
     "d8f2b6ac3b7bfae0422b": {
       "certificate": {
         "counterexample": null,
@@ -97,6 +136,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789851676.4843028,
+  "updated_at": 1789853655.271518,
   "version": 1
 }
