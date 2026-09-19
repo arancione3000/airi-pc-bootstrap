@@ -248,6 +248,23 @@ def _load_jobs():
     global _jobs
     try: _jobs = json.loads(SCHEDULER.read_text(encoding='utf-8')) if SCHEDULER.exists() else {}
     except Exception: _jobs = {}
+    lab_disabled = ROOT / '.ai' / 'evolution-lab' / 'shadow-router' / 'autopilot.disabled'
+    if os.environ.get('AIRI_EVOLUTION_LAB_AUTOPILOT','1').strip().lower() not in {'0','false','off','no'} and not lab_disabled.exists():
+        name = 'evolution-lab-shadow-router'
+        if name not in _jobs:
+            interval = max(300, int(os.environ.get('AIRI_EVOLUTION_LAB_INTERVAL','900')))
+            _jobs[name] = {
+                'name': name,
+                'action': 'evolution_lab_maintenance',
+                'interval_seconds': interval,
+                'enabled': True,
+                'created_at': time.time(),
+                'next_run': time.time() + 30,
+                'last_run': None,
+                'last_error': None,
+            }
+            try: _save_jobs()
+            except Exception: pass
 
 
 def _save_jobs(): _atomic_json(SCHEDULER, _jobs)
