@@ -35,3 +35,15 @@ tests pass.
 - deep theorem workflow uses Lean 4.34.0 and Mathlib 4.34.0;
 - all discovery/curriculum histories are bounded to avoid unbounded persistent-state growth;
 - no result may be called new to humanity automatically; only new to MATHESIS state.
+
+
+## 2026-09-19 — MATHESIS experience feedback + anti-forgetting
+
+- added an auditable ExperienceAnalyzer;
+- discoveries and curriculum coverage now generate bounded architecture-search hints;
+- challenger generation diversifies across different observed weaknesses;
+- experience-derived priorities are considered before generic benchmark gaps;
+- verified relation-style discoveries become critical replay tests for all future champions;
+- a candidate that forgets previously verified mathematical relations cannot be promoted;
+- web/research evidence still cannot directly edit the verifier kernel;
+- five-minute continuum cron uses an explicit minute list plus duplicate-aware watchdog.
