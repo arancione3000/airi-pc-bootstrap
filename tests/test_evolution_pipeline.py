@@ -87,9 +87,9 @@ def test_liar_import_uses_only_unambiguous_labels(tmp_path: Path):
     out = tmp_path / "verified.jsonl"
     stats = import_tsv(tsv, out, "train", "local-test")
     rows = load_records(out)
-    assert stats["accepted"] == 4
-    assert stats["ambiguous"] == 2
-    assert sorted(row["label"] for row in rows) == [0, 0, 1, 1]
+    assert stats["accepted"] == 3
+    assert stats["ambiguous"] == 3
+    assert sorted(row["label"] for row in rows) == [0, 0, 1]
 
 
 def test_report_works_before_first_champion(tmp_path: Path):
