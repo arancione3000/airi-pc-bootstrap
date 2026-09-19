@@ -1,6 +1,6 @@
 {
   "curriculum": {
-    "cursor": 11,
+    "cursor": 12,
     "domains": [
       "algebra",
       "polynomials",
@@ -19,9 +19,9 @@
       "optimization"
     ],
     "last": {
-      "at": 1789858605.1017156,
-      "domain": "special_functions",
-      "query": "special_functions mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+      "at": 1789858914.1869302,
+      "domain": "geometry",
+      "query": "geometry mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
       "sources": [
         {
           "authority_hint": 0.75,
@@ -50,26 +50,26 @@
     },
     "ok": true,
     "retry_counts": {},
-    "studies": 11,
+    "studies": 12,
     "version": 2
   },
   "discovery": {
-    "cycle": 20,
+    "cycle": 21,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 15,
+    "stored": 16,
     "strategies": {
-      "binomial_expansion": 5,
+      "binomial_expansion": 6,
       "difference_of_powers": 5,
       "faulhaber_interpolation": 4,
       "finite_geometric_identity": 5
     },
     "symbolic_depth": 12,
-    "verified": 15
+    "verified": 16
   },
   "evolution": {
     "benchmark": {
@@ -211,6 +211,15 @@
           "ok": true,
           "statement": "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
           "status": "verified"
+        },
+        {
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "(x+y)^8 = x**8 + 8*x**7*y + 28*x**6*y**2 + 56*x**5*y**3 + 70*x**4*y**4 + 56*x**3*y**5 + 28*x**2*y**6 + 8*x*y**7 + y**8",
+          "status": "verified"
         }
       ],
       "neural_accuracy": 0.909091,
@@ -273,7 +282,7 @@
         },
         {
           "critical": true,
-          "detail": 98.999623,
+          "detail": 98.999634,
           "name": "program:gcd",
           "ok": true
         },
@@ -469,6 +478,12 @@
           "critical": true,
           "detail": "verified",
           "name": "learned_theorem:14",
+          "ok": true
+        },
+        {
+          "critical": true,
+          "detail": "verified",
+          "name": "learned_theorem:15",
           "ok": true
         },
         {
@@ -890,7 +905,8 @@
       "(x+y)^4 = x**4 + 4*x**3*y + 6*x**2*y**2 + 4*x*y**3 + y**4",
       "((n + 1)*(n + 2)*(2*n + 3)*(3*n + 3*(n + 1)**2 + 2)/30)-(n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30) = (n+1)^4",
       "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
-      "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1"
+      "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
+      "(x+y)^8 = x**8 + 8*x**7*y + 28*x**6*y**2 + 56*x**5*y**3 + 70*x**4*y**4 + 56*x**3*y**5 + 28*x**2*y**6 + 8*x*y**7 + y**8"
     ],
     "ok": true,
     "self_rewrite_scope": "architecture DSL/router state only",
@@ -905,11 +921,11 @@
   },
   "guarantee": "proof-gated evolving system; not an infallibility or human-novelty guarantee",
   "knowledge": {
-    "nodes": 19,
+    "nodes": 20,
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/knowledge.json",
     "status_counts": {
-      "verified": 19
+      "verified": 20
     }
   },
   "model": {

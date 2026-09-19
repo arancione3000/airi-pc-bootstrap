@@ -1,5 +1,5 @@
 {
-  "cycle": 20,
+  "cycle": 21,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -172,7 +172,7 @@
     ]
   },
   "strategy_counts": {
-    "binomial_expansion": 5,
+    "binomial_expansion": 6,
     "difference_of_powers": 5,
     "faulhaber_interpolation": 4,
     "finite_geometric_identity": 5
@@ -432,6 +432,46 @@
       "quality_gate": "structurally_nontrivial_and_proof_gated",
       "statement": "sum(k^7, k=1..n) = n**2*(n + 1)**2*(3*n**4 + 6*n**3 - n**2 - 4*n + 2)/24 for integer n>=0",
       "strategy": "faulhaber_interpolation",
+      "verified": true
+    },
+    "84ee8a2c70d846f4067d": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "(x+y)^8 = x**8 + 8*x**7*y + 28*x**6*y**2 + 56*x**5*y**3 + 70*x**4*y**4 + 56*x**3*y**5 + 28*x**2*y**6 + 8*x*y**7 + y**8",
+        "status": "verified"
+      },
+      "complexity": 8,
+      "discovered_at": 1789858912.2137747,
+      "human_novelty": "unassessed",
+      "id": "84ee8a2c70d846f4067d",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "(x+y)^8 = x**8 + 8*x**7*y + 28*x**6*y**2 + 56*x**5*y**3 + 70*x**4*y**4 + 56*x**3*y**5 + 28*x**2*y**6 + 8*x*y**7 + y**8",
+      "strategy": "binomial_expansion",
       "verified": true
     },
     "875d9d1eacdecb5ff5d3": {
@@ -839,6 +879,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789858602.601222,
+  "updated_at": 1789858912.2137747,
   "version": 3
 }
