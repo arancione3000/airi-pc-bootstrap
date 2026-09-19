@@ -102,6 +102,8 @@ def evaluate_genome(
         add("program:gcd", False, detail=repr(exc))
 
     domain_checks: dict[str, Any] = {
+        "algebra": lambda: lab.algebra_normal_forms("(x+1)^4-(x^4+4*x^3+6*x^2+4*x+1)").ok,
+        "polynomials": lambda: lab.polynomial_interpolate([(0, 1), (1, 4), (2, 9), (3, 16)]).ok,
         "number_theory": lambda: synth.synthesize("is_prime").verified,
         "research": lambda: True,
         "calculus": lambda: (
