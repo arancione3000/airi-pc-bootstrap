@@ -1394,3 +1394,33 @@ def test_antiforgetting_default_replays_more_than_sixteen_valid_theorems(tmp_pat
     replayed = ExperienceAnalyzer(tmp_path).replayable_theorems()
     assert len(replayed) == 20
     assert set(replayed) == {row["statement"] for row in theorems.values()}
+
+
+def test_benchmark_rejects_unknown_strategy_and_proof_method():
+    from mathesis.benchmark import evaluate_genome
+
+    bad_strategy = default_genome()
+    bad_strategy.strategy_portfolio.append("download_and_execute")
+    strategy_bench = evaluate_genome(bad_strategy)
+    assert "architecture:known_strategies" in strategy_bench["critical_failures"]
+
+    bad_proof = default_genome()
+    bad_proof.proof_order.append("trust_web")
+    proof_bench = evaluate_genome(bad_proof)
+    assert "architecture:known_proof_order" in proof_bench["critical_failures"]
+
+
+def test_health_rejects_corrupted_persistent_strategy_portfolio(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    assert discovery.discover_once()["ok"] is True
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+
+    champion_path = tmp_path / "champion.json"
+    champion = json.loads(champion_path.read_text(encoding="utf-8"))
+    champion["strategy_portfolio"].append("remote_write")
+    champion_path.write_text(json.dumps(champion), encoding="utf-8")
+
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    assert any(row["name"] == "architecture:known_strategies" for row in report["failed"])
