@@ -692,3 +692,20 @@ def test_curriculum_success_clears_retry_and_advances(tmp_path: Path):
     assert second["status"] == "studied"
     assert state["cursor"] == 1
     assert "algebra" not in state["retry_counts"]
+
+
+def test_autonomous_workflow_api_calls_are_time_bounded_and_retried():
+    workflows = [
+        ROOT / ".github" / "workflows" / "mathesis-continuum.yml",
+        ROOT / ".github" / "workflows" / "mathesis-watchdog.yml",
+        ROOT / ".github" / "workflows" / "mathesis-deep-math.yml",
+    ]
+    for path in workflows:
+        text = path.read_text(encoding="utf-8")
+        assert "--connect-timeout 10" in text
+        assert "--max-time 30" in text
+        assert "--retry 3" in text
+        assert "--retry-all-errors" in text
+
+    continuum = workflows[0].read_text(encoding="utf-8")
+    assert "timeout-minutes: 15" in continuum
