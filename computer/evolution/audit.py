@@ -81,21 +81,33 @@ def audit_state(state_dir: Path) -> dict[str, Any]:
         warnings.append(f"{len(stale_assignments)} split assignments no longer correspond to current non-canary records")
 
     champion_dir = state_dir / "champion"
+    required_champion = ("genome.json", "model.pt", "metrics.json", "provenance.json")
+    backup_dir = state_dir / ".champion-old"
+    pending_dir = state_dir / ".champion-new"
+    backup_complete = backup_dir.exists() and all((backup_dir / name).exists() for name in required_champion)
+    pending_complete = pending_dir.exists() and all((pending_dir / name).exists() for name in required_champion)
     swap_dirs = {
-        "backup": (state_dir / ".champion-old").exists(),
-        "pending": (state_dir / ".champion-new").exists(),
+        "backup": backup_dir.exists(),
+        "pending": pending_dir.exists(),
+        "backup_complete": backup_complete,
+        "pending_complete": pending_complete,
     }
     checks["champion_swap_dirs"] = swap_dirs
     if swap_dirs["backup"] or swap_dirs["pending"]:
         warnings.append("champion swap recovery artifacts are present")
     champion_files = {
         name: (champion_dir / name).exists()
-        for name in ("genome.json", "model.pt", "metrics.json", "provenance.json")
+        for name in required_champion
     }
     checks["champion_files"] = champion_files
     present = sum(champion_files.values())
     if 0 < present < len(champion_files):
-        errors.append("champion directory is incomplete")
+        if backup_complete or pending_complete:
+            warnings.append("champion directory is incomplete but a complete recovery copy exists")
+        else:
+            errors.append("champion directory is incomplete and no complete recovery copy exists")
+    elif present == 0 and (swap_dirs["backup"] or swap_dirs["pending"]) and not (backup_complete or pending_complete):
+        errors.append("champion is missing and swap recovery artifacts are incomplete")
     provenance = _read_json(champion_dir / "provenance.json", {}) or {}
     genome = _read_json(champion_dir / "genome.json", {}) or {}
     if provenance:
