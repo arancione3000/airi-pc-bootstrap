@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .discovery import validate_verified_discovery
 from .knowledge import default_state_dir
 from .safe_math import parse_relation
+from .verifiers import CompositeVerifier
 from .types import ArchitectureGenome
 
 
@@ -52,9 +54,13 @@ class ExperienceAnalyzer:
         out: list[str] = []
         seen: set[str] = set()
         target = max(1, min(64, int(limit)))
+        verifier = CompositeVerifier()
 
         for row in rows:
             if not row.get("verified"):
+                continue
+            still_valid, _reason = validate_verified_discovery(row, verifier)
+            if not still_valid:
                 continue
 
             candidates: list[str] = []
