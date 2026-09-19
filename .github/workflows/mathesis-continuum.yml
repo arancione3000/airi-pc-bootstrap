@@ -38,6 +38,15 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check -r computer/mathesis/requirements.txt
 
+      - name: Install stable Lean 4 verifier
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf \
+            https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            -o /tmp/elan-init.sh
+          sh /tmp/elan-init.sh -y --default-toolchain leanprover/lean4:v4.34.0
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/lean" --version
+
       - name: Restore or initialize persistent MATHESIS state branch
         env:
           GH_TOKEN: ${{ github.token }}
