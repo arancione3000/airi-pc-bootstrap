@@ -42,11 +42,19 @@ def _extract(zip_path: Path, out_dir: Path) -> dict[str, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     wanted = {"train.tsv": "train", "valid.tsv": "valid", "test.tsv": "test"}
     found: dict[str, Path] = {}
+    extracted_bytes = 0
+    max_file_bytes = 100_000_000
+    max_total_bytes = 200_000_000
     with zipfile.ZipFile(zip_path) as archive:
         for info in archive.infolist():
             name = Path(info.filename).name
             if name not in wanted:
                 continue
+            if info.file_size < 0 or info.file_size > max_file_bytes:
+                raise ValueError(f"LIAR archive member exceeds safe extracted size: {name}")
+            extracted_bytes += int(info.file_size)
+            if extracted_bytes > max_total_bytes:
+                raise ValueError("LIAR archive exceeds safe total extracted size")
             target = out_dir / name
             with archive.open(info) as src, target.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
