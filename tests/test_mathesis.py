@@ -1097,7 +1097,7 @@ def test_polynomials_real_curriculum_study_reaches_real_benchmark(tmp_path: Path
     benchmark = evaluate_genome(challenger)
     polynomial_task = next(row for row in benchmark["tasks"] if row["name"] == "domain:polynomials")
     assert polynomial_task["ok"] is True
-    assert polynomial_task["detail"] == "verified capability"
+    assert polynomial_task["detail"] == "verified domain probe"
 
 
 def test_benchmark_rejects_duplicate_and_disconnected_expert_gaming():
@@ -1344,3 +1344,25 @@ def test_conflicting_or_authoritative_web_text_remains_evidence_only(tmp_path: P
     assert result["truth_status"] == "evidence_only"
     assert result["ok"] is False
     assert result["certificate"] is None
+
+
+def test_research_expert_requires_real_read_only_strategy(tmp_path: Path):
+    from mathesis.architecture import generate_challengers
+    from mathesis.benchmark import evaluate_genome
+
+    champion = default_genome()
+    challenger = generate_challengers(
+        champion,
+        weaknesses=["missing_research_expert"],
+        count=1,
+    )[0]
+    assert "research" in challenger.experts
+    assert "read_only_research" in challenger.strategy_portfolio
+    benchmark = evaluate_genome(challenger)
+    research_task = next(row for row in benchmark["tasks"] if row["name"] == "capability:research")
+    assert research_task["ok"] is True
+    assert research_task["critical"] is True
+
+    challenger.strategy_portfolio.remove("read_only_research")
+    broken = evaluate_genome(challenger)
+    assert "capability:research" in broken["critical_failures"]
