@@ -305,6 +305,7 @@ def run_cycle(
         }
         _json_write(META, {
             **_json_read(META, {}),
+            "last_cycle_raw_count": rebuilt["observations"],
             "last_cycle": result,
             "updated_at": time.time(),
         })
