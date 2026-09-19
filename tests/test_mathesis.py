@@ -368,3 +368,35 @@ def test_experience_hint_changes_challenger_expert_selection(tmp_path: Path):
     trial_experts = [trial["genome"]["experts"] for trial in result.benchmark["trials"]]
     assert any("combinatorics" in experts for experts in trial_experts)
     assert "missing_combinatorics_expert" in result.benchmark["weakness_hints"]
+
+
+def test_verified_discoveries_become_replayable_regression_theorems(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    first = discovery.discover_once()
+    assert first["ok"] is True
+
+    analyzer = ExperienceAnalyzer(tmp_path)
+    learned = analyzer.replayable_theorems(limit=16)
+    assert first["theorem"]["statement"] in learned
+
+
+def test_evolution_replays_learned_math_before_promotion(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    theorem = discovery.discover_once()["theorem"]["statement"]
+
+    evolution = SelfEvolutionEngine(tmp_path)
+    result = evolution.evolve_once()
+    assert theorem in result.benchmark["learned_theorems"]
+    candidate_replay = result.benchmark["candidate"]["learned_theorems_replayed"]
+    assert any(row["statement"] == theorem and row["ok"] for row in candidate_replay)
+
+
+def test_false_learned_relation_is_a_critical_regression_gate():
+    from mathesis.benchmark import evaluate_genome
+
+    benchmark = evaluate_genome(
+        default_genome(),
+        learned_theorems=["(x+1)^2=x^2+1"],
+    )
+    assert benchmark["ok"] is False
+    assert "learned_theorem:0" in benchmark["critical_failures"]
