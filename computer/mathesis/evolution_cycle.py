@@ -6,6 +6,7 @@ import os
 from .curriculum import MathematicalCurriculum
 from .discovery import ConjectureDiscoveryEngine
 from .evolution import SelfEvolutionEngine
+from .experience import ExperienceAnalyzer
 
 
 def main() -> int:
@@ -32,12 +33,18 @@ def main() -> int:
         except Exception as exc:
             study = {"ok": False, "status": "research_error", "error": repr(exc)}
 
-    result = evolution.evolve_once()
+    experience = ExperienceAnalyzer(evolution.state_dir).signals(
+        champion,
+        latest_discovery=discovery,
+        latest_study=study,
+    )
+    result = evolution.evolve_once(extra_weaknesses=experience["weaknesses"])
     output = {
         "ok": True,
         "discovery": discovery,
         "discovery_status": discovery_engine.status(),
         "study": study,
+        "experience": experience,
         "evolution": result.to_dict(),
     }
     print(json.dumps(output, indent=2, sort_keys=True))
