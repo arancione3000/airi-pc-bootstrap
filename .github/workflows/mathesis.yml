@@ -114,6 +114,7 @@ jobs:
           python -m mathesis.cli "scopri nuova matematica"
           python -m mathesis.evolution_cycle
           python -m mathesis.cli --status
+          python -m mathesis.health
 
       - name: Verify transactional self-rewrite artifacts
         run: |
@@ -124,6 +125,7 @@ jobs:
           test -f "$MATHESIS_STATE_DIR/history.jsonl"
           test -f "$MATHESIS_STATE_DIR/discoveries.json"
           test -f "$MATHESIS_STATE_DIR/discovery-history.jsonl"
+          test -f "$MATHESIS_STATE_DIR/health.json"
           python - <<'PY'
           import ast
           import json
