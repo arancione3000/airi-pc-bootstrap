@@ -1228,3 +1228,18 @@ def test_continuum_serializes_state_writers_without_force_push():
     assert "git push --quiet origin HEAD:mathesis-state" in workflow
     assert "git push --force" not in workflow
     assert "git push -f" not in workflow
+
+
+def test_self_rewrite_whitelist_rejects_nested_and_unknown_paths(tmp_path: Path):
+    kernel = IntegrityKernel()
+    allowed = tmp_path / "candidate_model.py"
+    assert kernel.validate_state_path(tmp_path, allowed) == allowed.resolve()
+
+    with pytest.raises(PermissionError):
+        kernel.validate_state_path(tmp_path, tmp_path / "not-authorized.py")
+    with pytest.raises(PermissionError):
+        kernel.validate_state_path(tmp_path, tmp_path / "nested" / "candidate_model.py")
+    with pytest.raises(PermissionError):
+        kernel.validate_state_path(tmp_path, tmp_path)
+    with pytest.raises(PermissionError):
+        kernel.validate_state_path(tmp_path, tmp_path.parent / "escape.py")
