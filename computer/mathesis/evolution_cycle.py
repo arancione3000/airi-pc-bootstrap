@@ -9,6 +9,10 @@ from .evolution import SelfEvolutionEngine
 from .experience import ExperienceAnalyzer
 
 
+def _should_study(cycle: int, study_every: int, last_status: str = "") -> bool:
+    return str(last_status) in {"no_sources", "research_error"} or int(cycle) % max(1, int(study_every)) == 0
+
+
 def main() -> int:
     evolution = SelfEvolutionEngine()
     champion = evolution.load_champion()
@@ -27,8 +31,11 @@ def main() -> int:
     curriculum = MathematicalCurriculum(evolution.state_dir)
     curriculum_status = curriculum.status()
     last_study = curriculum_status.get("last") or {}
-    retry_failed_study = str(last_study.get("status", "")) in {"no_sources", "research_error"}
-    should_study = retry_failed_study or discovery_status["cycle"] % study_every == 0
+    should_study = _should_study(
+        discovery_status["cycle"],
+        study_every,
+        str(last_study.get("status", "")),
+    )
 
     study = None
     if should_study:
