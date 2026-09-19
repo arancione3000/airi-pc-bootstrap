@@ -204,6 +204,9 @@ def export_snapshot(destination: Path, *, exported_at: float | None = None) -> d
         "champion_compatible": bool(status.get("champion_compatible", False)),
         "champion": _clean_public(status.get("champion")),
         "last_cycle": _clean_public(status.get("last_cycle")),
+        "daemon_running": bool(status.get("daemon_running", False)),
+        "daemon_status": _clean_public(status.get("daemon_status")),
+        "git_sync": _clean_public(status.get("git_sync")),
     }
     _write_json(destination / "status.json", public_status)
 
