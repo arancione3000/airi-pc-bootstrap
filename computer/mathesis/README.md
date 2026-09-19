@@ -333,3 +333,7 @@ The health gate validates the persisted champion JSON directly before using the
 engine fallback path, so malformed state cannot be mistaken for a healthy
 default model. When runtime status is present, SymPy, Z3 and Lean availability
 are all required for a checkpoint to be considered healthy.
+
+A persisted champion must also contain the complete required genome schema.
+Syntactically valid but partial JSON cannot be interpreted as a healthy default
+architecture.
