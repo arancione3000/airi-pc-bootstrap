@@ -1,5 +1,5 @@
 {
-  "cycle": 18,
+  "cycle": 19,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -173,7 +173,7 @@
   },
   "strategy_counts": {
     "binomial_expansion": 5,
-    "difference_of_powers": 4,
+    "difference_of_powers": 5,
     "faulhaber_interpolation": 4,
     "finite_geometric_identity": 4
   },
@@ -296,6 +296,46 @@
       "quality_gate": "structurally_nontrivial_and_proof_gated",
       "statement": "(x-1)*(x**12 + x**11 + x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^13-1",
       "strategy": "finite_geometric_identity",
+      "verified": true
+    },
+    "32a25047b45a31e91fb0": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
+        "status": "verified"
+      },
+      "complexity": 6,
+      "discovered_at": 1789858294.1706212,
+      "human_novelty": "unassessed",
+      "id": "32a25047b45a31e91fb0",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
+      "strategy": "difference_of_powers",
       "verified": true
     },
     "42bc893df49545f4cd2b": {
@@ -759,6 +799,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789857978.2641058,
+  "updated_at": 1789858294.1706212,
   "version": 3
 }
