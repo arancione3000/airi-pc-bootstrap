@@ -15,6 +15,11 @@ on:
       - '.ai/skills/neuroevolution/**'
       - '.github/workflows/neuroevolution.yml'
       - '.github/workflows/evolution-watchdog.yml'
+      - 'computer/mathesis/**'
+      - 'tests/test_mathesis.py'
+      - '.github/workflows/mathesis.yml'
+      - '.github/workflows/mathesis-continuum.yml'
+      - '.github/workflows/mathesis-watchdog.yml'
   workflow_dispatch:
 
 permissions:
@@ -32,6 +37,35 @@ jobs:
           python3 -m venv .venv
           .venv/bin/pip install --disable-pip-version-check pytest
           .venv/bin/pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+          .venv/bin/pip install --disable-pip-version-check -r computer/mathesis/requirements.txt pyyaml
+
+      - name: Validate MATHESIS workflow syntax
+        run: |
+          export GOBIN="$RUNNER_TEMP/actionlint-bin"
+          mkdir -p "$GOBIN"
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          "$GOBIN/actionlint" \
+            .github/workflows/mathesis.yml \
+            .github/workflows/mathesis-continuum.yml \
+            .github/workflows/mathesis-watchdog.yml
+
+      - name: Install Lean for MATHESIS independent checker
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf \
+            https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            -o /tmp/elan-init.sh
+          sh /tmp/elan-init.sh -y --default-toolchain leanprover/lean4:v4.34.0
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/lean" --version
+
+      - name: Compile and test MATHESIS
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+          MATHESIS_STATE_DIR: ${{ runner.temp }}/mathesis-ci-state
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          .venv/bin/python -m compileall -q computer/mathesis tests/test_mathesis.py
+          .venv/bin/python -m pytest -q tests/test_mathesis.py
 
       - name: Compile evolution and integration sources
         run: |
