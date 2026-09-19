@@ -384,4 +384,6 @@ workflow permissions, promotion gate, secrets or host boundary.
 The continuum serializes all state writers through the
 `mathesis-omega-continuum` concurrency group and never force-pushes the
 `mathesis-state` branch. Health validation runs before persistence, so a
-failed state cannot replace the last known-good remote checkpoint.
+failed state cannot replace the last known-good remote checkpoint. The health
+gate also fails closed on malformed champion/discovery/curriculum state instead
+of silently accepting fallback defaults or crashing on corrupted field types.
