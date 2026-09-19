@@ -268,3 +268,9 @@ Every mathematical domain advertised by the SymPy laboratory must also be an
 evolvable architecture expert. CI enforces this set relationship. Polynomial
 mathematics is explicitly benchmarked and can now be added by challenger
 architectures when curriculum feedback reports it as missing.
+
+
+The symbolic-depth promotion bonus is tied to the explicit
+`search:symbolic_depth` verification result, not to a positional task index.
+This prevents anti-forgetting replay tasks from accidentally changing the
+meaning of architecture scores.
