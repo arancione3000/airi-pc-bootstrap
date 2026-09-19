@@ -19,6 +19,7 @@ STATUS = STATE / "daemon-status.json"
 LOOP_SECONDS = max(60, int(os.environ.get("AIRI_EVOLUTION_DAEMON_INTERVAL", "300")))
 OFFLINE_EVOLUTION_SECONDS = max(1800, int(os.environ.get("AIRI_EVOLUTION_OFFLINE_INTERVAL", "7200")))
 SYNC_SECONDS = max(900, int(os.environ.get("AIRI_EVOLUTION_SYNC_INTERVAL", "1800")))
+MAX_OFFLINE_CYCLES_PER_DATASET = max(1, int(os.environ.get("AIRI_EVOLUTION_MAX_OFFLINE_CYCLES", "12")))
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -110,15 +111,20 @@ class EvolutionDaemon:
         state = _read_json(STATUS, {})
         last_offline = float(state.get("last_offline_cycle_at", self.last_offline_cycle_at) or 0)
         current = lab_runtime.status()
+        current_digest = state_sync.dataset_digest()
+        previous_digest = str(state.get("dataset_digest") or "")
+        offline_cycles = int(state.get("offline_cycles_on_dataset", 0) or 0) if current_digest == previous_digest else 0
         if (
             not worker_running
             and maintenance.get("training_started") is None
             and _eligible_for_offline_cycle(current)
             and now - last_offline >= OFFLINE_EVOLUTION_SECONDS
+            and offline_cycles < MAX_OFFLINE_CYCLES_PER_DATASET
         ):
             offline = lab_runtime.start(auto_setup=True)
             if offline.get("ok") and offline.get("started"):
                 self.last_offline_cycle_at = now
+                offline_cycles += 1
                 worker_running = True
                 self.previous_worker_running = True
 
@@ -139,6 +145,9 @@ class EvolutionDaemon:
             "loop_seconds": LOOP_SECONDS,
             "offline_evolution_seconds": OFFLINE_EVOLUTION_SECONDS,
             "sync_seconds": SYNC_SECONDS,
+            "max_offline_cycles_per_dataset": MAX_OFFLINE_CYCLES_PER_DATASET,
+            "dataset_digest": current_digest,
+            "offline_cycles_on_dataset": offline_cycles,
             "before": {
                 "training_records": before.get("training_records"),
                 "pending_observations": before.get("pending_observations"),
