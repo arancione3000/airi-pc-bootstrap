@@ -217,3 +217,11 @@ def test_verified_queue_conflict_with_existing_dataset_is_quarantined(monkeypatc
     assert "conflicting verified labels" in result["ingest_error"]
     rows = load_records(tmp_path / "data" / "verified.jsonl")
     assert len(rows) == 1 and rows[0]["label"] == 1
+
+
+def test_manual_ingest_requires_source_and_evidence(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(runtime, "DATA", tmp_path / "verified.jsonl")
+    result = runtime.ingest({"text": "manual claim with no provenance", "label": 1}, auto_evolve=False)
+    assert result["ok"] is False
+    assert result["error"] == "verification_metadata_required"
+    assert not (tmp_path / "verified.jsonl").exists()
