@@ -117,22 +117,37 @@ def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
     else:
         check("router:present", False, str(router_path))
 
-    discoveries = _read_json(root / "discoveries.json", {"theorems": {}, "discarded": {}})
-    discovery_version_raw = discoveries.get("version", 0) if isinstance(discoveries, dict) else 0
+    discoveries_raw = _read_json(root / "discoveries.json", {"theorems": {}, "discarded": {}})
+    discoveries_is_object = isinstance(discoveries_raw, dict)
+    check("discovery:state_object", discoveries_is_object, type(discoveries_raw).__name__)
+    discoveries = discoveries_raw if discoveries_is_object else {}
+
+    discovery_version_raw = discoveries.get("version", 0)
     discovery_version, discovery_version_ok = parse_int(discovery_version_raw)
     check(
         "discovery:schema",
         discovery_version_ok and discovery_version >= DISCOVERY_SCHEMA_VERSION,
         discovery_version_raw,
     )
-    active = discoveries.get("theorems") or {}
-    discarded = discoveries.get("discarded") or {}
+
+    active_raw = discoveries.get("theorems") or {}
+    discarded_raw = discoveries.get("discarded") or {}
+    active_is_map = isinstance(active_raw, dict)
+    discarded_is_map = isinstance(discarded_raw, dict)
+    check("discovery:active_map", active_is_map, type(active_raw).__name__)
+    check("discovery:discarded_map", discarded_is_map, type(discarded_raw).__name__)
+    active = active_raw if active_is_map else {}
+    discarded = discarded_raw if discarded_is_map else {}
+
     overlap = sorted(set(active) & set(discarded))
     check("discovery:active_discarded_disjoint", not overlap, overlap)
 
     bad_active: list[dict[str, Any]] = []
     discovery_verifier = CompositeVerifier(counterexample_radius=champion.counterexample_radius)
     for theorem_id, row in active.items():
+        if not isinstance(row, dict):
+            bad_active.append({"id": theorem_id, "reason": "theorem_row_not_object"})
+            continue
         if not row.get("verified"):
             continue
         valid, reason = validate_verified_discovery(row, discovery_verifier)
