@@ -156,7 +156,7 @@ def test_shadow_scoring_is_advisory_and_never_selects_tool(monkeypatch, tmp_path
     )
 
     def fake_predict(_state, text, vocab_size=8192):
-        p = 0.9 if "computer_file_read" in text else 0.2
+        p = 0.9 if "tool computer_file_read " in text else 0.2
         return {
             "real_probability": p,
             "fake_probability": 1.0 - p,
