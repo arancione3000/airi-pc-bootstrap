@@ -543,3 +543,86 @@ def test_symbolic_depth_score_is_independent_from_learned_theorem_replay():
     assert benchmark["verified_symbolic_depth"] == genome.symbolic_depth
     search_task = next(row for row in benchmark["tasks"] if row["name"] == "search:symbolic_depth")
     assert search_task["ok"] is True
+
+
+def test_legacy_faulhaber_certificate_is_reproved_with_nontrivial_induction(tmp_path: Path):
+    statement = "sum(k^2, k=1..n) = n*(n + 1)*(2*n + 1)/6 for integer n>=0"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 2,
+        "cycle": 2,
+        "strategy_counts": {"faulhaber_interpolation": 1},
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "faulhaber_interpolation",
+                "complexity": 2,
+                "discovered_at": 1.0,
+                "certificate": {
+                    "ok": True,
+                    "status": "verified",
+                    "base_case": True,
+                    "sample_count": 6,
+                    "polynomial": "n*(n + 1)*(2*n + 1)/6",
+                    "recurrence": {
+                        "ok": True,
+                        "status": "verified",
+                        "statement": "n**2+2*n+1=n**2+2*n+1",
+                    },
+                },
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+
+    engine = ConjectureDiscoveryEngine(tmp_path, symbolic_depth=6, discovery_beam=4)
+    result = engine.discover_once()
+    assert result["ok"] is True
+
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    theorem = migrated["theorems"][theorem_id]
+    cert = theorem["certificate"]
+    assert cert["recurrence_nontrivial"] is True
+    assert cert["recurrence"]["ok"] is True
+    rel = parse_relation(cert["recurrence"]["statement"])
+    import sympy as sp
+    assert sp.srepr(rel.lhs) != sp.srepr(rel.rhs)
+    assert theorem_id in migrated["last_quality_migration"]["revalidated"]
+
+
+def test_unreprovable_legacy_faulhaber_is_removed_from_active_corpus(tmp_path: Path):
+    statement = "sum(k^2, k=1..n) = n*(n+1)/2 for integer n>=0"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 2,
+        "cycle": 2,
+        "strategy_counts": {"faulhaber_interpolation": 1},
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "faulhaber_interpolation",
+                "complexity": 2,
+                "discovered_at": 1.0,
+                "certificate": {
+                    "ok": True,
+                    "status": "verified",
+                    "polynomial": "n*(n+1)/2",
+                    "sample_count": 6,
+                },
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+
+    engine = ConjectureDiscoveryEngine(tmp_path, symbolic_depth=6, discovery_beam=4)
+    engine.discover_once()
+
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    assert theorem_id not in migrated["theorems"]
+    assert migrated["discarded"][theorem_id]["discarded_reason"] == "legacy_faulhaber_reproof_failed"
