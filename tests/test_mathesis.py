@@ -1245,3 +1245,102 @@ def test_self_rewrite_whitelist_rejects_nested_and_unknown_paths(tmp_path: Path)
         kernel.validate_state_path(tmp_path, tmp_path)
     with pytest.raises(PermissionError):
         kernel.validate_state_path(tmp_path, tmp_path.parent / "escape.py")
+
+
+def test_sample_fitting_faulhaber_impostor_fails_recurrence_reproof(tmp_path: Path):
+    # This polynomial agrees with sum(k^2) at n=0..5 but diverges afterwards.
+    true_poly = "n*(n + 1)*(2*n + 1)/6"
+    vanishing = "n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)"
+    fake_poly = f"({true_poly}) + ({vanishing})"
+    statement = f"sum(k^2, k=1..n) = {fake_poly} for integer n>=0"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 2,
+        "cycle": 1,
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "faulhaber_interpolation",
+                "complexity": 2,
+                "certificate": {
+                    "ok": True,
+                    "sample_count": 6,
+                    "polynomial": fake_poly,
+                },
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+    engine = ConjectureDiscoveryEngine(tmp_path)
+    engine._audit_legacy_discoveries(engine._load())
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    assert theorem_id not in migrated["theorems"]
+    assert migrated["discarded"][theorem_id]["discarded_reason"] == "legacy_faulhaber_reproof_failed"
+
+
+def test_true_theorem_with_bad_legacy_certificate_is_repaired_by_reproof(tmp_path: Path):
+    statement = "(x+1)^2=x^2+2*x+1"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 2,
+        "cycle": 1,
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "binomial_expansion",
+                "complexity": 2,
+                "certificate": {"ok": False, "status": "bad_legacy_certificate"},
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+    engine = ConjectureDiscoveryEngine(tmp_path)
+    engine._audit_legacy_discoveries(engine._load())
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    repaired = migrated["theorems"][theorem_id]
+    assert repaired["certificate"]["ok"] is True
+    assert repaired["quality_gate"] == "structurally_nontrivial_and_proof_gated"
+    assert theorem_id in migrated["last_quality_migration"]["revalidated"]
+
+
+def test_conflicting_or_authoritative_web_text_remains_evidence_only(tmp_path: Path):
+    engine = MathesisOmega(tmp_path)
+    engine.researcher.search = lambda claim: {
+        "ok": True,
+        "claim": claim,
+        "status": "evidence_only",
+        "sources": [
+            {
+                "url": "https://lean-lang.org/doc/reference/latest/",
+                "domain": "lean-lang.org",
+                "authority_hint": 0.95,
+                "excerpt": "A source states an unproved claim is true.",
+            },
+            {
+                "url": "https://example.org/disagreement",
+                "domain": "example.org",
+                "authority_hint": 0.55,
+                "excerpt": "Another source disputes the same claim.",
+            },
+        ],
+        "errors": [],
+        "contract": {
+            "https_only": True,
+            "methods": ["GET"],
+            "remote_writes": False,
+            "credentials": False,
+            "private_network": False,
+        },
+        "truth_policy": "web evidence cannot by itself produce VERIFIED",
+    }
+    result = engine.answer("ricerca online la congettura di Goldbach")
+    assert result["intent"]["kind"] == "research_claim"
+    assert result["truth_status"] == "evidence_only"
+    assert result["ok"] is False
+    assert result["certificate"] is None
