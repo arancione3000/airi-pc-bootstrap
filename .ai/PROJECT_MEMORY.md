@@ -117,7 +117,8 @@ tests pass.
 - legacy non-Faulhaber discoveries missing the current proof-quality gate are
   re-proved or archived; structural tautologies keep their explicit discard
   classification;
-- anti-forgetting accepts only currently valid active proof obligations and
+- anti-forgetting accepts only currently valid active proof obligations,
+  replays the complete active corpus by default (not a 16-theorem window), and
   ignores discarded, unverified, certificate-invalid or currently disproved
   rows;
 - discovery novelty now distinguishes memory novelty from source novelty and
