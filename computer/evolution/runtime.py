@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .data import append_verified, class_counts, load_records
+from .data import _dataset_lock, append_verified, class_counts, load_records
 
 ROOT = Path(os.environ.get("AIRI_ROOT") or Path(__file__).resolve().parents[2]).resolve()
 STATE = Path(os.environ.get("AIRI_EVOLUTION_STATE") or ROOT / ".ai" / "evolution").resolve()
@@ -122,6 +122,27 @@ def ingest(record: dict, *, auto_evolve: bool = True, mode: str = "safe", trigge
 
 
 def start(*, mode: str = "safe", auto_setup: bool = True, population: int | None = None, generations: int | None = None, candidate_epochs: int | None = None) -> dict[str, Any]:
+    STATE.mkdir(parents=True, exist_ok=True)
+    try:
+        with _dataset_lock(STATE / "evolution-start", timeout=5.0, stale_after=300.0):
+            return _start_unlocked(
+                mode=mode,
+                auto_setup=auto_setup,
+                population=population,
+                generations=generations,
+                candidate_epochs=candidate_epochs,
+            )
+    except TimeoutError:
+        st = status()
+        return {
+            "ok": bool(st.get("running")),
+            "started": False,
+            "reason": "start_locked",
+            "pid": st.get("pid"),
+        }
+
+
+def _start_unlocked(*, mode: str = "safe", auto_setup: bool = True, population: int | None = None, generations: int | None = None, candidate_epochs: int | None = None) -> dict[str, Any]:
     st = status()
     if st["running"]:
         return {"ok": True, "started": False, "reason": "already_running", "pid": st["pid"]}
