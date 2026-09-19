@@ -1,6 +1,6 @@
 {
   "curriculum": {
-    "cursor": 14,
+    "cursor": 15,
     "domains": [
       "algebra",
       "polynomials",
@@ -19,9 +19,9 @@
       "optimization"
     ],
     "last": {
-      "at": 1789859537.8069503,
-      "domain": "discrete_math",
-      "query": "discrete_math mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+      "at": 1789859841.5853777,
+      "domain": "optimization",
+      "query": "optimization mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
       "sources": [
         {
           "authority_hint": 0.75,
@@ -50,26 +50,26 @@
     },
     "ok": true,
     "retry_counts": {},
-    "studies": 14,
+    "studies": 15,
     "version": 2
   },
   "discovery": {
-    "cycle": 23,
+    "cycle": 24,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 18,
+    "stored": 19,
     "strategies": {
       "binomial_expansion": 6,
       "difference_of_powers": 6,
       "faulhaber_interpolation": 5,
-      "finite_geometric_identity": 5
+      "finite_geometric_identity": 6
     },
     "symbolic_depth": 12,
-    "verified": 18
+    "verified": 19
   },
   "evolution": {
     "benchmark": {
@@ -77,15 +77,6 @@
       "complexity_penalty": 0.011912,
       "critical_failures": [],
       "learned_theorems_replayed": [
-        {
-          "methods": [
-            "sympy_normal_form",
-            "z3_unsat_negation"
-          ],
-          "ok": true,
-          "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
-          "status": "verified"
-        },
         {
           "methods": [
             "sympy_normal_form",
@@ -220,6 +211,15 @@
           "ok": true,
           "statement": "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)",
           "status": "verified"
+        },
+        {
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "(x-1)*(x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^11-1",
+          "status": "verified"
         }
       ],
       "neural_accuracy": 0.909091,
@@ -282,7 +282,7 @@
         },
         {
           "critical": true,
-          "detail": 98.999656,
+          "detail": 98.999616,
           "name": "program:gcd",
           "ok": true
         },
@@ -891,7 +891,6 @@
       "verifiers.py": "cc123cb352d2e06d190cb16960b2dfd82a620973fb8565bf4d527291b1701c90"
     },
     "learned_theorems_replayed": [
-      "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
       "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
       "((n + 1)**2*(n + 2)**2*(2*n + 2*(n + 1)**2 + 1)/12)-(n**2*(n + 1)**2*(2*n**2 + 2*n - 1)/12) = (n+1)^5",
       "x^12-y^12 = (x - y)*(x**11 + x**10*y + x**9*y**2 + x**8*y**3 + x**7*y**4 + x**6*y**5 + x**5*y**6 + x**4*y**7 + x**3*y**8 + x**2*y**9 + x*y**10 + y**11)",
@@ -906,7 +905,8 @@
       "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
       "(x+y)^8 = x**8 + 8*x**7*y + 28*x**6*y**2 + 56*x**5*y**3 + 70*x**4*y**4 + 56*x**3*y**5 + 28*x**2*y**6 + 8*x*y**7 + y**8",
       "((n + 1)*(n + 2)/2)-(n*(n + 1)/2) = (n+1)^1",
-      "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)"
+      "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)",
+      "(x-1)*(x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^11-1"
     ],
     "ok": true,
     "self_rewrite_scope": "architecture DSL/router state only",
@@ -921,11 +921,11 @@
   },
   "guarantee": "proof-gated evolving system; not an infallibility or human-novelty guarantee",
   "knowledge": {
-    "nodes": 22,
+    "nodes": 23,
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/knowledge.json",
     "status_counts": {
-      "verified": 22
+      "verified": 23
     }
   },
   "model": {
