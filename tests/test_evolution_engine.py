@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "computer"))
 
 from evolution.data import _dataset_lock, append_verified, append_verified_many, class_counts, encode_text, ensure_canary_partition, load_records, persistent_split_records, source_family, source_family_counts, split_records, text_fingerprint
-from evolution.engine import EvolutionConfig, _canary_decision, _metrics, _promotion_decision, _recover_champion_state, decision_from_probability, fitness, pareto_front
+from evolution.engine import EvolutionConfig, _canary_decision, _genome_parameter_count, _metrics, _promotion_decision, _random_feasible_genome, _recover_champion_state, decision_from_probability, fitness, pareto_front
 from evolution.edge import edge_acceptance
 from evolution.monitoring import detect_drift
 from evolution.genome import crossover, mutate, random_genome
@@ -336,3 +336,11 @@ def test_same_process_lock_is_not_reaped_by_age(tmp_path: Path):
         with pytest.raises(TimeoutError):
             with _dataset_lock(target, timeout=0.1, stale_after=0.01):
                 pass
+
+
+def test_initial_population_sampler_respects_parameter_budget():
+    import pytest
+    pytest.importorskip("torch")
+    cfg = EvolutionConfig.for_mode("safe")
+    genome = _random_feasible_genome(random.Random(123), "budget", cfg)
+    assert _genome_parameter_count(genome, cfg.vocab_size) <= cfg.max_params
