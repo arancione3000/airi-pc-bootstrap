@@ -1366,3 +1366,31 @@ def test_research_expert_requires_real_read_only_strategy(tmp_path: Path):
     challenger.strategy_portfolio.remove("read_only_research")
     broken = evaluate_genome(challenger)
     assert "capability:research" in broken["critical_failures"]
+
+
+def test_antiforgetting_default_replays_more_than_sixteen_valid_theorems(tmp_path: Path):
+    verifier = CompositeVerifier()
+    theorems = {}
+    for i in range(1, 21):
+        statement = f"(x+{i})^2=x^2+{2*i}*x+{i*i}"
+        theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+        cert = verifier.verify_relation(statement)
+        assert cert.ok is True
+        theorems[theorem_id] = {
+            "id": theorem_id,
+            "statement": statement,
+            "verified": True,
+            "strategy": "binomial_expansion",
+            "complexity": 2,
+            "quality_gate": "structurally_nontrivial_and_proof_gated",
+            "certificate": cert.to_dict(),
+            "discovered_at": float(i),
+        }
+
+    (tmp_path / "discoveries.json").write_text(
+        json.dumps({"version": 3, "cycle": 20, "theorems": theorems, "discarded": {}}),
+        encoding="utf-8",
+    )
+    replayed = ExperienceAnalyzer(tmp_path).replayable_theorems()
+    assert len(replayed) == 20
+    assert set(replayed) == {row["statement"] for row in theorems.values()}
