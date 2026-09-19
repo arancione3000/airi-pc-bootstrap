@@ -29,7 +29,7 @@ def _patch_lab(monkeypatch, tmp_path: Path):
     return workspace, state
 
 
-def test_shadow_trace_sanitizes_values_and_keeps_only_arg_schema(monkeypatch, tmp_path: Path):
+def test_shadow_trace_sanitizes_values_and_keeps_only_structural_shape(monkeypatch, tmp_path: Path):
     _patch_lab(monkeypatch, tmp_path)
     feature = lab.route_feature(
         "Open https://secret.example account=user@example.com password=hunter2 at /home/user/private/file.txt 123456",
@@ -43,9 +43,11 @@ def test_shadow_trace_sanitizes_values_and_keeps_only_arg_schema(monkeypatch, tm
     assert "user@example.com" not in feature
     assert "/home/user/private" not in feature
     assert "123456" not in feature
-    assert "url:str" in feature
-    assert "token:str" in feature
-    assert "timeout:int" in feature
+    assert "url:str" not in feature
+    assert "token:str" not in feature
+    assert "timeout:int" not in feature
+    assert "arg_shape count:3;int:1,str:2" in feature
+    assert "url:1" in feature and "email:1" in feature and "path:1" in feature
 
 
 def test_shadow_observations_rebuild_into_isolated_training_dataset(monkeypatch, tmp_path: Path):
@@ -148,6 +150,10 @@ def test_shadow_scoring_is_advisory_and_never_selects_tool(monkeypatch, tmp_path
     champion = state / "champion"
     champion.mkdir(parents=True)
     (champion / "model.pt").write_bytes(b"stub")
+    (state / "lab-meta.json").write_text(
+        json.dumps({"feature_schema": lab.FEATURE_SCHEMA}),
+        encoding="utf-8",
+    )
 
     def fake_predict(_state, text, vocab_size=8192):
         p = 0.9 if "computer_file_read" in text else 0.2
