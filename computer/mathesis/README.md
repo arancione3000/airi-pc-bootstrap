@@ -297,3 +297,8 @@ nontrivial induction recurrence as a critical promotion obligation. This keeps
 rich sum-of-powers results represented in future champion benchmarks without
 pretending the relation parser directly understands the full quantified sum
 schema.
+
+
+Persistent curriculum metadata is migrated on read to schema v2, which includes
+per-domain retry counters. Status reports the effective schema version so old
+state files cannot silently look older than the logic actually using them.
