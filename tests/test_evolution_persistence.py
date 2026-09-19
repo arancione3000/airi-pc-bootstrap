@@ -218,7 +218,7 @@ def test_restore_recovers_safe_training_state_from_remote(monkeypatch, tmp_path:
     assert state_sync.privacy_audit_dataset(lab.DATA)["ok"] is True
 
 
-def test_daemon_offline_cycle_budget_resets_only_for_new_dataset(monkeypatch, tmp_path: Path):
+def test_daemon_continuous_search_repeats_on_same_dataset(monkeypatch, tmp_path: Path):
     workspace = tmp_path / "airi"
     workspace.mkdir()
     _patch_state(monkeypatch, workspace)
@@ -239,11 +239,13 @@ def test_daemon_offline_cycle_budget_resets_only_for_new_dataset(monkeypatch, tm
     monkeypatch.setattr(state_sync, "dataset_digest", lambda: "dataset-A")
     monkeypatch.setattr(state_sync, "sync_to_git", lambda **kwargs: {"ok": True, "synced": False})
     monkeypatch.setattr(state_sync, "_source_sha", lambda: "same-source")
+    monkeypatch.setattr(daemon, "OFFLINE_EVOLUTION_SECONDS", 1)
+    monkeypatch.setattr(daemon, "MAX_OFFLINE_CYCLES_PER_DATASET", 0)
 
     d = daemon.EvolutionDaemon()
     d.last_offline_cycle_at = 0
-    monkeypatch.setattr(daemon, "OFFLINE_EVOLUTION_SECONDS", 1)
     first = d.run_once()
+    assert first["continuous_search"] is True
     assert first["offline_cycles_on_dataset"] == 1
     assert starts == [True]
 
@@ -254,20 +256,59 @@ def test_daemon_offline_cycle_budget_resets_only_for_new_dataset(monkeypatch, tm
         json.dumps(
             {
                 "dataset_digest": "dataset-A",
-                "offline_cycles_on_dataset": daemon.MAX_OFFLINE_CYCLES_PER_DATASET,
+                "offline_cycles_on_dataset": 999,
                 "last_offline_cycle_at": 0,
             }
         ),
         encoding="utf-8",
     )
     second = d.run_once()
-    assert second["offline_cycle"] is None
+    assert second["continuous_search"] is True
+    assert second["offline_cycles_on_dataset"] == 1000
+    assert starts == [True, True]
 
-    monkeypatch.setattr(state_sync, "dataset_digest", lambda: "dataset-B")
+
+def test_daemon_optional_cycle_cap_still_works(monkeypatch, tmp_path: Path):
+    workspace = tmp_path / "airi"
+    workspace.mkdir()
+    _patch_state(monkeypatch, workspace)
+
+    status = {
+        "worker_running": False,
+        "training_records": 50,
+        "success_records": 25,
+        "failure_records": 25,
+        "unique_route_features": 20,
+        "pending_observations": 0,
+        "champion_compatible": True,
+    }
+    monkeypatch.setattr(lab_runtime, "status", lambda: dict(status))
+    monkeypatch.setattr(lab_runtime, "maintenance", lambda: {"ok": True, "training_started": None})
+    starts = []
+    monkeypatch.setattr(lab_runtime, "start", lambda **kwargs: starts.append(True) or {"ok": True, "started": True})
+    monkeypatch.setattr(state_sync, "dataset_digest", lambda: "dataset-A")
+    monkeypatch.setattr(state_sync, "sync_to_git", lambda **kwargs: {"ok": True, "synced": False})
+    monkeypatch.setattr(state_sync, "_source_sha", lambda: "same-source")
+    monkeypatch.setattr(daemon, "OFFLINE_EVOLUTION_SECONDS", 1)
+    monkeypatch.setattr(daemon, "MAX_OFFLINE_CYCLES_PER_DATASET", 2)
+
+    daemon.STATUS.parent.mkdir(parents=True, exist_ok=True)
+    daemon.STATUS.write_text(
+        json.dumps(
+            {
+                "dataset_digest": "dataset-A",
+                "offline_cycles_on_dataset": 2,
+                "last_offline_cycle_at": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    d = daemon.EvolutionDaemon()
     d.last_offline_cycle_at = 0
-    third = d.run_once()
-    assert third["offline_cycles_on_dataset"] == 1
-
+    result = d.run_once()
+    assert result["continuous_search"] is False
+    assert result["offline_cycle"] is None
+    assert starts == []
 
 def test_runtime_restart_does_not_target_evolution_daemon():
     text = (ROOT / "computer" / "start.sh").read_text(encoding="utf-8")
