@@ -24,12 +24,19 @@ def main() -> int:
     discovery_status = discovery_engine.status()
     base_study_every = max(1, int(os.environ.get("MATHESIS_STUDY_EVERY", "12")))
     study_every = max(1, base_study_every // max(1, champion.research_budget))
+    curriculum = MathematicalCurriculum(evolution.state_dir)
+    curriculum_status = curriculum.status()
+    last_study = curriculum_status.get("last") or {}
+    retry_failed_study = str(last_study.get("status", "")) in {"no_sources", "research_error"}
+    should_study = retry_failed_study or discovery_status["cycle"] % study_every == 0
+
     study = None
-    if discovery_status["cycle"] % study_every == 0:
+    if should_study:
         # Web study is intentionally non-fatal: offline periods must never stop
-        # mathematical evolution or state persistence.
+        # mathematical evolution or state persistence. A failed study is retried
+        # on the next cycle instead of waiting for the normal cadence.
         try:
-            study = MathematicalCurriculum(evolution.state_dir).study_once()
+            study = curriculum.study_once()
         except Exception as exc:
             study = {"ok": False, "status": "research_error", "error": repr(exc)}
 
