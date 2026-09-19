@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -157,8 +158,54 @@ def record_execution(
     return {"ok": True, "recorded": True, "id": raw_id}
 
 
+
+def compact_raw_observations(max_rows: int = 50_000) -> dict[str, Any]:
+    ensure_state_boundary()
+    rows = _read_observations()
+    limit = max(1000, int(max_rows))
+    if len(rows) <= limit:
+        return {"compacted": False, "rows": len(rows)}
+    kept = rows[-limit:]
+    tmp = RAW.with_suffix(".compact.tmp")
+    with _dataset_lock(RAW, timeout=10.0, stale_after=900.0):
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        with tmp.open("w", encoding="utf-8") as handle:
+            for row in kept:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        tmp.replace(RAW)
+    return {"compacted": True, "rows": len(kept), "dropped": len(rows) - len(kept)}
+
+
+def prune_lab_storage(max_runs: int = 50, max_history_lines: int = 200) -> dict[str, Any]:
+    root = ensure_state_boundary()
+    removed_runs = []
+    runs = root / "runs"
+    if runs.exists():
+        dirs = sorted(
+            [path for path in runs.iterdir() if path.is_dir()],
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        for old in dirs[max(5, int(max_runs)):]:
+            shutil.rmtree(old, ignore_errors=True)
+            removed_runs.append(old.name)
+
+    history = root / "history.jsonl"
+    trimmed = 0
+    if history.exists():
+        lines = history.read_text(encoding="utf-8", errors="replace").splitlines()
+        keep = max(20, int(max_history_lines))
+        if len(lines) > keep:
+            trimmed = len(lines) - keep
+            tmp = history.with_suffix(".tmp")
+            tmp.write_text("\n".join(lines[-keep:]) + "\n", encoding="utf-8")
+            tmp.replace(history)
+
+    return {"removed_runs": removed_runs, "trimmed_history_lines": trimmed}
+
 def rebuild_dataset(max_observations: int = 20_000) -> dict[str, Any]:
     ensure_state_boundary()
+    compact_raw_observations()
     rows = _read_observations()
     if max_observations > 0:
         rows = rows[-int(max_observations):]
@@ -244,7 +291,7 @@ def run_cycle(
 ) -> dict[str, Any]:
     ensure_state_boundary()
     rebuilt = rebuild_dataset()
-    if rebuilt["observations"] < 40 or min(rebuilt["success"], rebuilt["failure"]) < 4:
+    if rebuilt["observations"] < 40 or rebuilt["unique_route_features"] < 12 or min(rebuilt["success"], rebuilt["failure"]) < 4:
         result = {
             "ok": True,
             "trained": False,
@@ -286,7 +333,8 @@ def run_cycle(
         "updated_at": time.time(),
     })
     _json_write(META, meta)
-    return {"ok": True, "trained": True, "dataset": rebuilt, "evolution": result}
+    storage = prune_lab_storage()
+    return {"ok": True, "trained": True, "dataset": rebuilt, "evolution": result, "storage": storage}
 
 
 def score_candidates(
