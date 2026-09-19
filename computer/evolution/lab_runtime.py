@@ -72,7 +72,7 @@ def _apply_resource_limits(pid: int) -> dict[str, Any]:
 
         limits = {
             "cpu_seconds": 600,
-            "address_space_bytes": 3 * 1024 * 1024 * 1024,
+            "address_space_bytes": 6 * 1024 * 1024 * 1024,
             "file_size_bytes": 512 * 1024 * 1024,
             "open_files": 128,
         }
@@ -136,6 +136,7 @@ def status() -> dict[str, Any]:
         "trigger_observations": DEFAULT_TRIGGER,
         "autopilot_interval_seconds": DEFAULT_INTERVAL,
         "audit": audit(),
+        "autopilot_enabled": not AUTOPILOT_DISABLED.exists(),
     }
 
 
@@ -159,6 +160,10 @@ def start(*, auto_setup: bool = True) -> dict[str, Any]:
         directory.mkdir(parents=True, exist_ok=True)
 
     command = [sys.executable, "-m", "evolution.lab_worker"]
+    if LOG.exists() and LOG.stat().st_size > 10 * 1024 * 1024:
+        rotated = LOG.with_suffix(".log.1")
+        rotated.unlink(missing_ok=True)
+        LOG.replace(rotated)
     handle = LOG.open("ab", buffering=0)
     kwargs: dict[str, Any] = {
         "cwd": str(lab.ROOT / "computer"),
