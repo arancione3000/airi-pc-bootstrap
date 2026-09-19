@@ -18,6 +18,7 @@ from mathesis.engine import MathesisOmega
 from mathesis.discovery import ConjectureDiscoveryEngine
 from mathesis.sympy_lab import SymPyMathLab, DOMAIN_ATLAS
 from mathesis.evolution import SelfEvolutionEngine
+from mathesis.experience import ExperienceAnalyzer
 from mathesis.formalizer import FormalizerMesh
 from mathesis.kernel import IntegrityKernel
 from mathesis.model_writer import render_model_module
@@ -320,3 +321,50 @@ def test_persisted_old_router_shape_is_migrated_instead_of_reinterpreted(tmp_pat
     migrated = evolution.load_router(genome)
     from mathesis.neural_graph import INTENTS
     assert migrated.output_size == len(INTENTS)
+
+
+def test_experience_feedback_turns_verified_math_into_architecture_signal(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    champion = evolution.load_champion()
+    feedback = ExperienceAnalyzer(tmp_path).signals(
+        champion,
+        latest_discovery={
+            "ok": True,
+            "status": "verified_discovery",
+            "theorem": {
+                "verified": True,
+                "strategy": "binomial_expansion",
+                "complexity": champion.symbolic_depth,
+            },
+        },
+    )
+    assert "missing_combinatorics_expert" in feedback["weaknesses"]
+    assert "symbolic_depth" in feedback["weaknesses"]
+
+
+def test_rejected_discovery_requests_stronger_search_not_direct_rewrite(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    champion = evolution.load_champion()
+    feedback = ExperienceAnalyzer(tmp_path).signals(
+        champion,
+        latest_discovery={
+            "ok": False,
+            "status": "rejected_conjecture",
+            "theorem": {
+                "verified": False,
+                "strategy": "faulhaber_interpolation",
+                "complexity": 4,
+            },
+        },
+    )
+    assert "counterexample" in feedback["weaknesses"]
+    assert "optimization" in feedback["weaknesses"]
+    assert "verifier" not in " ".join(feedback["weaknesses"]).lower()
+
+
+def test_experience_hint_changes_challenger_expert_selection(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    result = evolution.evolve_once(extra_weaknesses=["missing_combinatorics_expert"])
+    trial_experts = [trial["genome"]["experts"] for trial in result.benchmark["trials"]]
+    assert any("combinatorics" in experts for experts in trial_experts)
+    assert "missing_combinatorics_expert" in result.benchmark["weakness_hints"]
