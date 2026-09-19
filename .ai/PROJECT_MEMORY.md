@@ -88,3 +88,7 @@ tests pass.
 - added explicit connect/total timeouts and retries to continuum, watchdog and deep-Mathlib GitHub API calls;
 - raised the continuum job timeout margin to 15 minutes so cold setup plus persistence/handoff cannot be killed prematurely;
 - CI now enforces that autonomous workflow API calls remain time-bounded and retrying.
+
+
+- if active-run lookup fails after bounded retries, continuum attempts one serialized continuity dispatch;
+- watchdog converts bounded run-list lookup failure into a stale recovery condition instead of crashing before recovery.
