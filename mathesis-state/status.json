@@ -23,27 +23,39 @@
     "studies": 0
   },
   "discovery": {
-    "cycle": 1,
-    "discovery_beam": 1,
+    "cycle": 2,
+    "discovery_beam": 2,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 1,
+    "stored": 2,
     "strategies": {
-      "binomial_expansion": 1
+      "binomial_expansion": 1,
+      "faulhaber_interpolation": 1
     },
-    "symbolic_depth": 2,
-    "verified": 1
+    "symbolic_depth": 3,
+    "verified": 2
   },
   "evolution": {
     "benchmark": {
-      "capability_score": 0.576923,
-      "complexity_penalty": 0.0042320000000000005,
+      "capability_score": 0.62963,
+      "complexity_penalty": 0.004942,
       "critical_failures": [],
+      "learned_theorems_replayed": [
+        {
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
+          "status": "verified"
+        }
+      ],
       "neural_accuracy": 0.818182,
       "ok": true,
-      "score": 62.673251,
+      "score": 66.969065,
       "tasks": [
         {
           "critical": true,
@@ -101,7 +113,7 @@
         },
         {
           "critical": true,
-          "detail": 98.999631,
+          "detail": 98.999712,
           "name": "program:gcd",
           "ok": true
         },
@@ -125,9 +137,9 @@
         },
         {
           "critical": false,
-          "detail": "expert not present",
+          "detail": "verified capability",
           "name": "domain:trigonometry",
-          "ok": false
+          "ok": true
         },
         {
           "critical": false,
@@ -192,9 +204,15 @@
         {
           "critical": false,
           "detail": {
-            "tested_exponent": 4
+            "tested_exponent": 5
           },
           "name": "search:symbolic_depth",
+          "ok": true
+        },
+        {
+          "critical": true,
+          "detail": "verified",
+          "name": "learned_theorem:0",
           "ok": true
         },
         {
@@ -204,9 +222,8 @@
           "ok": true
         }
       ],
-      "verified_symbolic_depth": 2,
+      "verified_symbolic_depth": 3,
       "weaknesses": [
-        "domain:trigonometry",
         "domain:linear_algebra",
         "domain:combinatorics",
         "domain:equations",
@@ -225,7 +242,7 @@
     },
     "champion": {
       "architecture_graph": {
-        "discovery_beam": 1,
+        "discovery_beam": 2,
         "edges": [
           [
             "formalization",
@@ -252,6 +269,10 @@
             "calculus"
           ],
           [
+            "calculus",
+            "trigonometry"
+          ],
+          [
             "program_synthesis",
             "counterexample"
           ],
@@ -266,6 +287,10 @@
           [
             "calculus",
             "counterexample"
+          ],
+          [
+            "trigonometry",
+            "counterexample"
           ]
         ],
         "nodes": [
@@ -275,7 +300,8 @@
           "program_synthesis",
           "number_theory",
           "research",
-          "calculus"
+          "calculus",
+          "trigonometry"
         ],
         "research_budget": 2,
         "strategy_portfolio": [
@@ -283,14 +309,15 @@
           "smt_validity",
           "counterexample",
           "lean",
-          "conjecture_discovery"
+          "conjecture_discovery",
+          "specific_normal_forms"
         ],
-        "symbolic_depth": 2
+        "symbolic_depth": 3
       },
-      "fingerprint": "5c60b9b98e98b196",
+      "fingerprint": "e8602460b6eab4a0",
       "genome": {
         "counterexample_radius": 9,
-        "discovery_beam": 1,
+        "discovery_beam": 2,
         "experts": [
           "formalization",
           "algebra",
@@ -298,13 +325,14 @@
           "program_synthesis",
           "number_theory",
           "research",
-          "calculus"
+          "calculus",
+          "trigonometry"
         ],
-        "generation": 3,
-        "genome_id": "omega-3-4b709a6b",
-        "max_proof_cells": 64,
+        "generation": 4,
+        "genome_id": "omega-4-50fff62b",
+        "max_proof_cells": 80,
         "neural_hidden": 22,
-        "parent_id": "omega-2-21b03a45",
+        "parent_id": "omega-3-4b709a6b",
         "proof_order": [
           "symbolic",
           "smt",
@@ -317,9 +345,10 @@
           "smt_validity",
           "counterexample",
           "lean",
-          "conjecture_discovery"
+          "conjecture_discovery",
+          "specific_normal_forms"
         ],
-        "symbolic_depth": 2,
+        "symbolic_depth": 3,
         "topology": [
           [
             "formalization",
@@ -346,6 +375,10 @@
             "calculus"
           ],
           [
+            "calculus",
+            "trigonometry"
+          ],
+          [
             "program_synthesis",
             "counterexample"
           ],
@@ -359,6 +392,10 @@
           ],
           [
             "calculus",
+            "counterexample"
+          ],
+          [
+            "trigonometry",
             "counterexample"
           ]
         ]
@@ -381,7 +418,7 @@
           "candidate_result",
           "verification_status"
         ],
-        "max_cells": 64
+        "max_cells": 80
       }
     },
     "kernel": {
@@ -389,22 +426,32 @@
       "safe_math.py": "b427d6ac86ef5ddeaa560a5f4a03b834987571762117418593bb5ecb96f22741",
       "verifiers.py": "cc123cb352d2e06d190cb16960b2dfd82a620973fb8565bf4d527291b1701c90"
     },
+    "learned_theorems_replayed": [
+      "(x+y)^2 = x**2 + 2*x*y + y**2"
+    ],
     "ok": true,
     "self_rewrite_scope": "architecture DSL/router state only",
     "state_dir": "/tmp/mathesis-runtime-state"
   },
+  "experience": {
+    "champion": "omega-4-50fff62b",
+    "ok": true,
+    "policy": "experience proposes bounded architecture hints; it never edits verifier code",
+    "reasons": [],
+    "weaknesses": []
+  },
   "guarantee": "proof-gated evolving system; not an infallibility or human-novelty guarantee",
   "knowledge": {
-    "nodes": 1,
+    "nodes": 2,
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/knowledge.json",
     "status_counts": {
-      "verified": 1
+      "verified": 2
     }
   },
   "model": {
     "architecture_graph": {
-      "discovery_beam": 1,
+      "discovery_beam": 2,
       "edges": [
         [
           "formalization",
@@ -431,6 +478,10 @@
           "calculus"
         ],
         [
+          "calculus",
+          "trigonometry"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -445,6 +496,10 @@
         [
           "calculus",
           "counterexample"
+        ],
+        [
+          "trigonometry",
+          "counterexample"
         ]
       ],
       "nodes": [
@@ -454,7 +509,8 @@
         "program_synthesis",
         "number_theory",
         "research",
-        "calculus"
+        "calculus",
+        "trigonometry"
       ],
       "research_budget": 2,
       "strategy_portfolio": [
@@ -462,14 +518,15 @@
         "smt_validity",
         "counterexample",
         "lean",
-        "conjecture_discovery"
+        "conjecture_discovery",
+        "specific_normal_forms"
       ],
-      "symbolic_depth": 2
+      "symbolic_depth": 3
     },
-    "fingerprint": "5c60b9b98e98b196",
+    "fingerprint": "e8602460b6eab4a0",
     "genome": {
       "counterexample_radius": 9,
-      "discovery_beam": 1,
+      "discovery_beam": 2,
       "experts": [
         "formalization",
         "algebra",
@@ -477,13 +534,14 @@
         "program_synthesis",
         "number_theory",
         "research",
-        "calculus"
+        "calculus",
+        "trigonometry"
       ],
-      "generation": 3,
-      "genome_id": "omega-3-4b709a6b",
-      "max_proof_cells": 64,
+      "generation": 4,
+      "genome_id": "omega-4-50fff62b",
+      "max_proof_cells": 80,
       "neural_hidden": 22,
-      "parent_id": "omega-2-21b03a45",
+      "parent_id": "omega-3-4b709a6b",
       "proof_order": [
         "symbolic",
         "smt",
@@ -496,9 +554,10 @@
         "smt_validity",
         "counterexample",
         "lean",
-        "conjecture_discovery"
+        "conjecture_discovery",
+        "specific_normal_forms"
       ],
-      "symbolic_depth": 2,
+      "symbolic_depth": 3,
       "topology": [
         [
           "formalization",
@@ -525,6 +584,10 @@
           "calculus"
         ],
         [
+          "calculus",
+          "trigonometry"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -538,6 +601,10 @@
         ],
         [
           "calculus",
+          "counterexample"
+        ],
+        [
+          "trigonometry",
           "counterexample"
         ]
       ]
@@ -560,7 +627,7 @@
         "candidate_result",
         "verification_status"
       ],
-      "max_cells": 64
+      "max_cells": 80
     }
   },
   "ok": true,

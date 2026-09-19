@@ -4,67 +4,94 @@
     "status": "verified_discovery",
     "theorem": {
       "certificate": {
-        "counterexample": null,
-        "details": {
-          "lean": {
-            "ok": false,
-            "reason": "requires closed equality",
-            "status": "not_applicable"
-          },
-          "smt": {
-            "method": "z3_unsat_negation",
-            "ok": true,
-            "status": "verified"
-          },
-          "symbolic": {
-            "method": "sympy_normal_form",
-            "normal_form": "0",
-            "ok": true,
-            "status": "verified"
-          }
-        },
+        "base_case": true,
         "methods": [
+          "exact_integer_samples",
+          "sympy_interpolation",
+          "base_case",
+          "finite_difference_induction_step",
           "sympy_normal_form",
           "z3_unsat_negation"
         ],
         "ok": true,
-        "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
+        "polynomial": "n*(n + 1)*(2*n + 1)/6",
+        "recurrence": {
+          "counterexample": null,
+          "details": {
+            "lean": {
+              "ok": false,
+              "reason": "requires closed equality",
+              "status": "not_applicable"
+            },
+            "smt": {
+              "method": "z3_unsat_negation",
+              "ok": true,
+              "status": "verified"
+            },
+            "symbolic": {
+              "method": "sympy_normal_form",
+              "normal_form": "0",
+              "ok": true,
+              "status": "verified"
+            }
+          },
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "n**2 + 2*n + 1 = n**2 + 2*n + 1",
+          "status": "verified"
+        },
+        "sample_count": 6,
         "status": "verified"
       },
       "complexity": 2,
-      "discovered_at": 1789850355.8918607,
+      "discovered_at": 1789851676.4843028,
       "human_novelty": "unassessed",
-      "id": "d8f2b6ac3b7bfae0422b",
+      "id": "efb13ac5cb9a41475989",
       "internal_novelty": true,
-      "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
-      "strategy": "binomial_expansion",
+      "statement": "sum(k^2, k=1..n) = n*(n + 1)*(2*n + 1)/6 for integer n>=0",
+      "strategy": "faulhaber_interpolation",
       "verified": true
     },
-    "total_discoveries": 1
+    "total_discoveries": 2
   },
   "discovery_status": {
-    "cycle": 1,
+    "cycle": 2,
     "discovery_beam": 1,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 1,
+    "stored": 2,
     "strategies": {
-      "binomial_expansion": 1
+      "binomial_expansion": 1,
+      "faulhaber_interpolation": 1
     },
     "symbolic_depth": 2,
-    "verified": 1
+    "verified": 2
   },
   "evolution": {
     "benchmark": {
       "candidate": {
-        "capability_score": 0.576923,
-        "complexity_penalty": 0.0042320000000000005,
+        "capability_score": 0.62963,
+        "complexity_penalty": 0.004942,
         "critical_failures": [],
-        "neural_accuracy": 0.909091,
+        "learned_theorems_replayed": [
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
+            "status": "verified"
+          }
+        ],
+        "neural_accuracy": 0.818182,
         "ok": true,
-        "score": 64.491432,
+        "score": 66.969065,
         "tasks": [
           {
             "critical": true,
@@ -122,7 +149,7 @@
           },
           {
             "critical": true,
-            "detail": 98.999602,
+            "detail": 98.999717,
             "name": "program:gcd",
             "ok": true
           },
@@ -146,9 +173,9 @@
           },
           {
             "critical": false,
-            "detail": "expert not present",
+            "detail": "verified capability",
             "name": "domain:trigonometry",
-            "ok": false
+            "ok": true
           },
           {
             "critical": false,
@@ -213,21 +240,26 @@
           {
             "critical": false,
             "detail": {
-              "tested_exponent": 4
+              "tested_exponent": 5
             },
             "name": "search:symbolic_depth",
             "ok": true
           },
           {
+            "critical": true,
+            "detail": "verified",
+            "name": "learned_theorem:0",
+            "ok": true
+          },
+          {
             "critical": false,
-            "detail": 0.9091,
+            "detail": 0.8182,
             "name": "neural:intent_router",
             "ok": true
           }
         ],
-        "verified_symbolic_depth": 2,
+        "verified_symbolic_depth": 3,
         "weaknesses": [
-          "domain:trigonometry",
           "domain:linear_algebra",
           "domain:combinatorics",
           "domain:equations",
@@ -241,12 +273,23 @@
         ]
       },
       "champion": {
-        "capability_score": 0.538462,
-        "complexity_penalty": 0.0038820000000000005,
+        "capability_score": 0.592593,
+        "complexity_penalty": 0.0042320000000000005,
         "critical_failures": [],
+        "learned_theorems_replayed": [
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
+            "status": "verified"
+          }
+        ],
         "neural_accuracy": 0.818182,
         "ok": true,
-        "score": 59.596677,
+        "score": 63.926812,
         "tasks": [
           {
             "critical": true,
@@ -304,7 +347,7 @@
           },
           {
             "critical": true,
-            "detail": 98.99961,
+            "detail": 98.99972,
             "name": "program:gcd",
             "ok": true
           },
@@ -322,9 +365,9 @@
           },
           {
             "critical": false,
-            "detail": "expert not present",
+            "detail": "verified capability",
             "name": "domain:calculus",
-            "ok": false
+            "ok": true
           },
           {
             "critical": false,
@@ -401,6 +444,12 @@
             "ok": true
           },
           {
+            "critical": true,
+            "detail": "verified",
+            "name": "learned_theorem:0",
+            "ok": true
+          },
+          {
             "critical": false,
             "detail": 0.8182,
             "name": "neural:intent_router",
@@ -409,7 +458,6 @@
         ],
         "verified_symbolic_depth": 2,
         "weaknesses": [
-          "domain:calculus",
           "domain:trigonometry",
           "domain:linear_algebra",
           "domain:combinatorics",
@@ -432,16 +480,30 @@
         },
         "ok": true
       },
-      "selected_trial": 2,
+      "learned_theorems": [
+        "(x+y)^2 = x**2 + 2*x*y + y**2"
+      ],
+      "selected_trial": 1,
       "trials": [
         {
           "benchmark": {
-            "capability_score": 0.576923,
-            "complexity_penalty": 0.0043,
+            "capability_score": 0.62963,
+            "complexity_penalty": 0.0046500000000000005,
             "critical_failures": [],
+            "learned_theorems_replayed": [
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
+                "status": "verified"
+              }
+            ],
             "neural_accuracy": 0.818182,
             "ok": true,
-            "score": 62.673183,
+            "score": 66.889357,
             "tasks": [
               {
                 "critical": true,
@@ -499,7 +561,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999634,
+                "detail": 98.999704,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -553,9 +615,9 @@
               },
               {
                 "critical": false,
-                "detail": "expert not present",
+                "detail": "verified capability",
                 "name": "domain:sequences",
-                "ok": false
+                "ok": true
               },
               {
                 "critical": false,
@@ -596,6 +658,12 @@
                 "ok": true
               },
               {
+                "critical": true,
+                "detail": "verified",
+                "name": "learned_theorem:0",
+                "ok": true
+              },
+              {
                 "critical": false,
                 "detail": 0.8182,
                 "name": "neural:intent_router",
@@ -609,7 +677,6 @@
               "domain:combinatorics",
               "domain:equations",
               "domain:inequalities",
-              "domain:sequences",
               "domain:special_functions",
               "domain:geometry",
               "domain:probability",
@@ -627,20 +694,21 @@
               "program_synthesis",
               "number_theory",
               "research",
-              "calculus"
+              "calculus",
+              "sequences"
             ],
-            "generation": 3,
-            "genome_id": "omega-3-7b186593",
+            "generation": 4,
+            "genome_id": "omega-4-4936a751",
             "max_proof_cells": 64,
-            "neural_hidden": 28,
-            "parent_id": "omega-2-21b03a45",
+            "neural_hidden": 26,
+            "parent_id": "omega-3-4b709a6b",
             "proof_order": [
               "symbolic",
               "smt",
               "counterexample",
               "lean"
             ],
-            "research_budget": 1,
+            "research_budget": 2,
             "strategy_portfolio": [
               "exact_symbolic",
               "smt_validity",
@@ -675,6 +743,10 @@
                 "calculus"
               ],
               [
+                "calculus",
+                "sequences"
+              ],
+              [
                 "program_synthesis",
                 "counterexample"
               ],
@@ -689,6 +761,10 @@
               [
                 "calculus",
                 "counterexample"
+              ],
+              [
+                "sequences",
+                "counterexample"
               ]
             ]
           },
@@ -696,12 +772,23 @@
         },
         {
           "benchmark": {
-            "capability_score": 0.576923,
-            "complexity_penalty": 0.004592,
+            "capability_score": 0.62963,
+            "complexity_penalty": 0.004942,
             "critical_failures": [],
+            "learned_theorems_replayed": [
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
+                "status": "verified"
+              }
+            ],
             "neural_accuracy": 0.818182,
             "ok": true,
-            "score": 62.752891,
+            "score": 66.969065,
             "tasks": [
               {
                 "critical": true,
@@ -759,7 +846,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999605,
+                "detail": 98.999717,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -783,9 +870,9 @@
               },
               {
                 "critical": false,
-                "detail": "expert not present",
+                "detail": "verified capability",
                 "name": "domain:trigonometry",
-                "ok": false
+                "ok": true
               },
               {
                 "critical": false,
@@ -856,6 +943,12 @@
                 "ok": true
               },
               {
+                "critical": true,
+                "detail": "verified",
+                "name": "learned_theorem:0",
+                "ok": true
+              },
+              {
                 "critical": false,
                 "detail": 0.8182,
                 "name": "neural:intent_router",
@@ -864,7 +957,6 @@
             ],
             "verified_symbolic_depth": 3,
             "weaknesses": [
-              "domain:trigonometry",
               "domain:linear_algebra",
               "domain:combinatorics",
               "domain:equations",
@@ -887,20 +979,21 @@
               "program_synthesis",
               "number_theory",
               "research",
-              "calculus"
+              "calculus",
+              "trigonometry"
             ],
-            "generation": 3,
-            "genome_id": "omega-3-43c48dc0",
+            "generation": 4,
+            "genome_id": "omega-4-50fff62b",
             "max_proof_cells": 80,
-            "neural_hidden": 24,
-            "parent_id": "omega-2-21b03a45",
+            "neural_hidden": 22,
+            "parent_id": "omega-3-4b709a6b",
             "proof_order": [
               "symbolic",
               "smt",
               "counterexample",
               "lean"
             ],
-            "research_budget": 1,
+            "research_budget": 2,
             "strategy_portfolio": [
               "exact_symbolic",
               "smt_validity",
@@ -936,6 +1029,10 @@
                 "calculus"
               ],
               [
+                "calculus",
+                "trigonometry"
+              ],
+              [
                 "program_synthesis",
                 "counterexample"
               ],
@@ -950,6 +1047,10 @@
               [
                 "calculus",
                 "counterexample"
+              ],
+              [
+                "trigonometry",
+                "counterexample"
               ]
             ]
           },
@@ -957,12 +1058,23 @@
         },
         {
           "benchmark": {
-            "capability_score": 0.576923,
-            "complexity_penalty": 0.0042320000000000005,
+            "capability_score": 0.62963,
+            "complexity_penalty": 0.004582,
             "critical_failures": [],
-            "neural_accuracy": 0.909091,
+            "learned_theorems_replayed": [
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
+                "status": "verified"
+              }
+            ],
+            "neural_accuracy": 0.818182,
             "ok": true,
-            "score": 64.491432,
+            "score": 66.889425,
             "tasks": [
               {
                 "critical": true,
@@ -1020,7 +1132,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999602,
+                "detail": 98.999717,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -1050,9 +1162,9 @@
               },
               {
                 "critical": false,
-                "detail": "expert not present",
+                "detail": "verified capability",
                 "name": "domain:linear_algebra",
-                "ok": false
+                "ok": true
               },
               {
                 "critical": false,
@@ -1117,8 +1229,14 @@
                 "ok": true
               },
               {
+                "critical": true,
+                "detail": "verified",
+                "name": "learned_theorem:0",
+                "ok": true
+              },
+              {
                 "critical": false,
-                "detail": 0.9091,
+                "detail": 0.8182,
                 "name": "neural:intent_router",
                 "ok": true
               }
@@ -1126,7 +1244,6 @@
             "verified_symbolic_depth": 2,
             "weaknesses": [
               "domain:trigonometry",
-              "domain:linear_algebra",
               "domain:combinatorics",
               "domain:equations",
               "domain:inequalities",
@@ -1148,20 +1265,21 @@
               "program_synthesis",
               "number_theory",
               "research",
-              "calculus"
+              "calculus",
+              "linear_algebra"
             ],
-            "generation": 3,
-            "genome_id": "omega-3-4b709a6b",
+            "generation": 4,
+            "genome_id": "omega-4-2c6e7cdc",
             "max_proof_cells": 64,
-            "neural_hidden": 22,
-            "parent_id": "omega-2-21b03a45",
+            "neural_hidden": 20,
+            "parent_id": "omega-3-4b709a6b",
             "proof_order": [
               "symbolic",
               "smt",
               "counterexample",
               "lean"
             ],
-            "research_budget": 2,
+            "research_budget": 3,
             "strategy_portfolio": [
               "exact_symbolic",
               "smt_validity",
@@ -1196,6 +1314,10 @@
                 "calculus"
               ],
               [
+                "calculus",
+                "linear_algebra"
+              ],
+              [
                 "program_synthesis",
                 "counterexample"
               ],
@@ -1210,16 +1332,35 @@
               [
                 "calculus",
                 "counterexample"
+              ],
+              [
+                "linear_algebra",
+                "counterexample"
               ]
             ]
           },
           "trial": 2
         }
+      ],
+      "weakness_hints": [
+        "missing_sequences_expert",
+        "symbolic_depth",
+        "domain:trigonometry",
+        "domain:linear_algebra",
+        "domain:combinatorics",
+        "domain:equations",
+        "domain:inequalities",
+        "domain:sequences",
+        "domain:special_functions",
+        "domain:geometry",
+        "domain:probability",
+        "domain:discrete_math",
+        "domain:optimization"
       ]
     },
     "candidate": {
       "counterexample_radius": 9,
-      "discovery_beam": 1,
+      "discovery_beam": 2,
       "experts": [
         "formalization",
         "algebra",
@@ -1227,13 +1368,14 @@
         "program_synthesis",
         "number_theory",
         "research",
-        "calculus"
+        "calculus",
+        "trigonometry"
       ],
-      "generation": 3,
-      "genome_id": "omega-3-4b709a6b",
-      "max_proof_cells": 64,
+      "generation": 4,
+      "genome_id": "omega-4-50fff62b",
+      "max_proof_cells": 80,
       "neural_hidden": 22,
-      "parent_id": "omega-2-21b03a45",
+      "parent_id": "omega-3-4b709a6b",
       "proof_order": [
         "symbolic",
         "smt",
@@ -1246,9 +1388,10 @@
         "smt_validity",
         "counterexample",
         "lean",
-        "conjecture_discovery"
+        "conjecture_discovery",
+        "specific_normal_forms"
       ],
-      "symbolic_depth": 2,
+      "symbolic_depth": 3,
       "topology": [
         [
           "formalization",
@@ -1275,6 +1418,10 @@
           "calculus"
         ],
         [
+          "calculus",
+          "trigonometry"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -1289,13 +1436,17 @@
         [
           "calculus",
           "counterexample"
+        ],
+        [
+          "trigonometry",
+          "counterexample"
         ]
       ]
     },
-    "candidate_score": 64.491432,
+    "candidate_score": 66.969065,
     "champion": {
       "counterexample_radius": 9,
-      "discovery_beam": 1,
+      "discovery_beam": 2,
       "experts": [
         "formalization",
         "algebra",
@@ -1303,13 +1454,14 @@
         "program_synthesis",
         "number_theory",
         "research",
-        "calculus"
+        "calculus",
+        "trigonometry"
       ],
-      "generation": 3,
-      "genome_id": "omega-3-4b709a6b",
-      "max_proof_cells": 64,
+      "generation": 4,
+      "genome_id": "omega-4-50fff62b",
+      "max_proof_cells": 80,
       "neural_hidden": 22,
-      "parent_id": "omega-2-21b03a45",
+      "parent_id": "omega-3-4b709a6b",
       "proof_order": [
         "symbolic",
         "smt",
@@ -1322,9 +1474,10 @@
         "smt_validity",
         "counterexample",
         "lean",
-        "conjecture_discovery"
+        "conjecture_discovery",
+        "specific_normal_forms"
       ],
-      "symbolic_depth": 2,
+      "symbolic_depth": 3,
       "topology": [
         [
           "formalization",
@@ -1351,6 +1504,10 @@
           "calculus"
         ],
         [
+          "calculus",
+          "trigonometry"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -1365,12 +1522,35 @@
         [
           "calculus",
           "counterexample"
+        ],
+        [
+          "trigonometry",
+          "counterexample"
         ]
       ]
     },
-    "champion_score": 59.596677,
+    "champion_score": 63.926812,
     "promoted": true,
     "reason": "best candidate improved verified benchmark without critical regressions"
+  },
+  "experience": {
+    "champion": "omega-3-4b709a6b",
+    "ok": true,
+    "policy": "experience proposes bounded architecture hints; it never edits verifier code",
+    "reasons": [
+      {
+        "reason": "verified discovery used faulhaber_interpolation but champion lacks sequences",
+        "signal": "sequences"
+      },
+      {
+        "reason": "verified discovery reached current symbolic-depth frontier",
+        "signal": "symbolic_depth"
+      }
+    ],
+    "weaknesses": [
+      "missing_sequences_expert",
+      "symbolic_depth"
+    ]
   },
   "ok": true,
   "study": null

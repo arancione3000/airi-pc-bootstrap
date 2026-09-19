@@ -36,8 +36,60 @@
       "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
       "status": "verified",
       "updated_at": 1789850355.892493
+    },
+    "efb13ac5cb9a41475989": {
+      "certificate": {
+        "base_case": true,
+        "methods": [
+          "exact_integer_samples",
+          "sympy_interpolation",
+          "base_case",
+          "finite_difference_induction_step",
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "polynomial": "n*(n + 1)*(2*n + 1)/6",
+        "recurrence": {
+          "counterexample": null,
+          "details": {
+            "lean": {
+              "ok": false,
+              "reason": "requires closed equality",
+              "status": "not_applicable"
+            },
+            "smt": {
+              "method": "z3_unsat_negation",
+              "ok": true,
+              "status": "verified"
+            },
+            "symbolic": {
+              "method": "sympy_normal_form",
+              "normal_form": "0",
+              "ok": true,
+              "status": "verified"
+            }
+          },
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "n**2 + 2*n + 1 = n**2 + 2*n + 1",
+          "status": "verified"
+        },
+        "sample_count": 6,
+        "status": "verified"
+      },
+      "dependencies": [],
+      "first_seen_at": 1789851676.4847248,
+      "id": "efb13ac5cb9a41475989",
+      "sources": [],
+      "statement": "sum(k^2, k=1..n) = n*(n + 1)*(2*n + 1)/6 for integer n>=0",
+      "status": "verified",
+      "updated_at": 1789851676.4847248
     }
   },
-  "updated_at": 1789850355.892493,
+  "updated_at": 1789851676.4847248,
   "version": 1
 }
