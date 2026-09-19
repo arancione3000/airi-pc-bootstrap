@@ -248,7 +248,8 @@ def _load_jobs():
     global _jobs
     try: _jobs = json.loads(SCHEDULER.read_text(encoding='utf-8')) if SCHEDULER.exists() else {}
     except Exception: _jobs = {}
-    lab_disabled = ROOT / '.ai' / 'evolution-lab' / 'shadow-router' / 'autopilot.disabled'
+    lab_root = Path(os.environ.get('AIRI_EVOLUTION_LAB_STATE') or (Path(os.environ.get('AIRI_ROOT') or ROOT) / '.ai' / 'evolution-lab' / 'shadow-router')).resolve()
+    lab_disabled = lab_root / 'autopilot.disabled'
     if os.environ.get('AIRI_EVOLUTION_LAB_AUTOPILOT','1').strip().lower() not in {'0','false','off','no'} and not lab_disabled.exists():
         name = 'evolution-lab-shadow-router'
         if name not in _jobs:
