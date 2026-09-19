@@ -1,7 +1,7 @@
 {
-  "cycle": 8,
+  "cycle": 9,
   "strategy_counts": {
-    "binomial_expansion": 2,
+    "binomial_expansion": 3,
     "difference_of_powers": 2,
     "faulhaber_interpolation": 1,
     "finite_geometric_identity": 2
@@ -119,6 +119,44 @@
       "internal_novelty": true,
       "statement": "x^4-y^4 = x**4 - y**4",
       "strategy": "difference_of_powers",
+      "verified": true
+    },
+    "c9952a994c6582167d5e": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
+        "status": "verified"
+      },
+      "complexity": 10,
+      "discovered_at": 1789855202.4642878,
+      "human_novelty": "unassessed",
+      "id": "c9952a994c6582167d5e",
+      "internal_novelty": true,
+      "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
+      "strategy": "binomial_expansion",
       "verified": true
     },
     "d8f2b6ac3b7bfae0422b": {
@@ -289,6 +327,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789854896.748261,
+  "updated_at": 1789855202.4642878,
   "version": 1
 }
