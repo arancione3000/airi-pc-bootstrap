@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "computer"))
 
-from evolution import daemon, lab, lab_runtime, state_sync
+from evolution import cloud_cycle, daemon, lab, lab_runtime, state_sync
 
 
 def _git(args, cwd: Path | None = None):
@@ -360,3 +360,49 @@ def test_privacy_audit_rejects_unexpected_evidence_payload(monkeypatch, tmp_path
     audit = state_sync.privacy_audit_dataset(lab.DATA)
     assert audit["ok"] is False
     assert any("unexpected evidence fields" in error for error in audit["errors"])
+
+
+def test_cloud_cycle_zero_cap_keeps_searching_same_dataset(monkeypatch, tmp_path: Path):
+    state = tmp_path / "lab"
+    data = state / "data" / "verified.jsonl"
+    data.parent.mkdir(parents=True)
+    data.write_text("{}\n", encoding="utf-8")
+
+    monkeypatch.setattr(lab, "LAB_STATE", state)
+    monkeypatch.setattr(lab, "DATA", data)
+    monkeypatch.setattr(lab, "META", state / "lab-meta.json")
+    monkeypatch.setattr(cloud_cycle, "CLOUD_META", state / "cloud-meta.json")
+    monkeypatch.setattr(cloud_cycle, "MAX_CYCLES_PER_DATASET", 0)
+    monkeypatch.setattr(lab, "ensure_state_boundary", lambda: state)
+    monkeypatch.setattr(state_sync, "privacy_audit_dataset", lambda path: {"ok": True, "records": 96, "errors": []})
+    monkeypatch.setattr(state_sync, "dataset_digest", lambda: "same-dataset")
+    monkeypatch.setattr(cloud_cycle, "load_records", lambda path: [{"label": i % 2} for i in range(96)])
+    monkeypatch.setattr(cloud_cycle, "class_counts", lambda records: {"fake": 48, "real": 48})
+    monkeypatch.setattr(
+        cloud_cycle,
+        "_read_json",
+        lambda path, default: (
+            {"dataset_digest": "same-dataset", "cycles_on_dataset": 999}
+            if Path(path) == cloud_cycle.CLOUD_META
+            else default
+        ),
+    )
+    writes = []
+    monkeypatch.setattr(cloud_cycle, "_write_json", lambda path, value: writes.append(value))
+    monkeypatch.setattr(
+        cloud_cycle,
+        "run_evolution",
+        lambda state_dir, cfg: {
+            "run_id": "continuous-1000",
+            "promoted": False,
+            "promotion_reason": "candidate did not beat champion promotion criteria",
+            "candidate": {"f1": 0.99},
+        },
+    )
+    monkeypatch.setattr(lab, "prune_lab_storage", lambda: {})
+
+    result = cloud_cycle.run_cloud_cycle()
+    assert result["trained"] is True
+    assert result["continuous_search"] is True
+    assert result["cycles_on_dataset"] == 1000
+    assert result["run_id"] == "continuous-1000"
