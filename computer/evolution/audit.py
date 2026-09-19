@@ -81,6 +81,13 @@ def audit_state(state_dir: Path) -> dict[str, Any]:
         warnings.append(f"{len(stale_assignments)} split assignments no longer correspond to current non-canary records")
 
     champion_dir = state_dir / "champion"
+    swap_dirs = {
+        "backup": (state_dir / ".champion-old").exists(),
+        "pending": (state_dir / ".champion-new").exists(),
+    }
+    checks["champion_swap_dirs"] = swap_dirs
+    if swap_dirs["backup"] or swap_dirs["pending"]:
+        warnings.append("champion swap recovery artifacts are present")
     champion_files = {
         name: (champion_dir / name).exists()
         for name in ("genome.json", "model.pt", "metrics.json", "provenance.json")
