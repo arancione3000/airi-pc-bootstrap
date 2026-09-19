@@ -123,8 +123,9 @@ tests pass.
   rows;
 - discovery novelty now distinguishes memory novelty from source novelty and
   human novelty; source/human novelty remain unassessed automatically;
-- architecture benchmarks now reject duplicate/unknown experts, disconnected
-  nodes, bad topology and out-of-bound genome parameters;
+- architecture benchmarks and persistent health now reject duplicate/unknown
+  experts or strategies, disconnected nodes, bad topology, unknown proof-order
+  methods, broken research-strategy coupling and out-of-bound genome parameters;
 - CI exercises every SymPy domain through study signal -> weakness -> challenger
   -> expert/topology -> real domain benchmark, including polynomials;
 - evolution challenger selection now filters hard-gate-ineligible candidates
