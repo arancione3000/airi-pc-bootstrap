@@ -214,3 +214,108 @@ class SymPyMathLab:
             result={"polynomial": str(sp.factor(poly)), "expanded": str(sp.expand(poly))},
             verification={"all_input_points_exact": all(checks), "points": len(points)},
         )
+
+    def domain_probe(self, domain: str) -> MathLabResult:
+        """Run a deterministic, domain-specific capability probe.
+
+        The architecture benchmark calls this instead of rewarding an expert
+        merely because its name appears in the genome.
+        """
+        domain = str(domain)
+        if domain not in DOMAIN_ATLAS:
+            raise ValueError(f"unknown mathematical domain: {domain}")
+
+        if domain == "algebra":
+            return self.algebra_normal_forms("(x+1)^4-(x^4+4*x^3+6*x^2+4*x+1)")
+        if domain == "polynomials":
+            return self.polynomial_interpolate([(0, 1), (1, 4), (2, 9), (3, 16)])
+        if domain == "calculus":
+            derivative = self.derivative("x^4+2*x")
+            antiderivative = self.antiderivative("3*x^2")
+            checks = {
+                "derivative": derivative.ok,
+                "antiderivative": antiderivative.ok,
+            }
+        elif domain == "trigonometry":
+            return self.trig_normal_form("sin(x)^2+cos(x)^2")
+        elif domain == "number_theory":
+            return self.number_theory_profile(360)
+        elif domain == "linear_algebra":
+            return self.matrix_invariants([[2, 1], [1, 1]])
+        elif domain == "combinatorics":
+            checks = {
+                "binomial": sp.binomial(8, 3) == 56,
+                "factorial": sp.factorial(6) == 720,
+                "fibonacci": sp.fibonacci(10) == 55,
+            }
+        elif domain == "equations":
+            x = sp.Symbol("x", real=True)
+            solutions = set(sp.solve(sp.Eq(x**2 - 5*x + 6, 0), x))
+            checks = {"exact_solution_set": solutions == {sp.Integer(2), sp.Integer(3)}}
+        elif domain == "inequalities":
+            x = sp.Symbol("x", real=True)
+            reduced = sp.reduce_inequalities([x**2 >= 0], x)
+            checks = {"universal_nonnegative_square": bool(reduced == sp.true)}
+        elif domain == "sequences":
+            k = sp.Symbol("k", integer=True, positive=True)
+            n = sp.Symbol("n", integer=True, nonnegative=True)
+            total = sp.summation(k, (k, 1, n))
+            product = sp.product(k, (k, 1, 5))
+            checks = {
+                "symbolic_sum": sp.simplify(total - n * (n + 1) / 2) == 0,
+                "finite_product": product == 120,
+            }
+        elif domain == "special_functions":
+            checks = {
+                "gamma": sp.gamma(6) == 120,
+                "zeta": sp.simplify(sp.zeta(2) - sp.pi**2 / 6) == 0,
+                "erf": sp.erf(0) == 0,
+                "bessel": sp.besselj(0, 0) == 1,
+            }
+        elif domain == "geometry":
+            from sympy.geometry import Line, Point
+
+            p0 = Point(0, 0)
+            p1 = Point(3, 4)
+            diagonal_a = Line(Point(0, 0), Point(1, 1))
+            diagonal_b = Line(Point(0, 1), Point(1, 0))
+            checks = {
+                "exact_distance": p0.distance(p1) == 5,
+                "line_intersection": diagonal_a.intersection(diagonal_b) == [Point(sp.Rational(1, 2), sp.Rational(1, 2))],
+            }
+        elif domain == "probability":
+            from sympy.stats import Die, E, variance
+
+            die = Die("mathesis_probe_die", 6)
+            checks = {
+                "expectation": sp.simplify(E(die) - sp.Rational(7, 2)) == 0,
+                "variance": sp.simplify(variance(die) - sp.Rational(35, 12)) == 0,
+            }
+        elif domain == "discrete_math":
+            p, q = sp.symbols("p q", boolean=True)
+            implication = sp.Implies(p, q)
+            checks = {
+                "logic_equivalence": sp.simplify_logic(sp.Equivalent(implication, sp.Or(sp.Not(p), q))) == sp.true,
+                "finite_sets": sp.FiniteSet(1, 2, 3).intersection(sp.FiniteSet(2, 3, 4)) == sp.FiniteSet(2, 3),
+            }
+        elif domain == "optimization":
+            x, y = sp.symbols("x y", real=True)
+            objective = (x - 3) ** 2 + (y + 2) ** 2
+            gradient = [sp.diff(objective, v) for v in (x, y)]
+            stationary = sp.solve(gradient, (x, y), dict=True)
+            checks = {
+                "stationary_point": stationary == [{x: 3, y: -2}],
+                "positive_hessian": sp.hessian(objective, (x, y)) == sp.diag(2, 2),
+            }
+        else:  # pragma: no cover - DOMAIN_ATLAS additions must add a probe.
+            raise AssertionError(f"DOMAIN_ATLAS domain lacks a probe: {domain}")
+
+        ok = all(bool(value) for value in checks.values())
+        return MathLabResult(
+            ok=ok,
+            domain=domain,
+            operation="domain_probe",
+            result={"checks": {name: bool(value) for name, value in checks.items()}},
+            verification={"all_domain_checks": ok, **{name: bool(value) for name, value in checks.items()}},
+        )
+
