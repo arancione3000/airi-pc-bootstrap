@@ -296,3 +296,10 @@ Mathlib kick are explicitly connection-bounded, total-time-bounded and retried.
 A slow API response therefore cannot hold an autonomous runner indefinitely.
 The continuum job keeps a larger overall timeout margin so a cold environment
 can still finish mathematical work, persist state and hand off safely.
+
+
+If the active-run lookup itself fails after bounded retries, the continuum
+attempts one serialized successor dispatch rather than abandoning the chain.
+The GitHub concurrency group limits overlap. The watchdog treats an
+unreadable continuum-run listing as a stale/uncertain condition and attempts
+the normal recovery path.
