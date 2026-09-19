@@ -115,7 +115,7 @@ def import_tsv(tsv_path: Path, verified_path: Path, split: str, source_url: str 
                 "source": f"LIAR:{item_id}",
                 "evidence": json.dumps(evidence, ensure_ascii=False, sort_keys=True),
             })
-    batch = append_verified_many(verified_path, pending)
+    batch = append_verified_many(verified_path, pending, include_rows=False)
     for key in ("accepted", "duplicates", "conflicts", "invalid"):
         stats[key] += int(batch.get(key, 0))
     return stats
