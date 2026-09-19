@@ -1,5 +1,5 @@
 {
-  "cycle": 35,
+  "cycle": 36,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -175,7 +175,7 @@
     "binomial_expansion": 7,
     "difference_of_powers": 9,
     "faulhaber_interpolation": 6,
-    "finite_geometric_identity": 8
+    "finite_geometric_identity": 9
   },
   "theorems": {
     "1a9f202b40ac12dfe986": {
@@ -786,6 +786,46 @@
       "strategy": "finite_geometric_identity",
       "verified": true
     },
+    "805354d8fbde963aa334": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "(x-1)*(x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^9-1",
+        "status": "verified"
+      },
+      "complexity": 9,
+      "discovered_at": 1789862348.5298293,
+      "human_novelty": "unassessed",
+      "id": "805354d8fbde963aa334",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "(x-1)*(x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^9-1",
+      "strategy": "finite_geometric_identity",
+      "verified": true
+    },
     "84ee8a2c70d846f4067d": {
       "certificate": {
         "counterexample": null,
@@ -1311,6 +1351,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789862043.4513135,
+  "updated_at": 1789862348.5298293,
   "version": 3
 }
