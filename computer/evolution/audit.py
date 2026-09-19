@@ -37,11 +37,15 @@ def audit_state(state_dir: Path) -> dict[str, Any]:
                 except Exception:
                     malformed_lines += 1
     records = load_records(data_path)
+    skipped_rows = max(0, raw_lines - len(records))
     checks["dataset_raw_lines"] = raw_lines
     checks["dataset_malformed_lines"] = malformed_lines
+    checks["dataset_unloadable_rows"] = skipped_rows
     checks["dataset_records"] = len(records)
     if malformed_lines:
         errors.append(f"verified dataset contains {malformed_lines} malformed JSONL rows")
+    if skipped_rows > malformed_lines:
+        errors.append(f"verified dataset contains {skipped_rows - malformed_lines} rows with invalid schema or labels")
     checks["class_counts"] = class_counts(records)
 
     labels_by_text: dict[str, set[int]] = {}
