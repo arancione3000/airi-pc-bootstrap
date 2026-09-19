@@ -1,33 +1,42 @@
 {
-  "batch_size": 16,
+  "batch_size": 24,
   "blocks": [
     {
       "activation": "gelu",
-      "dropout": 0.101,
+      "dropout": 0.03,
       "heads": 1,
       "kernel": 5,
-      "kind": "gru",
+      "kind": "conv",
       "residual": true,
-      "width": 48
+      "width": 64
     },
     {
-      "activation": "gelu",
-      "dropout": 0.22,
-      "heads": 1,
-      "kernel": 5,
+      "activation": "tanh",
+      "dropout": 0.227,
+      "heads": 2,
+      "kernel": 7,
       "kind": "attention",
       "residual": true,
-      "width": 48
+      "width": 64
+    },
+    {
+      "activation": "relu",
+      "dropout": 0.159,
+      "heads": 1,
+      "kernel": 3,
+      "kind": "conv",
+      "residual": true,
+      "width": 32
     }
   ],
-  "dropout": 0.114,
+  "dropout": 0.203,
   "embed_dim": 48,
   "generation": 0,
-  "genome_id": "g0-002",
-  "learning_rate": 0.001757378928771773,
-  "max_len": 192,
-  "mutation_rate": 0.276,
+  "genome_id": "g0-000",
+  "learning_rate": 0.0031766599004730577,
+  "max_len": 96,
+  "mutation_rate": 0.458,
   "parents": [],
-  "structural_rate": 0.293,
-  "weight_decay": 0.00021684826079768375
+  "structural_rate": 0.399,
+  "weight_decay": 1.1585677013200663e-05
 }
