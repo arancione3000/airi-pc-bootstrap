@@ -200,3 +200,20 @@ def test_runtime_start_blocks_on_hard_audit_error(monkeypatch):
     result = runtime.start(auto_setup=False)
     assert result["ok"] is False
     assert result["reason"] == "state_audit_failed"
+
+
+def test_verified_queue_conflict_with_existing_dataset_is_quarantined(monkeypatch, tmp_path: Path):
+    claim = "Existing verified claim must not flip labels"
+    from evolution.data import append_verified
+    append_verified(tmp_path / "data" / "verified.jsonl", {"text": claim, "label": 1, "source": "manual:test", "evidence": "trusted"})
+    mapping = {
+        "https://one.example/a": claimreview.extract_claimreviews(_claimreview_html(claim, "False"), "https://one.example/a"),
+        "https://two.example/b": claimreview.extract_claimreviews(_claimreview_html(claim, "False"), "https://two.example/b"),
+    }
+    monkeypatch.setattr(claimreview, "fetch_claimreviews", lambda url: mapping[url])
+    queued = queue_claim(tmp_path, claim)
+    result = verify_queued_claim(tmp_path, queued["id"], list(mapping), min_sources=2)
+    assert result["status"] == "conflict"
+    assert "conflicting verified labels" in result["ingest_error"]
+    rows = load_records(tmp_path / "data" / "verified.jsonl")
+    assert len(rows) == 1 and rows[0]["label"] == 1
