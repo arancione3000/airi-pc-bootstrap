@@ -200,7 +200,7 @@ def evaluate_genome(
         add("search:symbolic_depth", False, critical=False, detail=repr(exc))
 
     learned_results: list[dict[str, Any]] = []
-    for index, statement in enumerate((learned_theorems or [])[:16]):
+    for index, statement in enumerate(learned_theorems or []):
         try:
             cert = verifier.verify_relation(statement)
             ok = bool(cert.ok)
