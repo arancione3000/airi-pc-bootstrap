@@ -154,33 +154,69 @@ jobs:
           mkdir -p "$AIRI_ROOT"
           .venv/bin/python - <<'PY'
           from evolution import lab
+
+          goals = [
+              "tiny task",
+              "read a medium document with several words for analysis",
+              "line one\nline two\nline three",
+              "inspect https://example.invalid/resource",
+              "inspect /tmp/example/path/file.txt safely",
+              "numbers 12 345 6789 mixed into a structured request",
+              "word " * 35,
+              "word " * 90,
+          ]
+          arg_variants = [
+              {"x": 1},
+              {"x": "value", "y": 2},
+              {"x": True, "y": []},
+              {"x": {}, "y": None, "z": 1.5},
+              {"x": [1,2,3]},
+              {"x": "v", "y": "w", "z": "q"},
+              {"x": 1, "y": 2, "z": 3, "w": 4},
+              {},
+          ]
+          candidate_variants = [
+              ["computer_file_read"],
+              ["computer_file_read","computer_browser_text"],
+              ["computer_file_read","computer_file_search"],
+              ["computer_file_read","computer_project_analyze"],
+              ["computer_browser_open"],
+              ["computer_browser_open","computer_research"],
+              ["computer_browser_open","computer_browser_text"],
+              ["computer_browser_open","computer_project_analyze"],
+          ]
+
           for i in range(24):
+              k=i % len(goals)
               lab.record_execution(
-                  goal=f"Read verified project file documentation sample {i}",
+                  goal=goals[k],
                   operation="read",
                   tool="computer_file_read",
-                  args={"path": f"/private/success/{i}.txt"},
+                  args=arg_variants[k],
                   success=True,
-                  latency_ms=20,
+                  latency_ms=20 + k,
                   task_id=f"s{i}",
                   node_id="n1",
-                  candidates=["computer_file_read","computer_browser_text"],
+                  candidates=candidate_variants[k],
               )
               lab.record_execution(
-                  goal=f"Open unavailable remote resource sample {i}",
+                  goal=goals[(k+3) % len(goals)],
                   operation="browser_open",
                   tool="computer_browser_open",
-                  args={"url": f"https://private.invalid/{i}"},
+                  args=arg_variants[(k+5) % len(arg_variants)],
                   success=False,
-                  latency_ms=900,
+                  latency_ms=900 + k,
                   error="network connection failed",
                   task_id=f"f{i}",
                   node_id="n1",
-                  candidates=["computer_browser_open"],
+                  candidates=candidate_variants[(k+4) % len(candidate_variants)],
               )
           st=lab.status()
           assert st["raw_observations"] == 48, st
-          assert "private.invalid" not in lab.RAW.read_text(encoding="utf-8")
+          assert st["unique_route_features"] >= 12, st
+          raw=lab.RAW.read_text(encoding="utf-8")
+          assert "example.invalid" not in raw
+          assert "/tmp/example/path" not in raw
           PY
 
           .venv/bin/python -m evolution.lab_worker
@@ -190,6 +226,9 @@ jobs:
           st=lab.status()
           assert st["training_records"] == 48, st
           assert st["last_cycle"] is not None, st
+          assert st["last_cycle"].get("run_id"), st
+          assert st["champion"] is not None, st
+          assert st["champion_compatible"] is True, st
           print({"lab_status":st})
           PY
 
