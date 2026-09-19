@@ -1,0 +1,110 @@
+name: MATHESIS Omega verification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'computer/mathesis/**'
+      - 'tests/test_mathesis.py'
+      - '.github/workflows/mathesis.yml'
+      - '.github/workflows/mathesis-continuum.yml'
+      - '.github/workflows/mathesis-watchdog.yml'
+      - '.ai/PROJECT_MEMORY.md'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: ${{ github.workspace }}/computer
+      MATHESIS_STATE_DIR: ${{ runner.temp }}/mathesis-state
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install mathematical runtime
+        run: |
+          python -m pip install --disable-pip-version-check -r computer/mathesis/requirements.txt
+          python -m pip install --disable-pip-version-check pytest
+
+      - name: Install stable Lean 4
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf \
+            https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            -o /tmp/elan-init.sh
+          sh /tmp/elan-init.sh -y --default-toolchain leanprover/lean4:v4.34.0
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/lean" --version
+
+      - name: Lean kernel smoke test
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          cat > /tmp/MathesisSmoke.lean <<'LEAN'
+          example : (2 + 3 : Nat) = 5 := by decide
+          example : (7 * 6 : Nat) = 42 := by decide
+          LEAN
+          lean /tmp/MathesisSmoke.lean
+
+      - name: Compile MATHESIS sources
+        run: |
+          python -m compileall -q computer/mathesis tests/test_mathesis.py
+
+      - name: Full MATHESIS tests
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          pytest -q tests/test_mathesis.py
+
+      - name: Read-only web contract smoke
+        run: |
+          python - <<'PY'
+          from evolution.read_only_research import fetch_text
+          page = fetch_text(
+              "https://lean-lang.org/doc/reference/latest/releases/",
+              timeout=20,
+              max_bytes=1_000_000,
+          )
+          assert page["url"].startswith("https://")
+          assert page["bytes"] > 100
+          assert "Lean" in page["text"]
+          print({"ok": True, "url": page["url"], "bytes": page["bytes"]})
+          PY
+
+      - name: End-to-end language and proof smoke
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          python -m mathesis.cli "calcola 12*7"
+          python -m mathesis.cli "risolvi 2*x+3=7"
+          python -m mathesis.cli "dimostra che (x+1)^2=x^2+2*x+1"
+          python -m mathesis.cli "scrivi una funzione mcd"
+          python -m mathesis.cli "scrivimi il tuo prossimo modello"
+          python -m mathesis.cli --status
+
+      - name: Verify transactional self-rewrite artifacts
+        run: |
+          test -f "$MATHESIS_STATE_DIR/champion.json"
+          test -f "$MATHESIS_STATE_DIR/router.json"
+          test -f "$MATHESIS_STATE_DIR/candidate_model.py"
+          test -f "$MATHESIS_STATE_DIR/champion_model.py"
+          test -f "$MATHESIS_STATE_DIR/history.jsonl"
+          python - <<'PY'
+          import ast
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["MATHESIS_STATE_DIR"])
+          champion = json.loads((root / "champion.json").read_text())
+          assert champion["generation"] >= 1
+          tree = ast.parse((root / "champion_model.py").read_text())
+          assert not any(isinstance(n, (ast.Import, ast.ImportFrom, ast.Call)) for n in ast.walk(tree))
+          print({"ok": True, "generation": champion["generation"], "genome_id": champion["genome_id"]})
+          PY
