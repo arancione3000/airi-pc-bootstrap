@@ -127,14 +127,17 @@ class ConjectureDiscoveryEngine:
 
         polynomial = sp.expand(sp.interpolate(samples, n))
         base_ok = sp.expand(polynomial.subs(n, 0)) == 0
-        difference = sp.expand(polynomial.subs(n, n + 1) - polynomial)
-        target = sp.expand((n + 1) ** power)
-        recurrence_statement = f"{sp.sstr(difference)} = {sp.sstr(target)}"
+        factored_polynomial = sp.factor(polynomial)
+        shifted_factored = factored_polynomial.subs(n, n + 1)
+        recurrence_statement = (
+            f"({sp.sstr(shifted_factored)})-({sp.sstr(factored_polynomial)}) = (n+1)^{power}"
+        )
+        recurrence_nontrivial = _relation_is_structurally_nontrivial(recurrence_statement)
         recurrence_cert = self.verifier.verify_relation(recurrence_statement)
         sample_ok = all(sp.expand(polynomial.subs(n, x) - y) == 0 for x, y in samples)
 
         statement = f"sum(k^{power}, k=1..n) = {sp.sstr(sp.factor(polynomial))} for integer n>=0"
-        verified = bool(base_ok and sample_ok and recurrence_cert.ok)
+        verified = bool(base_ok and sample_ok and recurrence_nontrivial and recurrence_cert.ok)
         return {
             "strategy": "faulhaber_interpolation",
             "statement": statement,
@@ -151,7 +154,8 @@ class ConjectureDiscoveryEngine:
                 "base_case": base_ok,
                 "sample_count": len(samples),
                 "recurrence": recurrence_cert.to_dict(),
-                "polynomial": str(sp.factor(polynomial)),
+                "recurrence_nontrivial": bool(recurrence_nontrivial),
+                "polynomial": str(factored_polynomial),
             },
             "verified": verified,
             "complexity": power,
