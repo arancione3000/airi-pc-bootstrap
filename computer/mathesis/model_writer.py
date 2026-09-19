@@ -8,7 +8,7 @@ from .types import ArchitectureGenome
 
 
 def render_model_module(genome: ArchitectureGenome) -> str:
-    payload = json.dumps(genome.to_dict(), indent=2, sort_keys=True)
+    payload = pprint.pformat(genome.to_dict(), sort_dicts=True, width=100)
     source = (
         '"""Generated MATHESIS-Ω architecture model.\n\n'
         "This file is data-bearing executable Python with no imports/calls. "
