@@ -269,6 +269,9 @@ def _scheduler_loop():
                 elif action == 'evolution_maintenance':
                     from evolution import runtime as evolution_runtime
                     result = evolution_runtime.maintenance(mode='safe')
+                elif action == 'evolution_lab_maintenance':
+                    from evolution import lab_runtime
+                    result = lab_runtime.maintenance()
                 else: raise ValueError(f'unsupported scheduled action: {action}')
                 job['last_result'] = result; job['last_error'] = None
             except Exception as exc:
@@ -292,7 +295,7 @@ def scheduler_start():
 def schedule_job(name: str, action: str, interval_seconds: int, run_now: bool = False) -> dict[str, Any]:
     scheduler_start()
     if not re.fullmatch(r'[A-Za-z0-9._-]{1,80}', name): raise ValueError('invalid job name')
-    if action not in {'health', 'cleanup_scan', 'persistence_verify', 'evolution_maintenance'}: raise ValueError('unsupported scheduled action')
+    if action not in {'health', 'cleanup_scan', 'persistence_verify', 'evolution_maintenance', 'evolution_lab_maintenance'}: raise ValueError('unsupported scheduled action')
     if int(interval_seconds) < 5: raise ValueError('interval_seconds must be >= 5')
     _jobs[name] = {'name': name, 'action': action, 'interval_seconds': int(interval_seconds), 'enabled': True,
                    'created_at': time.time(), 'next_run': time.time() if run_now else time.time() + int(interval_seconds),
