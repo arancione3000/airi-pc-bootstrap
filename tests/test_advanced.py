@@ -46,6 +46,9 @@ def test_research_local_http(tmp_path, monkeypatch):
 
 
 def test_scheduler_rejects_unsafe_actions(tmp_path, monkeypatch):
+    # This test isolates scheduler action validation from the product's
+    # default shadow-lab autopilot job, which has its own dedicated tests.
+    monkeypatch.setenv('AIRI_EVOLUTION_LAB_AUTOPILOT', '0')
     monkeypatch.setattr(advanced, 'SCHEDULER', tmp_path / 'scheduler.json')
     monkeypatch.setattr(advanced, '_scheduler_started', False)
     monkeypatch.setattr(advanced, '_jobs', {})
