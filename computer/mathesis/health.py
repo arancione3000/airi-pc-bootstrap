@@ -11,6 +11,7 @@ from .knowledge import default_state_dir
 from .neural_graph import INTENTS, GrowingNeuralRouter
 from .safe_math import parse_relation
 from .sympy_lab import DOMAIN_ATLAS
+from .types import ArchitectureGenome
 
 
 def _read_json(path: Path, fallback: Any) -> Any:
@@ -23,11 +24,31 @@ def _read_json(path: Path, fallback: Any) -> Any:
 def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
     root = Path(state_dir or default_state_dir()).resolve()
     engine = SelfEvolutionEngine(root)
-    champion = engine.load_champion()
     checks: list[dict[str, Any]] = []
 
     def check(name: str, ok: bool, detail: Any = None) -> None:
         checks.append({"name": name, "ok": bool(ok), "detail": detail})
+
+    # Never let SelfEvolutionEngine's safe default fallback hide a corrupt
+    # persisted champion from the pre-push health gate.
+    champion_path = root / "champion.json"
+    champion_payload = _read_json(champion_path, None)
+    champion_valid = isinstance(champion_payload, dict)
+    champion_error: str | None = None
+    if champion_valid:
+        try:
+            champion = ArchitectureGenome.from_dict(champion_payload)
+        except Exception as exc:
+            champion_valid = False
+            champion_error = repr(exc)
+            champion = engine.load_champion()
+    else:
+        champion = engine.load_champion()
+    check(
+        "state:champion_json_valid",
+        champion_valid,
+        champion_error or ("present" if champion_path.exists() else "missing"),
+    )
 
     # Architecture / curriculum closure.
     missing_domains = sorted(set(DOMAIN_ATLAS) - set(_ALLOWED_EXPERTS))
@@ -132,6 +153,7 @@ def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
         verifiers = status.get("verifiers") or {}
         check("status:z3_available", verifiers.get("z3_available") is True, verifiers)
         check("status:sympy_present", bool(verifiers.get("sympy")), verifiers)
+        check("status:lean_available", verifiers.get("lean_available") is True, verifiers)
 
     last = _read_json(root / "last-cycle.json", None)
     if isinstance(last, dict):
