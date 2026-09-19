@@ -143,7 +143,7 @@ jobs:
 
           active_other=0
           api_base="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/mathesis-continuum.yml/runs"
-          for status in queued in_progress; do
+          for status in pending queued in_progress; do
             if payload="$(curl --fail-with-body -sS               -H "Accept: application/vnd.github+json"               -H "Authorization: Bearer ${GH_TOKEN}"               -H "X-GitHub-Api-Version: 2022-11-28"               "${api_base}?status=${status}&per_page=30")"; then
               count="$(jq --argjson current "${GITHUB_RUN_ID}"                 '[.workflow_runs[] | select(.id != $current)] | length' <<<"$payload")"
               active_other="$((active_other + count))"

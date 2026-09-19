@@ -55,7 +55,7 @@ jobs:
           echo "age_seconds=$age" >> "$GITHUB_OUTPUT"
 
           active=0
-          for status in in_progress queued; do
+          for status in pending queued in_progress; do
             runs="$(curl --fail-with-body -sS \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${GH_TOKEN}" \

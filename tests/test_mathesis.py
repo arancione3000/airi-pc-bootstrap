@@ -413,6 +413,7 @@ def test_continuum_has_cron_watchdog_and_self_handoff_contract():
     assert "Hand off to the next autonomous cycle" in workflow
     assert "actions/workflows/mathesis-continuum.yml/dispatches" in workflow
     assert "Another MATHESIS continuum run is already queued/running" in workflow
+    assert "for status in pending queued in_progress" in workflow
     assert "github.ref == 'refs/heads/main'" in workflow
     assert "3,8,13,18,23,28,33,38,43,48,53,58" in workflow
 
@@ -442,3 +443,8 @@ def test_failed_curriculum_retries_on_next_cycle():
     assert _should_study(5, 3, "research_error") is True
     assert _should_study(6, 3, "studied") is True
     assert _should_study(5, 3, "studied") is False
+
+
+def test_watchdog_treats_pending_continuum_as_active():
+    workflow = (ROOT / ".github" / "workflows" / "mathesis-watchdog.yml").read_text(encoding="utf-8")
+    assert "for status in pending queued in_progress" in workflow
