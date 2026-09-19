@@ -14,12 +14,13 @@ If automatic research cannot establish consensus, leave the claim pending. Use A
 
 Use `safe` mode by default. Use `experimental` only when broader architecture search and additional compute are acceptable. Champion promotion is multi-seed, majority-gated and protected by a persistent golden canary set that is never used for training. Conflicting verified labels are quarantined instead of learned. Training replay is provenance-aware so large bootstrap corpora do not drown out newer ClaimReview evidence.
 
-Use `report` for macro-F1, per-class F1, parameter count, model size, CPU latency, drift status and edge metadata. Predictions may return `uncertain` below the champion abstention threshold; do not force an uncertain result into fake/real. Use `drift` to inspect performance on post-champion verified examples. Use `edge-quantize` before edge deployment; keep the INT8 model only when the measured gate accepts its quality/efficiency trade-off. Use `export --torchscript` for a portable champion bundle; accepted INT8 artifacts are included automatically.
+Use `audit` first when diagnosing the subsystem; it checks dataset integrity, frozen partitions, champion/edge consistency, stale locks and unpruned trial artifacts. Use `report` for macro-F1, per-class F1, parameter count, model size, CPU latency, drift status and edge metadata. Predictions may return `uncertain` below the champion abstention threshold; do not force an uncertain result into fake/real. Use `drift` to inspect performance on post-champion verified examples. Use `edge-quantize` before edge deployment; keep the INT8 model only when the measured gate accepts its quality/efficiency trade-off. Use `export --torchscript` for a portable champion bundle; accepted INT8 artifacts are included automatically.
 
 The output is a learned reliability estimate, not proof of factual truth. For consequential claims, surface the supporting fact-check sources to the user.
 
 ## Tools
 - computer_evolution_status
+- computer_evolution_audit
 - computer_evolution_bootstrap_liar
 - computer_evolution_factcheck
 - computer_evolution_predict
