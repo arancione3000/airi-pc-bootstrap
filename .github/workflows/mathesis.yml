@@ -80,6 +80,27 @@ jobs:
           print({"ok": True, "url": page["url"], "bytes": page["bytes"]})
           PY
 
+      - name: Live multi-provider mathematical source discovery
+        run: |
+          python - <<'PY'
+          from mathesis.research import ReadOnlyResearcher
+
+          result = ReadOnlyResearcher().search(
+              "algebra mathematics SymPy Lean mathlib theorem proving",
+              max_sources=3,
+          )
+          assert result["ok"] is True, result
+          assert len(result["sources"]) >= 2, result
+          domains = {row["domain"] for row in result["sources"]}
+          assert len(domains) >= 2, result
+          assert all(row["url"].startswith("https://") for row in result["sources"])
+          print({
+              "ok": True,
+              "domains": sorted(domains),
+              "sources": [row["url"] for row in result["sources"]],
+          })
+          PY
+
       - name: End-to-end language and proof smoke
         run: |
           export PATH="$HOME/.elan/bin:$PATH"
