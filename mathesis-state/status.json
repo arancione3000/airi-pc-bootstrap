@@ -1,6 +1,6 @@
 {
   "curriculum": {
-    "cursor": 5,
+    "cursor": 6,
     "domains": [
       "algebra",
       "polynomials",
@@ -19,9 +19,9 @@
       "optimization"
     ],
     "last": {
-      "at": 1789856742.9971228,
-      "domain": "number_theory",
-      "query": "number_theory mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+      "at": 1789857060.1062474,
+      "domain": "linear_algebra",
+      "query": "linear_algebra mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
       "sources": [
         {
           "authority_hint": 0.75,
@@ -50,25 +50,25 @@
     },
     "ok": true,
     "retry_counts": {},
-    "studies": 5
+    "studies": 6
   },
   "discovery": {
-    "cycle": 14,
+    "cycle": 15,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 9,
+    "stored": 10,
     "strategies": {
       "binomial_expansion": 4,
-      "difference_of_powers": 3,
+      "difference_of_powers": 4,
       "faulhaber_interpolation": 3,
       "finite_geometric_identity": 3
     },
     "symbolic_depth": 12,
-    "verified": 9
+    "verified": 10
   },
   "evolution": {
     "benchmark": {
@@ -128,6 +128,15 @@
           ],
           "ok": true,
           "statement": "(x+y)^14 = x**14 + 14*x**13*y + 91*x**12*y**2 + 364*x**11*y**3 + 1001*x**10*y**4 + 2002*x**9*y**5 + 3003*x**8*y**6 + 3432*x**7*y**7 + 3003*x**6*y**8 + 2002*x**5*y**9 + 1001*x**4*y**10 + 364*x**3*y**11 + 91*x**2*y**12 + 14*x*y**13 + y**14",
+          "status": "verified"
+        },
+        {
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "x^2-y^2 = (x - y)*(x + y)",
           "status": "verified"
         }
       ],
@@ -191,7 +200,7 @@
         },
         {
           "critical": true,
-          "detail": 98.999638,
+          "detail": 98.999623,
           "name": "program:gcd",
           "ok": true
         },
@@ -333,6 +342,12 @@
           "critical": true,
           "detail": "verified",
           "name": "learned_theorem:5",
+          "ok": true
+        },
+        {
+          "critical": true,
+          "detail": "verified",
+          "name": "learned_theorem:6",
           "ok": true
         },
         {
@@ -745,7 +760,8 @@
       "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
       "x^12-y^12 = (x - y)*(x**11 + x**10*y + x**9*y**2 + x**8*y**3 + x**7*y**4 + x**6*y**5 + x**5*y**6 + x**4*y**7 + x**3*y**8 + x**2*y**9 + x*y**10 + y**11)",
       "(x-1)*(x**12 + x**11 + x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^13-1",
-      "(x+y)^14 = x**14 + 14*x**13*y + 91*x**12*y**2 + 364*x**11*y**3 + 1001*x**10*y**4 + 2002*x**9*y**5 + 3003*x**8*y**6 + 3432*x**7*y**7 + 3003*x**6*y**8 + 2002*x**5*y**9 + 1001*x**4*y**10 + 364*x**3*y**11 + 91*x**2*y**12 + 14*x*y**13 + y**14"
+      "(x+y)^14 = x**14 + 14*x**13*y + 91*x**12*y**2 + 364*x**11*y**3 + 1001*x**10*y**4 + 2002*x**9*y**5 + 3003*x**8*y**6 + 3432*x**7*y**7 + 3003*x**6*y**8 + 2002*x**5*y**9 + 1001*x**4*y**10 + 364*x**3*y**11 + 91*x**2*y**12 + 14*x*y**13 + y**14",
+      "x^2-y^2 = (x - y)*(x + y)"
     ],
     "ok": true,
     "self_rewrite_scope": "architecture DSL/router state only",
@@ -760,11 +776,11 @@
   },
   "guarantee": "proof-gated evolving system; not an infallibility or human-novelty guarantee",
   "knowledge": {
-    "nodes": 13,
+    "nodes": 14,
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/knowledge.json",
     "status_counts": {
-      "verified": 13
+      "verified": 14
     }
   },
   "model": {

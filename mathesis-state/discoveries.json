@@ -1,5 +1,5 @@
 {
-  "cycle": 14,
+  "cycle": 15,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -173,7 +173,7 @@
   },
   "strategy_counts": {
     "binomial_expansion": 4,
-    "difference_of_powers": 3,
+    "difference_of_powers": 4,
     "faulhaber_interpolation": 3,
     "finite_geometric_identity": 3
   },
@@ -352,6 +352,46 @@
       "quality_gate": "structurally_nontrivial_and_proof_gated",
       "statement": "sum(k^7, k=1..n) = n**2*(n + 1)**2*(3*n**4 + 6*n**3 - n**2 - 4*n + 2)/24 for integer n>=0",
       "strategy": "faulhaber_interpolation",
+      "verified": true
+    },
+    "ae00b8164b970e48a65f": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "x^2-y^2 = (x - y)*(x + y)",
+        "status": "verified"
+      },
+      "complexity": 2,
+      "discovered_at": 1789857057.7919915,
+      "human_novelty": "unassessed",
+      "id": "ae00b8164b970e48a65f",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "x^2-y^2 = (x - y)*(x + y)",
+      "strategy": "difference_of_powers",
       "verified": true
     },
     "c9952a994c6582167d5e": {
@@ -583,6 +623,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789856741.1206815,
+  "updated_at": 1789857057.7919915,
   "version": 3
 }
