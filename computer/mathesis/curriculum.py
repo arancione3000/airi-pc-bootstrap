@@ -29,6 +29,7 @@ class MathematicalCurriculum:
         try:
             value = json.loads(self.path.read_text(encoding="utf-8"))
             if isinstance(value, dict):
+                value["version"] = max(2, int(value.get("version", 1)))
                 value.setdefault("cursor", 0)
                 value.setdefault("studies", [])
                 value.setdefault("retry_counts", {})
@@ -98,6 +99,7 @@ class MathematicalCurriculum:
         state = self._load()
         return {
             "ok": True,
+            "version": int(state.get("version", 2)),
             "cursor": int(state.get("cursor", 0)),
             "studies": len(state.get("studies", [])),
             "last": state.get("studies", [])[-1] if state.get("studies") else None,
