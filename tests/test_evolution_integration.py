@@ -16,6 +16,7 @@ def test_cli_exposes_autonomous_pipeline_commands():
         ["factcheck", "a sufficiently long claim"],
         ["queue-add", "a sufficiently long claim"],
         ["report"],
+        ["audit"],
         ["drift"],
         ["edge-quantize"],
         ["predict-edge", "a sufficiently long claim"],
@@ -31,6 +32,7 @@ def test_server_exposes_native_evolution_mcp_tools():
     text = (ROOT / "computer" / "server.py").read_text(encoding="utf-8")
     expected = [
         "computer_evolution_status",
+        "computer_evolution_audit",
         "computer_evolution_bootstrap_liar",
         "computer_evolution_factcheck",
         "computer_evolution_predict",
