@@ -56,6 +56,10 @@ jobs:
         working-directory: computer/mathesis/lean
         run: |
           set -euo pipefail
+          # cache.get intentionally may omit a tiny aggregate object such as
+          # Mathlib.olean. Build the dependency target first so Lean has a
+          # complete import graph, then verify our theorem file and library.
+          lake build Mathlib
           lake env lean Mathesis/DiscoverySmoke.lean
           lake build
 
