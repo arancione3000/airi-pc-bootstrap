@@ -18,6 +18,8 @@ Use `audit` first when diagnosing the subsystem; it checks dataset integrity, fr
 
 The output is a learned reliability estimate, not proof of factual truth. For consequential claims, surface the supporting fact-check sources to the user.
 
+The separate `evolution-lab` skill is for the perpetual shadow route-learning sandbox. Do not confuse its advisory route-success model with this fact/reliability classifier, and never use the shadow lab as a source of factual truth.
+
 ## Tools
 - computer_evolution_status
 - computer_evolution_audit

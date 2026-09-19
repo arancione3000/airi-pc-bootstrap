@@ -124,7 +124,25 @@ class ControlPlane:
         except Exception as exc: error=str(exc)
         latency=(__import__('time').perf_counter()-started)*1000; self.capabilities.probe(tool,error is None,latency,error or ''); REGISTRY.record(tool,error is None,latency,error or '')
         if transaction_id: self.transactions.step(transaction_id,operation,tool=tool,input_data=args,result=result,error=error)
-        row=self.tasks.update(node_id,'completed' if error is None else 'failed',output=result,error=error,checkpoint={'tool':tool,'latency_ms':latency}) if finalize else self.tasks.read(task_id); self.audit.event(kind='execution',task_id=task_id,node_id=node_id,tool=tool,operation=operation,input=args,output=result,error=error); return {'ok':error is None,'selected_tool':tool,'route':route,'result':result,'error':error,'task':row,'latency_ms':round(latency,2)}
+        row=self.tasks.update(node_id,'completed' if error is None else 'failed',output=result,error=error,checkpoint={'tool':tool,'latency_ms':latency}) if finalize else self.tasks.read(task_id)
+        self.audit.event(kind='execution',task_id=task_id,node_id=node_id,tool=tool,operation=operation,input=args,output=result,error=error)
+        try:
+            from evolution.lab import record_execution as _lab_record_execution
+            _lab_record_execution(
+                goal=str((row or {}).get('goal','')),
+                operation=operation,
+                tool=tool,
+                args=args,
+                success=error is None,
+                latency_ms=latency,
+                error=error,
+                task_id=task_id,
+                node_id=node_id,
+                candidates=list(candidates or []),
+            )
+        except Exception as lab_exc:
+            self.audit.event(kind='evolution_lab_record_error',task_id=task_id,node_id=node_id,error=str(lab_exc))
+        return {'ok':error is None,'selected_tool':tool,'route':route,'result':result,'error':error,'task':row,'latency_ms':round(latency,2)}
     def _classify_failure(self,error):
         text=str(error or '').lower()
         if not text: return 'unknown'

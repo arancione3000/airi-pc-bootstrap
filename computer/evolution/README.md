@@ -173,3 +173,69 @@ The audit checks dataset label conflicts, duplicate rows, canary/split overlap, 
 ### INT8 backend compatibility note
 
 PyTorch is moving quantization development from legacy `torch.ao.quantization` APIs to TorchAO. Airi-PC currently keeps `torch.ao.quantization.quantize_dynamic` as a compatibility backend because this project still supports PyTorch 2.7+, while newer TorchAO releases target newer PyTorch bases. Every INT8 attempt records the active backend, PyTorch version and migration target (`torchao.quantization.quantize_`) so the backend can be migrated explicitly when the project's minimum PyTorch version is raised.
+
+
+## Shadow Evolution Lab: perpetual route learning without production control
+
+Airi-PC now has a second, deliberately isolated use of neuroevolution: the **Shadow Evolution Lab**. It learns from the Control Plane's real execution outcomes and estimates which candidate tool is likely to succeed for a task.
+
+This is useful because Airi-PC already accumulates a continual stream of real examples such as:
+
+```text
+sanitized goal + operation + selected tool + argument schema
+                                ↓
+                         success / failure
+                                ↓
+                    isolated evolutionary NAS
+                                ↓
+                  advisory route-success scores
+```
+
+The lab is intentionally not connected to production routing. Its score is never used by `ControlPlane.route()` to select, execute, reorder or block tools. There is no lab-to-production promotion command.
+
+### Perpetual, but not wasteful
+
+The scheduler keeps the lab enabled across restarts by default. Every 15 minutes it checks for new observations. A training process starts only after enough new observations have accumulated (default 40). With no new evidence the lab remains idle rather than repeatedly fitting the same benchmark.
+
+This provides indefinite continual learning while avoiding permanent CPU usage and repeated overfitting.
+
+### Isolation
+
+The worker runs in a separate CPU-only process with several independent barriers:
+
+- the evolved genome can mutate only bounded architecture/hyperparameter fields;
+- no generated code is executed;
+- API keys and common credential environment variables are not inherited;
+- socket/DNS operations are blocked by a Python audit hook;
+- child subprocess creation is blocked inside the worker;
+- writes, deletes and renames outside `.ai/evolution-lab/shadow-router` are blocked;
+- symlinks escaping the lab directory make the sandbox audit fail;
+- on Linux, a network namespace is used as an additional kernel-level barrier when `unshare -n` is available;
+- CPU threads, CPU time, address space, file size and file descriptors are bounded where the OS exposes `prlimit`;
+- the production router cannot be modified by the lab.
+
+The Python audit hook is defense-in-depth rather than a claim of VM-grade containment. The strongest guarantee comes from the combination of shadow-only architecture, separate process, minimal environment, filesystem boundary, optional network namespace and the fact that the lab has no production execution path.
+
+### Privacy and retention
+
+Training traces do not persist argument values. They contain a sanitized goal, operation, tool name and argument **keys/types**. URLs, emails, filesystem paths, credential-like assignments and long identifiers in goals are redacted.
+
+Long-running storage is bounded:
+
+- raw observations: maximum 50,000 retained;
+- training view: latest 20,000 observations;
+- lab run directories: maximum 50;
+- history: maximum 200 lines;
+- worker log: rotated after 10 MiB.
+
+### Native Airi tools
+
+- `computer_evolution_lab_status`
+- `computer_evolution_lab_audit`
+- `computer_evolution_lab_score`
+- `computer_evolution_lab_start`
+- `computer_evolution_lab_stop`
+- `computer_evolution_lab_maintenance`
+- `computer_evolution_lab_autopilot`
+
+`computer_evolution_lab_score` is advisory only. A future production integration would require a separately reviewed change and should not be enabled merely because a lab benchmark looks good.

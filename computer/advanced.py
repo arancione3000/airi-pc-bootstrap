@@ -248,6 +248,24 @@ def _load_jobs():
     global _jobs
     try: _jobs = json.loads(SCHEDULER.read_text(encoding='utf-8')) if SCHEDULER.exists() else {}
     except Exception: _jobs = {}
+    lab_root = Path(os.environ.get('AIRI_EVOLUTION_LAB_STATE') or (Path(os.environ.get('AIRI_ROOT') or ROOT) / '.ai' / 'evolution-lab' / 'shadow-router')).resolve()
+    lab_disabled = lab_root / 'autopilot.disabled'
+    if os.environ.get('AIRI_EVOLUTION_LAB_AUTOPILOT','1').strip().lower() not in {'0','false','off','no'} and not lab_disabled.exists():
+        name = 'evolution-lab-shadow-router'
+        if name not in _jobs:
+            interval = max(300, int(os.environ.get('AIRI_EVOLUTION_LAB_INTERVAL','900')))
+            _jobs[name] = {
+                'name': name,
+                'action': 'evolution_lab_maintenance',
+                'interval_seconds': interval,
+                'enabled': True,
+                'created_at': time.time(),
+                'next_run': time.time() + 30,
+                'last_run': None,
+                'last_error': None,
+            }
+            try: _save_jobs()
+            except Exception: pass
 
 
 def _save_jobs(): _atomic_json(SCHEDULER, _jobs)
@@ -269,6 +287,9 @@ def _scheduler_loop():
                 elif action == 'evolution_maintenance':
                     from evolution import runtime as evolution_runtime
                     result = evolution_runtime.maintenance(mode='safe')
+                elif action == 'evolution_lab_maintenance':
+                    from evolution import lab_runtime
+                    result = lab_runtime.maintenance()
                 else: raise ValueError(f'unsupported scheduled action: {action}')
                 job['last_result'] = result; job['last_error'] = None
             except Exception as exc:
@@ -292,7 +313,7 @@ def scheduler_start():
 def schedule_job(name: str, action: str, interval_seconds: int, run_now: bool = False) -> dict[str, Any]:
     scheduler_start()
     if not re.fullmatch(r'[A-Za-z0-9._-]{1,80}', name): raise ValueError('invalid job name')
-    if action not in {'health', 'cleanup_scan', 'persistence_verify', 'evolution_maintenance'}: raise ValueError('unsupported scheduled action')
+    if action not in {'health', 'cleanup_scan', 'persistence_verify', 'evolution_maintenance', 'evolution_lab_maintenance'}: raise ValueError('unsupported scheduled action')
     if int(interval_seconds) < 5: raise ValueError('interval_seconds must be >= 5')
     _jobs[name] = {'name': name, 'action': action, 'interval_seconds': int(interval_seconds), 'enabled': True,
                    'created_at': time.time(), 'next_run': time.time() if run_now else time.time() + int(interval_seconds),

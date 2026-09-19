@@ -7,7 +7,9 @@ on:
       - 'computer/evolution/**'
       - 'computer/server.py'
       - 'computer/advanced.py'
+      - 'computer/control_plane/orchestrator.py'
       - 'tests/test_evolution_*.py'
+      - '.ai/skills/evolution-lab/**'
       - '.ai/skills/neuroevolution/**'
       - '.github/workflows/neuroevolution.yml'
   workflow_dispatch:
@@ -30,11 +32,11 @@ jobs:
 
       - name: Compile evolution and integration sources
         run: |
-          .venv/bin/python -m compileall -q computer/evolution computer/server.py computer/advanced.py tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py
+          .venv/bin/python -m compileall -q computer/evolution computer/server.py computer/advanced.py computer/control_plane/orchestrator.py tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py tests/test_evolution_lab.py
 
       - name: Focused evolution tests
         run: |
-          .venv/bin/python -m pytest -q tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py
+          .venv/bin/python -m pytest -q tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py tests/test_evolution_lab.py
 
       - name: PyTorch end-to-end evolution smoke test
         env:
@@ -82,4 +84,82 @@ jobs:
           audit=audit_state(state)
           assert audit['ok'] is True, audit
           print(json.dumps({'ok':True,'promoted':result['promoted'],'candidate':result['candidate']},indent=2))
+          PY
+
+
+      - name: Shadow Evolution Lab sandbox smoke test
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+          AIRI_ROOT: ${{ runner.temp }}/airi-shadow-root
+          AIRI_EVOLUTION_LAB_STATE: ${{ runner.temp }}/airi-shadow-root/.ai/evolution-lab/shadow-router
+          AIRI_LAB_POPULATION: "4"
+          AIRI_LAB_GENERATIONS: "1"
+          AIRI_LAB_CANDIDATE_EPOCHS: "1"
+          AIRI_LAB_FINALIST_EPOCHS: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          mkdir -p "$AIRI_ROOT"
+          .venv/bin/python - <<'PY'
+          from evolution import lab
+          for i in range(24):
+              lab.record_execution(
+                  goal=f"Read verified project file documentation sample {i}",
+                  operation="read",
+                  tool="computer_file_read",
+                  args={"path": f"/private/success/{i}.txt"},
+                  success=True,
+                  latency_ms=20,
+                  task_id=f"s{i}",
+                  node_id="n1",
+                  candidates=["computer_file_read","computer_browser_text"],
+              )
+              lab.record_execution(
+                  goal=f"Open unavailable remote resource sample {i}",
+                  operation="browser_open",
+                  tool="computer_browser_open",
+                  args={"url": f"https://private.invalid/{i}"},
+                  success=False,
+                  latency_ms=900,
+                  error="network connection failed",
+                  task_id=f"f{i}",
+                  node_id="n1",
+                  candidates=["computer_browser_open"],
+              )
+          st=lab.status()
+          assert st["raw_observations"] == 48, st
+          assert "private.invalid" not in lab.RAW.read_text(encoding="utf-8")
+          PY
+
+          .venv/bin/python -m evolution.lab_worker
+
+          .venv/bin/python - <<'PY'
+          from evolution import lab
+          st=lab.status()
+          assert st["training_records"] == 48, st
+          assert st["last_cycle"] is not None, st
+          print({"lab_status":st})
+          PY
+
+          .venv/bin/python - <<'PY'
+          import os, socket
+          from pathlib import Path
+          from evolution.lab_worker import install_sandbox_guard
+          root=Path(os.environ["AIRI_EVOLUTION_LAB_STATE"]).resolve()
+          root.mkdir(parents=True,exist_ok=True)
+          install_sandbox_guard(root)
+
+          try:
+              socket.getaddrinfo("example.com",443)
+          except PermissionError:
+              pass
+          else:
+              raise AssertionError("sandbox allowed DNS/network resolution")
+
+          try:
+              Path(os.environ["AIRI_ROOT"]).parent.joinpath("escape.txt").write_text("bad")
+          except PermissionError:
+              pass
+          else:
+              raise AssertionError("sandbox allowed write outside lab root")
+          print("sandbox guard blocked network and external writes")
           PY
