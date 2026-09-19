@@ -274,7 +274,11 @@ def queue_verify(qid: str, urls: list[str], *, min_sources: int = 2, auto_evolve
 
 def pipeline_status() -> dict[str, Any]:
     from .pipeline import pipeline_status as read_pipeline
-    return {**read_pipeline(STATE), "evolution": status()}
+    return {
+        **read_pipeline(STATE),
+        "evolution": status(),
+        "evidence": evidence_status(),
+    }
 
 
 def report(history_limit: int = 20) -> dict[str, Any]:
@@ -297,22 +301,18 @@ def export(out_path: str | None = None, include_torchscript: bool = False) -> di
 
 
 def factcheck(claim: str, *, max_sources: int = 8, min_sources: int = 2, auto_evolve: bool = True, mode: str = "safe") -> dict[str, Any]:
-    from advanced import research
+    from .read_only_research import research_claim
+
     queued = queue_add(claim, {"origin": "airi_factcheck"})
-    collected = []
-    research_runs = []
-    queries = [f'"{claim}" fact check', f'{claim} factcheck true false']
-    for query in queries:
-        try:
-            rr = research(query, None, max(2, min(10, int(max_sources))))
-            research_runs.append(rr)
-            for source in rr.get("sources", []):
-                url = source.get("url")
-                if url and url not in collected:
-                    collected.append(url)
-        except Exception as exc:
-            research_runs.append({"ok": False, "topic": query, "error": repr(exc), "sources": []})
-    result = queue_verify(queued["id"], collected, min_sources=min_sources, auto_evolve=auto_evolve, mode=mode)
+    research_result = research_claim(claim, max_sources=max_sources)
+    collected = list(research_result.get("candidate_urls") or [])
+    result = queue_verify(
+        queued["id"],
+        collected,
+        min_sources=min_sources,
+        auto_evolve=auto_evolve,
+        mode=mode,
+    )
     model_prediction = None
     try:
         model_prediction = predict(claim)
@@ -322,12 +322,81 @@ def factcheck(claim: str, *, max_sources: int = 8, min_sources: int = 2, auto_ev
         "ok": result.get("status") == "verified",
         "claim": claim,
         "queue_id": queued["id"],
-        "research": research_runs,
+        "research": research_result,
         "candidate_urls": collected,
         "verification": result,
         "model_prediction": model_prediction,
     }
 
+
+def research_maintenance(
+    *,
+    max_claims: int = 4,
+    max_sources: int = 8,
+    min_sources: int = 2,
+    cooldown_seconds: int = 21_600,
+    mode: str = "safe",
+) -> dict[str, Any]:
+    from .read_only_research import research_claim
+
+    now = time.time()
+    max_claims = max(1, min(20, int(max_claims)))
+    cooldown_seconds = max(300, int(cooldown_seconds))
+    processed = []
+    skipped = []
+
+    for row in queue_items("pending", limit=max_claims * 4):
+        attempts = list(row.get("attempts") or [])
+        last_attempt = float((attempts[-1] or {}).get("at", 0.0) or 0.0) if attempts else 0.0
+        if last_attempt and now - last_attempt < cooldown_seconds:
+            skipped.append({"id": row.get("id"), "reason": "cooldown"})
+            continue
+        try:
+            research_result = research_claim(row["claim"], max_sources=max_sources)
+            urls = list(research_result.get("candidate_urls") or [])
+            if not urls:
+                processed.append({
+                    "id": row.get("id"),
+                    "status": "pending",
+                    "reason": "no_candidate_sources",
+                    "research": research_result,
+                })
+            else:
+                verified = queue_verify(
+                    row["id"],
+                    urls,
+                    min_sources=min_sources,
+                    auto_evolve=True,
+                    mode=mode,
+                )
+                processed.append({
+                    "id": row.get("id"),
+                    "status": verified.get("status"),
+                    "evidence_graph": verified.get("evidence_graph"),
+                    "research": research_result,
+                })
+        except Exception as exc:
+            processed.append({
+                "id": row.get("id"),
+                "status": "error",
+                "error": repr(exc),
+            })
+        if len(processed) >= max_claims:
+            break
+
+    return {
+        "ok": True,
+        "processed": processed,
+        "skipped": skipped,
+        "pending_after": len(queue_items("pending", limit=1000)),
+        "read_only_web": True,
+        "cooldown_seconds": cooldown_seconds,
+    }
+
+
+def evidence_status() -> dict[str, Any]:
+    from .evidence_graph import status as graph_status
+    return graph_status(STATE)
 
 def drift(window: int = 100, min_window: int = DRIFT_TRIGGER) -> dict[str, Any]:
     from .monitoring import drift_report
