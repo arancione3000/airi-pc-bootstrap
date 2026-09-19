@@ -155,19 +155,24 @@ def record_execution(
     with _dataset_lock(RAW, timeout=5.0, stale_after=900.0):
         with RAW.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    try:
+        if RAW.stat().st_size > 64 * 1024 * 1024:
+            compact_raw_observations()
+    except OSError:
+        pass
     return {"ok": True, "recorded": True, "id": raw_id}
 
 
 
 def compact_raw_observations(max_rows: int = 50_000) -> dict[str, Any]:
     ensure_state_boundary()
-    rows = _read_observations()
     limit = max(1000, int(max_rows))
-    if len(rows) <= limit:
-        return {"compacted": False, "rows": len(rows)}
-    kept = rows[-limit:]
-    tmp = RAW.with_suffix(".compact.tmp")
     with _dataset_lock(RAW, timeout=10.0, stale_after=900.0):
+        rows = _read_observations()
+        if len(rows) <= limit:
+            return {"compacted": False, "rows": len(rows)}
+        kept = rows[-limit:]
+        tmp = RAW.with_suffix(".compact.tmp")
         tmp.parent.mkdir(parents=True, exist_ok=True)
         with tmp.open("w", encoding="utf-8") as handle:
             for row in kept:
