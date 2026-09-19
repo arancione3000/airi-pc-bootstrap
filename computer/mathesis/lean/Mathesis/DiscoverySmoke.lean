@@ -18,4 +18,10 @@ example : Nat.choose 8 3 = 56 := by
 example (a b : ℚ) (h : b ≠ 0) : (a / b) * b = a := by
   field_simp
 
+-- Same nontrivial finite-difference obligation used by the Faulhaber quality gate.
+example (n : ℚ) :
+    ((n + 1) * (n + 2) * (2*n + 3) / 6) -
+      (n * (n + 1) * (2*n + 1) / 6) = (n + 1)^2 := by
+  ring
+
 end Mathesis
