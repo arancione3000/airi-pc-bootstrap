@@ -255,8 +255,12 @@ def ensure_canary_partition(
     if existed_before:
         try:
             raw = json.loads(canary_path.read_text(encoding="utf-8"))
-            existing = {str(x) for x in raw.get("ids", [])}
+            ids = raw.get("ids")
+            if not isinstance(ids, list):
+                raise ValueError("invalid canary manifest")
+            existing = {str(x) for x in ids}
         except Exception:
+            existed_before = False
             existing = set()
 
     by_label = {0: [], 1: []}
@@ -306,12 +310,18 @@ def persistent_split_records(
     if existed_before:
         try:
             raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+            raw_assignments = raw.get("assignments")
+            if not isinstance(raw_assignments, dict):
+                raise ValueError("invalid split manifest")
             assignments = {
                 str(k): str(v)
-                for k, v in (raw.get("assignments") or {}).items()
+                for k, v in raw_assignments.items()
                 if str(v) in {"train", "val", "test"}
             }
+            if not assignments:
+                raise ValueError("empty split manifest")
         except Exception:
+            existed_before = False
             assignments = {}
 
     if not assignments:
