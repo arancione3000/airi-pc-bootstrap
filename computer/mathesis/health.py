@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .architecture import _ALLOWED_EXPERTS
+from .architecture import _ALLOWED_EXPERTS, _ALLOWED_STRATEGIES
 from .discovery import DISCOVERY_SCHEMA_VERSION, validate_verified_discovery
 from .evolution import SelfEvolutionEngine
 from .knowledge import default_state_dir
@@ -44,7 +44,32 @@ def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
         for edge in champion.topology
         if len(edge) != 2 or edge[0] not in experts or edge[1] not in experts
     ]
+    topology_nodes = {node for edge in champion.topology for node in edge}
+    disconnected = sorted(set(experts) - topology_nodes) if len(experts) > 1 else []
     check("architecture:topology_closed", not bad_edges, bad_edges)
+    check("architecture:experts_connected", not disconnected, disconnected)
+
+    strategies = list(champion.strategy_portfolio)
+    check("architecture:unique_strategies", len(strategies) == len(set(strategies)), strategies)
+    unknown_strategies = sorted(set(strategies) - set(_ALLOWED_STRATEGIES))
+    check("architecture:known_strategies", not unknown_strategies, unknown_strategies)
+    check(
+        "architecture:research_strategy_coupled",
+        "research" not in experts or "read_only_research" in strategies,
+        {"research_expert": "research" in experts, "read_only_research": "read_only_research" in strategies},
+    )
+
+    proof_order = list(champion.proof_order)
+    allowed_proof_order = {"symbolic", "smt", "counterexample", "lean"}
+    check("architecture:unique_proof_order", len(proof_order) == len(set(proof_order)), proof_order)
+    check(
+        "architecture:known_proof_order",
+        bool(proof_order) and set(proof_order) <= allowed_proof_order,
+        proof_order,
+    )
+
+    check("architecture:counterexample_radius_bounds", 1 <= champion.counterexample_radius <= 40, champion.counterexample_radius)
+    check("architecture:neural_hidden_bounds", 12 <= champion.neural_hidden <= 128, champion.neural_hidden)
     check("architecture:symbolic_depth_bounds", 1 <= champion.symbolic_depth <= 12, champion.symbolic_depth)
     check("architecture:discovery_beam_bounds", 1 <= champion.discovery_beam <= 8, champion.discovery_beam)
     check("architecture:proof_cell_bounds", 1 <= champion.max_proof_cells <= 256, champion.max_proof_cells)
