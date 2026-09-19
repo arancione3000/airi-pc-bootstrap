@@ -130,7 +130,14 @@ def _read_observations() -> list[dict[str, Any]]:
         for line in handle:
             try:
                 row = json.loads(line)
-                if (isinstance(row, dict) and row.get("feature") and row.get("label") in (0, 1)\n                        and int(row.get("feature_schema", 0) or 0) == FEATURE_SCHEMA):\n                    out.append(row)\n            except Exception:
+                if (
+                    isinstance(row, dict)
+                    and row.get("feature")
+                    and row.get("label") in (0, 1)
+                    and int(row.get("feature_schema", 0) or 0) == FEATURE_SCHEMA
+                ):
+                    out.append(row)
+            except Exception:
                 continue
     return out
 
