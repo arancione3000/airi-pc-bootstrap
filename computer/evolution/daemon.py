@@ -4,6 +4,7 @@ import fcntl
 import json
 import os
 import signal
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,7 @@ class EvolutionDaemon:
         self.last_sync_at = 0.0
         self.last_offline_cycle_at = 0.0
         self.previous_worker_running = False
+        self.source_sha = state_sync._source_sha()
 
     def acquire(self) -> bool:
         STATE.mkdir(parents=True, exist_ok=True)
@@ -93,6 +95,9 @@ class EvolutionDaemon:
         return result
 
     def run_once(self) -> dict[str, Any]:
+        current_sha = state_sync._source_sha()
+        if self.source_sha and current_sha and current_sha != self.source_sha:
+            os.execv(sys.executable, [sys.executable, "-m", "evolution.daemon"])
         now = time.time()
         before = lab_runtime.status()
         maintenance = lab_runtime.maintenance()
