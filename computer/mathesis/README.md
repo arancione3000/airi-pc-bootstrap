@@ -237,3 +237,26 @@ relations. This provides a bounded anti-forgetting mechanism.
 The five-minute GitHub schedule is written as an explicit minute list
 (3,8,13,...,58) and is backed by the duplicate-aware watchdog. GitHub Actions
 scheduling remains provider best-effort and can be delayed externally.
+
+
+### Continuous self-handoff
+
+Cron is no longer the only mechanism that keeps MATHESIS alive. After a
+continuum run persists its state, it waits until the five-minute cadence and
+uses GitHub's `workflow_dispatch` API to hand execution to the next run.
+Before dispatching it checks for another queued/in-progress continuum run and
+avoids duplicates. The normal five-minute cron and watchdog remain recovery
+paths.
+
+This means a delayed GitHub `schedule` event does not by itself stop the
+evolution chain. Provider outages, disabled Actions, permission changes or
+account-level limits can still interrupt execution; no repository workflow can
+guarantee literal zero downtime during an external platform outage.
+
+Verified discovery-domain gaps also remain active architecture priorities until
+the corresponding expert is actually present, so useful mathematical feedback
+is not forgotten when another challenger wins first.
+
+The read-only curriculum cadence is tuned so a champion with research budget 2
+attempts external mathematical study roughly every 15 minutes while the
+five-minute chain is healthy.

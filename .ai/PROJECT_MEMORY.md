@@ -47,3 +47,15 @@ tests pass.
 - a candidate that forgets previously verified mathematical relations cannot be promoted;
 - web/research evidence still cannot directly edit the verifier kernel;
 - five-minute continuum cron uses an explicit minute list plus duplicate-aware watchdog.
+
+
+## 2026-09-19 — MATHESIS continuous self-handoff
+
+- continuum no longer depends only on GitHub cron;
+- each completed main-branch cycle waits to the five-minute cadence and dispatches its successor;
+- handoff checks queued/in-progress runs to avoid duplicate chains;
+- cron and watchdog remain independent recovery paths;
+- workflow has explicit Actions write permission for workflow_dispatch;
+- verified discovery-domain gaps persist until the corresponding expert is acquired;
+- read-only curriculum cadence increased so research occurs roughly every 15 minutes at research_budget=2;
+- external GitHub outages/limits remain outside the repository's ability to guarantee zero downtime.

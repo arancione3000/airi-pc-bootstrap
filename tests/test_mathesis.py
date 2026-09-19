@@ -404,3 +404,32 @@ def test_false_learned_relation_is_a_critical_regression_gate():
     )
     assert benchmark["ok"] is False
     assert "learned_theorem:0" in benchmark["critical_failures"]
+
+
+def test_continuum_has_cron_watchdog_and_self_handoff_contract():
+    workflow = (ROOT / ".github" / "workflows" / "mathesis-continuum.yml").read_text(encoding="utf-8")
+    assert "actions: write" in workflow
+    assert "MATHESIS_MIN_CHAIN_SECONDS: '300'" in workflow
+    assert "Hand off to the next autonomous cycle" in workflow
+    assert "actions/workflows/mathesis-continuum.yml/dispatches" in workflow
+    assert "Another MATHESIS continuum run is already queued/running" in workflow
+    assert "github.ref == 'refs/heads/main'" in workflow
+    assert "3,8,13,18,23,28,33,38,43,48,53,58" in workflow
+
+
+def test_verified_discovery_domain_pressure_persists_until_expert_exists(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    discovery.discover_once()  # binomial -> combinatorics
+    discovery.discover_once()  # Faulhaber -> sequences
+
+    evolution = SelfEvolutionEngine(tmp_path)
+    champion = evolution.load_champion()
+    feedback = ExperienceAnalyzer(tmp_path).signals(champion)
+
+    assert "missing_combinatorics_expert" in feedback["weaknesses"]
+    assert "missing_sequences_expert" in feedback["weaknesses"]
+
+    champion.experts.extend(["combinatorics", "sequences"])
+    resolved = ExperienceAnalyzer(tmp_path).signals(champion)
+    assert "missing_combinatorics_expert" not in resolved["weaknesses"]
+    assert "missing_sequences_expert" not in resolved["weaknesses"]
