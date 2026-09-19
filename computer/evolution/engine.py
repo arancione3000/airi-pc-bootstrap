@@ -14,6 +14,7 @@ from typing import Any
 
 from .data import (
     DatasetView,
+    _dataset_lock,
     class_counts,
     encode_text,
     ensure_canary_partition,
@@ -323,6 +324,13 @@ def _prune_old_trial_weights(state_dir: Path, keep_runs: int = 5) -> None:
 
 
 def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
+    state_dir = Path(state_dir)
+    state_dir.mkdir(parents=True, exist_ok=True)
+    with _dataset_lock(state_dir / "evolution-run", timeout=2.0, stale_after=21600.0):
+        return _run_evolution_unlocked(state_dir, cfg)
+
+
+def _run_evolution_unlocked(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
     import torch
     state_dir = Path(state_dir)
     data_path = state_dir / "data" / "verified.jsonl"
