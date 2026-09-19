@@ -1,0 +1,97 @@
+name: MATHESIS Omega Continuum
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'computer/mathesis/**'
+      - '.github/workflows/mathesis-continuum.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mathesis-omega-continuum
+  cancel-in-progress: false
+
+jobs:
+  evolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: ${{ github.workspace }}/computer
+      MATHESIS_STATE_DIR: ${{ runner.temp }}/mathesis-runtime-state
+      STATE_REPO: ${{ runner.temp }}/mathesis-state-repo
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install mathematical runtime
+        run: |
+          python -m pip install --disable-pip-version-check -r computer/mathesis/requirements.txt
+
+      - name: Restore or initialize persistent MATHESIS state branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone --quiet \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$STATE_REPO"
+          cd "$STATE_REPO"
+          git config user.name "MATHESIS Omega"
+          git config user.email "mathesis-omega@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin mathesis-state >/dev/null 2>&1; then
+            git fetch --quiet origin mathesis-state:mathesis-state
+            git checkout --quiet mathesis-state
+          else
+            git checkout --orphan mathesis-state
+            git rm -rf . >/dev/null 2>&1 || true
+            mkdir -p mathesis-state
+            printf '%s\n' 'Persistent proof-gated MATHESIS model state.' > mathesis-state/README.txt
+            git add mathesis-state/README.txt
+            git commit -m "mathesis-state: initialize"
+            git push --quiet origin HEAD:mathesis-state
+          fi
+
+          mkdir -p "$MATHESIS_STATE_DIR"
+          if [ -d "$STATE_REPO/mathesis-state" ]; then
+            cp -a "$STATE_REPO/mathesis-state/." "$MATHESIS_STATE_DIR/" || true
+          fi
+
+      - name: Run bounded self-evolution cycle
+        run: |
+          set -euo pipefail
+          python -m mathesis.evolution_cycle | tee "$MATHESIS_STATE_DIR/last-cycle.json"
+          python -m mathesis.cli --status | tee "$MATHESIS_STATE_DIR/status.json"
+          test -f "$MATHESIS_STATE_DIR/champion.json"
+          test -f "$MATHESIS_STATE_DIR/router.json"
+          test -f "$MATHESIS_STATE_DIR/champion_model.py"
+
+      - name: Persist and verify state heartbeat
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$STATE_REPO"
+          rm -rf mathesis-state
+          mkdir -p mathesis-state
+          cp -a "$MATHESIS_STATE_DIR/." mathesis-state/
+          git add -A mathesis-state
+          git commit --allow-empty -m "mathesis-state: sync $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push --quiet origin HEAD:mathesis-state
+
+          local_sha="$(git rev-parse HEAD)"
+          remote_sha="$(git ls-remote origin refs/heads/mathesis-state | awk '{print $1}')"
+          test -n "$remote_sha"
+          test "$local_sha" = "$remote_sha"
+          echo "MATHESIS state persisted at $remote_sha"
