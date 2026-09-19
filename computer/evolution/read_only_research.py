@@ -65,9 +65,13 @@ def _read_public(
     timeout: int = 20,
     max_bytes: int = MAX_PAGE_BYTES,
 ) -> dict[str, Any]:
-    # _open_public_url enforces http/https only, public-address DNS resolution,
-    # redirect revalidation, credential rejection and HTTPS downgrade blocking.
-    response, final_url = _open_public_url(url, timeout=timeout)
+    # Autonomous evidence collection is HTTPS-only. _open_public_url then adds
+    # public-address DNS validation, redirect revalidation, credential
+    # rejection and HTTPS downgrade blocking.
+    safe_url, _domain = _public_http_url(url)
+    if urllib.parse.urlparse(safe_url).scheme.lower() != "https":
+        raise ValueError("read-only researcher requires HTTPS")
+    response, final_url = _open_public_url(safe_url, timeout=timeout)
     with response:
         content_type = (response.headers.get("Content-Type") or "").lower()
         if content_type and not any(kind in content_type for kind in ALLOWED_CONTENT_TYPES):
@@ -108,6 +112,8 @@ def search_web(query: str, limit: int = 8) -> list[dict[str, str]]:
         url = item["url"]
         try:
             safe_url, domain = _public_http_url(url)
+            if urllib.parse.urlparse(safe_url).scheme.lower() != "https":
+                continue
         except Exception:
             continue
         if safe_url in seen_urls:
