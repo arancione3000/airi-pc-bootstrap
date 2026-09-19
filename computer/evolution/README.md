@@ -195,7 +195,7 @@ The lab is intentionally not connected to production routing. Its score is never
 
 ### Perpetual, but not wasteful
 
-The scheduler keeps the lab enabled across restarts by default. Every 15 minutes it checks for new observations. A training process starts only after enough new observations have accumulated (default 20). With no new evidence the lab remains idle rather than repeatedly fitting the same benchmark.
+The scheduler keeps the lab enabled across restarts by default. Every 15 minutes it checks for new observations. A training process starts only after enough new observations have accumulated (default 40). With no new evidence the lab remains idle rather than repeatedly fitting the same benchmark.
 
 This provides indefinite continual learning while avoiding permanent CPU usage and repeated overfitting.
 
