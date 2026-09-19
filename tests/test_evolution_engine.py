@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "computer"))
 
-from evolution.data import append_verified, append_verified_many, class_counts, encode_text, ensure_canary_partition, load_records, persistent_split_records, source_family, source_family_counts, split_records, text_fingerprint
+from evolution.data import _dataset_lock, append_verified, append_verified_many, class_counts, encode_text, ensure_canary_partition, load_records, persistent_split_records, source_family, source_family_counts, split_records, text_fingerprint
 from evolution.engine import EvolutionConfig, _canary_decision, _metrics, _promotion_decision, _recover_champion_state, decision_from_probability, fitness, pareto_front
 from evolution.edge import edge_acceptance
 from evolution.monitoring import detect_drift
@@ -327,3 +327,12 @@ def test_interrupted_champion_swap_restores_complete_backup(tmp_path: Path):
     assert "restored_backup" in result["actions"]
     assert (tmp_path / "champion" / "model.pt").exists()
     assert not backup.exists()
+
+
+def test_same_process_lock_is_not_reaped_by_age(tmp_path: Path):
+    import pytest
+    target = tmp_path / "shared"
+    with _dataset_lock(target, timeout=0.2, stale_after=0.01):
+        with pytest.raises(TimeoutError):
+            with _dataset_lock(target, timeout=0.1, stale_after=0.01):
+                pass
