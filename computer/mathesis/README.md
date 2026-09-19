@@ -287,3 +287,12 @@ Curriculum failures are retried on the same mathematical domain rather than
 silently skipping it. A successful retry clears the retry counter; after three
 consecutive failures the cursor advances so a temporarily unreachable source
 cannot stall the whole curriculum indefinitely.
+
+
+### Network-bounded autonomous handoff
+
+GitHub API calls used by the continuum handoff, watchdog recovery and deep
+Mathlib kick are explicitly connection-bounded, total-time-bounded and retried.
+A slow API response therefore cannot hold an autonomous runner indefinitely.
+The continuum job keeps a larger overall timeout margin so a cold environment
+can still finish mathematical work, persist state and hand off safely.
