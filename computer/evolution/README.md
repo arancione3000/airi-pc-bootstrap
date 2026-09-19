@@ -228,6 +228,25 @@ Long-running storage is bounded:
 - history: maximum 200 lines;
 - worker log: rotated after 10 MiB.
 
+### Autonomous curriculum from real failures
+
+The Shadow Evolution Lab now derives a bounded curriculum directly from verified
+Control Plane outcomes. It groups sanitized observations by operation/tool pair
+and measures how inconsistent the real outcomes are. Routes that are sometimes
+successful and sometimes unsuccessful receive additional replay weight during
+training; already-predictable always-success or always-fail routes remain at
+baseline weight.
+
+The curriculum never invents labels or executes extra tools merely to create
+training data. Replay weights are bounded, audited before Git state
+synchronization, and remain subordinate to the normal validation, frozen
+canary, class-F1 and calibration promotion gates. A curriculum that makes a
+challenger worse therefore cannot promote it.
+
+The current profile is exposed in Shadow Lab status and stored as
+`curriculum.json`; the numeric weights are also embedded in the privacy-safe
+training snapshot so cloud evolution can reproduce the same replay policy.
+
 ### Native Airi tools
 
 - `computer_evolution_lab_status`
@@ -266,4 +285,43 @@ The Evolution Continuum now searches continuously by default:
 - old run artifacts are still pruned;
 - promotion gates are unchanged and never become easier because many attempts were made.
 
-This deliberately separates **continuous research** from **automatic promotion**. Repeated search can continue indefinitely for smaller/faster architectures on a frozen dataset. New real observations expand the evidence available for quality improvements. A candidate is promoted only when it independently satisfies the same F1/canary/efficiency gates as before.
+This deliberately separates **continuous research** from **automatic promotion**. Repeated search can continue indefinitely for smaller/faster architectures on a frozen dataset. New real observations expand the evidence available for quality improvements. A candidate is promoted only when it passes the normal validation and frozen-canary gates. Efficiency-only promotions additionally require stable accuracy and calibration, and material per-class F1 or Brier-score regressions block promotion.
+
+
+## Evolution Evidence v2: read-only research and evidence memory
+
+Airi-PC has a separate evidence-learning path for factual claims. It is kept
+separate from the Shadow Router because web facts are not valid labels for
+tool-routing success.
+
+The autonomous researcher:
+
+- uses HTTPS GET requests only;
+- rejects credential-bearing URLs, localhost, private/link-local/reserved
+  targets and HTTPS-to-HTTP redirects;
+- bounds response size and accepts only text-like content;
+- uses web search only to discover candidate evidence sources;
+- requires independent registrable domains and unambiguous structured
+  `ClaimReview` verdicts before a claim can enter the verified dataset;
+- stores true, false, conflict and insufficient-evidence states in a persistent
+  Evidence Graph;
+- abstains when independent sources disagree instead of choosing a side;
+- retries unresolved queued claims conservatively with a cooldown rather than
+  continuously hammering the web.
+
+The web researcher runs outside the network-disabled evolutionary worker. It
+cannot grant the worker network access or modify production routing. Verified
+evidence may improve the factual classifier; real Control Plane outcomes improve
+the router.
+
+The evidence scheduler is enabled by default as
+`evolution-evidence-research` and only does work when pending claims exist.
+Set `AIRI_EVOLUTION_RESEARCH_AUTOPILOT=0` to disable it or
+`AIRI_EVOLUTION_RESEARCH_INTERVAL` to change the default six-hour interval.
+
+CI includes deterministic adversarial truth tests (for example the plausible
+false claim that Sydney is Australia's capital versus the true Canberra claim),
+private-network/HTTP rejection tests, promotion-regression tests and a live
+HTTPS read-only fetch smoke test. These deterministic fixtures test the
+decision machinery without making the test suite depend on the current verdict
+of a third-party fact-check page.
