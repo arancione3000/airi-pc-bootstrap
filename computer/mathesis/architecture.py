@@ -11,6 +11,7 @@ from .types import ArchitectureGenome
 _ALLOWED_EXPERTS = (
     "formalization",
     "algebra",
+    "polynomials",
     "counterexample",
     "program_synthesis",
     "number_theory",
