@@ -1,0 +1,93 @@
+name: Airi Evolution Continuum
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 */2 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'computer/evolution/**'
+      - 'computer/start.sh'
+      - 'airi-os/config/includes.chroot/etc/systemd/system/airi-evolution-lab.service'
+      - '.github/workflows/evolution-continuum.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: airi-evolution-continuum
+  cancel-in-progress: false
+
+jobs:
+  evolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout evolution code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install CPU evolution runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Restore persistent state from GitHub
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+          AIRI_ROOT: ${{ runner.temp }}/airi-cloud
+          AIRI_EVOLUTION_LAB_STATE: ${{ runner.temp }}/airi-cloud/.ai/evolution-lab/shadow-router
+          AIRI_EVOLUTION_SYNC_DIR: ${{ runner.temp }}/evolution-git
+          AIRI_EVOLUTION_GIT_URL: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+          AIRI_EVOLUTION_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p "$AIRI_ROOT"
+          python - <<'PY'
+          import json
+          from evolution import state_sync
+          result = state_sync.restore_from_git(force=True)
+          print(json.dumps(result, indent=2, sort_keys=True))
+          if not result.get("ok"):
+              raise SystemExit(2)
+          PY
+
+      - name: Run bounded cloud evolution cycle
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+          AIRI_ROOT: ${{ runner.temp }}/airi-cloud
+          AIRI_EVOLUTION_LAB_STATE: ${{ runner.temp }}/airi-cloud/.ai/evolution-lab/shadow-router
+          AIRI_EVOLUTION_SYNC_DIR: ${{ runner.temp }}/evolution-git
+          AIRI_EVOLUTION_SOURCE_SHA: ${{ github.sha }}
+          AIRI_CLOUD_POPULATION: '4'
+          AIRI_CLOUD_GENERATIONS: '1'
+          AIRI_CLOUD_FINALIST_EPOCHS: '2'
+          AIRI_CLOUD_MAX_CYCLES_PER_DATASET: '12'
+        run: |
+          python -m evolution.cloud_cycle
+
+      - name: Push and verify learning state
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+          AIRI_ROOT: ${{ runner.temp }}/airi-cloud
+          AIRI_EVOLUTION_LAB_STATE: ${{ runner.temp }}/airi-cloud/.ai/evolution-lab/shadow-router
+          AIRI_EVOLUTION_SYNC_DIR: ${{ runner.temp }}/evolution-git
+          AIRI_EVOLUTION_GIT_URL: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+          AIRI_EVOLUTION_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json
+          from evolution import state_sync
+          result = state_sync.sync_to_git(force_heartbeat=True)
+          print(json.dumps(result, indent=2, sort_keys=True))
+          if not result.get("ok") or not result.get("synced"):
+              raise SystemExit(3)
+          if result.get("commit") != result.get("remote_sha"):
+              raise SystemExit(4)
+          PY
