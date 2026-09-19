@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '2,32 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mathesis-watchdog.yml'
 
 permissions:
   actions: write
