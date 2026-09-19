@@ -102,3 +102,40 @@ tests pass.
 - added a persistent-state Health Gate before every autonomous state push;
 - health checks architecture/domain closure, topology, router compatibility, discovery proof quality, Faulhaber certificates, curriculum retry bounds, benchmark failures and kernel/verifier status;
 - failed health audits cannot replace the previous known-good `mathesis-state` checkpoint.
+
+
+## 2026-09-20 — MATHESIS independent proof-integrity audit
+
+- persistent `verified` metadata is no longer trusted by health or anti-forgetting;
+  active relation discoveries are re-verified with the current CompositeVerifier;
+- Faulhaber migration now checks that theorem text, exponent and stored
+  polynomial agree before rebuilding base case, bounded exact samples and the
+  structurally nontrivial finite-difference recurrence;
+- legacy Faulhaber sample counts are capped during reproof, failed reproofs are
+  archived, schema-v3 upgrades persist even without theorem moves, and the
+  migration is idempotent;
+- legacy non-Faulhaber discoveries missing the current proof-quality gate are
+  re-proved or archived; structural tautologies keep their explicit discard
+  classification;
+- anti-forgetting accepts only currently valid active proof obligations and
+  ignores discarded, unverified, certificate-invalid or currently disproved
+  rows;
+- discovery novelty now distinguishes memory novelty from source novelty and
+  human novelty; source/human novelty remain unassessed automatically;
+- architecture benchmarks now reject duplicate/unknown experts, disconnected
+  nodes, bad topology and out-of-bound genome parameters;
+- CI exercises every SymPy domain through study signal -> weakness -> challenger
+  -> expert/topology -> real domain benchmark, including polynomials;
+- evolution challenger selection now filters hard-gate-ineligible candidates
+  before score selection;
+- interactive evolution preserves promoted symbolic-depth and discovery-beam
+  settings immediately when rebuilding the discovery engine;
+- self-rewrite path validation is a strict direct-file whitelist: nested state
+  paths, unknown files, the state root and external paths are rejected;
+- the Deep Mathlib smoke suite includes a nontrivial Faulhaber
+  finite-difference obligation;
+- continuum state writers remain serialized by the GitHub concurrency group,
+  health runs before persistence and state pushes are non-force pushes;
+- real continuum logs were observed carrying persistent discovery state across
+  consecutive cycles and self-dispatching the successor; GitHub availability
+  remains an external best-effort dependency.
