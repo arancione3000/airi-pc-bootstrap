@@ -109,3 +109,5 @@ tests pass.
 - health gate now validates champion.json directly before any engine fallback can mask corruption;
 - runtime health explicitly requires Lean alongside SymPy and Z3;
 - regression tests reject malformed champion state and checkpoints reporting Lean unavailable.
+
+- health gate now rejects syntactically valid but incomplete champion genomes instead of filling missing persisted fields from defaults.
