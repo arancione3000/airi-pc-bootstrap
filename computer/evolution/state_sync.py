@@ -126,6 +126,29 @@ def privacy_audit_dataset(path: Path) -> dict[str, Any]:
             lowered = text.lower()
             if "http://" in lowered or "https://" in lowered or "@" in text or "/" in text or "\\" in text:
                 errors.append(f"line {lineno}: possible user data in export feature")
+            if str(row.get("source", "")) != "airi-shadow-route-observation":
+                errors.append(f"line {lineno}: unexpected training source")
+            try:
+                evidence = json.loads(str(row.get("evidence", "{}")))
+            except Exception:
+                errors.append(f"line {lineno}: malformed evidence")
+                evidence = {}
+            allowed_evidence = {"operation", "tool", "latency_bucket", "error_class", "candidate_count"}
+            if not isinstance(evidence, dict) or set(evidence) - allowed_evidence:
+                errors.append(f"line {lineno}: unexpected evidence fields")
+            else:
+                for key, value in evidence.items():
+                    if isinstance(value, str):
+                        low = value.lower()
+                        if (
+                            "http://" in low
+                            or "https://" in low
+                            or "@" in value
+                            or "/" in value
+                            or "\\" in value
+                            or len(value) > 160
+                        ):
+                            errors.append(f"line {lineno}: unsafe evidence value for {key}")
     return {"ok": not errors, "records": records, "errors": errors[:50]}
 
 
