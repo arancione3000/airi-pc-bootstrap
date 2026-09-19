@@ -5,12 +5,13 @@ from pathlib import Path
 from typing import Any
 
 from .architecture import _ALLOWED_EXPERTS
-from .discovery import _relation_is_structurally_nontrivial
+from .discovery import DISCOVERY_SCHEMA_VERSION, validate_verified_discovery
 from .evolution import SelfEvolutionEngine
 from .knowledge import default_state_dir
 from .neural_graph import INTENTS, GrowingNeuralRouter
 from .safe_math import parse_relation
 from .sympy_lab import DOMAIN_ATLAS
+from .verifiers import CompositeVerifier
 
 
 def _read_json(path: Path, fallback: Any) -> Any:
@@ -68,46 +69,24 @@ def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
         check("router:present", False, str(router_path))
 
     discoveries = _read_json(root / "discoveries.json", {"theorems": {}, "discarded": {}})
+    check(
+        "discovery:schema",
+        int(discoveries.get("version", 0) or 0) >= DISCOVERY_SCHEMA_VERSION,
+        discoveries.get("version"),
+    )
     active = discoveries.get("theorems") or {}
     discarded = discoveries.get("discarded") or {}
     overlap = sorted(set(active) & set(discarded))
     check("discovery:active_discarded_disjoint", not overlap, overlap)
 
     bad_active: list[dict[str, Any]] = []
+    discovery_verifier = CompositeVerifier(counterexample_radius=champion.counterexample_radius)
     for theorem_id, row in active.items():
         if not row.get("verified"):
-            # Rejected conjectures may remain as bounded research history.
             continue
-
-        strategy = str(row.get("strategy", ""))
-        statement = str(row.get("statement", ""))
-        cert = row.get("certificate") or {}
-
-        if not bool(cert.get("ok", False)):
-            bad_active.append({"id": theorem_id, "reason": "verified row has non-ok certificate"})
-            continue
-
-        if strategy == "faulhaber_interpolation":
-            recurrence = cert.get("recurrence") or {}
-            recurrence_statement = str(recurrence.get("statement", ""))
-            if not (
-                cert.get("recurrence_nontrivial") is True
-                and recurrence.get("ok") is True
-                and recurrence_statement
-                and _relation_is_structurally_nontrivial(recurrence_statement)
-            ):
-                bad_active.append({"id": theorem_id, "reason": "Faulhaber recurrence is not proof-gated/nontrivial"})
-            continue
-
-        try:
-            parse_relation(statement)
-        except Exception:
-            # Some future theorem schemas may not be relation-style; they need
-            # their own explicit strategy-specific health check before being
-            # made critical.
-            continue
-        if not _relation_is_structurally_nontrivial(statement):
-            bad_active.append({"id": theorem_id, "reason": "structural tautology"})
+        valid, reason = validate_verified_discovery(row, discovery_verifier)
+        if not valid:
+            bad_active.append({"id": theorem_id, "reason": reason})
 
     check("discovery:verified_quality", not bad_active, bad_active)
 
