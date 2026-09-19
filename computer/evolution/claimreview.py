@@ -7,16 +7,33 @@ import socket
 import urllib.error
 import urllib.parse
 import urllib.request
+import unicodedata
 from difflib import SequenceMatcher
 from html.parser import HTMLParser
 from typing import Any
 
-STRONG_REAL = {"true", "correct", "accurate", "verified", "authentic", "fact", "factual"}
-STRONG_FAKE = {"false", "incorrect", "fake", "hoax", "fabricated", "pants on fire", "pants fire"}
+STRONG_REAL = {
+    "true", "correct", "accurate", "verified", "authentic", "fact", "factual",
+    "vero", "vera", "corretto", "corretta", "accurato", "accurata", "autentico", "autentica",
+    "verdadero", "verdadera", "cierto", "cierta",
+    "vrai", "vraie", "correct",
+    "wahr", "richtig",
+}
+STRONG_FAKE = {
+    "false", "incorrect", "fake", "hoax", "fabricated", "pants on fire", "pants fire",
+    "falso", "falsa", "errato", "errata", "bufala", "fabbricato", "fabbricata",
+    "falso", "falsa", "bulo",
+    "faux", "fausse",
+    "falsch",
+}
 AMBIGUOUS_MARKERS = {
     "mostly", "partly", "partial", "half", "mixture", "mixed", "misleading",
     "missing context", "needs context", "unproven", "unsupported", "satire",
     "outdated", "in dispute", "uncertain",
+    "parzialmente", "in parte", "fuorviante", "senza contesto", "non provato", "non verificato", "incerto", "incerta", "satira",
+    "parcialmente", "enganoso", "sin contexto", "no probado",
+    "partiellement", "trompeur", "sans contexte", "incertain",
+    "teilweise", "irrefuhrend", "ohne kontext", "unklar",
 }
 
 
@@ -66,7 +83,9 @@ def _is_claimreview(obj: dict) -> bool:
 
 
 def normalize_verdict(value: Any) -> str:
-    text = re.sub(r"[^a-z0-9 ]+", " ", str(value or "").lower())
+    text = unicodedata.normalize("NFKD", str(value or "").lower())
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = re.sub(r"[^a-z0-9 ]+", " ", text)
     return " ".join(text.split())
 
 
