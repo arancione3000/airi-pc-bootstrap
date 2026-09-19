@@ -272,6 +272,8 @@ def test_discovery_engine_creates_only_proof_gated_internal_novelty(tmp_path: Pa
         theorem = row["theorem"]
         assert theorem["verified"] is True
         assert theorem["internal_novelty"] is True
+        assert theorem["memory_novelty"] == "not_previously_stored"
+        assert theorem["source_novelty"] == "unassessed"
         assert theorem["human_novelty"] == "unassessed"
     status = engine.status()
     assert status["verified"] >= 4
