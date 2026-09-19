@@ -19,7 +19,7 @@ The lab must remain shadow-only.
 ## Continual training
 Autopilot is enabled by default on normal Airi-PC scheduler startup unless `AIRI_EVOLUTION_LAB_AUTOPILOT=0` is set or a persistent `autopilot.disabled` marker exists.
 
-The scheduler checks periodically (default 900 seconds). It starts a sandbox training cycle only when enough **new** observations have accumulated (default 20). With no new data the lab remains idle. This is deliberate: repeatedly optimizing forever on an unchanged benchmark would waste resources and overfit evaluation sets.
+The scheduler checks periodically (default 900 seconds). It starts a sandbox training cycle only when enough **new** observations have accumulated (default 40). With no new data the lab remains idle. This is deliberate: repeatedly optimizing forever on an unchanged benchmark would waste resources and overfit evaluation sets.
 
 Use:
 - `computer_evolution_lab_status` to inspect observations, champion and worker state.
