@@ -25,6 +25,14 @@ _EMAIL_RE = re.compile(r"\b[^\s@]+@[^\s@]+\.[^\s@]+\b")
 _LONG_NUMBER_RE = re.compile(r"\b\d{5,}\b")
 _PATH_RE = re.compile(r"(?<!\w)(?:[A-Za-z]:\\[^\s]+|/(?:[^\s/]+/)+[^\s]*)")
 
+def ensure_state_boundary() -> Path:
+    workspace = ROOT.resolve(strict=False)
+    resolved = LAB_STATE.resolve(strict=False)
+    if resolved == workspace or workspace not in resolved.parents:
+        raise RuntimeError(f"Evolution Lab state escaped Airi workspace: {resolved}")
+    return resolved
+
+
 
 def _json_read(path: Path, default):
     try:
@@ -34,6 +42,10 @@ def _json_read(path: Path, default):
 
 
 def _json_write(path: Path, value: Any) -> None:
+    root = ensure_state_boundary()
+    target = Path(path).resolve(strict=False)
+    if target != root and root not in target.parents:
+        raise RuntimeError(f"Evolution Lab blocked write outside state root: {target}")
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
@@ -137,6 +149,7 @@ def record_execution(
         ),
         "error_class": _error_class(error),
     }
+    ensure_state_boundary()
     RAW.parent.mkdir(parents=True, exist_ok=True)
     with _dataset_lock(RAW, timeout=5.0, stale_after=900.0):
         with RAW.open("a", encoding="utf-8") as handle:
@@ -145,6 +158,7 @@ def record_execution(
 
 
 def rebuild_dataset(max_observations: int = 20_000) -> dict[str, Any]:
+    ensure_state_boundary()
     rows = _read_observations()
     if max_observations > 0:
         rows = rows[-int(max_observations):]
@@ -228,6 +242,7 @@ def run_cycle(
     candidate_epochs: int = 1,
     finalist_epochs: int = 2,
 ) -> dict[str, Any]:
+    ensure_state_boundary()
     rebuilt = rebuild_dataset()
     if rebuilt["observations"] < 40 or min(rebuilt["success"], rebuilt["failure"]) < 4:
         result = {
