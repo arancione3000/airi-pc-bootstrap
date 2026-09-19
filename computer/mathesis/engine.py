@@ -5,6 +5,7 @@ from typing import Any
 
 from .architecture import architecture_report
 from .evolution import SelfEvolutionEngine
+from .experience import ExperienceAnalyzer
 from .discovery import ConjectureDiscoveryEngine
 from .curriculum import MathematicalCurriculum
 from .formalizer import FormalizerMesh
@@ -276,6 +277,7 @@ class MathesisOmega:
             "discovery": self.discovery.status(),
             "curriculum": self.curriculum.status(),
             "sympy_lab": self.math_lab.manifest(),
+            "experience": ExperienceAnalyzer(self.state_dir).signals(self.genome),
             "verifiers": self.verifier.diagnostics(),
             "guarantee": "proof-gated evolving system; not an infallibility or human-novelty guarantee",
         }
