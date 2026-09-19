@@ -9,6 +9,7 @@ on:
       - 'computer/advanced.py'
       - 'computer/control_plane/orchestrator.py'
       - 'tests/test_evolution_*.py'
+      - 'tests/test_advanced.py'
       - '.ai/skills/evolution-lab/**'
       - '.ai/skills/neuroevolution/**'
       - '.github/workflows/neuroevolution.yml'
@@ -36,7 +37,7 @@ jobs:
 
       - name: Focused evolution tests
         run: |
-          .venv/bin/python -m pytest -q tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py tests/test_evolution_lab.py
+          .venv/bin/python -m pytest -q tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py tests/test_evolution_lab.py tests/test_advanced.py
 
       - name: PyTorch end-to-end evolution smoke test
         env:
