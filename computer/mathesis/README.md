@@ -302,3 +302,15 @@ schema.
 Persistent curriculum metadata is migrated on read to schema v2, which includes
 per-domain retry counters. Status reports the effective schema version so old
 state files cannot silently look older than the logic actually using them.
+
+
+### Persistent-state health gate
+
+Every autonomous continuum cycle now runs a state health audit before pushing
+anything to the persistent `mathesis-state` branch. The audit checks
+architecture/domain closure, topology endpoints, genome bounds, router shape,
+verified discovery quality, Faulhaber recurrence certificates, curriculum retry
+metadata, benchmark critical failures and verifier/kernel status.
+
+A failed audit exits non-zero before the persistence step. The previous remote
+state therefore remains the last known-good checkpoint.
