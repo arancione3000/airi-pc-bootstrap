@@ -293,3 +293,29 @@ def test_systemd_evolution_service_is_independent_and_restartable():
     assert "Restart=always" in text
     assert "ExecStart=/opt/airi-pc/venv-current/bin/python -m evolution.daemon" in text
     assert "PartOf=airi-pc.service" not in text
+
+
+def test_privacy_audit_rejects_unexpected_evidence_payload(monkeypatch, tmp_path: Path):
+    workspace = tmp_path / "airi"
+    workspace.mkdir()
+    _patch_state(monkeypatch, workspace)
+    lab.DATA.parent.mkdir(parents=True)
+    lab.DATA.write_text(
+        json.dumps(
+            {
+                "id": "x",
+                "feature_schema": lab.FEATURE_SCHEMA,
+                "text": "goal_shape chars:le32,words:le5,lines:le1,url:0,email:0,path:0,digits:le0 operation read tool computer_file_read arg_shape count:0;none candidates computer_file_read",
+                "text_id": "x",
+                "label": 1,
+                "source": "airi-shadow-route-observation",
+                "evidence": json.dumps({"operation": "read", "tool": "computer_file_read", "secret": "https://leak.example"}),
+                "added_at": 1.0,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    audit = state_sync.privacy_audit_dataset(lab.DATA)
+    assert audit["ok"] is False
+    assert any("unexpected evidence fields" in error for error in audit["errors"])
