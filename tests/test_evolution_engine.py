@@ -283,3 +283,16 @@ def test_persistent_split_assignments_do_not_move_when_data_grows(tmp_path: Path
     assert sets[0].isdisjoint(sets[1])
     assert sets[0].isdisjoint(sets[2])
     assert sets[1].isdisjoint(sets[2])
+
+
+def test_stale_dataset_lock_is_recovered(tmp_path: Path):
+    import os
+    import time
+    path = tmp_path / "verified.jsonl"
+    lock = path.with_suffix(path.suffix + ".lock")
+    lock.write_text("stale", encoding="utf-8")
+    old = time.time() - 300
+    os.utime(lock, (old, old))
+    row = append_verified(path, {"text": "stale lock recovery sample text", "label": 1})
+    assert row["duplicate"] is False
+    assert not lock.exists()
