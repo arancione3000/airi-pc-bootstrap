@@ -17,6 +17,7 @@ LAB_STATE = Path(os.environ.get("AIRI_EVOLUTION_LAB_STATE") or ROOT / ".ai" / "e
 RAW = LAB_STATE / "raw" / "observations.jsonl"
 DATA = LAB_STATE / "data" / "verified.jsonl"
 META = LAB_STATE / "lab-meta.json"
+FEATURE_SCHEMA = 2
 
 _SECRET_RE = re.compile(
     r"(?i)(token|secret|password|cookie|authorization|api[_-]?key)\s*[:=]\s*[^\s,;}]+"
@@ -53,35 +54,56 @@ def _json_write(path: Path, value: Any) -> None:
     tmp.replace(path)
 
 
-def sanitize_goal(value: Any, max_chars: int = 600) -> str:
+def _bucket(value: int, bounds: tuple[int, ...]) -> str:
+    n = max(0, int(value))
+    for bound in bounds:
+        if n <= bound:
+            return f"le{bound}"
+    return f"gt{bounds[-1]}"
+
+
+def _goal_shape(value: Any) -> str:
     text = str(value or "")
-    text = _SECRET_RE.sub(r"\1=<redacted>", text)
-    text = _URL_RE.sub("<url>", text)
-    text = _EMAIL_RE.sub("<email>", text)
-    text = _PATH_RE.sub("<path>", text)
-    text = _LONG_NUMBER_RE.sub("<number>", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text[:max(80, int(max_chars))]
+    words = re.findall(r"\w+", text, re.UNICODE)
+    lines = text.count("\n") + 1 if text else 0
+    digit_count = sum(ch.isdigit() for ch in text)
+    return ",".join((
+        f"chars:{_bucket(len(text),(32,80,160,320,640,1200))}",
+        f"words:{_bucket(len(words),(5,12,25,50,100,200))}",
+        f"lines:{_bucket(lines,(1,2,5,10,25))}",
+        f"url:{int(bool(_URL_RE.search(text)))}",
+        f"email:{int(bool(_EMAIL_RE.search(text)))}",
+        f"path:{int(bool(_PATH_RE.search(text)))}",
+        f"digits:{_bucket(digit_count,(0,2,8,20,60))}",
+    ))
 
 
-def _arg_schema(args: Any) -> str:
+def _arg_shape(args: Any) -> str:
     if not isinstance(args, dict):
-        return type(args).__name__
-    bits = []
-    for key in sorted(str(k) for k in args.keys())[:24]:
-        value = args.get(key)
-        bits.append(f"{key}:{type(value).__name__}")
-    return ",".join(bits) or "none"
+        return f"kind:{type(args).__name__}"
+    counts: dict[str, int] = {}
+    for value in list(args.values())[:32]:
+        name = type(value).__name__
+        counts[name] = counts.get(name, 0) + 1
+    parts = [f"{name}:{counts[name]}" for name in sorted(counts)]
+    return f"count:{len(args)};" + (",".join(parts) if parts else "none")
 
 
-def route_feature(goal: str, operation: str, tool: str, args: Any = None) -> str:
+def route_feature(
+    goal: str,
+    operation: str,
+    tool: str,
+    args: Any = None,
+    candidates: list[str] | None = None,
+) -> str:
+    candidate_names = sorted({str(x)[:120] for x in (candidates or []) if str(x).strip()})[:16]
     return (
-        f"goal {sanitize_goal(goal)} "
+        f"goal_shape {_goal_shape(goal)} "
         f"operation {str(operation or 'unknown')[:80]} "
         f"tool {str(tool or 'unknown')[:120]} "
-        f"arg_schema {_arg_schema(args)}"
+        f"arg_shape {_arg_shape(args)} "
+        f"candidates {','.join(candidate_names) or 'none'}"
     )
-
 
 def _error_class(error: Any) -> str:
     text = str(error or "").lower()
@@ -108,7 +130,12 @@ def _read_observations() -> list[dict[str, Any]]:
         for line in handle:
             try:
                 row = json.loads(line)
-                if isinstance(row, dict) and row.get("feature") and row.get("label") in (0, 1):
+                if (
+                    isinstance(row, dict)
+                    and row.get("feature")
+                    and row.get("label") in (0, 1)
+                    and int(row.get("feature_schema", 0) or 0) == FEATURE_SCHEMA
+                ):
                     out.append(row)
             except Exception:
                 continue
@@ -128,13 +155,14 @@ def record_execution(
     node_id: str | None = None,
     candidates: list[str] | None = None,
 ) -> dict[str, Any]:
-    feature = route_feature(goal, operation, tool, args)
+    feature = route_feature(goal, operation, tool, args, candidates)
     stamp = time.time()
     raw_id = hashlib.sha256(
         f"{stamp}:{task_id or ''}:{node_id or ''}:{feature}:{bool(success)}".encode("utf-8")
     ).hexdigest()[:20]
     row = {
         "id": raw_id,
+        "feature_schema": FEATURE_SCHEMA,
         "created_at": stamp,
         "feature": feature,
         "feature_id": text_fingerprint(feature),
@@ -168,18 +196,41 @@ def compact_raw_observations(max_rows: int = 50_000) -> dict[str, Any]:
     ensure_state_boundary()
     limit = max(1000, int(max_rows))
     with _dataset_lock(RAW, timeout=10.0, stale_after=900.0):
-        rows = _read_observations()
-        if len(rows) <= limit:
-            return {"compacted": False, "rows": len(rows)}
-        kept = rows[-limit:]
+        safe_rows: list[dict[str, Any]] = []
+        total_rows = 0
+        if RAW.exists():
+            with RAW.open("r", encoding="utf-8", errors="replace") as handle:
+                for line in handle:
+                    if not line.strip():
+                        continue
+                    total_rows += 1
+                    try:
+                        row = json.loads(line)
+                    except Exception:
+                        continue
+                    if (
+                        isinstance(row, dict)
+                        and row.get("feature")
+                        and row.get("label") in (0, 1)
+                        and int(row.get("feature_schema", 0) or 0) == FEATURE_SCHEMA
+                    ):
+                        safe_rows.append(row)
+        kept = safe_rows[-limit:]
+        needs_rewrite = total_rows != len(kept) or len(safe_rows) > limit
+        if not needs_rewrite:
+            return {"compacted": False, "rows": len(kept), "purged_legacy": 0}
         tmp = RAW.with_suffix(".compact.tmp")
         tmp.parent.mkdir(parents=True, exist_ok=True)
         with tmp.open("w", encoding="utf-8") as handle:
             for row in kept:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
         tmp.replace(RAW)
-    return {"compacted": True, "rows": len(kept), "dropped": len(rows) - len(kept)}
-
+    return {
+        "compacted": True,
+        "rows": len(kept),
+        "dropped": max(0, len(safe_rows) - len(kept)),
+        "purged_legacy": max(0, total_rows - len(safe_rows)),
+    }
 
 def prune_lab_storage(max_runs: int = 50, max_history_lines: int = 200) -> dict[str, Any]:
     root = ensure_state_boundary()
@@ -231,6 +282,7 @@ def rebuild_dataset(max_observations: int = 20_000) -> dict[str, Any]:
             features.add(feature_id)
             training_row = {
                 "id": str(row["id"]),
+                "feature_schema": FEATURE_SCHEMA,
                 "text": feature,
                 "text_id": feature_id,
                 "label": label,
@@ -266,10 +318,13 @@ def status() -> dict[str, Any]:
     records = load_records(DATA)
     counts = class_counts(records)
     meta = _json_read(META, {})
-    champion = _json_read(LAB_STATE / "champion" / "metrics.json", None)
+    compatible = int(meta.get("feature_schema", 0) or 0) == FEATURE_SCHEMA
+    champion = _json_read(LAB_STATE / "champion" / "metrics.json", None) if compatible else None
     return {
         "ok": True,
         "mode": "shadow_only",
+        "feature_schema": FEATURE_SCHEMA,
+        "champion_compatible": compatible,
         "isolation": {
             "production_write_access": False,
             "network_required_for_training": False,
@@ -307,6 +362,7 @@ def run_cycle(
         }
         _json_write(META, {
             **_json_read(META, {}),
+            "feature_schema": FEATURE_SCHEMA,
             "last_cycle_raw_count": rebuilt["raw_observations"],
             "last_cycle": result,
             "updated_at": time.time(),
@@ -330,7 +386,8 @@ def run_cycle(
     result = run_evolution(LAB_STATE, cfg)
     meta = _json_read(META, {})
     meta.update({
-        "last_cycle_raw_count": rebuilt["observations"],
+        "feature_schema": FEATURE_SCHEMA,
+        "last_cycle_raw_count": rebuilt["raw_observations"],
         "last_cycle": {
             "run_id": result.get("run_id"),
             "promoted": result.get("promoted"),
@@ -351,7 +408,16 @@ def score_candidates(
     candidates: list[str],
     args: Any = None,
 ) -> dict[str, Any]:
+    meta = _json_read(META, {})
     champion = LAB_STATE / "champion" / "model.pt"
+    if int(meta.get("feature_schema", 0) or 0) != FEATURE_SCHEMA:
+        return {
+            "ok": False,
+            "available": False,
+            "reason": "champion_requires_privacy_safe_retraining",
+            "candidates": [],
+            "shadow_only": True,
+        }
     if not champion.exists():
         return {
             "ok": False,
@@ -362,7 +428,7 @@ def score_candidates(
         }
     scored = []
     for tool in list(candidates or [])[:32]:
-        feature = route_feature(goal, operation, tool, args)
+        feature = route_feature(goal, operation, tool, args, candidates)
         pred = predict_text(LAB_STATE, feature, vocab_size=4096)
         scored.append({
             "tool": tool,

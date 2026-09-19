@@ -1,0 +1,33 @@
+[Unit]
+Description=Airi-PC persistent Evolution Lab daemon
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/airi-pc/current/computer/evolution/daemon.py
+
+[Service]
+Type=simple
+User=airi-pc
+Group=airi-pc
+WorkingDirectory=/opt/airi-pc/current
+Environment=AIRI_ROOT=/opt/airi-pc/current
+Environment=AIRIPC_WORKSPACE_ROOT=/opt/airi-pc/current
+Environment=AIRIPC_VENV=/opt/airi-pc/venv-current
+Environment=PYTHONPATH=/opt/airi-pc/current/computer
+Environment=AIRI_EVOLUTION_LAB_AUTOPILOT=1
+Environment=AIRI_EVOLUTION_DAEMON_INTERVAL=300
+Environment=AIRI_EVOLUTION_OFFLINE_INTERVAL=7200
+Environment=AIRI_EVOLUTION_SYNC_INTERVAL=1800
+ExecStart=/opt/airi-pc/venv-current/bin/python -m evolution.daemon
+Restart=always
+RestartSec=10
+TimeoutStopSec=45
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

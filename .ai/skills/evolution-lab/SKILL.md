@@ -30,3 +30,31 @@ Use:
 - `computer_evolution_lab_autopilot` to enable/disable the persistent recurring job.
 
 A score is always advisory. If the lab says a route has 90% estimated success, production Airi-PC still uses its normal router unless a future, separately reviewed feature explicitly changes that policy.
+
+
+## Persistent continuum
+
+The Evolution Lab has a lifecycle independent from the chat/runtime session.
+
+- `computer/evolution/daemon.py` is the resident coordinator.
+- On Airi OS it runs as `airi-evolution-lab.service` with `Restart=always` and is not `PartOf=airi-pc.service`.
+- On generic bootstrap installations, `computer/start.sh` launches the daemon detached with `nohup`; server restarts do not target it.
+- The daemon checks for fresh observations, runs normal data-triggered cycles, and may run bounded offline search cycles every two hours.
+- Repeated search on one unchanged dataset is capped; new privacy-safe data resets the budget.
+- The daemon syncs state to the dedicated Git branch `airi-evolution-state` and verifies the pushed remote SHA.
+- State sync is bidirectional: privacy-safe records are merged, and a better remote/cloud champion can be imported locally.
+- A fresh runtime can restore state from the Git branch.
+
+GitHub Actions workflow `.github/workflows/evolution-continuum.yml` runs every two hours. It restores `airi-evolution-state`, performs one bounded cloud cycle when enough data exists, then pushes and verifies the resulting state. This means learning can continue when the Airi-PC host itself is offline.
+
+### Public-state privacy contract
+
+Only feature schema v2 may be synchronized. V2 contains no user goal words and no argument values or argument names. It contains structural request-shape buckets, internal operation/tool names, candidate tool names, labels and aggregate metrics. Legacy v1 observations are purged before a v2 dataset is rebuilt.
+
+Never export `raw/observations.jsonl`. Every dataset export must pass `state_sync.privacy_audit_dataset`.
+
+Tomorrow/status review can inspect:
+- `airi-evolution-state:evolution-state/shadow-router/status.json`
+- `airi-evolution-state:evolution-state/shadow-router/manifest.json`
+- `airi-evolution-state:evolution-state/shadow-router/cloud-meta.json` when cloud cycles have run
+- the branch commit history for verified heartbeats/syncs.

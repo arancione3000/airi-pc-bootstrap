@@ -1,0 +1,482 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import time
+from pathlib import Path
+from typing import Any
+
+from . import lab
+
+STATE_BRANCH = os.environ.get("AIRI_EVOLUTION_STATE_BRANCH", "airi-evolution-state")
+SYNC_ROOT = Path(os.environ.get("AIRI_EVOLUTION_SYNC_DIR") or (lab.ROOT / ".ai" / "evolution-git")).resolve()
+CHECKOUT = SYNC_ROOT / "checkout"
+EXPORT_REL = Path("evolution-state") / "shadow-router"
+SYNC_META = lab.LAB_STATE / "sync-meta.json"
+HEARTBEAT_SECONDS = max(1800, int(os.environ.get("AIRI_EVOLUTION_HEARTBEAT_SECONDS", "7200")))
+SOURCE_ROOT = Path(os.environ.get("AIRI_ROOT") or lab.ROOT)
+
+
+def _run(args: list[str], cwd: Path | None = None, timeout: int = 90) -> dict[str, Any]:
+    try:
+        proc = subprocess.run(
+            args,
+            cwd=str(cwd) if cwd else None,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+        return {
+            "ok": proc.returncode == 0,
+            "returncode": proc.returncode,
+            "stdout": proc.stdout[-12000:],
+            "stderr": proc.stderr[-12000:],
+        }
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"ok": False, "returncode": -1, "stdout": "", "stderr": repr(exc)}
+
+
+def _read_json(path: Path, default: Any) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default
+
+
+def _write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _source_sha() -> str:
+    override = os.environ.get("AIRI_EVOLUTION_SOURCE_SHA", "").strip()
+    if override:
+        return override
+    result = _run(["git", "-C", str(SOURCE_ROOT), "rev-parse", "HEAD"], timeout=10)
+    return result["stdout"].strip() if result["ok"] else ""
+
+
+def dataset_digest() -> str:
+    return _sha256(lab.DATA) if lab.DATA.exists() else ""
+
+
+def _git_url() -> str:
+    override = os.environ.get("AIRI_EVOLUTION_GIT_URL", "").strip()
+    if override:
+        return override
+    result = _run(["git", "-C", str(SOURCE_ROOT), "remote", "get-url", "origin"], timeout=10)
+    if not result["ok"] or not result["stdout"].strip():
+        raise RuntimeError("evolution state sync requires a configured git origin")
+    return result["stdout"].strip()
+
+
+def _clean_public(value: Any) -> Any:
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            k = str(key)
+            lower = k.lower()
+            if lower in {"state_dir", "run_dir", "selected_trial_path", "dataset"} or lower.endswith("_path"):
+                continue
+            out[k] = _clean_public(item)
+        return out
+    if isinstance(value, list):
+        return [_clean_public(item) for item in value]
+    if isinstance(value, str):
+        if value.startswith("/") or (len(value) > 2 and value[1:3] == ":\\"):
+            return "<local-path>"
+        return value
+    return value
+
+
+def privacy_audit_dataset(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"ok": True, "records": 0, "errors": []}
+    errors: list[str] = []
+    records = 0
+    with path.open("r", encoding="utf-8", errors="strict") as handle:
+        for lineno, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            records += 1
+            try:
+                row = json.loads(line)
+            except Exception as exc:
+                errors.append(f"line {lineno}: invalid json: {exc}")
+                continue
+            if int(row.get("feature_schema", 0) or 0) != lab.FEATURE_SCHEMA:
+                errors.append(f"line {lineno}: legacy feature schema")
+            text = str(row.get("text", ""))
+            if not text.startswith("goal_shape "):
+                errors.append(f"line {lineno}: non-structural feature")
+            lowered = text.lower()
+            if "http://" in lowered or "https://" in lowered or "@" in text or "/" in text or "\\" in text:
+                errors.append(f"line {lineno}: possible user data in export feature")
+            if str(row.get("source", "")) != "airi-shadow-route-observation":
+                errors.append(f"line {lineno}: unexpected training source")
+            try:
+                evidence = json.loads(str(row.get("evidence", "{}")))
+            except Exception:
+                errors.append(f"line {lineno}: malformed evidence")
+                evidence = {}
+            allowed_evidence = {"operation", "tool", "latency_bucket", "error_class", "candidate_count"}
+            if not isinstance(evidence, dict) or set(evidence) - allowed_evidence:
+                errors.append(f"line {lineno}: unexpected evidence fields")
+            else:
+                for key, value in evidence.items():
+                    if isinstance(value, str):
+                        low = value.lower()
+                        if (
+                            "http://" in low
+                            or "https://" in low
+                            or "@" in value
+                            or "/" in value
+                            or "\\" in value
+                            or len(value) > 160
+                        ):
+                            errors.append(f"line {lineno}: unsafe evidence value for {key}")
+    return {"ok": not errors, "records": records, "errors": errors[:50]}
+
+
+def _state_digest() -> str:
+    h = hashlib.sha256()
+    candidates = [
+        lab.DATA,
+        lab.META,
+        lab.LAB_STATE / "data" / "canary_ids.json",
+        lab.LAB_STATE / "data" / "split_manifest.json",
+        lab.LAB_STATE / "champion" / "genome.json",
+        lab.LAB_STATE / "champion" / "metrics.json",
+        lab.LAB_STATE / "champion" / "model.pt",
+        lab.LAB_STATE / "cloud-meta.json",
+    ]
+    for path in candidates:
+        h.update(str(path.name).encode("utf-8"))
+        if path.exists():
+            h.update(_sha256(path).encode("ascii"))
+    return h.hexdigest()
+
+
+def export_snapshot(destination: Path, *, exported_at: float | None = None) -> dict[str, Any]:
+    destination = Path(destination).resolve()
+    audit = privacy_audit_dataset(lab.DATA)
+    if not audit["ok"]:
+        raise RuntimeError(f"privacy audit failed: {audit['errors']}")
+
+    if destination.exists():
+        shutil.rmtree(destination)
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / "data").mkdir(parents=True, exist_ok=True)
+
+    if lab.DATA.exists():
+        shutil.copy2(lab.DATA, destination / "data" / "verified.jsonl")
+
+    for name in ("canary_ids.json", "split_manifest.json"):
+        src = lab.LAB_STATE / "data" / name
+        if src.exists():
+            _write_json(destination / "data" / name, _clean_public(_read_json(src, {})))
+
+    meta = _read_json(lab.META, {})
+    compatible = int(meta.get("feature_schema", 0) or 0) == lab.FEATURE_SCHEMA
+    if meta:
+        _write_json(destination / "lab-meta.json", _clean_public(meta))
+    cloud_meta = lab.LAB_STATE / "cloud-meta.json"
+    if cloud_meta.exists():
+        _write_json(destination / "cloud-meta.json", _clean_public(_read_json(cloud_meta, {})))
+
+    if compatible:
+        champion_src = lab.LAB_STATE / "champion"
+        champion_dst = destination / "champion"
+        for name in ("genome.json", "metrics.json", "provenance.json"):
+            src = champion_src / name
+            if src.exists():
+                champion_dst.mkdir(parents=True, exist_ok=True)
+                _write_json(champion_dst / name, _clean_public(_read_json(src, {})))
+        model = champion_src / "model.pt"
+        if model.exists() and model.stat().st_size <= 20 * 1024 * 1024:
+            champion_dst.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(model, champion_dst / "model.pt")
+
+    now = float(exported_at or time.time())
+    status = lab.status()
+    public_status = {
+        "ok": True,
+        "feature_schema": lab.FEATURE_SCHEMA,
+        "exported_at": now,
+        "source_sha": _source_sha(),
+        "raw_observations_local_only": int(status.get("raw_observations", 0)),
+        "training_records": int(status.get("training_records", 0)),
+        "success_records": int(status.get("success_records", 0)),
+        "failure_records": int(status.get("failure_records", 0)),
+        "unique_route_features": int(status.get("unique_route_features", 0)),
+        "pending_observations": int(status.get("pending_observations", 0)),
+        "champion_compatible": bool(status.get("champion_compatible", False)),
+        "champion": _clean_public(status.get("champion")),
+        "last_cycle": _clean_public(status.get("last_cycle")),
+        "daemon_running": bool(status.get("daemon_running", False)),
+        "daemon_status": _clean_public(status.get("daemon_status")),
+        "git_sync": _clean_public(status.get("git_sync")),
+    }
+    _write_json(destination / "status.json", public_status)
+
+    manifest_files: dict[str, str] = {}
+    for path in sorted(destination.rglob("*")):
+        if path.is_file() and path.name != "manifest.json":
+            manifest_files[str(path.relative_to(destination))] = _sha256(path)
+    manifest = {
+        "version": 1,
+        "feature_schema": lab.FEATURE_SCHEMA,
+        "exported_at": now,
+        "state_digest": _state_digest(),
+        "files": manifest_files,
+        "privacy": {
+            "raw_observations_exported": False,
+            "goal_text_exported": False,
+            "argument_values_exported": False,
+            "dataset_audit": audit,
+        },
+    }
+    _write_json(destination / "manifest.json", manifest)
+    return manifest
+
+
+def _ensure_checkout() -> dict[str, Any]:
+    url = _git_url()
+    SYNC_ROOT.mkdir(parents=True, exist_ok=True)
+    if not (CHECKOUT / ".git").exists():
+        if CHECKOUT.exists():
+            shutil.rmtree(CHECKOUT)
+        clone = _run(
+            ["git", "clone", "--filter=blob:none", "--single-branch", "--branch", STATE_BRANCH, url, str(CHECKOUT)],
+            timeout=180,
+        )
+        if not clone["ok"]:
+            return {"ok": False, "reason": "clone_failed", "git": clone}
+    else:
+        fetch = _run(["git", "fetch", "origin", STATE_BRANCH], cwd=CHECKOUT, timeout=120)
+        if not fetch["ok"]:
+            return {"ok": False, "reason": "fetch_failed", "git": fetch}
+        reset = _run(["git", "checkout", "-B", STATE_BRANCH, f"origin/{STATE_BRANCH}"], cwd=CHECKOUT)
+        if not reset["ok"]:
+            return {"ok": False, "reason": "checkout_failed", "git": reset}
+        _run(["git", "reset", "--hard", f"origin/{STATE_BRANCH}"], cwd=CHECKOUT)
+    _run(["git", "config", "user.name", "Airi Evolution Lab"], cwd=CHECKOUT)
+    _run(["git", "config", "user.email", "airi-evolution@users.noreply.github.com"], cwd=CHECKOUT)
+    return {"ok": True, "checkout": str(CHECKOUT)}
+
+
+
+def _champion_score(metrics: dict[str, Any] | None) -> tuple[float, float, float]:
+    row = metrics or {}
+    try:
+        f1 = float(row.get("f1", -1.0))
+    except Exception:
+        f1 = -1.0
+    try:
+        brier = float(row.get("brier", 999.0))
+    except Exception:
+        brier = 999.0
+    try:
+        params = float(row.get("params", 1e18))
+    except Exception:
+        params = 1e18
+    return (f1, -brier, -params)
+
+
+def reconcile_from_checkout() -> dict[str, Any]:
+    remote_root = CHECKOUT / EXPORT_REL
+    remote_data = remote_root / "data" / "verified.jsonl"
+    audit = privacy_audit_dataset(remote_data)
+    if not audit["ok"]:
+        return {"ok": False, "reason": "remote_privacy_audit_failed", "audit": audit}
+
+    from .data import load_records
+
+    local_rows = load_records(lab.DATA)
+    remote_rows = load_records(remote_data)
+    merged: dict[str, dict[str, Any]] = {}
+    conflicts = 0
+    for row in local_rows + remote_rows:
+        if int(row.get("feature_schema", 0) or 0) != lab.FEATURE_SCHEMA:
+            continue
+        key = str(row.get("text_id") or row.get("id") or "")
+        if not key:
+            continue
+        previous = merged.get(key)
+        if previous is not None and int(previous.get("label", -1)) != int(row.get("label", -2)):
+            conflicts += 1
+            continue
+        if previous is None or float(row.get("added_at", 0) or 0) < float(previous.get("added_at", 0) or 0):
+            merged[key] = row
+
+    if remote_rows and len(merged) >= len(local_rows):
+        lab.DATA.parent.mkdir(parents=True, exist_ok=True)
+        tmp = lab.DATA.with_suffix(".merge.tmp")
+        ordered = sorted(merged.values(), key=lambda row: (float(row.get("added_at", 0) or 0), str(row.get("text_id", ""))))
+        with tmp.open("w", encoding="utf-8") as handle:
+            for row in ordered:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        tmp.replace(lab.DATA)
+
+    local_metrics = _read_json(lab.LAB_STATE / "champion" / "metrics.json", {})
+    remote_metrics = _read_json(remote_root / "champion" / "metrics.json", {})
+    champion_imported = False
+    if remote_metrics and _champion_score(remote_metrics) > _champion_score(local_metrics):
+        remote_champion = remote_root / "champion"
+        local_champion = lab.LAB_STATE / "champion"
+        local_champion.mkdir(parents=True, exist_ok=True)
+        for name in ("genome.json", "metrics.json", "provenance.json", "model.pt"):
+            source = remote_champion / name
+            if source.exists():
+                shutil.copy2(source, local_champion / name)
+        meta = _read_json(lab.META, {})
+        meta["feature_schema"] = lab.FEATURE_SCHEMA
+        meta["remote_champion_imported_at"] = time.time()
+        _write_json(lab.META, meta)
+        champion_imported = True
+
+    remote_cloud_meta = remote_root / "cloud-meta.json"
+    local_cloud_meta = lab.LAB_STATE / "cloud-meta.json"
+    if remote_cloud_meta.exists():
+        remote_value = _read_json(remote_cloud_meta, {})
+        local_value = _read_json(local_cloud_meta, {})
+        if float(remote_value.get("updated_at", 0) or 0) >= float(local_value.get("updated_at", 0) or 0):
+            _write_json(local_cloud_meta, remote_value)
+
+    return {
+        "ok": True,
+        "local_records_before": len(local_rows),
+        "remote_records": len(remote_rows),
+        "merged_records": len(merged),
+        "conflicts": conflicts,
+        "champion_imported": champion_imported,
+    }
+
+def sync_to_git(*, force_heartbeat: bool = False, _retry: bool = True) -> dict[str, Any]:
+    checkout = _ensure_checkout()
+    if not checkout["ok"]:
+        return checkout
+
+    reconcile = reconcile_from_checkout()
+    if not reconcile.get("ok"):
+        return {"ok": False, "synced": False, "reason": "reconcile_failed", "reconcile": reconcile}
+
+    remote_manifest = _read_json(CHECKOUT / EXPORT_REL / "manifest.json", {})
+    digest = _state_digest()
+    last_export = float(remote_manifest.get("exported_at", 0) or 0)
+    if (
+        not force_heartbeat
+        and remote_manifest.get("state_digest") == digest
+        and time.time() - last_export < HEARTBEAT_SECONDS
+    ):
+        return {
+            "ok": True,
+            "synced": False,
+            "reason": "state_unchanged",
+            "remote_exported_at": last_export,
+            "state_digest": digest,
+            "reconcile": reconcile,
+        }
+
+    manifest = export_snapshot(CHECKOUT / EXPORT_REL)
+    _run(["git", "add", "--", str(EXPORT_REL)], cwd=CHECKOUT)
+    diff = _run(["git", "diff", "--cached", "--quiet"], cwd=CHECKOUT)
+    if diff["returncode"] == 0:
+        return {"ok": True, "synced": False, "reason": "nothing_to_commit", "manifest": manifest}
+
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    commit = _run(["git", "commit", "-m", f"evolution-state: sync {stamp}"], cwd=CHECKOUT)
+    if not commit["ok"]:
+        return {"ok": False, "synced": False, "reason": "commit_failed", "git": commit}
+
+    sha = _run(["git", "rev-parse", "HEAD"], cwd=CHECKOUT)["stdout"].strip()
+    push = _run(["git", "push", "origin", f"HEAD:{STATE_BRANCH}"], cwd=CHECKOUT, timeout=120)
+    if not push["ok"]:
+        if _retry:
+            refreshed = _ensure_checkout()
+            if refreshed.get("ok"):
+                return sync_to_git(force_heartbeat=True, _retry=False)
+        return {"ok": False, "synced": False, "reason": "push_failed", "local_commit": sha, "git": push}
+
+    verify = _run(["git", "ls-remote", "origin", f"refs/heads/{STATE_BRANCH}"], cwd=CHECKOUT, timeout=60)
+    remote_sha = verify["stdout"].split()[0] if verify["ok"] and verify["stdout"].split() else ""
+    ok = bool(remote_sha and remote_sha == sha)
+    result = {
+        "ok": ok,
+        "synced": ok,
+        "commit": sha,
+        "remote_sha": remote_sha,
+        "branch": STATE_BRANCH,
+        "manifest": manifest,
+        "reconcile": reconcile,
+        "reason": "verified" if ok else "remote_verification_failed",
+    }
+    _write_json(SYNC_META, {**result, "updated_at": time.time()})
+    return result
+
+
+def restore_from_git(*, force: bool = False) -> dict[str, Any]:
+    checkout = _ensure_checkout()
+    if not checkout["ok"]:
+        return checkout
+    src = CHECKOUT / EXPORT_REL
+    manifest = _read_json(src / "manifest.json", {})
+    if int(manifest.get("feature_schema", 0) or 0) != lab.FEATURE_SCHEMA:
+        return {"ok": False, "restored": False, "reason": "remote_feature_schema_mismatch"}
+
+    remote_data = src / "data" / "verified.jsonl"
+    audit = privacy_audit_dataset(remote_data)
+    if not audit["ok"]:
+        return {"ok": False, "restored": False, "reason": "remote_privacy_audit_failed", "audit": audit}
+
+    local_records = len(lab._read_observations()) if lab.RAW.exists() else 0
+    local_training = len(__import__("evolution.data", fromlist=["load_records"]).load_records(lab.DATA))
+    if not force and (local_records > 0 or local_training > 0):
+        return {"ok": True, "restored": False, "reason": "local_state_present"}
+
+    lab.LAB_STATE.mkdir(parents=True, exist_ok=True)
+    if remote_data.exists():
+        lab.DATA.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(remote_data, lab.DATA)
+    for name in ("canary_ids.json", "split_manifest.json"):
+        source = src / "data" / name
+        if source.exists():
+            target = lab.LAB_STATE / "data" / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+    source_meta = src / "lab-meta.json"
+    if source_meta.exists():
+        shutil.copy2(source_meta, lab.META)
+    source_cloud_meta = src / "cloud-meta.json"
+    if source_cloud_meta.exists():
+        shutil.copy2(source_cloud_meta, lab.LAB_STATE / "cloud-meta.json")
+    source_champion = src / "champion"
+    if source_champion.exists():
+        target = lab.LAB_STATE / "champion"
+        target.mkdir(parents=True, exist_ok=True)
+        for name in ("genome.json", "metrics.json", "provenance.json", "model.pt"):
+            source = source_champion / name
+            if source.exists():
+                shutil.copy2(source, target / name)
+
+    return {
+        "ok": True,
+        "restored": True,
+        "records": audit["records"],
+        "feature_schema": lab.FEATURE_SCHEMA,
+        "remote_exported_at": manifest.get("exported_at"),
+    }

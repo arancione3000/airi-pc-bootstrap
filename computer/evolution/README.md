@@ -239,3 +239,17 @@ Long-running storage is bounded:
 - `computer_evolution_lab_autopilot`
 
 `computer_evolution_lab_score` is advisory only. A future production integration would require a separately reviewed change and should not be enabled merely because a lab benchmark looks good.
+
+
+## Always-on Evolution Continuum
+
+The shadow router now has two independent execution environments:
+
+1. A resident local daemon survives ordinary Airi-PC/chat server restarts and continues bounded offline search plus Git state synchronization.
+2. A scheduled GitHub Actions workflow continues bounded evolution from the same privacy-safe state branch while the Airi-PC host is unavailable.
+
+Persistent state lives on the `airi-evolution-state` branch under `evolution-state/shadow-router/`. Raw observations are never synchronized. Feature schema v2 deliberately excludes original goal text, argument names and argument values.
+
+The local daemon and cloud workflow both use a finite search budget for each immutable dataset digest. This prevents endless repeated optimization against one frozen evaluation set. When new real observations change the dataset digest, the search budget resets and continual evolution resumes.
+
+The state sync verifies pushes with `git ls-remote`; a local success is not treated as persistent until the remote branch points to the same commit.

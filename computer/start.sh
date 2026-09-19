@@ -16,6 +16,8 @@ SERVER_PID_FILE="$LOG_DIR/computer-server.pid"
 LIVE_PID_FILE="$LOG_DIR/airi-live-runtime.pid"
 LIVE_SESSION_FILE="$ROOT/.ai/state/live_session_id"
 RUNTIME_SHA_FILE="$ROOT/.ai/.runtime_source_sha"
+EVOLUTION_DAEMON_PID_FILE="$ROOT/.ai/evolution-lab/shadow-router/daemon.pid"
+EVOLUTION_DAEMON_LOG="$LOG_DIR/evolution-daemon.log"
 server_pids() {
   pgrep -f 'uvicorn (server|contract_server):app --host 127\.0\.0\.1 --port 9010' 2>/dev/null || true
 }
@@ -201,6 +203,20 @@ if [ -z "$LIVE_PID" ] || ! kill -0 "$LIVE_PID" 2>/dev/null; then
     "$PYTHON_BIN" -m control_plane.live_runtime \
     >"$LOG_DIR/airi-live-runtime.log" 2>&1 < /dev/null &
   echo $! > "$LIVE_PID_FILE"
+fi
+
+if [ "${AIRI_EVOLUTION_DAEMON:-1}" != "0" ]; then
+  mkdir -p "$(dirname "$EVOLUTION_DAEMON_PID_FILE")"
+  EVOLUTION_DAEMON_PID="$(cat "$EVOLUTION_DAEMON_PID_FILE" 2>/dev/null || true)"
+  if [ -z "$EVOLUTION_DAEMON_PID" ] || ! kill -0 "$EVOLUTION_DAEMON_PID" 2>/dev/null; then
+    nohup env \
+      AIRI_ROOT="$ROOT" \
+      AIRIPC_WORKSPACE_ROOT="$ROOT" \
+      PYTHONPATH="$ROOT/computer${PYTHONPATH:+:$PYTHONPATH}" \
+      "$PYTHON_BIN" -m evolution.daemon \
+      >"$EVOLUTION_DAEMON_LOG" 2>&1 < /dev/null &
+    sleep 0.2
+  fi
 fi
 
 if [ -x "$ROOT/scripts/airi-supervisor" ] && ! pgrep -f '[a]iri-supervisor' >/dev/null 2>&1; then
