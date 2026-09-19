@@ -1,5 +1,5 @@
 {
-  "cycle": 32,
+  "cycle": 34,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -174,7 +174,7 @@
   "strategy_counts": {
     "binomial_expansion": 7,
     "difference_of_powers": 8,
-    "faulhaber_interpolation": 5,
+    "faulhaber_interpolation": 6,
     "finite_geometric_identity": 8
   },
   "theorems": {
@@ -336,6 +336,62 @@
       "quality_gate": "structurally_nontrivial_and_proof_gated",
       "statement": "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
       "strategy": "finite_geometric_identity",
+      "verified": true
+    },
+    "2db2b4776b57c9322789": {
+      "certificate": {
+        "base_case": true,
+        "methods": [
+          "exact_integer_samples",
+          "sympy_interpolation",
+          "base_case",
+          "finite_difference_induction_step",
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "polynomial": "n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42",
+        "recurrence": {
+          "counterexample": null,
+          "details": {
+            "lean": {
+              "ok": false,
+              "reason": "requires closed equality",
+              "status": "not_applicable"
+            },
+            "smt": {
+              "method": "z3_unsat_negation",
+              "ok": true,
+              "status": "verified"
+            },
+            "symbolic": {
+              "method": "sympy_normal_form",
+              "normal_form": "0",
+              "ok": true,
+              "status": "verified"
+            }
+          },
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "((n + 1)*(n + 2)*(2*n + 3)*(-3*n + 3*(n + 1)**4 + 6*(n + 1)**3 - 2)/42)-(n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42) = (n+1)^6",
+          "status": "verified"
+        },
+        "recurrence_nontrivial": true,
+        "sample_count": 10,
+        "status": "verified"
+      },
+      "complexity": 6,
+      "discovered_at": 1789861730.8948085,
+      "human_novelty": "unassessed",
+      "id": "2db2b4776b57c9322789",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "sum(k^6, k=1..n) = n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42 for integer n>=0",
+      "strategy": "faulhaber_interpolation",
       "verified": true
     },
     "2f64c86003bd7167441f": {
@@ -1215,6 +1271,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789861427.4270444,
+  "updated_at": 1789861730.8948085,
   "version": 3
 }
