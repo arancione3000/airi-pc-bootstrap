@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .knowledge import default_state_dir
+from .safe_math import parse_relation
 from .types import ArchitectureGenome
 
 
@@ -32,6 +33,33 @@ class ExperienceAnalyzer:
             return json.loads((self.state_dir / name).read_text(encoding="utf-8"))
         except Exception:
             return fallback
+
+    def replayable_theorems(self, limit: int = 16) -> list[str]:
+        """Return a bounded deterministic corpus of previously verified relations.
+
+        Only statements accepted by the safe mathematical relation parser are
+        replayed as promotion tests. Richer theorem schemas remain in the
+        knowledge graph but are not silently downgraded into string heuristics.
+        """
+        discoveries = self._json("discoveries.json", {"theorems": {}})
+        rows = sorted(
+            (discoveries.get("theorems") or {}).values(),
+            key=lambda row: (float(row.get("discovered_at", 0)), str(row.get("id", ""))),
+            reverse=True,
+        )
+        out: list[str] = []
+        for row in rows:
+            if not row.get("verified"):
+                continue
+            statement = str(row.get("statement", "")).strip()
+            try:
+                parse_relation(statement)
+            except Exception:
+                continue
+            out.append(statement)
+            if len(out) >= max(1, min(64, int(limit))):
+                break
+        return list(reversed(out))
 
     def signals(
         self,
