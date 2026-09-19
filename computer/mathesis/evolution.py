@@ -128,7 +128,16 @@ class SelfEvolutionEngine:
                 "benchmark": candidate_bench,
             })
 
-        selected_trial = max(trials, key=lambda row: float(row["benchmark"]["score"]))
+        # Never let an ineligible high score hide a lower-scoring safe challenger.
+        # Score chooses among candidates only after the hard promotion gates pass.
+        eligible_trials = [
+            row for row in trials
+            if row["benchmark"]["ok"]
+            and len(row["benchmark"]["critical_failures"])
+            <= len(champion_bench["critical_failures"])
+        ]
+        selection_pool = eligible_trials or trials
+        selected_trial = max(selection_pool, key=lambda row: float(row["benchmark"]["score"]))
         candidate = ArchitectureGenome.from_dict(selected_trial["genome"])
         candidate_bench = selected_trial["benchmark"]
         candidate_router = router_by_id[candidate.genome_id]
