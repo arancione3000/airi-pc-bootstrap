@@ -22,9 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      PYTHONPATH: ${{ github.workspace }}/computer
-      MATHESIS_STATE_DIR: ${{ runner.temp }}/mathesis-runtime-state
-      STATE_REPO: ${{ runner.temp }}/mathesis-state-repo
+      PYTHONPATH: computer
+      MATHESIS_STATE_DIR: /tmp/mathesis-runtime-state
+      STATE_REPO: /tmp/mathesis-state-repo
     steps:
       - uses: actions/checkout@v4
 
