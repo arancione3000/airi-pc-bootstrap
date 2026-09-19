@@ -260,3 +260,30 @@ is not forgotten when another challenger wins first.
 The read-only curriculum cadence is tuned so a champion with research budget 2
 attempts external mathematical study roughly every 15 minutes while the
 five-minute chain is healthy.
+
+
+### Domain closure invariant
+
+Every mathematical domain advertised by the SymPy laboratory must also be an
+evolvable architecture expert. CI enforces this set relationship. Polynomial
+mathematics is explicitly benchmarked and can now be added by challenger
+architectures when curriculum feedback reports it as missing.
+
+
+The symbolic-depth promotion bonus is tied to the explicit
+`search:symbolic_depth` verification result, not to a positional task index.
+This prevents anti-forgetting replay tasks from accidentally changing the
+meaning of architecture scores.
+
+
+Legacy Faulhaber discoveries created before the nontrivial-induction gate are
+automatically re-proved from their stored polynomial. Their base case, exact
+sample points and a structurally nontrivial finite-difference recurrence are
+checked again. A legacy result remains active only if that upgrade succeeds;
+otherwise it is archived outside the active theorem corpus.
+
+
+Curriculum failures are retried on the same mathematical domain rather than
+silently skipping it. A successful retry clears the retry counter; after three
+consecutive failures the cursor advances so a temporarily unreachable source
+cannot stall the whole curriculum indefinitely.

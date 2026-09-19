@@ -59,3 +59,25 @@ tests pass.
 - verified discovery-domain gaps persist until the corresponding expert is acquired;
 - read-only curriculum cadence increased so research occurs roughly every 15 minutes at research_budget=2;
 - external GitHub outages/limits remain outside the repository's ability to guarantee zero downtime.
+
+
+## 2026-09-19 — MATHESIS domain-closure invariant
+
+- fixed a feedback-loop gap where curriculum could request a polynomials expert that architecture could not build;
+- added polynomials to evolvable experts;
+- added algebra/polynomial domain benchmarks;
+- CI now requires every SymPy lab domain to be representable by the architecture expert set.
+
+
+- fixed symbolic-depth scoring to use the explicit symbolic-depth proof result rather than a fragile positional task index;
+- added regression coverage showing anti-forgetting theorem failures cannot corrupt the reported verified symbolic depth.
+
+
+- legacy Faulhaber discoveries are now re-proved with the new nontrivial induction obligation;
+- successful legacy proofs are upgraded in place; failed reproofs are archived out of the active theorem corpus;
+- quality migration persists immediately even if the current discovery cycle finds no new candidate.
+
+
+- curriculum no_sources/research_error retries now remain on the same mathematical domain;
+- successful retry clears the per-domain retry counter;
+- after three failures the curriculum advances to avoid permanent source-induced stalls.

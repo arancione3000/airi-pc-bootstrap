@@ -31,10 +31,11 @@ class MathematicalCurriculum:
             if isinstance(value, dict):
                 value.setdefault("cursor", 0)
                 value.setdefault("studies", [])
+                value.setdefault("retry_counts", {})
                 return value
         except Exception:
             pass
-        return {"version": 1, "cursor": 0, "studies": []}
+        return {"version": 2, "cursor": 0, "studies": [], "retry_counts": {}}
 
     def study_once(self) -> dict[str, Any]:
         state = self._load()
@@ -71,7 +72,21 @@ class MathematicalCurriculum:
             "sources": sources,
             "web_truth_policy": "source evidence is not a formal proof",
         }
-        state["cursor"] = cursor + 1
+        retry_counts = state.setdefault("retry_counts", {})
+        if status == "studied":
+            retry_counts.pop(domain, None)
+            state["cursor"] = cursor + 1
+        else:
+            retries = int(retry_counts.get(domain, 0)) + 1
+            retry_counts[domain] = retries
+            # Retry transient failures on the same domain. After three failed
+            # attempts, advance so one unreachable source family cannot stall
+            # the entire mathematical curriculum forever.
+            if retries >= 3:
+                state["cursor"] = cursor + 1
+                retry_counts.pop(domain, None)
+            else:
+                state["cursor"] = cursor
         state["studies"].append(row)
         state["studies"] = state["studies"][-100:]
         state["updated_at"] = row["at"]
@@ -87,4 +102,5 @@ class MathematicalCurriculum:
             "studies": len(state.get("studies", [])),
             "last": state.get("studies", [])[-1] if state.get("studies") else None,
             "domains": list(DOMAIN_ATLAS),
+            "retry_counts": state.get("retry_counts", {}),
         }

@@ -12,10 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 import sys
 sys.path.insert(0, str(ROOT / "computer"))
 
-from mathesis.architecture import default_genome
+from mathesis.architecture import _ALLOWED_EXPERTS, default_genome
 from mathesis.benchmark import TRAINING_PHRASES, VALIDATION_PHRASES
 from mathesis.engine import MathesisOmega
 from mathesis.discovery import ConjectureDiscoveryEngine
+from mathesis.curriculum import MathematicalCurriculum
 from mathesis.sympy_lab import SymPyMathLab, DOMAIN_ATLAS
 from mathesis.evolution import SelfEvolutionEngine
 from mathesis.experience import ExperienceAnalyzer
@@ -518,4 +519,176 @@ def test_legacy_structural_tautologies_are_migrated_out_of_active_theorems(tmp_p
     migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
     assert legacy_id not in migrated["theorems"]
     assert migrated["discarded"][legacy_id]["discarded_reason"] == "structural_tautology"
-    assert migrated["last_quality_migration"]["reason"] == "structural_tautology"
+    assert migrated["last_quality_migration"]["reason"] == "proof_quality_upgrade"
+    assert legacy_id in migrated["last_quality_migration"]["moved"]
+
+
+def test_every_math_lab_domain_is_evolvable_by_architecture():
+    assert set(DOMAIN_ATLAS).issubset(set(_ALLOWED_EXPERTS))
+
+
+def test_polynomial_feedback_can_be_resolved_by_a_challenger(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    result = evolution.evolve_once(extra_weaknesses=["missing_polynomials_expert"])
+    trial_experts = [set(trial["genome"]["experts"]) for trial in result.benchmark["trials"]]
+    assert any("polynomials" in experts for experts in trial_experts)
+
+
+def test_polynomial_expert_is_actually_benchmarked():
+    from mathesis.benchmark import evaluate_genome
+    genome = default_genome()
+    genome.experts.append("polynomials")
+    benchmark = evaluate_genome(genome)
+    task = next(row for row in benchmark["tasks"] if row["name"] == "domain:polynomials")
+    assert task["ok"] is True
+
+
+def test_symbolic_depth_score_is_independent_from_learned_theorem_replay():
+    from mathesis.benchmark import evaluate_genome
+
+    genome = default_genome()
+    benchmark = evaluate_genome(
+        genome,
+        learned_theorems=["(x+1)^2=x^2+1"],
+    )
+    assert benchmark["ok"] is False
+    assert benchmark["verified_symbolic_depth"] == genome.symbolic_depth
+    search_task = next(row for row in benchmark["tasks"] if row["name"] == "search:symbolic_depth")
+    assert search_task["ok"] is True
+
+
+def test_legacy_faulhaber_certificate_is_reproved_with_nontrivial_induction(tmp_path: Path):
+    statement = "sum(k^2, k=1..n) = n*(n + 1)*(2*n + 1)/6 for integer n>=0"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 2,
+        "cycle": 2,
+        "strategy_counts": {"faulhaber_interpolation": 1},
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "faulhaber_interpolation",
+                "complexity": 2,
+                "discovered_at": 1.0,
+                "certificate": {
+                    "ok": True,
+                    "status": "verified",
+                    "base_case": True,
+                    "sample_count": 6,
+                    "polynomial": "n*(n + 1)*(2*n + 1)/6",
+                    "recurrence": {
+                        "ok": True,
+                        "status": "verified",
+                        "statement": "n**2+2*n+1=n**2+2*n+1",
+                    },
+                },
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+
+    engine = ConjectureDiscoveryEngine(tmp_path, symbolic_depth=6, discovery_beam=4)
+    result = engine.discover_once()
+    assert result["ok"] is True
+
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    theorem = migrated["theorems"][theorem_id]
+    cert = theorem["certificate"]
+    assert cert["recurrence_nontrivial"] is True
+    assert cert["recurrence"]["ok"] is True
+    rel = parse_relation(cert["recurrence"]["statement"])
+    import sympy as sp
+    assert sp.srepr(rel.lhs) != sp.srepr(rel.rhs)
+    assert theorem_id in migrated["last_quality_migration"]["revalidated"]
+
+
+def test_unreprovable_legacy_faulhaber_is_removed_from_active_corpus(tmp_path: Path):
+    statement = "sum(k^2, k=1..n) = n*(n+1)/2 for integer n>=0"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 2,
+        "cycle": 2,
+        "strategy_counts": {"faulhaber_interpolation": 1},
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "faulhaber_interpolation",
+                "complexity": 2,
+                "discovered_at": 1.0,
+                "certificate": {
+                    "ok": True,
+                    "status": "verified",
+                    "polynomial": "n*(n+1)/2",
+                    "sample_count": 6,
+                },
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+
+    engine = ConjectureDiscoveryEngine(tmp_path, symbolic_depth=6, discovery_beam=4)
+    engine.discover_once()
+
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    assert theorem_id not in migrated["theorems"]
+    assert migrated["discarded"][theorem_id]["discarded_reason"] == "legacy_faulhaber_reproof_failed"
+
+
+def test_curriculum_retries_same_failed_domain_before_advancing(tmp_path: Path):
+    curriculum = MathematicalCurriculum(tmp_path)
+    curriculum.researcher.search = lambda query, max_sources=3: {
+        "ok": False,
+        "sources": [],
+        "errors": [],
+    }
+
+    first = curriculum.study_once()
+    second = curriculum.study_once()
+    state = json.loads((tmp_path / "curriculum.json").read_text(encoding="utf-8"))
+
+    assert first["domain"] == "algebra"
+    assert second["domain"] == "algebra"
+    assert state["cursor"] == 0
+    assert state["retry_counts"]["algebra"] == 2
+
+    third = curriculum.study_once()
+    state = json.loads((tmp_path / "curriculum.json").read_text(encoding="utf-8"))
+    assert third["domain"] == "algebra"
+    assert state["cursor"] == 1
+    assert "algebra" not in state["retry_counts"]
+
+
+def test_curriculum_success_clears_retry_and_advances(tmp_path: Path):
+    curriculum = MathematicalCurriculum(tmp_path)
+    attempts = {"count": 0}
+
+    def fake_search(query, max_sources=3):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            return {"ok": False, "sources": [], "errors": []}
+        return {
+            "ok": True,
+            "sources": [{
+                "url": "https://example.org/math",
+                "domain": "example.org",
+                "authority_hint": 0.75,
+                "excerpt": "mathematics",
+            }],
+            "errors": [],
+        }
+
+    curriculum.researcher.search = fake_search
+    first = curriculum.study_once()
+    second = curriculum.study_once()
+    state = json.loads((tmp_path / "curriculum.json").read_text(encoding="utf-8"))
+
+    assert first["domain"] == second["domain"] == "algebra"
+    assert second["status"] == "studied"
+    assert state["cursor"] == 1
+    assert "algebra" not in state["retry_counts"]

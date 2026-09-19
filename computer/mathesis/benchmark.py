@@ -102,6 +102,8 @@ def evaluate_genome(
         add("program:gcd", False, detail=repr(exc))
 
     domain_checks: dict[str, Any] = {
+        "algebra": lambda: lab.algebra_normal_forms("(x+1)^4-(x^4+4*x^3+6*x^2+4*x+1)").ok,
+        "polynomials": lambda: lab.polynomial_interpolate([(0, 1), (1, 4), (2, 9), (3, 16)]).ok,
         "number_theory": lambda: synth.synthesize("is_prime").verified,
         "research": lambda: True,
         "calculus": lambda: (
@@ -131,12 +133,14 @@ def evaluate_genome(
             add(f"domain:{domain}", False, critical=False, detail=repr(exc))
 
     # The architecture search budget must correspond to a real symbolic workload.
+    symbolic_depth_verified = False
     try:
         exponent = min(16, max(2, genome.symbolic_depth + 2))
         cert = verifier.verify_relation(
             f"(x+1)^{exponent}={sp.sstr(sp.expand((sp.Symbol('x', real=True)+1)**exponent))}"
         )
-        add("search:symbolic_depth", cert.ok, critical=False, detail={"tested_exponent": exponent})
+        symbolic_depth_verified = bool(cert.ok)
+        add("search:symbolic_depth", symbolic_depth_verified, critical=False, detail={"tested_exponent": exponent})
     except Exception as exc:
         add("search:symbolic_depth", False, critical=False, detail=repr(exc))
 
@@ -188,7 +192,7 @@ def evaluate_genome(
     )
     # Reward verified breadth and language competence; symbolic depth contributes
     # only after the corresponding harder identity was actually verified above.
-    depth_bonus = min(1.5, 0.08 * genome.symbolic_depth) if tasks[-2]["ok"] else 0.0
+    depth_bonus = min(1.5, 0.08 * genome.symbolic_depth) if symbolic_depth_verified else 0.0
     score = 80.0 * capability_score + 20.0 * neural_accuracy + depth_bonus - complexity_penalty
 
     return {
@@ -200,6 +204,6 @@ def evaluate_genome(
         "weaknesses": [task["name"] for task in tasks if not task["ok"]],
         "tasks": tasks,
         "complexity_penalty": complexity_penalty,
-        "verified_symbolic_depth": genome.symbolic_depth if tasks[-2]["ok"] else 0,
+        "verified_symbolic_depth": genome.symbolic_depth if symbolic_depth_verified else 0,
         "learned_theorems_replayed": learned_results,
     }
