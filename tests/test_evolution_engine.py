@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "computer"))
 
 from evolution.data import append_verified, append_verified_many, class_counts, encode_text, ensure_canary_partition, load_records, persistent_split_records, source_family, source_family_counts, split_records, text_fingerprint
-from evolution.engine import EvolutionConfig, _canary_decision, _metrics, _promotion_decision, decision_from_probability, fitness, pareto_front
+from evolution.engine import EvolutionConfig, _canary_decision, _metrics, _promotion_decision, _recover_champion_state, decision_from_probability, fitness, pareto_front
 from evolution.edge import edge_acceptance
 from evolution.monitoring import detect_drift
 from evolution.genome import crossover, mutate, random_genome
@@ -315,3 +315,15 @@ def test_corrupt_partition_manifests_are_regenerated(tmp_path: Path):
     train, val, test, split_info = persistent_split_records(tmp_path, remaining, seed=9)
     assert split_info["created_now"] is True
     assert len(train) + len(val) + len(test) == len(remaining)
+
+
+def test_interrupted_champion_swap_restores_complete_backup(tmp_path: Path):
+    backup = tmp_path / ".champion-old"
+    backup.mkdir()
+    for name in ("genome.json", "model.pt", "metrics.json", "provenance.json"):
+        (backup / name).write_text("{}", encoding="utf-8")
+    result = _recover_champion_state(tmp_path)
+    assert result["ok"] is True
+    assert "restored_backup" in result["actions"]
+    assert (tmp_path / "champion" / "model.pt").exists()
+    assert not backup.exists()
