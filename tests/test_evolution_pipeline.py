@@ -129,3 +129,29 @@ def test_consensus_does_not_double_count_same_registrable_domain(monkeypatch):
     result = claimreview.verify_consensus(claim, list(mapping), min_sources=2)
     assert result["verified"] is False
     assert result["reason"] == "not enough independent unambiguous ClaimReview sources"
+
+
+def test_multilingual_verdicts_are_conservative():
+    assert claimreview.verdict_to_binary("Vero") == 1
+    assert claimreview.verdict_to_binary("Falso") == 0
+    assert claimreview.verdict_to_binary("Corretto") == 1
+    assert claimreview.verdict_to_binary("Bufala") == 0
+    assert claimreview.verdict_to_binary("Parzialmente vero") is None
+    assert claimreview.verdict_to_binary("Fuorviante") is None
+    assert claimreview.verdict_to_binary("Sin contexto") is None
+
+
+def test_redirect_to_private_address_is_rejected_before_follow(monkeypatch):
+    import urllib.error
+    from email.message import Message
+
+    class FakeOpener:
+        def open(self, request, timeout=None):
+            headers = Message()
+            headers["Location"] = "http://127.0.0.1/private"
+            raise urllib.error.HTTPError(request.full_url, 302, "Found", headers, None)
+
+    monkeypatch.setattr(claimreview.urllib.request, "build_opener", lambda *args, **kwargs: FakeOpener())
+    import pytest
+    with pytest.raises(ValueError, match="non-public"):
+        claimreview._open_public_url("http://8.8.8.8/start", timeout=1)
