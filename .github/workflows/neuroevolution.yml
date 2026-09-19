@@ -46,6 +46,7 @@ jobs:
           from evolution.data import append_verified
           from evolution.engine import EvolutionConfig, run_evolution, predict_text
           from evolution.edge import quantize_champion
+          from evolution.audit import audit_state
 
           state=Path(tempfile.mkdtemp(prefix='airi-evo-ci-'))
           data=state/'data'/'verified.jsonl'
@@ -78,5 +79,7 @@ jobs:
               assert edge['metrics']['samples'] >= 4
               assert (state/'edge'/'attempt.json').exists()
               assert 0.0 <= edge['metrics']['label_agreement'] <= 1.0
+          audit=audit_state(state)
+          assert audit['ok'] is True, audit
           print(json.dumps({'ok':True,'promoted':result['promoted'],'candidate':result['candidate']},indent=2))
           PY
