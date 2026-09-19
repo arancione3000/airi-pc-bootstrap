@@ -26,12 +26,22 @@ def _dataset_lock(path: Path, timeout: float = 15.0, stale_after: float = 900.0)
             fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             os.write(fd, f"{os.getpid()} {time.time()}".encode("ascii", errors="ignore"))
         except FileExistsError:
+            owner_dead = False
             try:
+                raw = lock_path.read_text(encoding="ascii", errors="ignore").strip().split()
+                owner_pid = int(raw[0]) if raw and raw[0].isdigit() else None
+                if owner_pid and owner_pid != os.getpid():
+                    try:
+                        os.kill(owner_pid, 0)
+                    except PermissionError:
+                        pass
+                    except OSError:
+                        owner_dead = True
                 age = time.time() - lock_path.stat().st_mtime
-                if age > max(5.0, float(stale_after)):
+                if owner_dead or age > max(5.0, float(stale_after)):
                     lock_path.unlink(missing_ok=True)
                     continue
-            except OSError:
+            except (OSError, ValueError):
                 pass
             if time.time() >= deadline:
                 raise TimeoutError(f"timed out waiting for dataset lock: {lock_path}")
