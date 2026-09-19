@@ -4,7 +4,7 @@ from typing import Any
 
 import sympy as sp
 
-from .architecture import _ALLOWED_EXPERTS
+from .architecture import _ALLOWED_EXPERTS, _ALLOWED_STRATEGIES
 from .formalizer import FormalizerMesh
 from .neural_graph import GrowingNeuralRouter
 from .synthesis import ProgramSynthesizer
@@ -86,6 +86,25 @@ def evaluate_genome(
     add("architecture:known_experts", not unknown_experts, detail=unknown_experts)
     add("architecture:topology_closed", not bad_edges, detail=bad_edges)
     add("architecture:experts_connected", not disconnected, detail=disconnected)
+
+    strategies = list(genome.strategy_portfolio)
+    unknown_strategies = sorted(set(strategies) - set(_ALLOWED_STRATEGIES))
+    add("architecture:unique_strategies", len(strategies) == len(set(strategies)), detail=strategies)
+    add("architecture:known_strategies", not unknown_strategies, detail=unknown_strategies)
+    add(
+        "architecture:research_strategy_coupled",
+        "research" not in expert_set or "read_only_research" in strategies,
+        detail={"research_expert": "research" in expert_set, "read_only_research": "read_only_research" in strategies},
+    )
+
+    proof_order = list(genome.proof_order)
+    allowed_proof_order = {"symbolic", "smt", "counterexample", "lean"}
+    add("architecture:unique_proof_order", len(proof_order) == len(set(proof_order)), detail=proof_order)
+    add(
+        "architecture:known_proof_order",
+        bool(proof_order) and set(proof_order) <= allowed_proof_order,
+        detail=proof_order,
+    )
     add(
         "architecture:bounded_genome",
         (
