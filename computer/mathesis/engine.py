@@ -269,7 +269,7 @@ class MathesisOmega:
         self.genome = self.evolution.load_champion()
         return {
             "ok": True,
-            "version": "0.1.0",
+            "version": "0.2.0",
             "model": architecture_report(self.genome),
             "evolution": self.evolution.status(),
             "knowledge": self.knowledge.status(),
