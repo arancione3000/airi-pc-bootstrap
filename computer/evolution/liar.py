@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from .data import append_verified, class_counts, load_records
+from .data import append_verified_many, class_counts, load_records
 
 LIAR_OFFICIAL_URL = "https://www.cs.ucsb.edu/~william/data/liar_dataset.zip"
 LIAR_MIRROR_RAW = {
@@ -83,6 +83,7 @@ def acquire(cache_dir: Path) -> dict[str, Any]:
 
 def import_tsv(tsv_path: Path, verified_path: Path, split: str, source_url: str = LIAR_OFFICIAL_URL) -> dict[str, Any]:
     stats = {"split": split, "accepted": 0, "duplicates": 0, "ambiguous": 0, "conflicts": 0, "invalid": 0}
+    pending = []
     with Path(tsv_path).open("r", encoding="utf-8", errors="replace", newline="") as handle:
         for row in csv.reader(handle, delimiter="\t"):
             if len(row) < 3:
@@ -100,15 +101,15 @@ def import_tsv(tsv_path: Path, verified_path: Path, split: str, source_url: str 
                 "original_label": raw_label, "research_use_only": True,
                 "dataset_source": source_url,
             }
-            try:
-                added = append_verified(verified_path, {
-                    "text": statement, "label": LIAR_LABEL_MAP[raw_label],
-                    "source": f"LIAR:{item_id}",
-                    "evidence": json.dumps(evidence, ensure_ascii=False, sort_keys=True),
-                })
-                stats["duplicates" if added.get("duplicate") else "accepted"] += 1
-            except ValueError:
-                stats["conflicts"] += 1
+            pending.append({
+                "text": statement,
+                "label": LIAR_LABEL_MAP[raw_label],
+                "source": f"LIAR:{item_id}",
+                "evidence": json.dumps(evidence, ensure_ascii=False, sort_keys=True),
+            })
+    batch = append_verified_many(verified_path, pending)
+    for key in ("accepted", "duplicates", "conflicts", "invalid"):
+        stats[key] += int(batch.get(key, 0))
     return stats
 
 
