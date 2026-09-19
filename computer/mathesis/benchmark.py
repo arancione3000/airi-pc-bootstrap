@@ -54,7 +54,12 @@ VALIDATION_PHRASES = [
 ]
 
 
-def evaluate_genome(genome: ArchitectureGenome, router: GrowingNeuralRouter | None = None) -> dict[str, Any]:
+def evaluate_genome(
+    genome: ArchitectureGenome,
+    router: GrowingNeuralRouter | None = None,
+    *,
+    learned_theorems: list[str] | None = None,
+) -> dict[str, Any]:
     formalizer = FormalizerMesh()
     verifier = CompositeVerifier(counterexample_radius=genome.counterexample_radius)
     synth = ProgramSynthesizer()
@@ -135,6 +140,34 @@ def evaluate_genome(genome: ArchitectureGenome, router: GrowingNeuralRouter | No
     except Exception as exc:
         add("search:symbolic_depth", False, critical=False, detail=repr(exc))
 
+    learned_results: list[dict[str, Any]] = []
+    for index, statement in enumerate((learned_theorems or [])[:16]):
+        try:
+            cert = verifier.verify_relation(statement)
+            ok = bool(cert.ok)
+            learned_results.append({
+                "statement": statement,
+                "ok": ok,
+                "status": cert.status,
+                "methods": list(cert.methods),
+            })
+            # Previously verified mathematical knowledge becomes a critical
+            # promotion invariant: challengers may expand capability but may
+            # not lose the ability to re-verify learned relations.
+            add(
+                f"learned_theorem:{index}",
+                ok,
+                critical=True,
+                detail=cert.status,
+            )
+        except Exception as exc:
+            learned_results.append({
+                "statement": statement,
+                "ok": False,
+                "error": repr(exc),
+            })
+            add(f"learned_theorem:{index}", False, critical=True, detail=repr(exc))
+
     router = router or GrowingNeuralRouter(hidden_size=genome.neural_hidden)
     router.train(TRAINING_PHRASES, epochs=70, lr=0.07)
     neural_accuracy = router.accuracy(VALIDATION_PHRASES)
@@ -168,4 +201,5 @@ def evaluate_genome(genome: ArchitectureGenome, router: GrowingNeuralRouter | No
         "tasks": tasks,
         "complexity_penalty": complexity_penalty,
         "verified_symbolic_depth": genome.symbolic_depth if tasks[-2]["ok"] else 0,
+        "learned_theorems_replayed": learned_results,
     }
