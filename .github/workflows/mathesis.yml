@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      PYTHONPATH: ${{ github.workspace }}/computer
-      MATHESIS_STATE_DIR: ${{ runner.temp }}/mathesis-state
+      PYTHONPATH: computer
+      MATHESIS_STATE_DIR: /tmp/mathesis-state
     steps:
       - uses: actions/checkout@v4
 
