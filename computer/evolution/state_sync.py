@@ -138,6 +138,7 @@ def _state_digest() -> str:
         lab.LAB_STATE / "champion" / "genome.json",
         lab.LAB_STATE / "champion" / "metrics.json",
         lab.LAB_STATE / "champion" / "model.pt",
+        lab.LAB_STATE / "cloud-meta.json",
     ]
     for path in candidates:
         h.update(str(path.name).encode("utf-8"))
@@ -169,6 +170,9 @@ def export_snapshot(destination: Path, *, exported_at: float | None = None) -> d
     compatible = int(meta.get("feature_schema", 0) or 0) == lab.FEATURE_SCHEMA
     if meta:
         _write_json(destination / "lab-meta.json", _clean_public(meta))
+    cloud_meta = lab.LAB_STATE / "cloud-meta.json"
+    if cloud_meta.exists():
+        _write_json(destination / "cloud-meta.json", _clean_public(_read_json(cloud_meta, {})))
 
     if compatible:
         champion_src = lab.LAB_STATE / "champion"
@@ -248,10 +252,101 @@ def _ensure_checkout() -> dict[str, Any]:
     return {"ok": True, "checkout": str(CHECKOUT)}
 
 
+
+def _champion_score(metrics: dict[str, Any] | None) -> tuple[float, float, float]:
+    row = metrics or {}
+    try:
+        f1 = float(row.get("f1", -1.0))
+    except Exception:
+        f1 = -1.0
+    try:
+        brier = float(row.get("brier", 999.0))
+    except Exception:
+        brier = 999.0
+    try:
+        params = float(row.get("params", 1e18))
+    except Exception:
+        params = 1e18
+    return (f1, -brier, -params)
+
+
+def reconcile_from_checkout() -> dict[str, Any]:
+    remote_root = CHECKOUT / EXPORT_REL
+    remote_data = remote_root / "data" / "verified.jsonl"
+    audit = privacy_audit_dataset(remote_data)
+    if not audit["ok"]:
+        return {"ok": False, "reason": "remote_privacy_audit_failed", "audit": audit}
+
+    from .data import load_records
+
+    local_rows = load_records(lab.DATA)
+    remote_rows = load_records(remote_data)
+    merged: dict[str, dict[str, Any]] = {}
+    conflicts = 0
+    for row in local_rows + remote_rows:
+        if int(row.get("feature_schema", 0) or 0) != lab.FEATURE_SCHEMA:
+            continue
+        key = str(row.get("text_id") or row.get("id") or "")
+        if not key:
+            continue
+        previous = merged.get(key)
+        if previous is not None and int(previous.get("label", -1)) != int(row.get("label", -2)):
+            conflicts += 1
+            continue
+        if previous is None or float(row.get("added_at", 0) or 0) < float(previous.get("added_at", 0) or 0):
+            merged[key] = row
+
+    if remote_rows and len(merged) >= len(local_rows):
+        lab.DATA.parent.mkdir(parents=True, exist_ok=True)
+        tmp = lab.DATA.with_suffix(".merge.tmp")
+        ordered = sorted(merged.values(), key=lambda row: (float(row.get("added_at", 0) or 0), str(row.get("text_id", ""))))
+        with tmp.open("w", encoding="utf-8") as handle:
+            for row in ordered:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        tmp.replace(lab.DATA)
+
+    local_metrics = _read_json(lab.LAB_STATE / "champion" / "metrics.json", {})
+    remote_metrics = _read_json(remote_root / "champion" / "metrics.json", {})
+    champion_imported = False
+    if remote_metrics and _champion_score(remote_metrics) > _champion_score(local_metrics):
+        remote_champion = remote_root / "champion"
+        local_champion = lab.LAB_STATE / "champion"
+        local_champion.mkdir(parents=True, exist_ok=True)
+        for name in ("genome.json", "metrics.json", "provenance.json", "model.pt"):
+            source = remote_champion / name
+            if source.exists():
+                shutil.copy2(source, local_champion / name)
+        meta = _read_json(lab.META, {})
+        meta["feature_schema"] = lab.FEATURE_SCHEMA
+        meta["remote_champion_imported_at"] = time.time()
+        _write_json(lab.META, meta)
+        champion_imported = True
+
+    remote_cloud_meta = remote_root / "cloud-meta.json"
+    local_cloud_meta = lab.LAB_STATE / "cloud-meta.json"
+    if remote_cloud_meta.exists():
+        remote_value = _read_json(remote_cloud_meta, {})
+        local_value = _read_json(local_cloud_meta, {})
+        if float(remote_value.get("updated_at", 0) or 0) >= float(local_value.get("updated_at", 0) or 0):
+            _write_json(local_cloud_meta, remote_value)
+
+    return {
+        "ok": True,
+        "local_records_before": len(local_rows),
+        "remote_records": len(remote_rows),
+        "merged_records": len(merged),
+        "conflicts": conflicts,
+        "champion_imported": champion_imported,
+    }
+
 def sync_to_git(*, force_heartbeat: bool = False) -> dict[str, Any]:
     checkout = _ensure_checkout()
     if not checkout["ok"]:
         return checkout
+
+    reconcile = reconcile_from_checkout()
+    if not reconcile.get("ok"):
+        return {"ok": False, "synced": False, "reason": "reconcile_failed", "reconcile": reconcile}
 
     remote_manifest = _read_json(CHECKOUT / EXPORT_REL / "manifest.json", {})
     digest = _state_digest()
@@ -267,6 +362,7 @@ def sync_to_git(*, force_heartbeat: bool = False) -> dict[str, Any]:
             "reason": "state_unchanged",
             "remote_exported_at": last_export,
             "state_digest": digest,
+            "reconcile": reconcile,
         }
 
     manifest = export_snapshot(CHECKOUT / EXPORT_REL)
@@ -295,6 +391,7 @@ def sync_to_git(*, force_heartbeat: bool = False) -> dict[str, Any]:
         "remote_sha": remote_sha,
         "branch": STATE_BRANCH,
         "manifest": manifest,
+        "reconcile": reconcile,
         "reason": "verified" if ok else "remote_verification_failed",
     }
     _write_json(SYNC_META, {**result, "updated_at": time.time()})
@@ -333,6 +430,9 @@ def restore_from_git(*, force: bool = False) -> dict[str, Any]:
     source_meta = src / "lab-meta.json"
     if source_meta.exists():
         shutil.copy2(source_meta, lab.META)
+    source_cloud_meta = src / "cloud-meta.json"
+    if source_cloud_meta.exists():
+        shutil.copy2(source_cloud_meta, lab.LAB_STATE / "cloud-meta.json")
     source_champion = src / "champion"
     if source_champion.exists():
         target = lab.LAB_STATE / "champion"
