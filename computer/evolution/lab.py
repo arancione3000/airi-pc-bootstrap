@@ -53,35 +53,56 @@ def _json_write(path: Path, value: Any) -> None:
     tmp.replace(path)
 
 
-def sanitize_goal(value: Any, max_chars: int = 600) -> str:
+def _bucket(value: int, bounds: tuple[int, ...]) -> str:
+    n = max(0, int(value))
+    for bound in bounds:
+        if n <= bound:
+            return f"le{bound}"
+    return f"gt{bounds[-1]}"
+
+
+def _goal_shape(value: Any) -> str:
     text = str(value or "")
-    text = _SECRET_RE.sub(r"\1=<redacted>", text)
-    text = _URL_RE.sub("<url>", text)
-    text = _EMAIL_RE.sub("<email>", text)
-    text = _PATH_RE.sub("<path>", text)
-    text = _LONG_NUMBER_RE.sub("<number>", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text[:max(80, int(max_chars))]
+    words = re.findall(r"\w+", text, re.UNICODE)
+    lines = text.count("\n") + 1 if text else 0
+    digit_count = sum(ch.isdigit() for ch in text)
+    return ",".join((
+        f"chars:{_bucket(len(text),(32,80,160,320,640,1200))}",
+        f"words:{_bucket(len(words),(5,12,25,50,100,200))}",
+        f"lines:{_bucket(lines,(1,2,5,10,25))}",
+        f"url:{int(bool(_URL_RE.search(text)))}",
+        f"email:{int(bool(_EMAIL_RE.search(text)))}",
+        f"path:{int(bool(_PATH_RE.search(text)))}",
+        f"digits:{_bucket(digit_count,(0,2,8,20,60))}",
+    ))
 
 
-def _arg_schema(args: Any) -> str:
+def _arg_shape(args: Any) -> str:
     if not isinstance(args, dict):
-        return type(args).__name__
-    bits = []
-    for key in sorted(str(k) for k in args.keys())[:24]:
-        value = args.get(key)
-        bits.append(f"{key}:{type(value).__name__}")
-    return ",".join(bits) or "none"
+        return f"kind:{type(args).__name__}"
+    counts: dict[str, int] = {}
+    for value in list(args.values())[:32]:
+        name = type(value).__name__
+        counts[name] = counts.get(name, 0) + 1
+    parts = [f"{name}:{counts[name]}" for name in sorted(counts)]
+    return f"count:{len(args)};" + (",".join(parts) if parts else "none")
 
 
-def route_feature(goal: str, operation: str, tool: str, args: Any = None) -> str:
+def route_feature(
+    goal: str,
+    operation: str,
+    tool: str,
+    args: Any = None,
+    candidates: list[str] | None = None,
+) -> str:
+    candidate_names = sorted({str(x)[:120] for x in (candidates or []) if str(x).strip()})[:16]
     return (
-        f"goal {sanitize_goal(goal)} "
+        f"goal_shape {_goal_shape(goal)} "
         f"operation {str(operation or 'unknown')[:80]} "
         f"tool {str(tool or 'unknown')[:120]} "
-        f"arg_schema {_arg_schema(args)}"
+        f"arg_shape {_arg_shape(args)} "
+        f"candidates {','.join(candidate_names) or 'none'}"
     )
-
 
 def _error_class(error: Any) -> str:
     text = str(error or "").lower()
@@ -128,7 +149,7 @@ def record_execution(
     node_id: str | None = None,
     candidates: list[str] | None = None,
 ) -> dict[str, Any]:
-    feature = route_feature(goal, operation, tool, args)
+    feature = route_feature(goal, operation, tool, args, candidates)
     stamp = time.time()
     raw_id = hashlib.sha256(
         f"{stamp}:{task_id or ''}:{node_id or ''}:{feature}:{bool(success)}".encode("utf-8")
@@ -362,7 +383,7 @@ def score_candidates(
         }
     scored = []
     for tool in list(candidates or [])[:32]:
-        feature = route_feature(goal, operation, tool, args)
+        feature = route_feature(goal, operation, tool, args, candidates)
         pred = predict_text(LAB_STATE, feature, vocab_size=4096)
         scored.append({
             "tool": tool,
