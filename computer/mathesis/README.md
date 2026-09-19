@@ -260,3 +260,11 @@ is not forgotten when another challenger wins first.
 The read-only curriculum cadence is tuned so a champion with research budget 2
 attempts external mathematical study roughly every 15 minutes while the
 five-minute chain is healthy.
+
+
+### Domain closure invariant
+
+Every mathematical domain advertised by the SymPy laboratory must also be an
+evolvable architecture expert. CI enforces this set relationship. Polynomial
+mathematics is explicitly benchmarked and can now be added by challenger
+architectures when curriculum feedback reports it as missing.
