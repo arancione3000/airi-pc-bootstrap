@@ -856,3 +856,14 @@ def test_health_gate_requires_lean_when_runtime_status_is_present(tmp_path: Path
     assert report["ok"] is False
     failed = {row["name"] for row in report["failed"]}
     assert "status:lean_available" in failed
+
+
+def test_health_gate_rejects_incomplete_but_valid_champion_json(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+    (tmp_path / "champion.json").write_text(json.dumps({"generation": 99}), encoding="utf-8")
+
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    row = next(item for item in report["failed"] if item["name"] == "state:champion_json_valid")
+    assert "missing required genome fields" in str(row["detail"])
