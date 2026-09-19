@@ -52,27 +52,27 @@
     "studies": 3
   },
   "discovery": {
-    "cycle": 10,
+    "cycle": 11,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 5,
+    "stored": 6,
     "strategies": {
       "binomial_expansion": 3,
-      "difference_of_powers": 2,
+      "difference_of_powers": 3,
       "faulhaber_interpolation": 2,
       "finite_geometric_identity": 2
     },
-    "symbolic_depth": 10,
-    "verified": 5
+    "symbolic_depth": 11,
+    "verified": 6
   },
   "evolution": {
     "benchmark": {
-      "capability_score": 0.896552,
-      "complexity_penalty": 0.009872,
+      "capability_score": 0.933333,
+      "complexity_penalty": 0.010542000000000001,
       "critical_failures": [],
       "learned_theorems_replayed": [
         {
@@ -101,11 +101,20 @@
           "ok": true,
           "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
           "status": "verified"
+        },
+        {
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "x^12-y^12 = (x - y)*(x**11 + x**10*y + x**9*y**2 + x**8*y**3 + x**7*y**4 + x**6*y**5 + x**5*y**6 + x**4*y**7 + x**3*y**8 + x**2*y**9 + x*y**10 + y**11)",
+          "status": "verified"
         }
       ],
       "neural_accuracy": 0.818182,
       "ok": true,
-      "score": 88.877902,
+      "score": 91.899761,
       "tasks": [
         {
           "critical": true,
@@ -163,7 +172,7 @@
         },
         {
           "critical": true,
-          "detail": 98.999726,
+          "detail": 98.999728,
           "name": "program:gcd",
           "ok": true
         },
@@ -241,9 +250,9 @@
         },
         {
           "critical": false,
-          "detail": "expert not present",
+          "detail": "verified capability",
           "name": "domain:discrete_math",
-          "ok": false
+          "ok": true
         },
         {
           "critical": false,
@@ -254,7 +263,7 @@
         {
           "critical": false,
           "detail": {
-            "tested_exponent": 12
+            "tested_exponent": 13
           },
           "name": "search:symbolic_depth",
           "ok": true
@@ -278,16 +287,21 @@
           "ok": true
         },
         {
+          "critical": true,
+          "detail": "verified",
+          "name": "learned_theorem:3",
+          "ok": true
+        },
+        {
           "critical": false,
           "detail": 0.8182,
           "name": "neural:intent_router",
           "ok": true
         }
       ],
-      "verified_symbolic_depth": 10,
+      "verified_symbolic_depth": 11,
       "weaknesses": [
         "domain:combinatorics",
-        "domain:discrete_math",
         "domain:optimization"
       ]
     },
@@ -356,6 +370,10 @@
             "probability"
           ],
           [
+            "probability",
+            "discrete_math"
+          ],
+          [
             "program_synthesis",
             "counterexample"
           ],
@@ -402,6 +420,10 @@
           [
             "probability",
             "counterexample"
+          ],
+          [
+            "discrete_math",
+            "counterexample"
           ]
         ],
         "nodes": [
@@ -419,7 +441,8 @@
           "inequalities",
           "special_functions",
           "geometry",
-          "probability"
+          "probability",
+          "discrete_math"
         ],
         "research_budget": 2,
         "strategy_portfolio": [
@@ -433,9 +456,9 @@
           "exact_sampling",
           "read_only_research"
         ],
-        "symbolic_depth": 10
+        "symbolic_depth": 11
       },
-      "fingerprint": "1c19009e633b3ba5",
+      "fingerprint": "397831bded30eeac",
       "genome": {
         "counterexample_radius": 9,
         "discovery_beam": 8,
@@ -454,13 +477,14 @@
           "inequalities",
           "special_functions",
           "geometry",
-          "probability"
+          "probability",
+          "discrete_math"
         ],
-        "generation": 11,
-        "genome_id": "omega-11-d9d44095",
-        "max_proof_cells": 192,
+        "generation": 12,
+        "genome_id": "omega-12-25fe92c9",
+        "max_proof_cells": 208,
         "neural_hidden": 22,
-        "parent_id": "omega-10-db685e82",
+        "parent_id": "omega-11-d9d44095",
         "proof_order": [
           "symbolic",
           "smt",
@@ -479,7 +503,7 @@
           "exact_sampling",
           "read_only_research"
         ],
-        "symbolic_depth": 10,
+        "symbolic_depth": 11,
         "topology": [
           [
             "formalization",
@@ -538,6 +562,10 @@
             "probability"
           ],
           [
+            "probability",
+            "discrete_math"
+          ],
+          [
             "program_synthesis",
             "counterexample"
           ],
@@ -584,6 +612,10 @@
           [
             "probability",
             "counterexample"
+          ],
+          [
+            "discrete_math",
+            "counterexample"
           ]
         ]
       },
@@ -605,7 +637,7 @@
           "candidate_result",
           "verification_status"
         ],
-        "max_cells": 192
+        "max_cells": 208
       }
     },
     "kernel": {
@@ -616,14 +648,15 @@
     "learned_theorems_replayed": [
       "(x+y)^2 = x**2 + 2*x*y + y**2",
       "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
-      "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10"
+      "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
+      "x^12-y^12 = (x - y)*(x**11 + x**10*y + x**9*y**2 + x**8*y**3 + x**7*y**4 + x**6*y**5 + x**5*y**6 + x**4*y**7 + x**3*y**8 + x**2*y**9 + x*y**10 + y**11)"
     ],
     "ok": true,
     "self_rewrite_scope": "architecture DSL/router state only",
     "state_dir": "/tmp/mathesis-runtime-state"
   },
   "experience": {
-    "champion": "omega-11-d9d44095",
+    "champion": "omega-12-25fe92c9",
     "ok": true,
     "policy": "experience proposes bounded architecture hints; it never edits verifier code",
     "reasons": [
@@ -647,11 +680,11 @@
   },
   "guarantee": "proof-gated evolving system; not an infallibility or human-novelty guarantee",
   "knowledge": {
-    "nodes": 9,
+    "nodes": 10,
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/knowledge.json",
     "status_counts": {
-      "verified": 9
+      "verified": 10
     }
   },
   "model": {
@@ -715,6 +748,10 @@
           "probability"
         ],
         [
+          "probability",
+          "discrete_math"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -761,6 +798,10 @@
         [
           "probability",
           "counterexample"
+        ],
+        [
+          "discrete_math",
+          "counterexample"
         ]
       ],
       "nodes": [
@@ -778,7 +819,8 @@
         "inequalities",
         "special_functions",
         "geometry",
-        "probability"
+        "probability",
+        "discrete_math"
       ],
       "research_budget": 2,
       "strategy_portfolio": [
@@ -792,9 +834,9 @@
         "exact_sampling",
         "read_only_research"
       ],
-      "symbolic_depth": 10
+      "symbolic_depth": 11
     },
-    "fingerprint": "1c19009e633b3ba5",
+    "fingerprint": "397831bded30eeac",
     "genome": {
       "counterexample_radius": 9,
       "discovery_beam": 8,
@@ -813,13 +855,14 @@
         "inequalities",
         "special_functions",
         "geometry",
-        "probability"
+        "probability",
+        "discrete_math"
       ],
-      "generation": 11,
-      "genome_id": "omega-11-d9d44095",
-      "max_proof_cells": 192,
+      "generation": 12,
+      "genome_id": "omega-12-25fe92c9",
+      "max_proof_cells": 208,
       "neural_hidden": 22,
-      "parent_id": "omega-10-db685e82",
+      "parent_id": "omega-11-d9d44095",
       "proof_order": [
         "symbolic",
         "smt",
@@ -838,7 +881,7 @@
         "exact_sampling",
         "read_only_research"
       ],
-      "symbolic_depth": 10,
+      "symbolic_depth": 11,
       "topology": [
         [
           "formalization",
@@ -897,6 +940,10 @@
           "probability"
         ],
         [
+          "probability",
+          "discrete_math"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -943,6 +990,10 @@
         [
           "probability",
           "counterexample"
+        ],
+        [
+          "discrete_math",
+          "counterexample"
         ]
       ]
     },
@@ -964,7 +1015,7 @@
         "candidate_result",
         "verification_status"
       ],
-      "max_cells": 192
+      "max_cells": 208
     }
   },
   "ok": true,
