@@ -433,3 +433,12 @@ def test_verified_discovery_domain_pressure_persists_until_expert_exists(tmp_pat
     resolved = ExperienceAnalyzer(tmp_path).signals(champion)
     assert "missing_combinatorics_expert" not in resolved["weaknesses"]
     assert "missing_sequences_expert" not in resolved["weaknesses"]
+
+
+def test_failed_curriculum_retries_on_next_cycle():
+    from mathesis.evolution_cycle import _should_study
+
+    assert _should_study(5, 3, "no_sources") is True
+    assert _should_study(5, 3, "research_error") is True
+    assert _should_study(6, 3, "studied") is True
+    assert _should_study(5, 3, "studied") is False
