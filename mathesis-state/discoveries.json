@@ -1,10 +1,10 @@
 {
-  "cycle": 7,
+  "cycle": 8,
   "strategy_counts": {
     "binomial_expansion": 2,
     "difference_of_powers": 2,
     "faulhaber_interpolation": 1,
-    "finite_geometric_identity": 1
+    "finite_geometric_identity": 2
   },
   "theorems": {
     "348ea96fb93f0b38287f": {
@@ -197,6 +197,44 @@
       "strategy": "binomial_expansion",
       "verified": true
     },
+    "e89d829d77146895c7d6": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "x**9 - 1 = x**9 - 1",
+        "status": "verified"
+      },
+      "complexity": 9,
+      "discovered_at": 1789854896.748261,
+      "human_novelty": "unassessed",
+      "id": "e89d829d77146895c7d6",
+      "internal_novelty": true,
+      "statement": "x**9 - 1 = x**9 - 1",
+      "strategy": "finite_geometric_identity",
+      "verified": true
+    },
     "efb13ac5cb9a41475989": {
       "certificate": {
         "base_case": true,
@@ -251,6 +289,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789854584.6527724,
+  "updated_at": 1789854896.748261,
   "version": 1
 }
