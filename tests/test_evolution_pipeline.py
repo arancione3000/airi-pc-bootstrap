@@ -249,18 +249,14 @@ def test_self_audit_allows_recoverable_champion_swap(tmp_path: Path):
     assert result["checks"]["champion_swap_dirs"]["backup_complete"] is True
 
 
-def test_edge_metadata_records_quantization_backend(monkeypatch, tmp_path: Path):
-    import json
-    import types
+def test_edge_backend_metadata_contract(monkeypatch):
     import evolution.edge as edge
     class FakeTorch:
-        __version__ = "test"
+        __version__ = "test-version"
     monkeypatch.setitem(sys.modules, "torch", FakeTorch())
-    assert edge.edge_acceptance(
-        float_bytes=1000,
-        int8_bytes=500,
-        float_latency_ms=10,
-        int8_latency_ms=5,
-        mean_probability_delta=0.01,
-        label_agreement=1.0,
-    )["accepted"] is True
+    info = edge.quantization_backend_info()
+    assert info == {
+        "backend": "torch.ao.quantization.quantize_dynamic",
+        "torch_version": "test-version",
+        "migration_target": "torchao.quantization.quantize_",
+    }
