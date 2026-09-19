@@ -14,6 +14,7 @@ from . import lab
 STATE = lab.LAB_STATE
 PID = STATE / "worker.pid"
 LOG = STATE / "worker.log"
+AUTOPILOT_DISABLED = STATE / "autopilot.disabled"
 DEFAULT_TRIGGER = max(10, int(os.environ.get("AIRI_EVOLUTION_LAB_TRIGGER", "20")))
 DEFAULT_INTERVAL = max(300, int(os.environ.get("AIRI_EVOLUTION_LAB_INTERVAL", "900")))
 
@@ -225,14 +226,17 @@ def autopilot(enable: bool = True, interval_seconds: int = DEFAULT_INTERVAL) -> 
     from advanced import cancel_job, schedule_job, scheduler_status
 
     name = "evolution-lab-shadow-router"
+    STATE.mkdir(parents=True, exist_ok=True)
     if enable:
+        AUTOPILOT_DISABLED.unlink(missing_ok=True)
         interval = max(300, int(interval_seconds))
         job = schedule_job(name, "evolution_lab_maintenance", interval, run_now=True)
         return {"ok": True, "enabled": True, "job": job, "shadow_only": True}
+    AUTOPILOT_DISABLED.write_text("disabled\n", encoding="utf-8")
     jobs = {row.get("name"): row for row in scheduler_status().get("jobs", [])}
     if name not in jobs:
-        return {"ok": True, "enabled": False, "already_disabled": True}
-    return {"ok": True, "enabled": False, "cancelled": cancel_job(name)}
+        return {"ok": True, "enabled": False, "already_disabled": True, "persistent": True}
+    return {"ok": True, "enabled": False, "persistent": True, "cancelled": cancel_job(name)}
 
 
 def score(goal: str, operation: str, candidates: list[str], args: Any = None) -> dict[str, Any]:
