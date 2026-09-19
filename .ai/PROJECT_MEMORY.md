@@ -59,3 +59,11 @@ tests pass.
 - verified discovery-domain gaps persist until the corresponding expert is acquired;
 - read-only curriculum cadence increased so research occurs roughly every 15 minutes at research_budget=2;
 - external GitHub outages/limits remain outside the repository's ability to guarantee zero downtime.
+
+
+## 2026-09-19 — MATHESIS domain-closure invariant
+
+- fixed a feedback-loop gap where curriculum could request a polynomials expert that architecture could not build;
+- added polynomials to evolvable experts;
+- added algebra/polynomial domain benchmarks;
+- CI now requires every SymPy lab domain to be representable by the architecture expert set.
