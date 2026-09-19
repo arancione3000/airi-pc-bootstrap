@@ -71,3 +71,8 @@ tests pass.
 
 - fixed symbolic-depth scoring to use the explicit symbolic-depth proof result rather than a fragile positional task index;
 - added regression coverage showing anti-forgetting theorem failures cannot corrupt the reported verified symbolic depth.
+
+
+- legacy Faulhaber discoveries are now re-proved with the new nontrivial induction obligation;
+- successful legacy proofs are upgraded in place; failed reproofs are archived out of the active theorem corpus;
+- quality migration persists immediately even if the current discovery cycle finds no new candidate.
