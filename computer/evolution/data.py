@@ -49,21 +49,12 @@ def text_fingerprint(text: str) -> str:
     return hashlib.sha256(_canonical_text(text).encode("utf-8")).hexdigest()[:24]
 
 
-def append_verified(path: Path, record: dict) -> dict:
+def _prepare_verified(record: dict) -> dict:
     text = str(record.get("text", "")).strip()
     if len(text) < 8:
         raise ValueError("text is too short")
     label = normalize_label(record.get("label"))
     text_id = text_fingerprint(text)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    existing = load_records(path) if path.exists() else []
-    same_text = [r for r in existing if r.get("text_id") == text_id or text_fingerprint(r.get("text", "")) == text_id]
-    if any(normalize_label(r.get("label")) != label for r in same_text):
-        raise ValueError("conflicting verified labels for the same normalized text")
-    if any(normalize_label(r.get("label")) == label for r in same_text):
-        row = dict(same_text[0])
-        row["duplicate"] = True
-        return row
     row = {
         "text": text,
         "text_id": text_id,
@@ -73,8 +64,64 @@ def append_verified(path: Path, record: dict) -> dict:
         "added_at": float(record.get("added_at") or time.time()),
     }
     row["id"] = hashlib.sha256((text_id + "\0" + str(label)).encode("utf-8")).hexdigest()[:20]
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return row
+
+
+def append_verified_many(path: Path, records: Iterable[dict]) -> dict:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing = load_records(path) if path.exists() else []
+    known = {
+        row.get("text_id") or text_fingerprint(row.get("text", "")): normalize_label(row.get("label"))
+        for row in existing
+    }
+    accepted_rows: list[dict] = []
+    results: list[dict] = []
+    stats = {"accepted": 0, "duplicates": 0, "conflicts": 0, "invalid": 0}
+    for record in records:
+        try:
+            row = _prepare_verified(record)
+        except Exception as exc:
+            stats["invalid"] += 1
+            results.append({"status": "invalid", "error": str(exc)})
+            continue
+        previous = known.get(row["text_id"])
+        if previous is not None:
+            if previous != row["label"]:
+                stats["conflicts"] += 1
+                results.append({"status": "conflict", **row})
+            else:
+                stats["duplicates"] += 1
+                results.append({"status": "duplicate", **row})
+            continue
+        known[row["text_id"]] = row["label"]
+        accepted_rows.append(row)
+        stats["accepted"] += 1
+        results.append({"status": "accepted", **row})
+    if accepted_rows:
+        with path.open("a", encoding="utf-8") as handle:
+            for row in accepted_rows:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return {**stats, "rows": results}
+
+
+def append_verified(path: Path, record: dict) -> dict:
+    row = _prepare_verified(record)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing = load_records(path) if path.exists() else []
+    same_text = [
+        item for item in existing
+        if (item.get("text_id") or text_fingerprint(item.get("text", ""))) == row["text_id"]
+    ]
+    if any(normalize_label(item.get("label")) != row["label"] for item in same_text):
+        raise ValueError("conflicting verified labels for the same normalized text")
+    if same_text:
+        duplicate = dict(same_text[0])
+        duplicate["duplicate"] = True
+        return duplicate
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, ensure_ascii=False) + "\n")
     return {**row, "duplicate": False}
 
 
@@ -181,19 +228,17 @@ def ensure_canary_partition(
         by_label[normalize_label(row["label"])].append(row)
 
     selected = {row.get("text_id") for row in records if row.get("text_id") in existing}
-    for label, rows in by_label.items():
-        max_canary = max(0, len(rows) - 4)
-        target = min(max_canary, max(int(min_per_class), round(len(rows) * float(fraction))))
-        have = [row for row in rows if row.get("text_id") in selected]
-        need = max(0, target - len(have))
-        if need:
-            candidates = [row for row in rows if row.get("text_id") not in selected]
+    if not existed_before:
+        for label, rows in by_label.items():
+            max_canary = max(0, len(rows) - 4)
+            target = min(max_canary, max(int(min_per_class), round(len(rows) * float(fraction))))
+            candidates = list(rows)
             candidates.sort(
                 key=lambda row: hashlib.sha256(
                     f"{seed}:{row.get('text_id') or text_fingerprint(row.get('text',''))}".encode("utf-8")
                 ).hexdigest()
             )
-            for row in candidates[:need]:
+            for row in candidates[:target]:
                 selected.add(row.get("text_id") or text_fingerprint(row.get("text", "")))
 
     canary = [row for row in records if (row.get("text_id") or text_fingerprint(row.get("text", ""))) in selected]
@@ -211,6 +256,76 @@ def ensure_canary_partition(
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     tmp.replace(canary_path)
     return remaining, canary, payload
+
+
+def persistent_split_records(
+    state_dir: Path,
+    records: list[dict],
+    seed: int = 1337,
+) -> tuple[list[dict], list[dict], list[dict], dict]:
+    state_dir = Path(state_dir)
+    manifest_path = state_dir / "data" / "split_manifest.json"
+    assignments: dict[str, str] = {}
+    existed_before = manifest_path.exists()
+    if existed_before:
+        try:
+            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+            assignments = {
+                str(k): str(v)
+                for k, v in (raw.get("assignments") or {}).items()
+                if str(v) in {"train", "val", "test"}
+            }
+        except Exception:
+            assignments = {}
+
+    if not assignments:
+        train0, val0, test0 = split_records(records, seed)
+        for name, rows in (("train", train0), ("val", val0), ("test", test0)):
+            for row in rows:
+                tid = row.get("text_id") or text_fingerprint(row.get("text", ""))
+                assignments[tid] = name
+
+    for row in records:
+        tid = row.get("text_id") or text_fingerprint(row.get("text", ""))
+        if tid in assignments:
+            continue
+        label = normalize_label(row.get("label"))
+        digest = hashlib.sha256(f"split:{seed}:{label}:{tid}".encode("utf-8")).digest()
+        bucket = int.from_bytes(digest[:4], "big") % 100
+        assignments[tid] = "test" if bucket < 15 else ("val" if bucket < 30 else "train")
+
+    train: list[dict] = []
+    val: list[dict] = []
+    test: list[dict] = []
+    current_ids = set()
+    for row in records:
+        tid = row.get("text_id") or text_fingerprint(row.get("text", ""))
+        current_ids.add(tid)
+        target = assignments.get(tid, "train")
+        if target == "test":
+            test.append(row)
+        elif target == "val":
+            val.append(row)
+        else:
+            train.append(row)
+
+    payload = {
+        "version": 1,
+        "created_now": not existed_before,
+        "seed": seed,
+        "assignments": {tid: assignments[tid] for tid in sorted(current_ids)},
+        "counts": {"train": len(train), "val": len(val), "test": len(test)},
+        "class_counts": {
+            "train": class_counts(train),
+            "val": class_counts(val),
+            "test": class_counts(test),
+        },
+    }
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = manifest_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.replace(manifest_path)
+    return train, val, test, payload
 
 
 @dataclass
