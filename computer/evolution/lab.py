@@ -212,6 +212,7 @@ def rebuild_dataset(max_observations: int = 20_000) -> dict[str, Any]:
     ensure_state_boundary()
     compact_raw_observations()
     rows = _read_observations()
+    raw_observations = len(rows)
     if max_observations > 0:
         rows = rows[-int(max_observations):]
 
@@ -252,6 +253,7 @@ def rebuild_dataset(max_observations: int = 20_000) -> dict[str, Any]:
     return {
         "ok": True,
         "observations": len(rows),
+        "raw_observations": raw_observations,
         "unique_route_features": len(features),
         "success": positives,
         "failure": negatives,
@@ -305,7 +307,7 @@ def run_cycle(
         }
         _json_write(META, {
             **_json_read(META, {}),
-            "last_cycle_raw_count": rebuilt["observations"],
+            "last_cycle_raw_count": rebuilt["raw_observations"],
             "last_cycle": result,
             "updated_at": time.time(),
         })
