@@ -18,9 +18,9 @@ from .data import (
     encode_text,
     ensure_canary_partition,
     load_records,
+    persistent_split_records,
     source_family,
     source_family_counts,
-    split_records,
 )
 from .genome import Genome, crossover, mutate, random_genome
 from .model import build_model, parameter_count
@@ -307,6 +307,21 @@ def _select_parent(rows: list[dict], rng: random.Random) -> dict:
     return max(sample, key=lambda x: x["fitness"])
 
 
+def _prune_old_trial_weights(state_dir: Path, keep_runs: int = 5) -> None:
+    runs_dir = Path(state_dir) / "runs"
+    if not runs_dir.exists():
+        return
+    run_dirs = sorted(
+        [path for path in runs_dir.iterdir() if path.is_dir()],
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for old_run in run_dirs[max(1, int(keep_runs)):]:
+        for pattern in ("selected-trial.pt", "promotion-trial-*.pt"):
+            for path in old_run.glob(pattern):
+                path.unlink(missing_ok=True)
+
+
 def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
     import torch
     state_dir = Path(state_dir)
@@ -319,7 +334,7 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
     if min(counts.values()) < 4:
         raise ValueError("need at least 4 verified samples in each class")
     remaining, canary, canary_info = ensure_canary_partition(state_dir, records, seed=cfg.seed)
-    train, val, test = split_records(remaining, cfg.seed)
+    train, val, test, split_info = persistent_split_records(state_dir, remaining, cfg.seed)
     run_id = time.strftime("run-%Y%m%d-%H%M%S") + f"-{os.getpid()}"
     run_dir = state_dir / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -331,6 +346,7 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         "train": len(train),
         "val": len(val),
         "test": len(test),
+        "split_manifest": split_info,
         "canary": canary_info,
     })
 
@@ -448,6 +464,16 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
     selected_model.eval()
     candidate_final["source_families"] = evaluate_source_families(selected_model, best_genome, test, cfg.vocab_size)
 
+    # Keep only the selected trial weights for auditability; loser trial state dicts
+    # are redundant and would otherwise make long-running autopilot state grow quickly.
+    selected_trial_path = run_dir / f"promotion-trial-{selected_trial:02d}.pt"
+    selected_audit_path = run_dir / "selected-trial.pt"
+    if selected_trial_path.exists():
+        selected_trial_path.replace(selected_audit_path)
+    for path in run_dir.glob("promotion-trial-*.pt"):
+        path.unlink(missing_ok=True)
+    candidate_final["selected_trial_path"] = str(selected_audit_path) if selected_audit_path.exists() else None
+
     if promote:
         champion_dir.mkdir(parents=True, exist_ok=True)
         tmp_dir = state_dir / ".champion-new"
@@ -496,6 +522,7 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
     _save_json(run_dir / "result.json", result)
     with (state_dir / "history.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps({k: v for k, v in result.items() if k != "best_search_candidate"}, ensure_ascii=False) + "\n")
+    _prune_old_trial_weights(state_dir, keep_runs=5)
     return result
 
 
