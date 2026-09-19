@@ -10,6 +10,7 @@ from .architecture import architecture_report, default_genome, mutate_genome
 from .benchmark import TRAINING_PHRASES, evaluate_genome
 from .kernel import IntegrityKernel, atomic_json
 from .knowledge import default_state_dir
+from .model_writer import write_model_module
 from .neural_graph import GrowingNeuralRouter
 from .types import ArchitectureGenome, EvolutionResult
 
@@ -59,6 +60,8 @@ class SelfEvolutionEngine:
         champion_bench = evaluate_genome(champion, champion_router)
 
         candidate = mutate_genome(champion)
+        self.kernel.validate_state_path(self.state_dir, self.state_dir / "candidate_model.py")
+        write_model_module(self.state_dir / "candidate_model.py", candidate)
         grow_by = max(1, candidate.neural_hidden - champion_router.hidden_size)
         candidate_router = champion_router.grow(grow_by)
         candidate_router.train(TRAINING_PHRASES, epochs=50, lr=0.05)
@@ -84,12 +87,17 @@ class SelfEvolutionEngine:
         if promoted:
             atomic_json(self.champion_path, candidate.to_dict())
             atomic_json(self.router_path, candidate_router.to_dict())
+            self.kernel.validate_state_path(self.state_dir, self.state_dir / "champion_model.py")
+            write_model_module(self.state_dir / "champion_model.py", candidate)
             selected = candidate
         else:
             if not self.champion_path.exists():
                 atomic_json(self.champion_path, champion.to_dict())
             if not self.router_path.exists():
                 atomic_json(self.router_path, champion_router.to_dict())
+            if not (self.state_dir / "champion_model.py").exists():
+                self.kernel.validate_state_path(self.state_dir, self.state_dir / "champion_model.py")
+                write_model_module(self.state_dir / "champion_model.py", champion)
             selected = champion
 
         row = {
