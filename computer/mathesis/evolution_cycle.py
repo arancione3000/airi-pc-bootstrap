@@ -15,11 +15,14 @@ def main() -> int:
     discovery_engine = ConjectureDiscoveryEngine(
         evolution.state_dir,
         counterexample_radius=champion.counterexample_radius,
+        symbolic_depth=champion.symbolic_depth,
+        discovery_beam=champion.discovery_beam,
     )
     discovery = discovery_engine.discover_once()
 
     discovery_status = discovery_engine.status()
-    study_every = max(1, int(os.environ.get("MATHESIS_STUDY_EVERY", "12")))
+    base_study_every = max(1, int(os.environ.get("MATHESIS_STUDY_EVERY", "12")))
+    study_every = max(1, base_study_every // max(1, champion.research_budget))
     study = None
     if discovery_status["cycle"] % study_every == 0:
         # Web study is intentionally non-fatal: offline periods must never stop
