@@ -1,11 +1,50 @@
 {
-  "cycle": 3,
+  "cycle": 4,
   "strategy_counts": {
     "binomial_expansion": 1,
     "difference_of_powers": 1,
-    "faulhaber_interpolation": 1
+    "faulhaber_interpolation": 1,
+    "finite_geometric_identity": 1
   },
   "theorems": {
+    "6fa35cc97a1d807c0b6f": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "x**5 - 1 = x**5 - 1",
+        "status": "verified"
+      },
+      "complexity": 5,
+      "discovered_at": 1789853959.78055,
+      "human_novelty": "unassessed",
+      "id": "6fa35cc97a1d807c0b6f",
+      "internal_novelty": true,
+      "statement": "x**5 - 1 = x**5 - 1",
+      "strategy": "finite_geometric_identity",
+      "verified": true
+    },
     "74e3201b8ab35ca45614": {
       "certificate": {
         "counterexample": null,
@@ -136,6 +175,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789853655.271518,
+  "updated_at": 1789853959.78055,
   "version": 1
 }
