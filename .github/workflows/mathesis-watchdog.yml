@@ -55,23 +55,29 @@ jobs:
           if (( age < 0 )); then age=0; fi
           echo "age_seconds=$age" >> "$GITHUB_OUTPUT"
 
-          runs="$(curl "${curl_common[@]}" \
+          if runs="$(curl "${curl_common[@]}" \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/mathesis-continuum.yml/runs?per_page=50")"
-          active="$(jq '
-            [
-              .workflow_runs[]
-              | select(
-                  .status == "pending"
-                  or .status == "queued"
-                  or .status == "in_progress"
-                  or .status == "waiting"
-                  or .status == "requested"
-                )
-            ] | length
-          ' <<<"$runs")"
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/mathesis-continuum.yml/runs?per_page=50")"; then
+            active="$(jq '
+              [
+                .workflow_runs[]
+                | select(
+                    .status == "pending"
+                    or .status == "queued"
+                    or .status == "in_progress"
+                    or .status == "waiting"
+                    or .status == "requested"
+                  )
+              ] | length
+            ' <<<"$runs")"
+          else
+            echo "active=false" >> "$GITHUB_OUTPUT"
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "reason=continuum_run_lookup_failed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if (( active > 0 )); then
             echo "active=true" >> "$GITHUB_OUTPUT"
           else
