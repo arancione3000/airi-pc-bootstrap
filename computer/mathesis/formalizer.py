@@ -77,7 +77,7 @@ def _keyword_vote(raw: str) -> _Vote | None:
         return _Vote("research_claim", claim or raw, None, None, 0.92, "keyword")
 
     if any(word in lower for word in ("dimostra", "prova che", "prove that", "show that")):
-        expr = _extract_after_prefix(raw, ("dimostra", "prova che", "prove that", "show that"))
+        expr = _extract_after_prefix(raw, ("prova che", "prove that", "show that", "dimostra che", "dimostra"))
         return _Vote("identity", expr, None, None, 0.98, "keyword")
 
     if any(word in lower for word in ("risolvi", "solve")):
