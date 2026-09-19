@@ -20,6 +20,9 @@ MUTABLE_STATE_NAMES = {
     "knowledge.json",
     "candidate_model.py",
     "champion_model.py",
+    "discoveries.json",
+    "discovery-history.jsonl",
+    "curriculum.json",
 }
 
 
