@@ -102,3 +102,10 @@ tests pass.
 - added a persistent-state Health Gate before every autonomous state push;
 - health checks architecture/domain closure, topology, router compatibility, discovery proof quality, Faulhaber certificates, curriculum retry bounds, benchmark failures and kernel/verifier status;
 - failed health audits cannot replace the previous known-good `mathesis-state` checkpoint.
+
+
+## 2026-09-20 — Strict health-gate persisted-state validation
+
+- health gate now validates champion.json directly before any engine fallback can mask corruption;
+- runtime health explicitly requires Lean alongside SymPy and Z3;
+- regression tests reject malformed champion state and checkpoints reporting Lean unavailable.
