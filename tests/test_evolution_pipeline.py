@@ -111,3 +111,21 @@ def test_runtime_export_is_confined_to_evolution_state(monkeypatch, tmp_path: Pa
     result = runtime.export("/tmp/escape.zip")
     assert result["ok"] is False
     assert "exports directory" in result["error"]
+
+
+def test_registrable_domain_collapses_same_organization_subdomains():
+    assert claimreview.registrable_domain("www.news.example.com") == "example.com"
+    assert claimreview.registrable_domain("factcheck.example.com") == "example.com"
+    assert claimreview.registrable_domain("foo.example.co.uk") == "example.co.uk"
+
+
+def test_consensus_does_not_double_count_same_registrable_domain(monkeypatch):
+    claim = "A claim checked by one organization twice"
+    mapping = {
+        "https://a.example.com/check": claimreview.extract_claimreviews(_claimreview_html(claim, "False"), "https://a.example.com/check"),
+        "https://b.example.com/check": claimreview.extract_claimreviews(_claimreview_html(claim, "False"), "https://b.example.com/check"),
+    }
+    monkeypatch.setattr(claimreview, "fetch_claimreviews", lambda url: mapping[url])
+    result = claimreview.verify_consensus(claim, list(mapping), min_sources=2)
+    assert result["verified"] is False
+    assert result["reason"] == "not enough independent unambiguous ClaimReview sources"
