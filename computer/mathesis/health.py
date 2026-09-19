@@ -33,8 +33,27 @@ def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
     # persisted champion from the pre-push health gate.
     champion_path = root / "champion.json"
     champion_payload = _read_json(champion_path, None)
+    required_genome_fields = {
+        "generation",
+        "experts",
+        "proof_order",
+        "counterexample_radius",
+        "max_proof_cells",
+        "neural_hidden",
+        "symbolic_depth",
+        "discovery_beam",
+        "research_budget",
+        "strategy_portfolio",
+        "topology",
+        "genome_id",
+    }
     champion_valid = isinstance(champion_payload, dict)
     champion_error: str | None = None
+    if champion_valid:
+        missing_fields = sorted(required_genome_fields - set(champion_payload))
+        if missing_fields:
+            champion_valid = False
+            champion_error = f"missing required genome fields: {missing_fields}"
     if champion_valid:
         try:
             champion = ArchitectureGenome.from_dict(champion_payload)
