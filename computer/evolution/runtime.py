@@ -127,6 +127,9 @@ def start(*, mode: str = "safe", auto_setup: bool = True, population: int | None
         return {"ok": True, "started": False, "reason": "already_running", "pid": st["pid"]}
     if st["dataset_records"] < 40 or min(st["class_counts"].values()) < 4:
         return {"ok": False, "started": False, "reason": "insufficient_verified_data", "status": st}
+    state_audit = audit()
+    if not state_audit.get("ok", False):
+        return {"ok": False, "started": False, "reason": "state_audit_failed", "audit": state_audit, "status": st}
     ts = torch_status()
     if not ts.get("available") and auto_setup:
         installed = setup()
