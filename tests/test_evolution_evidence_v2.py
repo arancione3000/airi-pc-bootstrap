@@ -213,3 +213,23 @@ def test_research_maintenance_retries_pending_claims_conservatively(monkeypatch)
     assert result["ok"] is True
     assert result["read_only_web"] is True
     assert result["processed"][0]["status"] == "verified"
+
+
+def test_evolution_watchdog_recovers_stale_cloud_heartbeat():
+    text = (ROOT / ".github" / "workflows" / "evolution-watchdog.yml").read_text(encoding="utf-8")
+    assert "Airi Evolution Watchdog" in text
+    assert "cron: '8,38 * * * *'" in text
+    assert "MAX_AGE_SECONDS: '4200'" in text
+    assert "airi-evolution-state" in text
+    assert "actions/workflows/evolution-continuum.yml/dispatches" in text
+    assert "actions: write" in text
+    assert "contents: read" in text
+    assert "heartbeat_older_than_70_minutes" in text
+
+
+def test_evolution_continuum_keeps_hourly_primary_schedule_and_state_heartbeat():
+    text = (ROOT / ".github" / "workflows" / "evolution-continuum.yml").read_text(encoding="utf-8")
+    assert "cron: '23 * * * *'" in text
+    assert "AIRI_CLOUD_MAX_CYCLES_PER_DATASET: '0'" in text
+    assert "sync_to_git(force_heartbeat=True)" in text
+    assert "commit" in text and "remote_sha" in text
