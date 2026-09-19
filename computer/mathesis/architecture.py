@@ -84,18 +84,15 @@ def mutate_genome(
     weaknesses = [str(x) for x in (weaknesses or [])]
 
     # Prefer an expert corresponding to an observed weak benchmark domain.
-    requested = None
+    requested_candidates: list[str] = []
     for weakness in weaknesses:
         for expert in _ALLOWED_EXPERTS:
-            if expert in weakness and expert not in experts:
-                requested = expert
-                break
-        if requested:
-            break
+            if expert in weakness and expert not in experts and expert not in requested_candidates:
+                requested_candidates.append(expert)
 
     missing = [expert for expert in _ALLOWED_EXPERTS if expert not in experts]
-    if requested:
-        experts.append(requested)
+    if requested_candidates:
+        experts.append(requested_candidates[variant % len(requested_candidates)])
     elif missing:
         experts.append(missing[variant % len(missing)])
 
