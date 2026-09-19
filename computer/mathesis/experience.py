@@ -35,11 +35,13 @@ class ExperienceAnalyzer:
             return fallback
 
     def replayable_theorems(self, limit: int = 16) -> list[str]:
-        """Return a bounded deterministic corpus of previously verified relations.
+        """Return bounded proof obligations for previously verified mathematics.
 
-        Only statements accepted by the safe mathematical relation parser are
-        replayed as promotion tests. Richer theorem schemas remain in the
-        knowledge graph but are not silently downgraded into string heuristics.
+        Ordinary relation-style discoveries replay their theorem statement.
+        Richer schemas such as Faulhaber sums replay the verified, structurally
+        nontrivial induction recurrence stored in their certificate. This keeps
+        anti-forgetting proof-gated without pretending the safe relation parser
+        understands a richer theorem language than it actually does.
         """
         discoveries = self._json("discoveries.json", {"theorems": {}})
         rows = sorted(
@@ -48,17 +50,46 @@ class ExperienceAnalyzer:
             reverse=True,
         )
         out: list[str] = []
+        seen: set[str] = set()
+        target = max(1, min(64, int(limit)))
+
         for row in rows:
             if not row.get("verified"):
                 continue
+
+            candidates: list[str] = []
             statement = str(row.get("statement", "")).strip()
             try:
                 parse_relation(statement)
             except Exception:
-                continue
-            out.append(statement)
-            if len(out) >= max(1, min(64, int(limit))):
-                break
+                pass
+            else:
+                candidates.append(statement)
+
+            if row.get("strategy") == "faulhaber_interpolation":
+                cert = row.get("certificate") or {}
+                recurrence = cert.get("recurrence") or {}
+                recurrence_statement = str(recurrence.get("statement", "")).strip()
+                if (
+                    cert.get("recurrence_nontrivial") is True
+                    and recurrence.get("ok") is True
+                    and recurrence_statement
+                ):
+                    try:
+                        parse_relation(recurrence_statement)
+                    except Exception:
+                        pass
+                    else:
+                        candidates.append(recurrence_statement)
+
+            for candidate in candidates:
+                if candidate in seen:
+                    continue
+                seen.add(candidate)
+                out.append(candidate)
+                if len(out) >= target:
+                    return list(reversed(out))
+
         return list(reversed(out))
 
     def signals(
