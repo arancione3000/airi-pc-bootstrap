@@ -112,7 +112,7 @@ def _prepare_verified(record: dict) -> dict:
     return row
 
 
-def append_verified_many(path: Path, records: Iterable[dict]) -> dict:
+def append_verified_many(path: Path, records: Iterable[dict], *, include_rows: bool = True) -> dict:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with _dataset_lock(path):
@@ -121,34 +121,34 @@ def append_verified_many(path: Path, records: Iterable[dict]) -> dict:
             row.get("text_id") or text_fingerprint(row.get("text", "")): normalize_label(row.get("label"))
             for row in existing
         }
-        accepted_rows: list[dict] = []
         results: list[dict] = []
         stats = {"accepted": 0, "duplicates": 0, "conflicts": 0, "invalid": 0}
-        for record in records:
-            try:
-                row = _prepare_verified(record)
-            except Exception as exc:
-                stats["invalid"] += 1
-                results.append({"status": "invalid", "error": str(exc)})
-                continue
-            previous = known.get(row["text_id"])
-            if previous is not None:
-                if previous != row["label"]:
-                    stats["conflicts"] += 1
-                    results.append({"status": "conflict", **row})
-                else:
-                    stats["duplicates"] += 1
-                    results.append({"status": "duplicate", **row})
-                continue
-            known[row["text_id"]] = row["label"]
-            accepted_rows.append(row)
-            stats["accepted"] += 1
-            results.append({"status": "accepted", **row})
-        if accepted_rows:
-            with path.open("a", encoding="utf-8") as handle:
-                for row in accepted_rows:
-                    handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-        return {**stats, "rows": results}
+        with path.open("a", encoding="utf-8") as handle:
+            for record in records:
+                try:
+                    row = _prepare_verified(record)
+                except Exception as exc:
+                    stats["invalid"] += 1
+                    if include_rows:
+                        results.append({"status": "invalid", "error": str(exc)})
+                    continue
+                previous = known.get(row["text_id"])
+                if previous is not None:
+                    if previous != row["label"]:
+                        stats["conflicts"] += 1
+                        if include_rows:
+                            results.append({"status": "conflict", **row})
+                    else:
+                        stats["duplicates"] += 1
+                        if include_rows:
+                            results.append({"status": "duplicate", **row})
+                    continue
+                known[row["text_id"]] = row["label"]
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+                stats["accepted"] += 1
+                if include_rows:
+                    results.append({"status": "accepted", **row})
+        return {**stats, "rows": results if include_rows else None}
 
 
 def append_verified(path: Path, record: dict) -> dict:
