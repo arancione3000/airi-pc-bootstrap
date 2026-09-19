@@ -21,7 +21,7 @@ concurrency:
 jobs:
   evolve:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       PYTHONPATH: computer
       MATHESIS_STATE_DIR: /tmp/mathesis-runtime-state
@@ -142,31 +142,40 @@ jobs:
           fi
 
           api_base="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/mathesis-continuum.yml/runs"
-          payload="$(curl --fail-with-body -sS \
+          curl_common=(--fail-with-body -sS --connect-timeout 10 --max-time 30 --retry 3 --retry-delay 2 --retry-all-errors)
+          if payload="$(curl "${curl_common[@]}" \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${api_base}?per_page=50")"
-
-          active_other="$(jq --argjson current "${GITHUB_RUN_ID}" '
-            [
-              .workflow_runs[]
-              | select(.id != $current)
-              | select(
-                  .status == "pending"
-                  or .status == "queued"
-                  or .status == "in_progress"
-                  or .status == "waiting"
-                  or .status == "requested"
-                )
-            ] | length
-          ' <<<"$payload")"
+            "${api_base}?per_page=50")"; then
+            active_other="$(jq --argjson current "${GITHUB_RUN_ID}" '
+              [
+                .workflow_runs[]
+                | select(.id != $current)
+                | select(
+                    .status == "pending"
+                    or .status == "queued"
+                    or .status == "in_progress"
+                    or .status == "waiting"
+                    or .status == "requested"
+                  )
+              ] | length
+            ' <<<"$payload")"
+          else
+            echo "Could not inspect active runs after bounded retries; attempting one continuity dispatch."
+            active_other=0
+          fi
 
           if (( active_other > 0 )); then
             echo "Another MATHESIS continuum run is already queued/running; no duplicate handoff."
             exit 0
           fi
 
-          curl --fail-with-body -sS -X POST             -H "Accept: application/vnd.github+json"             -H "Authorization: Bearer ${GH_TOKEN}"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/mathesis-continuum.yml/dispatches"             -d '{"ref":"main"}'
+          curl "${curl_common[@]}" -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/mathesis-continuum.yml/dispatches" \
+            -d '{"ref":"main"}'
 
           echo "Next autonomous MATHESIS cycle dispatched."

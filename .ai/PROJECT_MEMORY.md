@@ -81,3 +81,14 @@ tests pass.
 - curriculum no_sources/research_error retries now remain on the same mathematical domain;
 - successful retry clears the per-domain retry counter;
 - after three failures the curriculum advances to avoid permanent source-induced stalls.
+
+
+## 2026-09-20 — MATHESIS handoff network hardening
+
+- added explicit connect/total timeouts and retries to continuum, watchdog and deep-Mathlib GitHub API calls;
+- raised the continuum job timeout margin to 15 minutes so cold setup plus persistence/handoff cannot be killed prematurely;
+- CI now enforces that autonomous workflow API calls remain time-bounded and retrying.
+
+
+- if active-run lookup fails after bounded retries, continuum attempts one serialized continuity dispatch;
+- watchdog converts bounded run-list lookup failure into a stale recovery condition instead of crashing before recovery.
