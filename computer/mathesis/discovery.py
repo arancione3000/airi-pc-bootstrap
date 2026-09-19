@@ -329,8 +329,12 @@ class ConjectureDiscoveryEngine:
         discarded = state.setdefault("discarded", {})
         moved: list[str] = []
         revalidated: list[str] = []
-        schema_upgraded = int(state.get("version", 1) or 1) < DISCOVERY_SCHEMA_VERSION
-        state["version"] = max(DISCOVERY_SCHEMA_VERSION, int(state.get("version", 1) or 1))
+        try:
+            previous_version = int(state.get("version", 1) or 1)
+        except Exception:
+            previous_version = 1
+        schema_upgraded = previous_version < DISCOVERY_SCHEMA_VERSION
+        state["version"] = max(DISCOVERY_SCHEMA_VERSION, previous_version)
 
         for theorem_id, row in list(theorems.items()):
             if not row.get("verified"):
@@ -356,7 +360,10 @@ class ConjectureDiscoveryEngine:
                         continue
                     reason = "legacy_faulhaber_reproof_failed"
             else:
-                if needs_upgrade:
+                statement = str(row.get("statement", "")).strip()
+                if not _relation_is_structurally_nontrivial(statement):
+                    reason = "structural_tautology"
+                elif needs_upgrade:
                     if self._revalidate_legacy_relation(row):
                         revalidated.append(theorem_id)
                         continue
