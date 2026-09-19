@@ -719,4 +719,5 @@ def test_handoff_and_watchdog_have_bounded_network_fallbacks():
     assert "active_other=0" in continuum
 
     assert "reason=continuum_run_lookup_failed" in watchdog
-    assert 'echo "stale=true" >> "$GITHUB_OUTPUT"' in watchdog
+    assert 'echo "stale=true"' in watchdog
+    assert '} >> "$GITHUB_OUTPUT"' in watchdog
