@@ -6,7 +6,7 @@ Operate Airi-PC's autonomous lightweight reliability classifier: verified-data a
 ## Instructions
 Use the dedicated evolution commands/tools rather than editing model files manually.
 
-On first real-data setup, run `scripts/airi-evolve bootstrap-liar --mode safe`. The importer downloads LIAR at runtime, keeps only unambiguous labels (true/mostly-true vs false/pants-fire), records provenance and starts evolution automatically. LIAR is research-use-only; do not commit or redistribute its downloaded dataset.
+On first real-data setup, run `scripts/airi-evolve bootstrap-liar --mode safe`. The importer downloads LIAR at runtime, keeps only strict binary labels (true vs false/pants-fire) and excludes mostly-true/half-true/barely-true as ambiguous, records provenance and starts evolution automatically. LIAR is research-use-only; do not commit or redistribute its downloaded dataset.
 
 For an online claim, prefer the one-shot `scripts/airi-evolve factcheck "<claim>"`. It uses Airi-PC's existing multi-source research, queues the claim, looks for structured ClaimReview metadata, requires at least two independent domains with the same unambiguous verdict, ingests only verified consensus and triggers a new evolution when the verified-data threshold is reached.
 
