@@ -349,9 +349,10 @@ anti-forgetting:
 - schema-v3 upgrades are persisted even when no theorem needed moving;
 - migrations are idempotent.
 
-Anti-forgetting consumes only currently valid active discoveries. A theorem
-that is discarded, unverified, structurally trivial, certificate-inconsistent
-or rejected by the current verifier is not turned into a promotion obligation.
+Anti-forgetting consumes the complete currently valid active discovery corpus by
+default, rather than only the newest fixed-size window. A theorem that is
+discarded, unverified, structurally trivial, certificate-inconsistent or
+rejected by the current verifier is not turned into a promotion obligation.
 
 Novelty metadata is deliberately separated into three claims: novelty relative
 to the MATHESIS memory, novelty relative to consulted sources, and novelty to
