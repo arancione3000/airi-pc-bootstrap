@@ -114,9 +114,11 @@ def test_pipeline_records_evidence_graph_for_true_and_false_consensus(monkeypatc
         assert result["evidence_graph"]["label"] == label
 
 
-def test_read_only_research_rejects_local_and_non_http_targets():
+def test_read_only_research_rejects_local_non_https_and_private_targets():
     with pytest.raises(ValueError):
         read_only_research.fetch_text("file:///etc/passwd")
+    with pytest.raises(ValueError, match="requires HTTPS"):
+        read_only_research.fetch_text("http://8.8.8.8/plain")
     with pytest.raises(ValueError):
         read_only_research.fetch_text("http://127.0.0.1/private")
 
