@@ -28,39 +28,39 @@
           "z3_unsat_negation"
         ],
         "ok": true,
-        "statement": "(x-1)*(x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^11-1",
+        "statement": "(x+y)^12 = x**12 + 12*x**11*y + 66*x**10*y**2 + 220*x**9*y**3 + 495*x**8*y**4 + 792*x**7*y**5 + 924*x**6*y**6 + 792*x**5*y**7 + 495*x**4*y**8 + 220*x**3*y**9 + 66*x**2*y**10 + 12*x*y**11 + y**12",
         "status": "verified"
       },
-      "complexity": 11,
-      "discovered_at": 1789859840.1724956,
+      "complexity": 12,
+      "discovered_at": 1789860185.3250139,
       "human_novelty": "unassessed",
-      "id": "c6294726e1673c5852bb",
+      "id": "43afdb26454b3f76214f",
       "internal_novelty": true,
       "nontrivial": true,
       "quality_gate": "structurally_nontrivial_and_proof_gated",
-      "statement": "(x-1)*(x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^11-1",
-      "strategy": "finite_geometric_identity",
+      "statement": "(x+y)^12 = x**12 + 12*x**11*y + 66*x**10*y**2 + 220*x**9*y**3 + 495*x**8*y**4 + 792*x**7*y**5 + 924*x**6*y**6 + 792*x**5*y**7 + 495*x**4*y**8 + 220*x**3*y**9 + 66*x**2*y**10 + 12*x*y**11 + y**12",
+      "strategy": "binomial_expansion",
       "verified": true
     },
-    "total_discoveries": 19
+    "total_discoveries": 20
   },
   "discovery_status": {
-    "cycle": 24,
+    "cycle": 25,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 19,
+    "stored": 20,
     "strategies": {
-      "binomial_expansion": 6,
+      "binomial_expansion": 7,
       "difference_of_powers": 6,
       "faulhaber_interpolation": 5,
       "finite_geometric_identity": 6
     },
     "symbolic_depth": 12,
-    "verified": 19
+    "verified": 20
   },
   "evolution": {
     "benchmark": {
@@ -69,15 +69,6 @@
         "complexity_penalty": 0.011882000000000002,
         "critical_failures": [],
         "learned_theorems_replayed": [
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
-            "status": "verified"
-          },
           {
             "methods": [
               "sympy_normal_form",
@@ -212,6 +203,15 @@
             "ok": true,
             "statement": "(x-1)*(x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^11-1",
             "status": "verified"
+          },
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "(x+y)^12 = x**12 + 12*x**11*y + 66*x**10*y**2 + 220*x**9*y**3 + 495*x**8*y**4 + 792*x**7*y**5 + 924*x**6*y**6 + 792*x**5*y**7 + 495*x**4*y**8 + 220*x**3*y**9 + 66*x**2*y**10 + 12*x*y**11 + y**12",
+            "status": "verified"
           }
         ],
         "neural_accuracy": 0.909091,
@@ -274,7 +274,7 @@
           },
           {
             "critical": true,
-            "detail": 98.999618,
+            "detail": 98.999622,
             "name": "program:gcd",
             "ok": true
           },
@@ -499,15 +499,6 @@
               "z3_unsat_negation"
             ],
             "ok": true,
-            "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
             "statement": "((n + 1)**2*(n + 2)**2*(2*n + 2*(n + 1)**2 + 1)/12)-(n**2*(n + 1)**2*(2*n**2 + 2*n - 1)/12) = (n+1)^5",
             "status": "verified"
           },
@@ -636,6 +627,15 @@
             "ok": true,
             "statement": "(x-1)*(x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^11-1",
             "status": "verified"
+          },
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "(x+y)^12 = x**12 + 12*x**11*y + 66*x**10*y**2 + 220*x**9*y**3 + 495*x**8*y**4 + 792*x**7*y**5 + 924*x**6*y**6 + 792*x**5*y**7 + 495*x**4*y**8 + 220*x**3*y**9 + 66*x**2*y**10 + 12*x*y**11 + y**12",
+            "status": "verified"
           }
         ],
         "neural_accuracy": 0.909091,
@@ -698,7 +698,7 @@
           },
           {
             "critical": true,
-            "detail": 98.999621,
+            "detail": 98.999597,
             "name": "program:gcd",
             "ok": true
           },
@@ -922,7 +922,6 @@
         "ok": true
       },
       "learned_theorems": [
-        "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
         "((n + 1)**2*(n + 2)**2*(2*n + 2*(n + 1)**2 + 1)/12)-(n**2*(n + 1)**2*(2*n**2 + 2*n - 1)/12) = (n+1)^5",
         "x^12-y^12 = (x - y)*(x**11 + x**10*y + x**9*y**2 + x**8*y**3 + x**7*y**4 + x**6*y**5 + x**5*y**6 + x**4*y**7 + x**3*y**8 + x**2*y**9 + x*y**10 + y**11)",
         "(x-1)*(x**12 + x**11 + x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^13-1",
@@ -937,7 +936,8 @@
         "(x+y)^8 = x**8 + 8*x**7*y + 28*x**6*y**2 + 56*x**5*y**3 + 70*x**4*y**4 + 56*x**3*y**5 + 28*x**2*y**6 + 8*x*y**7 + y**8",
         "((n + 1)*(n + 2)/2)-(n*(n + 1)/2) = (n+1)^1",
         "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)",
-        "(x-1)*(x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^11-1"
+        "(x-1)*(x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^11-1",
+        "(x+y)^12 = x**12 + 12*x**11*y + 66*x**10*y**2 + 220*x**9*y**3 + 495*x**8*y**4 + 792*x**7*y**5 + 924*x**6*y**6 + 792*x**5*y**7 + 495*x**4*y**8 + 220*x**3*y**9 + 66*x**2*y**10 + 12*x*y**11 + y**12"
       ],
       "selected_trial": 2,
       "trials": [
@@ -947,15 +947,6 @@
             "complexity_penalty": 0.011980000000000003,
             "critical_failures": [],
             "learned_theorems_replayed": [
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
-                "status": "verified"
-              },
               {
                 "methods": [
                   "sympy_normal_form",
@@ -1090,6 +1081,15 @@
                 "ok": true,
                 "statement": "(x-1)*(x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^11-1",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x+y)^12 = x**12 + 12*x**11*y + 66*x**10*y**2 + 220*x**9*y**3 + 495*x**8*y**4 + 792*x**7*y**5 + 924*x**6*y**6 + 792*x**5*y**7 + 495*x**4*y**8 + 220*x**3*y**9 + 66*x**2*y**10 + 12*x*y**11 + y**12",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -1152,7 +1152,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999603,
+                "detail": 98.9996,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -1567,15 +1567,6 @@
                   "z3_unsat_negation"
                 ],
                 "ok": true,
-                "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
                 "statement": "((n + 1)**2*(n + 2)**2*(2*n + 2*(n + 1)**2 + 1)/12)-(n**2*(n + 1)**2*(2*n**2 + 2*n - 1)/12) = (n+1)^5",
                 "status": "verified"
               },
@@ -1704,6 +1695,15 @@
                 "ok": true,
                 "statement": "(x-1)*(x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^11-1",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x+y)^12 = x**12 + 12*x**11*y + 66*x**10*y**2 + 220*x**9*y**3 + 495*x**8*y**4 + 792*x**7*y**5 + 924*x**6*y**6 + 792*x**5*y**7 + 495*x**4*y**8 + 220*x**3*y**9 + 66*x**2*y**10 + 12*x*y**11 + y**12",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -1766,7 +1766,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999628,
+                "detail": 98.999634,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -2181,15 +2181,6 @@
                   "z3_unsat_negation"
                 ],
                 "ok": true,
-                "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
                 "statement": "((n + 1)**2*(n + 2)**2*(2*n + 2*(n + 1)**2 + 1)/12)-(n**2*(n + 1)**2*(2*n**2 + 2*n - 1)/12) = (n+1)^5",
                 "status": "verified"
               },
@@ -2318,6 +2309,15 @@
                 "ok": true,
                 "statement": "(x-1)*(x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^11-1",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x+y)^12 = x**12 + 12*x**11*y + 66*x**10*y**2 + 220*x**9*y**3 + 495*x**8*y**4 + 792*x**7*y**5 + 924*x**6*y**6 + 792*x**5*y**7 + 495*x**4*y**8 + 220*x**3*y**9 + 66*x**2*y**10 + 12*x*y**11 + y**12",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -2380,7 +2380,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999618,
+                "detail": 98.999622,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -2784,7 +2784,9 @@
           "trial": 2
         }
       ],
-      "weakness_hints": []
+      "weakness_hints": [
+        "symbolic_depth"
+      ]
     },
     "candidate": {
       "counterexample_radius": 9,
@@ -3169,15 +3171,22 @@
     "champion": "omega-15-06619f38",
     "ok": true,
     "policy": "experience proposes bounded architecture hints; it never edits verifier code",
-    "reasons": [],
-    "weaknesses": []
+    "reasons": [
+      {
+        "reason": "verified discovery reached current symbolic-depth frontier",
+        "signal": "symbolic_depth"
+      }
+    ],
+    "weaknesses": [
+      "symbolic_depth"
+    ]
   },
   "ok": true,
   "study": {
-    "at": 1789859841.5853777,
-    "domain": "optimization",
+    "at": 1789860186.7401917,
+    "domain": "algebra",
     "ok": true,
-    "query": "optimization mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+    "query": "algebra mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
     "raw": null,
     "sources": [
       {

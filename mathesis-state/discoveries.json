@@ -1,5 +1,5 @@
 {
-  "cycle": 24,
+  "cycle": 25,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -172,7 +172,7 @@
     ]
   },
   "strategy_counts": {
-    "binomial_expansion": 6,
+    "binomial_expansion": 7,
     "difference_of_powers": 6,
     "faulhaber_interpolation": 5,
     "finite_geometric_identity": 6
@@ -472,6 +472,46 @@
       "quality_gate": "structurally_nontrivial_and_proof_gated",
       "statement": "sum(k^7, k=1..n) = n**2*(n + 1)**2*(3*n**4 + 6*n**3 - n**2 - 4*n + 2)/24 for integer n>=0",
       "strategy": "faulhaber_interpolation",
+      "verified": true
+    },
+    "43afdb26454b3f76214f": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "(x+y)^12 = x**12 + 12*x**11*y + 66*x**10*y**2 + 220*x**9*y**3 + 495*x**8*y**4 + 792*x**7*y**5 + 924*x**6*y**6 + 792*x**5*y**7 + 495*x**4*y**8 + 220*x**3*y**9 + 66*x**2*y**10 + 12*x*y**11 + y**12",
+        "status": "verified"
+      },
+      "complexity": 12,
+      "discovered_at": 1789860185.3250139,
+      "human_novelty": "unassessed",
+      "id": "43afdb26454b3f76214f",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "(x+y)^12 = x**12 + 12*x**11*y + 66*x**10*y**2 + 220*x**9*y**3 + 495*x**8*y**4 + 792*x**7*y**5 + 924*x**6*y**6 + 792*x**5*y**7 + 495*x**4*y**8 + 220*x**3*y**9 + 66*x**2*y**10 + 12*x*y**11 + y**12",
+      "strategy": "binomial_expansion",
       "verified": true
     },
     "44ead2c10be543108525": {
@@ -1015,6 +1055,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789859840.1724956,
+  "updated_at": 1789860185.3250139,
   "version": 3
 }
