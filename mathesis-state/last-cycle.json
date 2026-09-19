@@ -4,79 +4,63 @@
     "status": "verified_discovery",
     "theorem": {
       "certificate": {
-        "base_case": true,
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
         "methods": [
-          "exact_integer_samples",
-          "sympy_interpolation",
-          "base_case",
-          "finite_difference_induction_step",
           "sympy_normal_form",
           "z3_unsat_negation"
         ],
         "ok": true,
-        "polynomial": "n*(n + 1)/2",
-        "recurrence": {
-          "counterexample": null,
-          "details": {
-            "lean": {
-              "ok": false,
-              "reason": "requires closed equality",
-              "status": "not_applicable"
-            },
-            "smt": {
-              "method": "z3_unsat_negation",
-              "ok": true,
-              "status": "verified"
-            },
-            "symbolic": {
-              "method": "sympy_normal_form",
-              "normal_form": "0",
-              "ok": true,
-              "status": "verified"
-            }
-          },
-          "methods": [
-            "sympy_normal_form",
-            "z3_unsat_negation"
-          ],
-          "ok": true,
-          "statement": "((n + 1)*(n + 2)/2)-(n*(n + 1)/2) = (n+1)^1",
-          "status": "verified"
-        },
-        "recurrence_nontrivial": true,
-        "sample_count": 5,
+        "statement": "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)",
         "status": "verified"
       },
-      "complexity": 1,
-      "discovered_at": 1789859218.542683,
+      "complexity": 10,
+      "discovered_at": 1789859535.8619947,
       "human_novelty": "unassessed",
-      "id": "44ead2c10be543108525",
+      "id": "37504b91a998f4399556",
       "internal_novelty": true,
       "nontrivial": true,
       "quality_gate": "structurally_nontrivial_and_proof_gated",
-      "statement": "sum(k^1, k=1..n) = n*(n + 1)/2 for integer n>=0",
-      "strategy": "faulhaber_interpolation",
+      "statement": "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)",
+      "strategy": "difference_of_powers",
       "verified": true
     },
-    "total_discoveries": 17
+    "total_discoveries": 18
   },
   "discovery_status": {
-    "cycle": 22,
+    "cycle": 23,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 17,
+    "stored": 18,
     "strategies": {
       "binomial_expansion": 6,
-      "difference_of_powers": 5,
+      "difference_of_powers": 6,
       "faulhaber_interpolation": 5,
       "finite_geometric_identity": 5
     },
     "symbolic_depth": 12,
-    "verified": 17
+    "verified": 18
   },
   "evolution": {
     "benchmark": {
@@ -85,15 +69,6 @@
         "complexity_penalty": 0.011882000000000002,
         "critical_failures": [],
         "learned_theorems_replayed": [
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "((n + 1)*(n + 2)*(2*n + 3)/6)-(n*(n + 1)*(2*n + 1)/6) = (n+1)^2",
-            "status": "verified"
-          },
           {
             "methods": [
               "sympy_normal_form",
@@ -228,6 +203,15 @@
             "ok": true,
             "statement": "((n + 1)*(n + 2)/2)-(n*(n + 1)/2) = (n+1)^1",
             "status": "verified"
+          },
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)",
+            "status": "verified"
           }
         ],
         "neural_accuracy": 0.909091,
@@ -290,7 +274,7 @@
           },
           {
             "critical": true,
-            "detail": 98.999611,
+            "detail": 98.999651,
             "name": "program:gcd",
             "ok": true
           },
@@ -515,15 +499,6 @@
               "z3_unsat_negation"
             ],
             "ok": true,
-            "statement": "((n + 1)*(n + 2)*(2*n + 3)/6)-(n*(n + 1)*(2*n + 1)/6) = (n+1)^2",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
             "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
             "status": "verified"
           },
@@ -652,6 +627,15 @@
             "ok": true,
             "statement": "((n + 1)*(n + 2)/2)-(n*(n + 1)/2) = (n+1)^1",
             "status": "verified"
+          },
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)",
+            "status": "verified"
           }
         ],
         "neural_accuracy": 0.909091,
@@ -714,7 +698,7 @@
           },
           {
             "critical": true,
-            "detail": 98.99963,
+            "detail": 98.999637,
             "name": "program:gcd",
             "ok": true
           },
@@ -938,7 +922,6 @@
         "ok": true
       },
       "learned_theorems": [
-        "((n + 1)*(n + 2)*(2*n + 3)/6)-(n*(n + 1)*(2*n + 1)/6) = (n+1)^2",
         "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
         "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
         "((n + 1)**2*(n + 2)**2*(2*n + 2*(n + 1)**2 + 1)/12)-(n**2*(n + 1)**2*(2*n**2 + 2*n - 1)/12) = (n+1)^5",
@@ -953,7 +936,8 @@
         "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
         "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
         "(x+y)^8 = x**8 + 8*x**7*y + 28*x**6*y**2 + 56*x**5*y**3 + 70*x**4*y**4 + 56*x**3*y**5 + 28*x**2*y**6 + 8*x*y**7 + y**8",
-        "((n + 1)*(n + 2)/2)-(n*(n + 1)/2) = (n+1)^1"
+        "((n + 1)*(n + 2)/2)-(n*(n + 1)/2) = (n+1)^1",
+        "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)"
       ],
       "selected_trial": 2,
       "trials": [
@@ -963,15 +947,6 @@
             "complexity_penalty": 0.011980000000000003,
             "critical_failures": [],
             "learned_theorems_replayed": [
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "((n + 1)*(n + 2)*(2*n + 3)/6)-(n*(n + 1)*(2*n + 1)/6) = (n+1)^2",
-                "status": "verified"
-              },
               {
                 "methods": [
                   "sympy_normal_form",
@@ -1105,6 +1080,15 @@
                 ],
                 "ok": true,
                 "statement": "((n + 1)*(n + 2)/2)-(n*(n + 1)/2) = (n+1)^1",
+                "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)",
                 "status": "verified"
               }
             ],
@@ -1583,15 +1567,6 @@
                   "z3_unsat_negation"
                 ],
                 "ok": true,
-                "statement": "((n + 1)*(n + 2)*(2*n + 3)/6)-(n*(n + 1)*(2*n + 1)/6) = (n+1)^2",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
                 "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
                 "status": "verified"
               },
@@ -1720,6 +1695,15 @@
                 "ok": true,
                 "statement": "((n + 1)*(n + 2)/2)-(n*(n + 1)/2) = (n+1)^1",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -1782,7 +1766,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999631,
+                "detail": 98.999657,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -2197,15 +2181,6 @@
                   "z3_unsat_negation"
                 ],
                 "ok": true,
-                "statement": "((n + 1)*(n + 2)*(2*n + 3)/6)-(n*(n + 1)*(2*n + 1)/6) = (n+1)^2",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
                 "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
                 "status": "verified"
               },
@@ -2334,6 +2309,15 @@
                 "ok": true,
                 "statement": "((n + 1)*(n + 2)/2)-(n*(n + 1)/2) = (n+1)^1",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -2396,7 +2380,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999611,
+                "detail": 98.999651,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -3190,10 +3174,10 @@
   },
   "ok": true,
   "study": {
-    "at": 1789859219.9337847,
-    "domain": "probability",
+    "at": 1789859537.8069503,
+    "domain": "discrete_math",
     "ok": true,
-    "query": "probability mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+    "query": "discrete_math mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
     "raw": null,
     "sources": [
       {

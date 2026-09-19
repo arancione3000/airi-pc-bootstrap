@@ -1,5 +1,5 @@
 {
-  "cycle": 22,
+  "cycle": 23,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -173,7 +173,7 @@
   },
   "strategy_counts": {
     "binomial_expansion": 6,
-    "difference_of_powers": 5,
+    "difference_of_powers": 6,
     "faulhaber_interpolation": 5,
     "finite_geometric_identity": 5
   },
@@ -375,6 +375,46 @@
       "nontrivial": true,
       "quality_gate": "structurally_nontrivial_and_proof_gated",
       "statement": "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
+      "strategy": "difference_of_powers",
+      "verified": true
+    },
+    "37504b91a998f4399556": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)",
+        "status": "verified"
+      },
+      "complexity": 10,
+      "discovered_at": 1789859535.8619947,
+      "human_novelty": "unassessed",
+      "id": "37504b91a998f4399556",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "x^10-y^10 = (x - y)*(x**9 + x**8*y + x**7*y**2 + x**6*y**3 + x**5*y**4 + x**4*y**5 + x**3*y**6 + x**2*y**7 + x*y**8 + y**9)",
       "strategy": "difference_of_powers",
       "verified": true
     },
@@ -935,6 +975,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789859218.542683,
+  "updated_at": 1789859535.8619947,
   "version": 3
 }
