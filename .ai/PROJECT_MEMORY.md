@@ -89,3 +89,8 @@ tests pass.
 
 - persistent curriculum v1 metadata is migrated in-memory to schema v2 with retry_counts;
 - curriculum status now exposes the effective schema version.
+
+
+- added a persistent-state Health Gate before every autonomous state push;
+- health checks architecture/domain closure, topology, router compatibility, discovery proof quality, Faulhaber certificates, curriculum retry bounds, benchmark failures and kernel/verifier status;
+- a failed health audit prevents the candidate state from replacing the previous known-good mathesis-state checkpoint.
