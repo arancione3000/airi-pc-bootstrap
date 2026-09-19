@@ -67,3 +67,7 @@ tests pass.
 - added polynomials to evolvable experts;
 - added algebra/polynomial domain benchmarks;
 - CI now requires every SymPy lab domain to be representable by the architecture expert set.
+
+
+- fixed symbolic-depth scoring to use the explicit symbolic-depth proof result rather than a fragile positional task index;
+- added regression coverage showing anti-forgetting theorem failures cannot corrupt the reported verified symbolic depth.
