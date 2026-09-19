@@ -233,3 +233,18 @@ def test_evolution_continuum_keeps_hourly_primary_schedule_and_state_heartbeat()
     assert "AIRI_CLOUD_MAX_CYCLES_PER_DATASET: '0'" in text
     assert "sync_to_git(force_heartbeat=True)" in text
     assert "commit" in text and "remote_sha" in text
+
+
+def test_search_web_math_catalog_survives_search_provider_failures(monkeypatch):
+    import evolution.read_only_research as research
+
+    monkeypatch.setattr(research, "_duckduckgo_search", lambda query, limit: (_ for _ in ()).throw(RuntimeError("blocked")))
+    monkeypatch.setattr(research, "_wikipedia_search", lambda query, limit: [])
+    monkeypatch.setattr(research, "_arxiv_search", lambda query, limit: [])
+
+    rows = research.search_web("algebra SymPy Lean theorem proof mathematics", limit=4)
+    assert len(rows) >= 3
+    assert len({row["domain"] for row in rows}) == len(rows)
+    assert all(row["url"].startswith("https://") for row in rows)
+    assert any("sympy" in row["domain"] for row in rows)
+    assert any("lean-lang.org" in row["domain"] for row in rows)
