@@ -134,6 +134,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 def _open_public_url(url: str, timeout: int, max_redirects: int = 4):
     opener = urllib.request.build_opener(_NoRedirect)
     current = url
+    original_scheme = urllib.parse.urlparse(str(url)).scheme.lower()
     for _ in range(max(0, int(max_redirects)) + 1):
         safe_url, _domain = _public_http_url(current)
         request = urllib.request.Request(
@@ -144,6 +145,9 @@ def _open_public_url(url: str, timeout: int, max_redirects: int = 4):
             response = opener.open(request, timeout=timeout)
             final_url = response.geturl()
             _public_http_url(final_url)
+            if original_scheme == "https" and urllib.parse.urlparse(final_url).scheme.lower() != "https":
+                response.close()
+                raise ValueError("HTTPS fact-check URL cannot downgrade to HTTP")
             return response, final_url
         except urllib.error.HTTPError as exc:
             if 300 <= int(exc.code) < 400:
@@ -152,6 +156,8 @@ def _open_public_url(url: str, timeout: int, max_redirects: int = 4):
                     raise ValueError("redirect response is missing Location") from exc
                 current = urllib.parse.urljoin(safe_url, location)
                 _public_http_url(current)
+                if original_scheme == "https" and urllib.parse.urlparse(current).scheme.lower() != "https":
+                    raise ValueError("HTTPS fact-check URL cannot downgrade to HTTP")
                 continue
             raise
     raise ValueError("too many fact-check redirects")
@@ -225,7 +231,9 @@ def fetch_claimreviews(url: str, timeout: int = 25, max_bytes: int = 4_000_000) 
 
 
 def _canon(text: str) -> str:
-    return " ".join(re.findall(r"[a-z0-9]+", str(text).lower()))
+    value = unicodedata.normalize("NFKD", str(text).lower())
+    value = "".join(ch for ch in value if not unicodedata.combining(ch))
+    return " ".join(re.findall(r"[a-z0-9]+", value))
 
 
 def claim_similarity(left: str, right: str) -> float:
