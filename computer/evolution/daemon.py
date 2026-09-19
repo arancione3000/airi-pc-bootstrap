@@ -17,9 +17,9 @@ PID = STATE / "daemon.pid"
 STATUS = STATE / "daemon-status.json"
 
 LOOP_SECONDS = max(60, int(os.environ.get("AIRI_EVOLUTION_DAEMON_INTERVAL", "300")))
-OFFLINE_EVOLUTION_SECONDS = max(1800, int(os.environ.get("AIRI_EVOLUTION_OFFLINE_INTERVAL", "7200")))
+OFFLINE_EVOLUTION_SECONDS = max(300, int(os.environ.get("AIRI_EVOLUTION_OFFLINE_INTERVAL", "900")))
 SYNC_SECONDS = max(900, int(os.environ.get("AIRI_EVOLUTION_SYNC_INTERVAL", "1800")))
-MAX_OFFLINE_CYCLES_PER_DATASET = max(1, int(os.environ.get("AIRI_EVOLUTION_MAX_OFFLINE_CYCLES", "12")))
+MAX_OFFLINE_CYCLES_PER_DATASET = max(0, int(os.environ.get("AIRI_EVOLUTION_MAX_OFFLINE_CYCLES", "0")))
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -119,7 +119,7 @@ class EvolutionDaemon:
             and maintenance.get("training_started") is None
             and _eligible_for_offline_cycle(current)
             and now - last_offline >= OFFLINE_EVOLUTION_SECONDS
-            and offline_cycles < MAX_OFFLINE_CYCLES_PER_DATASET
+            and (MAX_OFFLINE_CYCLES_PER_DATASET == 0 or offline_cycles < MAX_OFFLINE_CYCLES_PER_DATASET)
         ):
             offline = lab_runtime.start(auto_setup=True)
             if offline.get("ok") and offline.get("started"):
@@ -146,6 +146,7 @@ class EvolutionDaemon:
             "offline_evolution_seconds": OFFLINE_EVOLUTION_SECONDS,
             "sync_seconds": SYNC_SECONDS,
             "max_offline_cycles_per_dataset": MAX_OFFLINE_CYCLES_PER_DATASET,
+            "continuous_search": MAX_OFFLINE_CYCLES_PER_DATASET == 0,
             "dataset_digest": current_digest,
             "offline_cycles_on_dataset": offline_cycles,
             "before": {
