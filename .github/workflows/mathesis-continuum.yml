@@ -99,11 +99,13 @@ jobs:
           set -euo pipefail
           python -m mathesis.evolution_cycle | tee "$MATHESIS_STATE_DIR/last-cycle.json"
           python -m mathesis.cli --status | tee "$MATHESIS_STATE_DIR/status.json"
+          python -m mathesis.health
           test -f "$MATHESIS_STATE_DIR/champion.json"
           test -f "$MATHESIS_STATE_DIR/router.json"
           test -f "$MATHESIS_STATE_DIR/champion_model.py"
           test -f "$MATHESIS_STATE_DIR/discoveries.json"
           test -f "$MATHESIS_STATE_DIR/discovery-history.jsonl"
+          test -f "$MATHESIS_STATE_DIR/health.json"
 
       - name: Persist and verify state heartbeat
         env:
