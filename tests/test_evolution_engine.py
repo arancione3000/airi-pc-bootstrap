@@ -291,8 +291,27 @@ def test_stale_dataset_lock_is_recovered(tmp_path: Path):
     path = tmp_path / "verified.jsonl"
     lock = path.with_suffix(path.suffix + ".lock")
     lock.write_text("stale", encoding="utf-8")
-    old = time.time() - 300
+    old = time.time() - 1200
     os.utime(lock, (old, old))
     row = append_verified(path, {"text": "stale lock recovery sample text", "label": 1})
     assert row["duplicate"] is False
     assert not lock.exists()
+
+
+def test_corrupt_partition_manifests_are_regenerated(tmp_path: Path):
+    rows = []
+    for label in (0, 1):
+        for i in range(12):
+            text = f"manifest regeneration class {label} sample {i}"
+            rows.append({"text": text, "text_id": text_fingerprint(text), "label": label})
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True)
+    (data_dir / "canary_ids.json").write_text("{broken", encoding="utf-8")
+    remaining, canary, canary_info = ensure_canary_partition(tmp_path, rows, seed=9)
+    assert canary_info["created_now"] is True
+    assert len(canary) >= 4
+
+    (data_dir / "split_manifest.json").write_text('{"assignments":"bad"}', encoding="utf-8")
+    train, val, test, split_info = persistent_split_records(tmp_path, remaining, seed=9)
+    assert split_info["created_now"] is True
+    assert len(train) + len(val) + len(test) == len(remaining)
