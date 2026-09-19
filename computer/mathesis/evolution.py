@@ -88,16 +88,20 @@ class SelfEvolutionEngine:
         except Exception:
             pass
 
-    def evolve_once(self) -> EvolutionResult:
+    def evolve_once(self, *, extra_weaknesses: list[str] | None = None) -> EvolutionResult:
         before = self.kernel.snapshot()
         champion = self.load_champion()
         champion_router = self.load_router(champion)
         champion_bench = evaluate_genome(champion, champion_router)
 
         requested = int(os.environ.get("MATHESIS_CHALLENGERS", "3"))
+        weakness_hints = list(champion_bench.get("weaknesses", []))
+        weakness_hints.extend(str(x) for x in (extra_weaknesses or []))
+        weakness_hints = list(dict.fromkeys(weakness_hints))
+
         challengers = generate_challengers(
             champion,
-            weaknesses=champion_bench.get("weaknesses", []),
+            weaknesses=weakness_hints,
             count=max(1, min(6, requested)),
         )
 
@@ -161,6 +165,7 @@ class SelfEvolutionEngine:
             "champion": champion.to_dict(),
             "candidate": candidate.to_dict(),
             "selected_trial": selected_trial["trial"],
+            "weakness_hints": weakness_hints,
             "trials": trials,
             "champion_benchmark": champion_bench,
             "candidate_benchmark": candidate_bench,
@@ -181,6 +186,7 @@ class SelfEvolutionEngine:
                 "candidate": candidate_bench,
                 "trials": trials,
                 "selected_trial": selected_trial["trial"],
+                "weakness_hints": weakness_hints,
                 "kernel_integrity": integrity,
             },
         )
