@@ -9,6 +9,10 @@ from .evolution import SelfEvolutionEngine
 from .experience import ExperienceAnalyzer
 
 
+def _should_study(cycle: int, study_every: int, last_status: str = "") -> bool:
+    return str(last_status) in {"no_sources", "research_error"} or int(cycle) % max(1, int(study_every)) == 0
+
+
 def main() -> int:
     evolution = SelfEvolutionEngine()
     champion = evolution.load_champion()
@@ -24,12 +28,22 @@ def main() -> int:
     discovery_status = discovery_engine.status()
     base_study_every = max(1, int(os.environ.get("MATHESIS_STUDY_EVERY", "12")))
     study_every = max(1, base_study_every // max(1, champion.research_budget))
+    curriculum = MathematicalCurriculum(evolution.state_dir)
+    curriculum_status = curriculum.status()
+    last_study = curriculum_status.get("last") or {}
+    should_study = _should_study(
+        discovery_status["cycle"],
+        study_every,
+        str(last_study.get("status", "")),
+    )
+
     study = None
-    if discovery_status["cycle"] % study_every == 0:
+    if should_study:
         # Web study is intentionally non-fatal: offline periods must never stop
-        # mathematical evolution or state persistence.
+        # mathematical evolution or state persistence. A failed study is retried
+        # on the next cycle instead of waiting for the normal cadence.
         try:
-            study = MathematicalCurriculum(evolution.state_dir).study_once()
+            study = curriculum.study_once()
         except Exception as exc:
             study = {"ok": False, "status": "research_error", "error": repr(exc)}
 
