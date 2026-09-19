@@ -3,7 +3,7 @@ name: Airi Evolution Continuum
 on:
   workflow_dispatch:
   schedule:
-    - cron: '23 */2 * * *'
+    - cron: '23 * * * *'
   push:
     branches: [main]
     paths:
@@ -58,7 +58,7 @@ jobs:
               raise SystemExit(2)
           PY
 
-      - name: Run bounded cloud evolution cycle
+      - name: Run continuous bounded cloud evolution cycle
         env:
           PYTHONPATH: ${{ github.workspace }}/computer
           AIRI_ROOT: ${{ runner.temp }}/airi-cloud
@@ -68,7 +68,7 @@ jobs:
           AIRI_CLOUD_POPULATION: '4'
           AIRI_CLOUD_GENERATIONS: '1'
           AIRI_CLOUD_FINALIST_EPOCHS: '2'
-          AIRI_CLOUD_MAX_CYCLES_PER_DATASET: '12'
+          AIRI_CLOUD_MAX_CYCLES_PER_DATASET: '0'
         run: |
           python -m evolution.cloud_cycle
 
