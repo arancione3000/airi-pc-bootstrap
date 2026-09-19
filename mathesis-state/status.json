@@ -1,6 +1,6 @@
 {
   "curriculum": {
-    "cursor": 21,
+    "cursor": 22,
     "domains": [
       "algebra",
       "polynomials",
@@ -19,9 +19,9 @@
       "optimization"
     ],
     "last": {
-      "at": 1789861752.374314,
-      "domain": "linear_algebra",
-      "query": "linear_algebra mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+      "at": 1789862045.3349316,
+      "domain": "combinatorics",
+      "query": "combinatorics mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
       "sources": [
         {
           "authority_hint": 0.75,
@@ -50,26 +50,26 @@
     },
     "ok": true,
     "retry_counts": {},
-    "studies": 21,
+    "studies": 22,
     "version": 2
   },
   "discovery": {
-    "cycle": 34,
+    "cycle": 35,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 25,
+    "stored": 26,
     "strategies": {
       "binomial_expansion": 7,
-      "difference_of_powers": 8,
+      "difference_of_powers": 9,
       "faulhaber_interpolation": 6,
       "finite_geometric_identity": 8
     },
     "symbolic_depth": 12,
-    "verified": 25
+    "verified": 26
   },
   "evolution": {
     "benchmark": {
@@ -77,15 +77,6 @@
       "complexity_penalty": 0.011912,
       "critical_failures": [],
       "learned_theorems_replayed": [
-        {
-          "methods": [
-            "sympy_normal_form",
-            "z3_unsat_negation"
-          ],
-          "ok": true,
-          "statement": "x^2-y^2 = (x - y)*(x + y)",
-          "status": "verified"
-        },
         {
           "methods": [
             "sympy_normal_form",
@@ -220,6 +211,15 @@
           "ok": true,
           "statement": "((n + 1)*(n + 2)*(2*n + 3)*(-3*n + 3*(n + 1)**4 + 6*(n + 1)**3 - 2)/42)-(n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42) = (n+1)^6",
           "status": "verified"
+        },
+        {
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "x^8-y^8 = (x - y)*(x**7 + x**6*y + x**5*y**2 + x**4*y**3 + x**3*y**4 + x**2*y**5 + x*y**6 + y**7)",
+          "status": "verified"
         }
       ],
       "neural_accuracy": 0.909091,
@@ -282,7 +282,7 @@
         },
         {
           "critical": true,
-          "detail": 98.999573,
+          "detail": 98.999645,
           "name": "program:gcd",
           "ok": true
         },
@@ -891,7 +891,6 @@
       "verifiers.py": "cc123cb352d2e06d190cb16960b2dfd82a620973fb8565bf4d527291b1701c90"
     },
     "learned_theorems_replayed": [
-      "x^2-y^2 = (x - y)*(x + y)",
       "(x-1)*(x**2 + x + 1) = x^3-1",
       "(x+y)^4 = x**4 + 4*x**3*y + 6*x**2*y**2 + 4*x*y**3 + y**4",
       "((n + 1)*(n + 2)*(2*n + 3)*(3*n + 3*(n + 1)**2 + 2)/30)-(n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30) = (n+1)^4",
@@ -906,7 +905,8 @@
       "(x-1)*(x**14 + x**13 + x**12 + x**11 + x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^15-1",
       "x^4-y^4 = (x - y)*(x**3 + x**2*y + x*y**2 + y**3)",
       "(x-1)*(x**4 + x**3 + x**2 + x + 1) = x^5-1",
-      "((n + 1)*(n + 2)*(2*n + 3)*(-3*n + 3*(n + 1)**4 + 6*(n + 1)**3 - 2)/42)-(n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42) = (n+1)^6"
+      "((n + 1)*(n + 2)*(2*n + 3)*(-3*n + 3*(n + 1)**4 + 6*(n + 1)**3 - 2)/42)-(n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42) = (n+1)^6",
+      "x^8-y^8 = (x - y)*(x**7 + x**6*y + x**5*y**2 + x**4*y**3 + x**3*y**4 + x**2*y**5 + x*y**6 + y**7)"
     ],
     "ok": true,
     "self_rewrite_scope": "architecture DSL/router state only",
@@ -921,11 +921,11 @@
   },
   "guarantee": "proof-gated evolving system; not an infallibility or human-novelty guarantee",
   "knowledge": {
-    "nodes": 29,
+    "nodes": 30,
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/knowledge.json",
     "status_counts": {
-      "verified": 29
+      "verified": 30
     }
   },
   "model": {

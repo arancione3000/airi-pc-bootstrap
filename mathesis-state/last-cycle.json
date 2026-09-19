@@ -4,79 +4,63 @@
     "status": "verified_discovery",
     "theorem": {
       "certificate": {
-        "base_case": true,
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
         "methods": [
-          "exact_integer_samples",
-          "sympy_interpolation",
-          "base_case",
-          "finite_difference_induction_step",
           "sympy_normal_form",
           "z3_unsat_negation"
         ],
         "ok": true,
-        "polynomial": "n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42",
-        "recurrence": {
-          "counterexample": null,
-          "details": {
-            "lean": {
-              "ok": false,
-              "reason": "requires closed equality",
-              "status": "not_applicable"
-            },
-            "smt": {
-              "method": "z3_unsat_negation",
-              "ok": true,
-              "status": "verified"
-            },
-            "symbolic": {
-              "method": "sympy_normal_form",
-              "normal_form": "0",
-              "ok": true,
-              "status": "verified"
-            }
-          },
-          "methods": [
-            "sympy_normal_form",
-            "z3_unsat_negation"
-          ],
-          "ok": true,
-          "statement": "((n + 1)*(n + 2)*(2*n + 3)*(-3*n + 3*(n + 1)**4 + 6*(n + 1)**3 - 2)/42)-(n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42) = (n+1)^6",
-          "status": "verified"
-        },
-        "recurrence_nontrivial": true,
-        "sample_count": 10,
+        "statement": "x^8-y^8 = (x - y)*(x**7 + x**6*y + x**5*y**2 + x**4*y**3 + x**3*y**4 + x**2*y**5 + x*y**6 + y**7)",
         "status": "verified"
       },
-      "complexity": 6,
-      "discovered_at": 1789861730.8948085,
+      "complexity": 8,
+      "discovered_at": 1789862043.4513135,
       "human_novelty": "unassessed",
-      "id": "2db2b4776b57c9322789",
+      "id": "73a3123f31985b8a7afb",
       "internal_novelty": true,
       "nontrivial": true,
       "quality_gate": "structurally_nontrivial_and_proof_gated",
-      "statement": "sum(k^6, k=1..n) = n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42 for integer n>=0",
-      "strategy": "faulhaber_interpolation",
+      "statement": "x^8-y^8 = (x - y)*(x**7 + x**6*y + x**5*y**2 + x**4*y**3 + x**3*y**4 + x**2*y**5 + x*y**6 + y**7)",
+      "strategy": "difference_of_powers",
       "verified": true
     },
-    "total_discoveries": 25
+    "total_discoveries": 26
   },
   "discovery_status": {
-    "cycle": 34,
+    "cycle": 35,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 25,
+    "stored": 26,
     "strategies": {
       "binomial_expansion": 7,
-      "difference_of_powers": 8,
+      "difference_of_powers": 9,
       "faulhaber_interpolation": 6,
       "finite_geometric_identity": 8
     },
     "symbolic_depth": 12,
-    "verified": 25
+    "verified": 26
   },
   "evolution": {
     "benchmark": {
@@ -85,15 +69,6 @@
         "complexity_penalty": 0.011882000000000002,
         "critical_failures": [],
         "learned_theorems_replayed": [
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "x^2-y^2 = (x - y)*(x + y)",
-            "status": "verified"
-          },
           {
             "methods": [
               "sympy_normal_form",
@@ -228,6 +203,15 @@
             "ok": true,
             "statement": "((n + 1)*(n + 2)*(2*n + 3)*(-3*n + 3*(n + 1)**4 + 6*(n + 1)**3 - 2)/42)-(n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42) = (n+1)^6",
             "status": "verified"
+          },
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "x^8-y^8 = (x - y)*(x**7 + x**6*y + x**5*y**2 + x**4*y**3 + x**3*y**4 + x**2*y**5 + x*y**6 + y**7)",
+            "status": "verified"
           }
         ],
         "neural_accuracy": 0.909091,
@@ -290,7 +274,7 @@
           },
           {
             "critical": true,
-            "detail": 98.999604,
+            "detail": 98.999621,
             "name": "program:gcd",
             "ok": true
           },
@@ -515,15 +499,6 @@
               "z3_unsat_negation"
             ],
             "ok": true,
-            "statement": "x^2-y^2 = (x - y)*(x + y)",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
             "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
             "status": "verified"
           },
@@ -652,6 +627,15 @@
             "ok": true,
             "statement": "((n + 1)*(n + 2)*(2*n + 3)*(-3*n + 3*(n + 1)**4 + 6*(n + 1)**3 - 2)/42)-(n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42) = (n+1)^6",
             "status": "verified"
+          },
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "x^8-y^8 = (x - y)*(x**7 + x**6*y + x**5*y**2 + x**4*y**3 + x**3*y**4 + x**2*y**5 + x*y**6 + y**7)",
+            "status": "verified"
           }
         ],
         "neural_accuracy": 0.909091,
@@ -714,7 +698,7 @@
           },
           {
             "critical": true,
-            "detail": 98.999607,
+            "detail": 98.99933,
             "name": "program:gcd",
             "ok": true
           },
@@ -938,7 +922,6 @@
         "ok": true
       },
       "learned_theorems": [
-        "x^2-y^2 = (x - y)*(x + y)",
         "(x-1)*(x**2 + x + 1) = x^3-1",
         "(x+y)^4 = x**4 + 4*x**3*y + 6*x**2*y**2 + 4*x*y**3 + y**4",
         "((n + 1)*(n + 2)*(2*n + 3)*(3*n + 3*(n + 1)**2 + 2)/30)-(n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30) = (n+1)^4",
@@ -953,7 +936,8 @@
         "(x-1)*(x**14 + x**13 + x**12 + x**11 + x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^15-1",
         "x^4-y^4 = (x - y)*(x**3 + x**2*y + x*y**2 + y**3)",
         "(x-1)*(x**4 + x**3 + x**2 + x + 1) = x^5-1",
-        "((n + 1)*(n + 2)*(2*n + 3)*(-3*n + 3*(n + 1)**4 + 6*(n + 1)**3 - 2)/42)-(n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42) = (n+1)^6"
+        "((n + 1)*(n + 2)*(2*n + 3)*(-3*n + 3*(n + 1)**4 + 6*(n + 1)**3 - 2)/42)-(n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42) = (n+1)^6",
+        "x^8-y^8 = (x - y)*(x**7 + x**6*y + x**5*y**2 + x**4*y**3 + x**3*y**4 + x**2*y**5 + x*y**6 + y**7)"
       ],
       "selected_trial": 2,
       "trials": [
@@ -963,15 +947,6 @@
             "complexity_penalty": 0.011980000000000003,
             "critical_failures": [],
             "learned_theorems_replayed": [
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "x^2-y^2 = (x - y)*(x + y)",
-                "status": "verified"
-              },
               {
                 "methods": [
                   "sympy_normal_form",
@@ -1106,6 +1081,15 @@
                 "ok": true,
                 "statement": "((n + 1)*(n + 2)*(2*n + 3)*(-3*n + 3*(n + 1)**4 + 6*(n + 1)**3 - 2)/42)-(n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42) = (n+1)^6",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "x^8-y^8 = (x - y)*(x**7 + x**6*y + x**5*y**2 + x**4*y**3 + x**3*y**4 + x**2*y**5 + x*y**6 + y**7)",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -1168,7 +1152,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999622,
+                "detail": 98.99964,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -1583,15 +1567,6 @@
                   "z3_unsat_negation"
                 ],
                 "ok": true,
-                "statement": "x^2-y^2 = (x - y)*(x + y)",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
                 "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
                 "status": "verified"
               },
@@ -1720,6 +1695,15 @@
                 "ok": true,
                 "statement": "((n + 1)*(n + 2)*(2*n + 3)*(-3*n + 3*(n + 1)**4 + 6*(n + 1)**3 - 2)/42)-(n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42) = (n+1)^6",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "x^8-y^8 = (x - y)*(x**7 + x**6*y + x**5*y**2 + x**4*y**3 + x**3*y**4 + x**2*y**5 + x*y**6 + y**7)",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -1782,7 +1766,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999595,
+                "detail": 98.999651,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -2197,15 +2181,6 @@
                   "z3_unsat_negation"
                 ],
                 "ok": true,
-                "statement": "x^2-y^2 = (x - y)*(x + y)",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
                 "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
                 "status": "verified"
               },
@@ -2334,6 +2309,15 @@
                 "ok": true,
                 "statement": "((n + 1)*(n + 2)*(2*n + 3)*(-3*n + 3*(n + 1)**4 + 6*(n + 1)**3 - 2)/42)-(n*(n + 1)*(2*n + 1)*(3*n**4 + 6*n**3 - 3*n + 1)/42) = (n+1)^6",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "x^8-y^8 = (x - y)*(x**7 + x**6*y + x**5*y**2 + x**4*y**3 + x**3*y**4 + x**2*y**5 + x*y**6 + y**7)",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -2396,7 +2380,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999604,
+                "detail": 98.999621,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -3190,10 +3174,10 @@
   },
   "ok": true,
   "study": {
-    "at": 1789861752.374314,
-    "domain": "linear_algebra",
+    "at": 1789862045.3349316,
+    "domain": "combinatorics",
     "ok": true,
-    "query": "linear_algebra mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+    "query": "combinatorics mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
     "raw": null,
     "sources": [
       {
