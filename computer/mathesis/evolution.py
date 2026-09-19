@@ -102,8 +102,8 @@ class SelfEvolutionEngine:
         )
 
         requested = int(os.environ.get("MATHESIS_CHALLENGERS", "3"))
-        weakness_hints = list(champion_bench.get("weaknesses", []))
-        weakness_hints.extend(str(x) for x in (extra_weaknesses or []))
+        weakness_hints = [str(x) for x in (extra_weaknesses or [])]
+        weakness_hints.extend(champion_bench.get("weaknesses", []))
         weakness_hints = list(dict.fromkeys(weakness_hints))
 
         challengers = generate_challengers(
