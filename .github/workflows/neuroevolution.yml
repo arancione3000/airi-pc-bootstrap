@@ -65,7 +65,9 @@ jobs:
           assert result['promoted'] is True
           selected=result['candidate']['selected_trial']
           champion_state=torch.load(state/'champion'/'model.pt',map_location='cpu',weights_only=True)
-          trial_state=torch.load(Path(result['run_dir'])/f'promotion-trial-{selected:02d}.pt',map_location='cpu',weights_only=True)
+          trial_state=torch.load(Path(result['run_dir'])/'selected-trial.pt',map_location='cpu',weights_only=True)
+          assert result['candidate']['selected_trial_path'].endswith('selected-trial.pt')
+          assert not list(Path(result['run_dir']).glob('promotion-trial-*.pt'))
           assert champion_state.keys() == trial_state.keys()
           assert all(torch.equal(champion_state[k], trial_state[k]) for k in champion_state)
           if result['promoted']:
