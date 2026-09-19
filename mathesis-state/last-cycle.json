@@ -4,66 +4,84 @@
     "status": "verified_discovery",
     "theorem": {
       "certificate": {
-        "counterexample": null,
-        "details": {
-          "lean": {
-            "ok": false,
-            "reason": "requires closed equality",
-            "status": "not_applicable"
-          },
-          "smt": {
-            "method": "z3_unsat_negation",
-            "ok": true,
-            "status": "verified"
-          },
-          "symbolic": {
-            "method": "sympy_normal_form",
-            "normal_form": "0",
-            "ok": true,
-            "status": "verified"
-          }
-        },
+        "base_case": true,
         "methods": [
+          "exact_integer_samples",
+          "sympy_interpolation",
+          "base_case",
+          "finite_difference_induction_step",
           "sympy_normal_form",
           "z3_unsat_negation"
         ],
         "ok": true,
-        "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
+        "polynomial": "n**2*(n + 1)**2*(2*n**2 + 2*n - 1)/12",
+        "recurrence": {
+          "counterexample": null,
+          "details": {
+            "lean": {
+              "ok": false,
+              "reason": "requires closed equality",
+              "status": "not_applicable"
+            },
+            "smt": {
+              "method": "z3_unsat_negation",
+              "ok": true,
+              "status": "verified"
+            },
+            "symbolic": {
+              "method": "sympy_normal_form",
+              "normal_form": "0",
+              "ok": true,
+              "status": "verified"
+            }
+          },
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "n**5 + 5*n**4 + 10*n**3 + 10*n**2 + 5*n + 1 = n**5 + 5*n**4 + 10*n**3 + 10*n**2 + 5*n + 1",
+          "status": "verified"
+        },
+        "sample_count": 9,
         "status": "verified"
       },
-      "complexity": 10,
-      "discovered_at": 1789855202.4642878,
+      "complexity": 5,
+      "discovered_at": 1789855517.2243094,
       "human_novelty": "unassessed",
-      "id": "c9952a994c6582167d5e",
+      "id": "e397b483f12f9d52b861",
       "internal_novelty": true,
-      "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
-      "strategy": "binomial_expansion",
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "sum(k^5, k=1..n) = n**2*(n + 1)**2*(2*n**2 + 2*n - 1)/12 for integer n>=0",
+      "strategy": "faulhaber_interpolation",
       "verified": true
     },
-    "total_discoveries": 8
+    "total_discoveries": 5
   },
   "discovery_status": {
-    "cycle": 9,
-    "discovery_beam": 7,
+    "cycle": 10,
+    "discarded": 4,
+    "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 8,
+    "stored": 5,
     "strategies": {
       "binomial_expansion": 3,
       "difference_of_powers": 2,
-      "faulhaber_interpolation": 1,
+      "faulhaber_interpolation": 2,
       "finite_geometric_identity": 2
     },
-    "symbolic_depth": 8,
-    "verified": 8
+    "symbolic_depth": 9,
+    "verified": 5
   },
   "evolution": {
     "benchmark": {
       "candidate": {
-        "capability_score": 0.878788,
-        "complexity_penalty": 0.009202,
+        "capability_score": 0.896552,
+        "complexity_penalty": 0.009872,
         "critical_failures": [],
         "learned_theorems_replayed": [
           {
@@ -81,43 +99,7 @@
               "z3_unsat_negation"
             ],
             "ok": true,
-            "statement": "x^4-y^4 = x**4 - y**4",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "x**5 - 1 = x**5 - 1",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
             "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "x^8-y^8 = x**8 - y**8",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "x**9 - 1 = x**9 - 1",
             "status": "verified"
           },
           {
@@ -132,7 +114,7 @@
         ],
         "neural_accuracy": 0.818182,
         "ok": true,
-        "score": 87.377465,
+        "score": 88.877902,
         "tasks": [
           {
             "critical": true,
@@ -190,7 +172,228 @@
           },
           {
             "critical": true,
-            "detail": 98.999609,
+            "detail": 98.999707,
+            "name": "program:gcd",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": "verified capability",
+            "name": "domain:number_theory",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": "verified capability",
+            "name": "domain:research",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": "verified capability",
+            "name": "domain:calculus",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": "verified capability",
+            "name": "domain:trigonometry",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": "verified capability",
+            "name": "domain:linear_algebra",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": "expert not present",
+            "name": "domain:combinatorics",
+            "ok": false
+          },
+          {
+            "critical": false,
+            "detail": "verified capability",
+            "name": "domain:equations",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": "verified capability",
+            "name": "domain:inequalities",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": "verified capability",
+            "name": "domain:sequences",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": "verified capability",
+            "name": "domain:special_functions",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": "verified capability",
+            "name": "domain:geometry",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": "verified capability",
+            "name": "domain:probability",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": "expert not present",
+            "name": "domain:discrete_math",
+            "ok": false
+          },
+          {
+            "critical": false,
+            "detail": "expert not present",
+            "name": "domain:optimization",
+            "ok": false
+          },
+          {
+            "critical": false,
+            "detail": {
+              "tested_exponent": 12
+            },
+            "name": "search:symbolic_depth",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "verified",
+            "name": "learned_theorem:0",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "verified",
+            "name": "learned_theorem:1",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "verified",
+            "name": "learned_theorem:2",
+            "ok": true
+          },
+          {
+            "critical": false,
+            "detail": 0.8182,
+            "name": "neural:intent_router",
+            "ok": true
+          }
+        ],
+        "verified_symbolic_depth": 10,
+        "weaknesses": [
+          "domain:combinatorics",
+          "domain:discrete_math",
+          "domain:optimization"
+        ]
+      },
+      "champion": {
+        "capability_score": 0.862069,
+        "complexity_penalty": 0.009202,
+        "critical_failures": [],
+        "learned_theorems_replayed": [
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
+            "status": "verified"
+          },
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
+            "status": "verified"
+          },
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
+            "status": "verified"
+          }
+        ],
+        "neural_accuracy": 0.818182,
+        "ok": true,
+        "score": 86.039952,
+        "tasks": [
+          {
+            "critical": true,
+            "detail": "arithmetic",
+            "name": "formalize:arithmetic",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "equation",
+            "name": "formalize:equation",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "identity",
+            "name": "formalize:identity",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "evolve_model",
+            "name": "formalize:evolve_model",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "derivative",
+            "name": "formalize:derivative",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "integral",
+            "name": "formalize:integral",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "discover_math",
+            "name": "formalize:discover_math",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "verified",
+            "name": "proof:closed_arithmetic",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "verified",
+            "name": "proof:algebra_identity",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": 98.999017,
             "name": "program:gcd",
             "ok": true
           },
@@ -305,30 +508,6 @@
             "ok": true
           },
           {
-            "critical": true,
-            "detail": "verified",
-            "name": "learned_theorem:3",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "verified",
-            "name": "learned_theorem:4",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "verified",
-            "name": "learned_theorem:5",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "verified",
-            "name": "learned_theorem:6",
-            "ok": true
-          },
-          {
             "critical": false,
             "detail": 0.8182,
             "name": "neural:intent_router",
@@ -338,289 +517,6 @@
         "verified_symbolic_depth": 9,
         "weaknesses": [
           "domain:combinatorics",
-          "domain:probability",
-          "domain:discrete_math",
-          "domain:optimization"
-        ]
-      },
-      "champion": {
-        "capability_score": 0.848485,
-        "complexity_penalty": 0.008492000000000001,
-        "critical_failures": [],
-        "learned_theorems_replayed": [
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "x^4-y^4 = x**4 - y**4",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "x**5 - 1 = x**5 - 1",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "x^8-y^8 = x**8 - y**8",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "x**9 - 1 = x**9 - 1",
-            "status": "verified"
-          },
-          {
-            "methods": [
-              "sympy_normal_form",
-              "z3_unsat_negation"
-            ],
-            "ok": true,
-            "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
-            "status": "verified"
-          }
-        ],
-        "neural_accuracy": 0.818182,
-        "ok": true,
-        "score": 84.873932,
-        "tasks": [
-          {
-            "critical": true,
-            "detail": "arithmetic",
-            "name": "formalize:arithmetic",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "equation",
-            "name": "formalize:equation",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "identity",
-            "name": "formalize:identity",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "evolve_model",
-            "name": "formalize:evolve_model",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "derivative",
-            "name": "formalize:derivative",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "integral",
-            "name": "formalize:integral",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "discover_math",
-            "name": "formalize:discover_math",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "verified",
-            "name": "proof:closed_arithmetic",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "verified",
-            "name": "proof:algebra_identity",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": 98.999638,
-            "name": "program:gcd",
-            "ok": true
-          },
-          {
-            "critical": false,
-            "detail": "verified capability",
-            "name": "domain:number_theory",
-            "ok": true
-          },
-          {
-            "critical": false,
-            "detail": "verified capability",
-            "name": "domain:research",
-            "ok": true
-          },
-          {
-            "critical": false,
-            "detail": "verified capability",
-            "name": "domain:calculus",
-            "ok": true
-          },
-          {
-            "critical": false,
-            "detail": "verified capability",
-            "name": "domain:trigonometry",
-            "ok": true
-          },
-          {
-            "critical": false,
-            "detail": "verified capability",
-            "name": "domain:linear_algebra",
-            "ok": true
-          },
-          {
-            "critical": false,
-            "detail": "expert not present",
-            "name": "domain:combinatorics",
-            "ok": false
-          },
-          {
-            "critical": false,
-            "detail": "verified capability",
-            "name": "domain:equations",
-            "ok": true
-          },
-          {
-            "critical": false,
-            "detail": "verified capability",
-            "name": "domain:inequalities",
-            "ok": true
-          },
-          {
-            "critical": false,
-            "detail": "verified capability",
-            "name": "domain:sequences",
-            "ok": true
-          },
-          {
-            "critical": false,
-            "detail": "verified capability",
-            "name": "domain:special_functions",
-            "ok": true
-          },
-          {
-            "critical": false,
-            "detail": "expert not present",
-            "name": "domain:geometry",
-            "ok": false
-          },
-          {
-            "critical": false,
-            "detail": "expert not present",
-            "name": "domain:probability",
-            "ok": false
-          },
-          {
-            "critical": false,
-            "detail": "expert not present",
-            "name": "domain:discrete_math",
-            "ok": false
-          },
-          {
-            "critical": false,
-            "detail": "expert not present",
-            "name": "domain:optimization",
-            "ok": false
-          },
-          {
-            "critical": false,
-            "detail": {
-              "tested_exponent": 10
-            },
-            "name": "search:symbolic_depth",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "verified",
-            "name": "learned_theorem:0",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "verified",
-            "name": "learned_theorem:1",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "verified",
-            "name": "learned_theorem:2",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "verified",
-            "name": "learned_theorem:3",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "verified",
-            "name": "learned_theorem:4",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "verified",
-            "name": "learned_theorem:5",
-            "ok": true
-          },
-          {
-            "critical": true,
-            "detail": "verified",
-            "name": "learned_theorem:6",
-            "ok": true
-          },
-          {
-            "critical": false,
-            "detail": 0.8182,
-            "name": "neural:intent_router",
-            "ok": true
-          }
-        ],
-        "verified_symbolic_depth": 8,
-        "weaknesses": [
-          "domain:combinatorics",
-          "domain:geometry",
           "domain:probability",
           "domain:discrete_math",
           "domain:optimization"
@@ -637,19 +533,15 @@
       },
       "learned_theorems": [
         "(x+y)^2 = x**2 + 2*x*y + y**2",
-        "x^4-y^4 = x**4 - y**4",
-        "x**5 - 1 = x**5 - 1",
         "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
-        "x^8-y^8 = x**8 - y**8",
-        "x**9 - 1 = x**9 - 1",
         "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10"
       ],
       "selected_trial": 1,
       "trials": [
         {
           "benchmark": {
-            "capability_score": 0.878788,
-            "complexity_penalty": 0.00891,
+            "capability_score": 0.896552,
+            "complexity_penalty": 0.00962,
             "critical_failures": [],
             "learned_theorems_replayed": [
               {
@@ -667,43 +559,7 @@
                   "z3_unsat_negation"
                 ],
                 "ok": true,
-                "statement": "x^4-y^4 = x**4 - y**4",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "x**5 - 1 = x**5 - 1",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
                 "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "x^8-y^8 = x**8 - y**8",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "x**9 - 1 = x**9 - 1",
                 "status": "verified"
               },
               {
@@ -718,7 +574,7 @@
             ],
             "neural_accuracy": 0.818182,
             "ok": true,
-            "score": 87.297757,
+            "score": 88.798154,
             "tasks": [
               {
                 "critical": true,
@@ -776,7 +632,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999632,
+                "detail": 98.999705,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -815,433 +671,6 @@
                 "detail": "verified capability",
                 "name": "domain:combinatorics",
                 "ok": true
-              },
-              {
-                "critical": false,
-                "detail": "verified capability",
-                "name": "domain:equations",
-                "ok": true
-              },
-              {
-                "critical": false,
-                "detail": "verified capability",
-                "name": "domain:inequalities",
-                "ok": true
-              },
-              {
-                "critical": false,
-                "detail": "verified capability",
-                "name": "domain:sequences",
-                "ok": true
-              },
-              {
-                "critical": false,
-                "detail": "verified capability",
-                "name": "domain:special_functions",
-                "ok": true
-              },
-              {
-                "critical": false,
-                "detail": "expert not present",
-                "name": "domain:geometry",
-                "ok": false
-              },
-              {
-                "critical": false,
-                "detail": "expert not present",
-                "name": "domain:probability",
-                "ok": false
-              },
-              {
-                "critical": false,
-                "detail": "expert not present",
-                "name": "domain:discrete_math",
-                "ok": false
-              },
-              {
-                "critical": false,
-                "detail": "expert not present",
-                "name": "domain:optimization",
-                "ok": false
-              },
-              {
-                "critical": false,
-                "detail": {
-                  "tested_exponent": 10
-                },
-                "name": "search:symbolic_depth",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:0",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:1",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:2",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:3",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:4",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:5",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:6",
-                "ok": true
-              },
-              {
-                "critical": false,
-                "detail": 0.8182,
-                "name": "neural:intent_router",
-                "ok": true
-              }
-            ],
-            "verified_symbolic_depth": 8,
-            "weaknesses": [
-              "domain:geometry",
-              "domain:probability",
-              "domain:discrete_math",
-              "domain:optimization"
-            ]
-          },
-          "genome": {
-            "counterexample_radius": 10,
-            "discovery_beam": 7,
-            "experts": [
-              "formalization",
-              "algebra",
-              "counterexample",
-              "program_synthesis",
-              "number_theory",
-              "research",
-              "calculus",
-              "trigonometry",
-              "sequences",
-              "linear_algebra",
-              "equations",
-              "inequalities",
-              "special_functions",
-              "combinatorics"
-            ],
-            "generation": 10,
-            "genome_id": "omega-10-35425c86",
-            "max_proof_cells": 160,
-            "neural_hidden": 26,
-            "parent_id": "omega-9-326170f3",
-            "proof_order": [
-              "symbolic",
-              "smt",
-              "counterexample",
-              "lean"
-            ],
-            "research_budget": 2,
-            "strategy_portfolio": [
-              "exact_symbolic",
-              "smt_validity",
-              "counterexample",
-              "lean",
-              "conjecture_discovery",
-              "specific_normal_forms",
-              "finite_difference",
-              "exact_sampling",
-              "read_only_research"
-            ],
-            "symbolic_depth": 8,
-            "topology": [
-              [
-                "formalization",
-                "algebra"
-              ],
-              [
-                "algebra",
-                "counterexample"
-              ],
-              [
-                "counterexample",
-                "program_synthesis"
-              ],
-              [
-                "program_synthesis",
-                "number_theory"
-              ],
-              [
-                "number_theory",
-                "research"
-              ],
-              [
-                "research",
-                "calculus"
-              ],
-              [
-                "calculus",
-                "trigonometry"
-              ],
-              [
-                "trigonometry",
-                "sequences"
-              ],
-              [
-                "sequences",
-                "linear_algebra"
-              ],
-              [
-                "linear_algebra",
-                "equations"
-              ],
-              [
-                "equations",
-                "inequalities"
-              ],
-              [
-                "inequalities",
-                "special_functions"
-              ],
-              [
-                "special_functions",
-                "combinatorics"
-              ],
-              [
-                "program_synthesis",
-                "counterexample"
-              ],
-              [
-                "number_theory",
-                "counterexample"
-              ],
-              [
-                "research",
-                "counterexample"
-              ],
-              [
-                "calculus",
-                "counterexample"
-              ],
-              [
-                "trigonometry",
-                "counterexample"
-              ],
-              [
-                "sequences",
-                "counterexample"
-              ],
-              [
-                "linear_algebra",
-                "counterexample"
-              ],
-              [
-                "equations",
-                "counterexample"
-              ],
-              [
-                "inequalities",
-                "counterexample"
-              ],
-              [
-                "special_functions",
-                "counterexample"
-              ],
-              [
-                "combinatorics",
-                "counterexample"
-              ]
-            ]
-          },
-          "trial": 0
-        },
-        {
-          "benchmark": {
-            "capability_score": 0.878788,
-            "complexity_penalty": 0.009202,
-            "critical_failures": [],
-            "learned_theorems_replayed": [
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "x^4-y^4 = x**4 - y**4",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "x**5 - 1 = x**5 - 1",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "x^8-y^8 = x**8 - y**8",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "x**9 - 1 = x**9 - 1",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
-                "status": "verified"
-              }
-            ],
-            "neural_accuracy": 0.818182,
-            "ok": true,
-            "score": 87.377465,
-            "tasks": [
-              {
-                "critical": true,
-                "detail": "arithmetic",
-                "name": "formalize:arithmetic",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "equation",
-                "name": "formalize:equation",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "identity",
-                "name": "formalize:identity",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "evolve_model",
-                "name": "formalize:evolve_model",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "derivative",
-                "name": "formalize:derivative",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "integral",
-                "name": "formalize:integral",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "discover_math",
-                "name": "formalize:discover_math",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "proof:closed_arithmetic",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "proof:algebra_identity",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": 98.999609,
-                "name": "program:gcd",
-                "ok": true
-              },
-              {
-                "critical": false,
-                "detail": "verified capability",
-                "name": "domain:number_theory",
-                "ok": true
-              },
-              {
-                "critical": false,
-                "detail": "verified capability",
-                "name": "domain:research",
-                "ok": true
-              },
-              {
-                "critical": false,
-                "detail": "verified capability",
-                "name": "domain:calculus",
-                "ok": true
-              },
-              {
-                "critical": false,
-                "detail": "verified capability",
-                "name": "domain:trigonometry",
-                "ok": true
-              },
-              {
-                "critical": false,
-                "detail": "verified capability",
-                "name": "domain:linear_algebra",
-                "ok": true
-              },
-              {
-                "critical": false,
-                "detail": "expert not present",
-                "name": "domain:combinatorics",
-                "ok": false
               },
               {
                 "critical": false,
@@ -1318,30 +747,6 @@
                 "ok": true
               },
               {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:3",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:4",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:5",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:6",
-                "ok": true
-              },
-              {
                 "critical": false,
                 "detail": 0.8182,
                 "name": "neural:intent_router",
@@ -1350,14 +755,13 @@
             ],
             "verified_symbolic_depth": 9,
             "weaknesses": [
-              "domain:combinatorics",
               "domain:probability",
               "domain:discrete_math",
               "domain:optimization"
             ]
           },
           "genome": {
-            "counterexample_radius": 9,
+            "counterexample_radius": 10,
             "discovery_beam": 8,
             "experts": [
               "formalization",
@@ -1373,13 +777,14 @@
               "equations",
               "inequalities",
               "special_functions",
-              "geometry"
+              "geometry",
+              "combinatorics"
             ],
-            "generation": 10,
-            "genome_id": "omega-10-db685e82",
+            "generation": 11,
+            "genome_id": "omega-11-ad00b74c",
             "max_proof_cells": 176,
-            "neural_hidden": 22,
-            "parent_id": "omega-9-326170f3",
+            "neural_hidden": 26,
+            "parent_id": "omega-10-db685e82",
             "proof_order": [
               "symbolic",
               "smt",
@@ -1453,6 +858,10 @@
                 "geometry"
               ],
               [
+                "geometry",
+                "combinatorics"
+              ],
+              [
                 "program_synthesis",
                 "counterexample"
               ],
@@ -1495,15 +904,19 @@
               [
                 "geometry",
                 "counterexample"
+              ],
+              [
+                "combinatorics",
+                "counterexample"
               ]
             ]
           },
-          "trial": 1
+          "trial": 0
         },
         {
           "benchmark": {
-            "capability_score": 0.878788,
-            "complexity_penalty": 0.008842000000000001,
+            "capability_score": 0.896552,
+            "complexity_penalty": 0.009872,
             "critical_failures": [],
             "learned_theorems_replayed": [
               {
@@ -1521,43 +934,7 @@
                   "z3_unsat_negation"
                 ],
                 "ok": true,
-                "statement": "x^4-y^4 = x**4 - y**4",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "x**5 - 1 = x**5 - 1",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
                 "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "x^8-y^8 = x**8 - y**8",
-                "status": "verified"
-              },
-              {
-                "methods": [
-                  "sympy_normal_form",
-                  "z3_unsat_negation"
-                ],
-                "ok": true,
-                "statement": "x**9 - 1 = x**9 - 1",
                 "status": "verified"
               },
               {
@@ -1572,7 +949,7 @@
             ],
             "neural_accuracy": 0.818182,
             "ok": true,
-            "score": 87.297825,
+            "score": 88.877902,
             "tasks": [
               {
                 "critical": true,
@@ -1630,7 +1007,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999644,
+                "detail": 98.999707,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -1696,9 +1073,9 @@
               },
               {
                 "critical": false,
-                "detail": "expert not present",
+                "detail": "verified capability",
                 "name": "domain:geometry",
-                "ok": false
+                "ok": true
               },
               {
                 "critical": false,
@@ -1721,7 +1098,7 @@
               {
                 "critical": false,
                 "detail": {
-                  "tested_exponent": 10
+                  "tested_exponent": 12
                 },
                 "name": "search:symbolic_depth",
                 "ok": true
@@ -1745,47 +1122,22 @@
                 "ok": true
               },
               {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:3",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:4",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:5",
-                "ok": true
-              },
-              {
-                "critical": true,
-                "detail": "verified",
-                "name": "learned_theorem:6",
-                "ok": true
-              },
-              {
                 "critical": false,
                 "detail": 0.8182,
                 "name": "neural:intent_router",
                 "ok": true
               }
             ],
-            "verified_symbolic_depth": 8,
+            "verified_symbolic_depth": 10,
             "weaknesses": [
               "domain:combinatorics",
-              "domain:geometry",
               "domain:discrete_math",
               "domain:optimization"
             ]
           },
           "genome": {
             "counterexample_radius": 9,
-            "discovery_beam": 7,
+            "discovery_beam": 8,
             "experts": [
               "formalization",
               "algebra",
@@ -1800,20 +1152,21 @@
               "equations",
               "inequalities",
               "special_functions",
+              "geometry",
               "probability"
             ],
-            "generation": 10,
-            "genome_id": "omega-10-d18a9843",
-            "max_proof_cells": 160,
-            "neural_hidden": 20,
-            "parent_id": "omega-9-326170f3",
+            "generation": 11,
+            "genome_id": "omega-11-d9d44095",
+            "max_proof_cells": 192,
+            "neural_hidden": 22,
+            "parent_id": "omega-10-db685e82",
             "proof_order": [
               "symbolic",
               "smt",
               "counterexample",
               "lean"
             ],
-            "research_budget": 3,
+            "research_budget": 2,
             "strategy_portfolio": [
               "exact_symbolic",
               "smt_validity",
@@ -1825,7 +1178,7 @@
               "exact_sampling",
               "read_only_research"
             ],
-            "symbolic_depth": 8,
+            "symbolic_depth": 10,
             "topology": [
               [
                 "formalization",
@@ -1877,6 +1230,10 @@
               ],
               [
                 "special_functions",
+                "geometry"
+              ],
+              [
+                "geometry",
                 "probability"
               ],
               [
@@ -1920,7 +1277,386 @@
                 "counterexample"
               ],
               [
+                "geometry",
+                "counterexample"
+              ],
+              [
                 "probability",
+                "counterexample"
+              ]
+            ]
+          },
+          "trial": 1
+        },
+        {
+          "benchmark": {
+            "capability_score": 0.896552,
+            "complexity_penalty": 0.009552000000000001,
+            "critical_failures": [],
+            "learned_theorems_replayed": [
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x+y)^2 = x**2 + 2*x*y + y**2",
+                "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
+                "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x+y)^10 = x**10 + 10*x**9*y + 45*x**8*y**2 + 120*x**7*y**3 + 210*x**6*y**4 + 252*x**5*y**5 + 210*x**4*y**6 + 120*x**3*y**7 + 45*x**2*y**8 + 10*x*y**9 + y**10",
+                "status": "verified"
+              }
+            ],
+            "neural_accuracy": 0.818182,
+            "ok": true,
+            "score": 88.798222,
+            "tasks": [
+              {
+                "critical": true,
+                "detail": "arithmetic",
+                "name": "formalize:arithmetic",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "equation",
+                "name": "formalize:equation",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "identity",
+                "name": "formalize:identity",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "evolve_model",
+                "name": "formalize:evolve_model",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "derivative",
+                "name": "formalize:derivative",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "integral",
+                "name": "formalize:integral",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "discover_math",
+                "name": "formalize:discover_math",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "verified",
+                "name": "proof:closed_arithmetic",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "verified",
+                "name": "proof:algebra_identity",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": 98.999713,
+                "name": "program:gcd",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": "verified capability",
+                "name": "domain:number_theory",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": "verified capability",
+                "name": "domain:research",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": "verified capability",
+                "name": "domain:calculus",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": "verified capability",
+                "name": "domain:trigonometry",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": "verified capability",
+                "name": "domain:linear_algebra",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": "expert not present",
+                "name": "domain:combinatorics",
+                "ok": false
+              },
+              {
+                "critical": false,
+                "detail": "verified capability",
+                "name": "domain:equations",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": "verified capability",
+                "name": "domain:inequalities",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": "verified capability",
+                "name": "domain:sequences",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": "verified capability",
+                "name": "domain:special_functions",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": "verified capability",
+                "name": "domain:geometry",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": "expert not present",
+                "name": "domain:probability",
+                "ok": false
+              },
+              {
+                "critical": false,
+                "detail": "verified capability",
+                "name": "domain:discrete_math",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": "expert not present",
+                "name": "domain:optimization",
+                "ok": false
+              },
+              {
+                "critical": false,
+                "detail": {
+                  "tested_exponent": 11
+                },
+                "name": "search:symbolic_depth",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "verified",
+                "name": "learned_theorem:0",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "verified",
+                "name": "learned_theorem:1",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "verified",
+                "name": "learned_theorem:2",
+                "ok": true
+              },
+              {
+                "critical": false,
+                "detail": 0.8182,
+                "name": "neural:intent_router",
+                "ok": true
+              }
+            ],
+            "verified_symbolic_depth": 9,
+            "weaknesses": [
+              "domain:combinatorics",
+              "domain:probability",
+              "domain:optimization"
+            ]
+          },
+          "genome": {
+            "counterexample_radius": 9,
+            "discovery_beam": 8,
+            "experts": [
+              "formalization",
+              "algebra",
+              "counterexample",
+              "program_synthesis",
+              "number_theory",
+              "research",
+              "calculus",
+              "trigonometry",
+              "sequences",
+              "linear_algebra",
+              "equations",
+              "inequalities",
+              "special_functions",
+              "geometry",
+              "discrete_math"
+            ],
+            "generation": 11,
+            "genome_id": "omega-11-ca4aa8f0",
+            "max_proof_cells": 176,
+            "neural_hidden": 20,
+            "parent_id": "omega-10-db685e82",
+            "proof_order": [
+              "symbolic",
+              "smt",
+              "counterexample",
+              "lean"
+            ],
+            "research_budget": 3,
+            "strategy_portfolio": [
+              "exact_symbolic",
+              "smt_validity",
+              "counterexample",
+              "lean",
+              "conjecture_discovery",
+              "specific_normal_forms",
+              "finite_difference",
+              "exact_sampling",
+              "read_only_research"
+            ],
+            "symbolic_depth": 9,
+            "topology": [
+              [
+                "formalization",
+                "algebra"
+              ],
+              [
+                "algebra",
+                "counterexample"
+              ],
+              [
+                "counterexample",
+                "program_synthesis"
+              ],
+              [
+                "program_synthesis",
+                "number_theory"
+              ],
+              [
+                "number_theory",
+                "research"
+              ],
+              [
+                "research",
+                "calculus"
+              ],
+              [
+                "calculus",
+                "trigonometry"
+              ],
+              [
+                "trigonometry",
+                "sequences"
+              ],
+              [
+                "sequences",
+                "linear_algebra"
+              ],
+              [
+                "linear_algebra",
+                "equations"
+              ],
+              [
+                "equations",
+                "inequalities"
+              ],
+              [
+                "inequalities",
+                "special_functions"
+              ],
+              [
+                "special_functions",
+                "geometry"
+              ],
+              [
+                "geometry",
+                "discrete_math"
+              ],
+              [
+                "program_synthesis",
+                "counterexample"
+              ],
+              [
+                "number_theory",
+                "counterexample"
+              ],
+              [
+                "research",
+                "counterexample"
+              ],
+              [
+                "calculus",
+                "counterexample"
+              ],
+              [
+                "trigonometry",
+                "counterexample"
+              ],
+              [
+                "sequences",
+                "counterexample"
+              ],
+              [
+                "linear_algebra",
+                "counterexample"
+              ],
+              [
+                "equations",
+                "counterexample"
+              ],
+              [
+                "inequalities",
+                "counterexample"
+              ],
+              [
+                "special_functions",
+                "counterexample"
+              ],
+              [
+                "geometry",
+                "counterexample"
+              ],
+              [
+                "discrete_math",
                 "counterexample"
               ]
             ]
@@ -1930,10 +1666,8 @@
       ],
       "weakness_hints": [
         "missing_combinatorics_expert",
-        "symbolic_depth",
         "missing_polynomials_expert",
         "domain:combinatorics",
-        "domain:geometry",
         "domain:probability",
         "domain:discrete_math",
         "domain:optimization"
@@ -1956,13 +1690,14 @@
         "equations",
         "inequalities",
         "special_functions",
-        "geometry"
+        "geometry",
+        "probability"
       ],
-      "generation": 10,
-      "genome_id": "omega-10-db685e82",
-      "max_proof_cells": 176,
+      "generation": 11,
+      "genome_id": "omega-11-d9d44095",
+      "max_proof_cells": 192,
       "neural_hidden": 22,
-      "parent_id": "omega-9-326170f3",
+      "parent_id": "omega-10-db685e82",
       "proof_order": [
         "symbolic",
         "smt",
@@ -1981,7 +1716,7 @@
         "exact_sampling",
         "read_only_research"
       ],
-      "symbolic_depth": 9,
+      "symbolic_depth": 10,
       "topology": [
         [
           "formalization",
@@ -2036,6 +1771,10 @@
           "geometry"
         ],
         [
+          "geometry",
+          "probability"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -2078,10 +1817,14 @@
         [
           "geometry",
           "counterexample"
+        ],
+        [
+          "probability",
+          "counterexample"
         ]
       ]
     },
-    "candidate_score": 87.377465,
+    "candidate_score": 88.877902,
     "champion": {
       "counterexample_radius": 9,
       "discovery_beam": 8,
@@ -2099,13 +1842,14 @@
         "equations",
         "inequalities",
         "special_functions",
-        "geometry"
+        "geometry",
+        "probability"
       ],
-      "generation": 10,
-      "genome_id": "omega-10-db685e82",
-      "max_proof_cells": 176,
+      "generation": 11,
+      "genome_id": "omega-11-d9d44095",
+      "max_proof_cells": 192,
       "neural_hidden": 22,
-      "parent_id": "omega-9-326170f3",
+      "parent_id": "omega-10-db685e82",
       "proof_order": [
         "symbolic",
         "smt",
@@ -2124,7 +1868,7 @@
         "exact_sampling",
         "read_only_research"
       ],
-      "symbolic_depth": 9,
+      "symbolic_depth": 10,
       "topology": [
         [
           "formalization",
@@ -2179,6 +1923,10 @@
           "geometry"
         ],
         [
+          "geometry",
+          "probability"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -2221,26 +1969,22 @@
         [
           "geometry",
           "counterexample"
+        ],
+        [
+          "probability",
+          "counterexample"
         ]
       ]
     },
-    "champion_score": 84.873932,
+    "champion_score": 86.039952,
     "promoted": true,
     "reason": "best candidate improved verified benchmark without critical regressions"
   },
   "experience": {
-    "champion": "omega-9-326170f3",
+    "champion": "omega-10-db685e82",
     "ok": true,
     "policy": "experience proposes bounded architecture hints; it never edits verifier code",
     "reasons": [
-      {
-        "reason": "verified discovery used binomial_expansion but champion lacks combinatorics",
-        "signal": "combinatorics"
-      },
-      {
-        "reason": "verified discovery reached current symbolic-depth frontier",
-        "signal": "symbolic_depth"
-      },
       {
         "reason": "persistent verified discovery used binomial_expansion but champion still lacks combinatorics",
         "signal": "combinatorics"
@@ -2256,41 +2000,9 @@
     ],
     "weaknesses": [
       "missing_combinatorics_expert",
-      "symbolic_depth",
       "missing_polynomials_expert"
     ]
   },
   "ok": true,
-  "study": {
-    "at": 1789855204.8577566,
-    "domain": "calculus",
-    "ok": true,
-    "query": "calculus mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
-    "raw": null,
-    "sources": [
-      {
-        "authority_hint": 0.75,
-        "domain": "sympy.org",
-        "excerpt": "SymPy 1.14.0 documentation Contents Menu Expand Light mode Dark mode Auto light/dark, in light mode Auto light/dark, in dark mode Hide navigation sidebar Hide table of contents sidebar Skip to content Toggle site navigation sidebar SymPy 1.14.0 documentation Toggle Light / Dark / Auto color theme Toggle table of contents sidebar SymPy 1.14.0 documentation Installation Tutorials Toggle navigation of Tutorials Introductory Tutorial Toggle navigation of Introductory Tutorial Preliminaries Introduction Gotchas SymPy Features Toggle navigation of SymPy Features Basic Operations Printing Simplificat",
-        "excerpt_sha256": "a403a7fc24b15c955806e65cc5aac4ad294e3fb2afc8fa1aba947d1ebbacc4aa",
-        "url": "https://docs.sympy.org/latest/index.html"
-      },
-      {
-        "authority_hint": 0.95,
-        "domain": "lean-lang.org",
-        "excerpt": "The Lean Language Reference The Lean Language Reference The Lean Language Reference Table of Contents 1. Introduction 2. Elaboration and Compilation 3. Interacting with Lean 4. The Type System 5. Source Files and Modules 6. Namespaces and Sections 7. Definitions 8. Axioms 9. Attributes 10. Type Classes 11. Coercions 12. Run-Time Code 13. Terms 14. Tactic Proofs 15. The Simplifier 16. The grind tactic 17. The mvcgen tactic 18. Functors, Monads and do -Notation 19. Basic Propositions 20. Basic Types 21. IO 22. Iterators 23. Notations and Macros 24. Build Tools and Distribution Validating a Lean ",
-        "excerpt_sha256": "a65b5d69094d55fcb1aede0f2e1de773e9028cb1b850fbadb4bbede34e5ef144",
-        "url": "https://lean-lang.org/doc/reference/latest/"
-      },
-      {
-        "authority_hint": 0.55,
-        "domain": "github.io",
-        "excerpt": "Index Documentation Index Search Welcome to the documentation page This was built using Lean 4 4.35.0-rc2",
-        "excerpt_sha256": "24eae0272582a302afdeab9f0d09bc64d24fd93d596249dd12727a6975c84bce",
-        "url": "https://leanprover-community.github.io/mathlib4_docs/"
-      }
-    ],
-    "status": "studied",
-    "web_truth_policy": "source evidence is not a formal proof"
-  }
+  "study": null
 }
