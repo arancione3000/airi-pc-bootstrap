@@ -361,8 +361,9 @@ novelty and human novelty remain `unassessed` unless a separate scholarly
 comparison establishes them.
 
 The architecture benchmark also verifies the genome itself. Duplicate or
-unknown experts, disconnected expert nodes, invalid topology edges and
-out-of-bounds architecture parameters are critical failures. Every SymPy lab
+unknown experts/strategies, disconnected expert nodes, invalid topology edges,
+unknown proof-order methods, broken research-strategy coupling and out-of-bounds
+architecture parameters are critical failures. Every SymPy lab
 domain has a real domain probe, and CI exercises the path from curriculum
 evidence to weakness, challenger expert, graph membership and benchmarked
 capability. Merely growing budgets cannot improve the score unless the
