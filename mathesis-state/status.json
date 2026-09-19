@@ -1,6 +1,6 @@
 {
   "curriculum": {
-    "cursor": 19,
+    "cursor": 20,
     "domains": [
       "algebra",
       "polynomials",
@@ -19,9 +19,9 @@
       "optimization"
     ],
     "last": {
-      "at": 1789861118.8853128,
-      "domain": "trigonometry",
-      "query": "trigonometry mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+      "at": 1789861429.5320864,
+      "domain": "number_theory",
+      "query": "number_theory mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
       "sources": [
         {
           "authority_hint": 0.75,
@@ -50,26 +50,26 @@
     },
     "ok": true,
     "retry_counts": {},
-    "studies": 19,
+    "studies": 20,
     "version": 2
   },
   "discovery": {
-    "cycle": 31,
+    "cycle": 32,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 23,
+    "stored": 24,
     "strategies": {
       "binomial_expansion": 7,
       "difference_of_powers": 8,
       "faulhaber_interpolation": 5,
-      "finite_geometric_identity": 7
+      "finite_geometric_identity": 8
     },
     "symbolic_depth": 12,
-    "verified": 23
+    "verified": 24
   },
   "evolution": {
     "benchmark": {
@@ -77,15 +77,6 @@
       "complexity_penalty": 0.011912,
       "critical_failures": [],
       "learned_theorems_replayed": [
-        {
-          "methods": [
-            "sympy_normal_form",
-            "z3_unsat_negation"
-          ],
-          "ok": true,
-          "statement": "(x+y)^14 = x**14 + 14*x**13*y + 91*x**12*y**2 + 364*x**11*y**3 + 1001*x**10*y**4 + 2002*x**9*y**5 + 3003*x**8*y**6 + 3432*x**7*y**7 + 3003*x**6*y**8 + 2002*x**5*y**9 + 1001*x**4*y**10 + 364*x**3*y**11 + 91*x**2*y**12 + 14*x*y**13 + y**14",
-          "status": "verified"
-        },
         {
           "methods": [
             "sympy_normal_form",
@@ -220,6 +211,15 @@
           "ok": true,
           "statement": "x^4-y^4 = (x - y)*(x**3 + x**2*y + x*y**2 + y**3)",
           "status": "verified"
+        },
+        {
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "(x-1)*(x**4 + x**3 + x**2 + x + 1) = x^5-1",
+          "status": "verified"
         }
       ],
       "neural_accuracy": 0.909091,
@@ -282,7 +282,7 @@
         },
         {
           "critical": true,
-          "detail": 98.999641,
+          "detail": 98.999704,
           "name": "program:gcd",
           "ok": true
         },
@@ -891,7 +891,6 @@
       "verifiers.py": "cc123cb352d2e06d190cb16960b2dfd82a620973fb8565bf4d527291b1701c90"
     },
     "learned_theorems_replayed": [
-      "(x+y)^14 = x**14 + 14*x**13*y + 91*x**12*y**2 + 364*x**11*y**3 + 1001*x**10*y**4 + 2002*x**9*y**5 + 3003*x**8*y**6 + 3432*x**7*y**7 + 3003*x**6*y**8 + 2002*x**5*y**9 + 1001*x**4*y**10 + 364*x**3*y**11 + 91*x**2*y**12 + 14*x*y**13 + y**14",
       "((n + 1)**2*(n + 2)**2*(-4*n + 3*(n + 1)**4 + 6*(n + 1)**3 - (n + 1)**2 - 2)/24)-(n**2*(n + 1)**2*(3*n**4 + 6*n**3 - n**2 - 4*n + 2)/24) = (n+1)^7",
       "x^2-y^2 = (x - y)*(x + y)",
       "(x-1)*(x**2 + x + 1) = x^3-1",
@@ -906,7 +905,8 @@
       "(x+y)^12 = x**12 + 12*x**11*y + 66*x**10*y**2 + 220*x**9*y**3 + 495*x**8*y**4 + 792*x**7*y**5 + 924*x**6*y**6 + 792*x**5*y**7 + 495*x**4*y**8 + 220*x**3*y**9 + 66*x**2*y**10 + 12*x*y**11 + y**12",
       "x^14-y^14 = (x - y)*(x**13 + x**12*y + x**11*y**2 + x**10*y**3 + x**9*y**4 + x**8*y**5 + x**7*y**6 + x**6*y**7 + x**5*y**8 + x**4*y**9 + x**3*y**10 + x**2*y**11 + x*y**12 + y**13)",
       "(x-1)*(x**14 + x**13 + x**12 + x**11 + x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^15-1",
-      "x^4-y^4 = (x - y)*(x**3 + x**2*y + x*y**2 + y**3)"
+      "x^4-y^4 = (x - y)*(x**3 + x**2*y + x*y**2 + y**3)",
+      "(x-1)*(x**4 + x**3 + x**2 + x + 1) = x^5-1"
     ],
     "ok": true,
     "self_rewrite_scope": "architecture DSL/router state only",
@@ -921,11 +921,11 @@
   },
   "guarantee": "proof-gated evolving system; not an infallibility or human-novelty guarantee",
   "knowledge": {
-    "nodes": 27,
+    "nodes": 28,
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/knowledge.json",
     "status_counts": {
-      "verified": 27
+      "verified": 28
     }
   },
   "model": {

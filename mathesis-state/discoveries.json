@@ -1,5 +1,5 @@
 {
-  "cycle": 31,
+  "cycle": 32,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -175,7 +175,7 @@
     "binomial_expansion": 7,
     "difference_of_powers": 8,
     "faulhaber_interpolation": 5,
-    "finite_geometric_identity": 7
+    "finite_geometric_identity": 8
   },
   "theorems": {
     "1a9f202b40ac12dfe986": {
@@ -648,6 +648,46 @@
       "quality_gate": "structurally_nontrivial_and_proof_gated",
       "statement": "x^14-y^14 = (x - y)*(x**13 + x**12*y + x**11*y**2 + x**10*y**3 + x**9*y**4 + x**8*y**5 + x**7*y**6 + x**6*y**7 + x**5*y**8 + x**4*y**9 + x**3*y**10 + x**2*y**11 + x*y**12 + y**13)",
       "strategy": "difference_of_powers",
+      "verified": true
+    },
+    "7ea37f307f8f2a19adbf": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "(x-1)*(x**4 + x**3 + x**2 + x + 1) = x^5-1",
+        "status": "verified"
+      },
+      "complexity": 5,
+      "discovered_at": 1789861427.4270444,
+      "human_novelty": "unassessed",
+      "id": "7ea37f307f8f2a19adbf",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "(x-1)*(x**4 + x**3 + x**2 + x + 1) = x^5-1",
+      "strategy": "finite_geometric_identity",
       "verified": true
     },
     "84ee8a2c70d846f4067d": {
@@ -1175,6 +1215,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789861117.2845192,
+  "updated_at": 1789861427.4270444,
   "version": 3
 }
