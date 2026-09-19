@@ -327,3 +327,9 @@ metadata, benchmark critical failures and verifier/kernel status.
 
 A failed audit exits before persistence, so the previous remote state remains
 the last known-good checkpoint.
+
+
+The health gate validates the persisted champion JSON directly before using the
+engine fallback path, so malformed state cannot be mistaken for a healthy
+default model. When runtime status is present, SymPy, Z3 and Lean availability
+are all required for a checkpoint to be considered healthy.
