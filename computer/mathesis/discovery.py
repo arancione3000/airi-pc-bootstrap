@@ -127,9 +127,10 @@ class ConjectureDiscoveryEngine:
 
         polynomial = sp.expand(sp.interpolate(samples, n))
         base_ok = sp.expand(polynomial.subs(n, 0)) == 0
-        shifted = sp.expand(polynomial.subs(n, n + 1))
+        factored_polynomial = sp.factor(polynomial)
+        shifted_factored = factored_polynomial.subs(n, n + 1)
         recurrence_statement = (
-            f"({sp.sstr(shifted)})-({sp.sstr(polynomial)}) = (n+1)^{power}"
+            f"({sp.sstr(shifted_factored)})-({sp.sstr(factored_polynomial)}) = (n+1)^{power}"
         )
         recurrence_nontrivial = _relation_is_structurally_nontrivial(recurrence_statement)
         recurrence_cert = self.verifier.verify_relation(recurrence_statement)
@@ -154,7 +155,7 @@ class ConjectureDiscoveryEngine:
                 "sample_count": len(samples),
                 "recurrence": recurrence_cert.to_dict(),
                 "recurrence_nontrivial": bool(recurrence_nontrivial),
-                "polynomial": str(sp.factor(polynomial)),
+                "polynomial": str(factored_polynomial),
             },
             "verified": verified,
             "complexity": power,
