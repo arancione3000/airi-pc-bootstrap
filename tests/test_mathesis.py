@@ -509,7 +509,8 @@ def test_legacy_structural_tautologies_are_migrated_out_of_active_theorems(tmp_p
     migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
     assert legacy_id not in migrated["theorems"]
     assert migrated["discarded"][legacy_id]["discarded_reason"] == "structural_tautology"
-    assert migrated["last_quality_migration"]["reason"] == "structural_tautology"
+    assert migrated["last_quality_migration"]["reason"] == "proof_quality_upgrade"
+    assert legacy_id in migrated["last_quality_migration"]["moved"]
 
 
 def test_every_math_lab_domain_is_evolvable_by_architecture():
