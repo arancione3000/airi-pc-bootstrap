@@ -1,5 +1,5 @@
 {
-  "cycle": 15,
+  "cycle": 16,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -175,7 +175,7 @@
     "binomial_expansion": 4,
     "difference_of_powers": 4,
     "faulhaber_interpolation": 3,
-    "finite_geometric_identity": 3
+    "finite_geometric_identity": 4
   },
   "theorems": {
     "1a9f202b40ac12dfe986": {
@@ -621,8 +621,48 @@
       "statement": "sum(k^2, k=1..n) = n*(n + 1)*(2*n + 1)/6 for integer n>=0",
       "strategy": "faulhaber_interpolation",
       "verified": true
+    },
+    "fdd3364f2598b40f9769": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
+        "status": "verified"
+      },
+      "complexity": 3,
+      "discovered_at": 1789857372.0137212,
+      "human_novelty": "unassessed",
+      "id": "fdd3364f2598b40f9769",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
+      "strategy": "finite_geometric_identity",
+      "verified": true
     }
   },
-  "updated_at": 1789857057.7919915,
+  "updated_at": 1789857372.0137212,
   "version": 3
 }

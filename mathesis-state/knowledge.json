@@ -563,8 +563,45 @@
       "statement": "sum(k^2, k=1..n) = n*(n + 1)*(2*n + 1)/6 for integer n>=0",
       "status": "verified",
       "updated_at": 1789851676.4847248
+    },
+    "fdd3364f2598b40f9769": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
+        "status": "verified"
+      },
+      "dependencies": [],
+      "first_seen_at": 1789857372.0146756,
+      "id": "fdd3364f2598b40f9769",
+      "sources": [],
+      "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
+      "status": "verified",
+      "updated_at": 1789857372.0146756
     }
   },
-  "updated_at": 1789857057.7935288,
+  "updated_at": 1789857372.0146756,
   "version": 1
 }

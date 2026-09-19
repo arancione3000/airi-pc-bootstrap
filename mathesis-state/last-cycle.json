@@ -28,39 +28,39 @@
           "z3_unsat_negation"
         ],
         "ok": true,
-        "statement": "x^2-y^2 = (x - y)*(x + y)",
+        "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
         "status": "verified"
       },
-      "complexity": 2,
-      "discovered_at": 1789857057.7919915,
+      "complexity": 3,
+      "discovered_at": 1789857372.0137212,
       "human_novelty": "unassessed",
-      "id": "ae00b8164b970e48a65f",
+      "id": "fdd3364f2598b40f9769",
       "internal_novelty": true,
       "nontrivial": true,
       "quality_gate": "structurally_nontrivial_and_proof_gated",
-      "statement": "x^2-y^2 = (x - y)*(x + y)",
-      "strategy": "difference_of_powers",
+      "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
+      "strategy": "finite_geometric_identity",
       "verified": true
     },
-    "total_discoveries": 10
+    "total_discoveries": 11
   },
   "discovery_status": {
-    "cycle": 15,
+    "cycle": 16,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 10,
+    "stored": 11,
     "strategies": {
       "binomial_expansion": 4,
       "difference_of_powers": 4,
       "faulhaber_interpolation": 3,
-      "finite_geometric_identity": 3
+      "finite_geometric_identity": 4
     },
     "symbolic_depth": 12,
-    "verified": 10
+    "verified": 11
   },
   "evolution": {
     "benchmark": {
@@ -131,6 +131,15 @@
             "ok": true,
             "statement": "x^2-y^2 = (x - y)*(x + y)",
             "status": "verified"
+          },
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
+            "status": "verified"
           }
         ],
         "neural_accuracy": 0.909091,
@@ -193,7 +202,7 @@
           },
           {
             "critical": true,
-            "detail": 98.999623,
+            "detail": 98.999716,
             "name": "program:gcd",
             "ok": true
           },
@@ -341,6 +350,12 @@
             "critical": true,
             "detail": "verified",
             "name": "learned_theorem:6",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "verified",
+            "name": "learned_theorem:7",
             "ok": true
           },
           {
@@ -420,6 +435,15 @@
             "ok": true,
             "statement": "x^2-y^2 = (x - y)*(x + y)",
             "status": "verified"
+          },
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
+            "status": "verified"
           }
         ],
         "neural_accuracy": 0.909091,
@@ -482,7 +506,7 @@
           },
           {
             "critical": true,
-            "detail": 98.999404,
+            "detail": 98.99972,
             "name": "program:gcd",
             "ok": true
           },
@@ -633,6 +657,12 @@
             "ok": true
           },
           {
+            "critical": true,
+            "detail": "verified",
+            "name": "learned_theorem:7",
+            "ok": true
+          },
+          {
             "critical": false,
             "detail": 0.9091,
             "name": "neural:intent_router",
@@ -658,7 +688,8 @@
         "x^12-y^12 = (x - y)*(x**11 + x**10*y + x**9*y**2 + x**8*y**3 + x**7*y**4 + x**6*y**5 + x**5*y**6 + x**4*y**7 + x**3*y**8 + x**2*y**9 + x*y**10 + y**11)",
         "(x-1)*(x**12 + x**11 + x**10 + x**9 + x**8 + x**7 + x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^13-1",
         "(x+y)^14 = x**14 + 14*x**13*y + 91*x**12*y**2 + 364*x**11*y**3 + 1001*x**10*y**4 + 2002*x**9*y**5 + 3003*x**8*y**6 + 3432*x**7*y**7 + 3003*x**6*y**8 + 2002*x**5*y**9 + 1001*x**4*y**10 + 364*x**3*y**11 + 91*x**2*y**12 + 14*x*y**13 + y**14",
-        "x^2-y^2 = (x - y)*(x + y)"
+        "x^2-y^2 = (x - y)*(x + y)",
+        "(x-1)*(x**2 + x + 1) = x^3-1"
       ],
       "selected_trial": 2,
       "trials": [
@@ -730,6 +761,15 @@
                 "ok": true,
                 "statement": "x^2-y^2 = (x - y)*(x + y)",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -792,7 +832,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999597,
+                "detail": 98.999722,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -940,6 +980,12 @@
                 "critical": true,
                 "detail": "verified",
                 "name": "learned_theorem:6",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "verified",
+                "name": "learned_theorem:7",
                 "ok": true
               },
               {
@@ -1209,6 +1255,15 @@
                 "ok": true,
                 "statement": "x^2-y^2 = (x - y)*(x + y)",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -1271,7 +1326,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999594,
+                "detail": 98.999636,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -1419,6 +1474,12 @@
                 "critical": true,
                 "detail": "verified",
                 "name": "learned_theorem:6",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "verified",
+                "name": "learned_theorem:7",
                 "ok": true
               },
               {
@@ -1688,6 +1749,15 @@
                 "ok": true,
                 "statement": "x^2-y^2 = (x - y)*(x + y)",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x-1)*(x**2 + x + 1) = x^3-1",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -1750,7 +1820,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999623,
+                "detail": 98.999716,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -1898,6 +1968,12 @@
                 "critical": true,
                 "detail": "verified",
                 "name": "learned_theorem:6",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "verified",
+                "name": "learned_theorem:7",
                 "ok": true
               },
               {
@@ -2490,10 +2566,10 @@
   },
   "ok": true,
   "study": {
-    "at": 1789857060.1062474,
-    "domain": "linear_algebra",
+    "at": 1789857375.5164845,
+    "domain": "combinatorics",
     "ok": true,
-    "query": "linear_algebra mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+    "query": "combinatorics mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
     "raw": null,
     "sources": [
       {
