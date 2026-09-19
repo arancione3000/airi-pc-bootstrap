@@ -1429,3 +1429,48 @@ def test_health_rejects_corrupted_persistent_strategy_portfolio(tmp_path: Path):
     report = health_report(tmp_path)
     assert report["ok"] is False
     assert any(row["name"] == "architecture:known_strategies" for row in report["failed"])
+
+
+def test_health_fails_closed_on_corrupt_champion_and_malformed_state_fields(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    assert discovery.discover_once()["ok"] is True
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+
+    champion_path = tmp_path / "champion.json"
+    champion_path.write_text("{broken-json", encoding="utf-8")
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    assert any(row["name"] == "state:champion_loadable" for row in report["failed"])
+
+    # Restore a loadable champion, then verify malformed numeric/object fields
+    # are reported as failed health checks rather than raising exceptions.
+    champion_path.write_text(json.dumps(default_genome().to_dict()), encoding="utf-8")
+    (tmp_path / "discoveries.json").write_text(
+        json.dumps({"version": "not-an-integer", "theorems": [], "discarded": {}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "curriculum.json").write_text(
+        json.dumps({"version": "bad", "cursor": "bad", "retry_counts": {}}),
+        encoding="utf-8",
+    )
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    failed = {row["name"] for row in report["failed"]}
+    assert "discovery:schema" in failed
+    assert "discovery:active_map" in failed
+    assert "curriculum:schema" in failed
+    assert "curriculum:cursor_nonnegative" in failed
+
+
+def test_health_rejects_non_object_discovery_state_without_crashing(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    assert discovery.discover_once()["ok"] is True
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+    (tmp_path / "discoveries.json").write_text("[]", encoding="utf-8")
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    failed = {row["name"] for row in report["failed"]}
+    assert "discovery:state_object" in failed
+    assert "discovery:schema" in failed
