@@ -138,6 +138,9 @@ tests pass.
   finite-difference obligation;
 - continuum state writers remain serialized by the GitHub concurrency group,
   health runs before persistence and state pushes are non-force pushes;
+- persistent-state health now fails closed on an unreadable champion and on
+  malformed discovery/curriculum object or numeric fields, rather than
+  silently validating fallback defaults or crashing;
 - real continuum logs were observed carrying persistent discovery state across
   consecutive cycles and self-dispatching the successor; GitHub availability
   remains an external best-effort dependency.
