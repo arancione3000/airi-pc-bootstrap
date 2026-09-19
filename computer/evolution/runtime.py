@@ -364,3 +364,9 @@ def autopilot(enable: bool = True, interval_seconds: int = 3600) -> dict[str, An
         return {"ok": True, "enabled": False, "already_disabled": True}
     cancelled = cancel_job(name)
     return {"ok": True, "enabled": False, "cancelled": cancelled}
+
+
+
+def audit() -> dict[str, Any]:
+    from .audit import audit_state
+    return audit_state(STATE)
