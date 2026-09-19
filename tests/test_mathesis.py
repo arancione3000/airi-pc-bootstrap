@@ -529,3 +529,17 @@ def test_polynomial_expert_is_actually_benchmarked():
     benchmark = evaluate_genome(genome)
     task = next(row for row in benchmark["tasks"] if row["name"] == "domain:polynomials")
     assert task["ok"] is True
+
+
+def test_symbolic_depth_score_is_independent_from_learned_theorem_replay():
+    from mathesis.benchmark import evaluate_genome
+
+    genome = default_genome()
+    benchmark = evaluate_genome(
+        genome,
+        learned_theorems=["(x+1)^2=x^2+1"],
+    )
+    assert benchmark["ok"] is False
+    assert benchmark["verified_symbolic_depth"] == genome.symbolic_depth
+    search_task = next(row for row in benchmark["tasks"] if row["name"] == "search:symbolic_depth")
+    assert search_task["ok"] is True
