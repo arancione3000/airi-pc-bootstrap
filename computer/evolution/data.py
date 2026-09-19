@@ -1,15 +1,49 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import json
 import random
 import re
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
 TOKEN_RE = re.compile(r"[\wÀ-ÿ']+|[^\w\s]", re.UNICODE)
+
+
+@contextmanager
+def _dataset_lock(path: Path, timeout: float = 15.0, stale_after: float = 120.0):
+    path = Path(path)
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    deadline = time.time() + max(0.1, float(timeout))
+    fd = None
+    while fd is None:
+        try:
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, f"{os.getpid()} {time.time()}".encode("ascii", errors="ignore"))
+        except FileExistsError:
+            try:
+                age = time.time() - lock_path.stat().st_mtime
+                if age > max(5.0, float(stale_after)):
+                    lock_path.unlink(missing_ok=True)
+                    continue
+            except OSError:
+                pass
+            if time.time() >= deadline:
+                raise TimeoutError(f"timed out waiting for dataset lock: {lock_path}")
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        try:
+            if fd is not None:
+                os.close(fd)
+        finally:
+            lock_path.unlink(missing_ok=True)
 
 
 def token_id(token: str, vocab_size: int = 8192) -> int:
@@ -70,59 +104,61 @@ def _prepare_verified(record: dict) -> dict:
 def append_verified_many(path: Path, records: Iterable[dict]) -> dict:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    existing = load_records(path) if path.exists() else []
-    known = {
-        row.get("text_id") or text_fingerprint(row.get("text", "")): normalize_label(row.get("label"))
-        for row in existing
-    }
-    accepted_rows: list[dict] = []
-    results: list[dict] = []
-    stats = {"accepted": 0, "duplicates": 0, "conflicts": 0, "invalid": 0}
-    for record in records:
-        try:
-            row = _prepare_verified(record)
-        except Exception as exc:
-            stats["invalid"] += 1
-            results.append({"status": "invalid", "error": str(exc)})
-            continue
-        previous = known.get(row["text_id"])
-        if previous is not None:
-            if previous != row["label"]:
-                stats["conflicts"] += 1
-                results.append({"status": "conflict", **row})
-            else:
-                stats["duplicates"] += 1
-                results.append({"status": "duplicate", **row})
-            continue
-        known[row["text_id"]] = row["label"]
-        accepted_rows.append(row)
-        stats["accepted"] += 1
-        results.append({"status": "accepted", **row})
-    if accepted_rows:
-        with path.open("a", encoding="utf-8") as handle:
-            for row in accepted_rows:
-                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-    return {**stats, "rows": results}
+    with _dataset_lock(path):
+        existing = load_records(path) if path.exists() else []
+        known = {
+            row.get("text_id") or text_fingerprint(row.get("text", "")): normalize_label(row.get("label"))
+            for row in existing
+        }
+        accepted_rows: list[dict] = []
+        results: list[dict] = []
+        stats = {"accepted": 0, "duplicates": 0, "conflicts": 0, "invalid": 0}
+        for record in records:
+            try:
+                row = _prepare_verified(record)
+            except Exception as exc:
+                stats["invalid"] += 1
+                results.append({"status": "invalid", "error": str(exc)})
+                continue
+            previous = known.get(row["text_id"])
+            if previous is not None:
+                if previous != row["label"]:
+                    stats["conflicts"] += 1
+                    results.append({"status": "conflict", **row})
+                else:
+                    stats["duplicates"] += 1
+                    results.append({"status": "duplicate", **row})
+                continue
+            known[row["text_id"]] = row["label"]
+            accepted_rows.append(row)
+            stats["accepted"] += 1
+            results.append({"status": "accepted", **row})
+        if accepted_rows:
+            with path.open("a", encoding="utf-8") as handle:
+                for row in accepted_rows:
+                    handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return {**stats, "rows": results}
 
 
 def append_verified(path: Path, record: dict) -> dict:
     row = _prepare_verified(record)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    existing = load_records(path) if path.exists() else []
-    same_text = [
-        item for item in existing
-        if (item.get("text_id") or text_fingerprint(item.get("text", ""))) == row["text_id"]
-    ]
-    if any(normalize_label(item.get("label")) != row["label"] for item in same_text):
-        raise ValueError("conflicting verified labels for the same normalized text")
-    if same_text:
-        duplicate = dict(same_text[0])
-        duplicate["duplicate"] = True
-        return duplicate
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-    return {**row, "duplicate": False}
+    with _dataset_lock(path):
+        existing = load_records(path) if path.exists() else []
+        same_text = [
+            item for item in existing
+            if (item.get("text_id") or text_fingerprint(item.get("text", ""))) == row["text_id"]
+        ]
+        if any(normalize_label(item.get("label")) != row["label"] for item in same_text):
+            raise ValueError("conflicting verified labels for the same normalized text")
+        if same_text:
+            duplicate = dict(same_text[0])
+            duplicate["duplicate"] = True
+            return duplicate
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return {**row, "duplicate": False}
 
 
 def load_records(path: Path) -> list[dict]:
