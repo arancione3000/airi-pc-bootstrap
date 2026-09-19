@@ -1,5 +1,5 @@
 {
-  "cycle": 21,
+  "cycle": 22,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -174,7 +174,7 @@
   "strategy_counts": {
     "binomial_expansion": 6,
     "difference_of_powers": 5,
-    "faulhaber_interpolation": 4,
+    "faulhaber_interpolation": 5,
     "finite_geometric_identity": 5
   },
   "theorems": {
@@ -431,6 +431,62 @@
       "nontrivial": true,
       "quality_gate": "structurally_nontrivial_and_proof_gated",
       "statement": "sum(k^7, k=1..n) = n**2*(n + 1)**2*(3*n**4 + 6*n**3 - n**2 - 4*n + 2)/24 for integer n>=0",
+      "strategy": "faulhaber_interpolation",
+      "verified": true
+    },
+    "44ead2c10be543108525": {
+      "certificate": {
+        "base_case": true,
+        "methods": [
+          "exact_integer_samples",
+          "sympy_interpolation",
+          "base_case",
+          "finite_difference_induction_step",
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "polynomial": "n*(n + 1)/2",
+        "recurrence": {
+          "counterexample": null,
+          "details": {
+            "lean": {
+              "ok": false,
+              "reason": "requires closed equality",
+              "status": "not_applicable"
+            },
+            "smt": {
+              "method": "z3_unsat_negation",
+              "ok": true,
+              "status": "verified"
+            },
+            "symbolic": {
+              "method": "sympy_normal_form",
+              "normal_form": "0",
+              "ok": true,
+              "status": "verified"
+            }
+          },
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "((n + 1)*(n + 2)/2)-(n*(n + 1)/2) = (n+1)^1",
+          "status": "verified"
+        },
+        "recurrence_nontrivial": true,
+        "sample_count": 5,
+        "status": "verified"
+      },
+      "complexity": 1,
+      "discovered_at": 1789859218.542683,
+      "human_novelty": "unassessed",
+      "id": "44ead2c10be543108525",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "sum(k^1, k=1..n) = n*(n + 1)/2 for integer n>=0",
       "strategy": "faulhaber_interpolation",
       "verified": true
     },
@@ -879,6 +935,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789858912.2137747,
+  "updated_at": 1789859218.542683,
   "version": 3
 }

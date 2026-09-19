@@ -275,6 +275,59 @@
       "status": "verified",
       "updated_at": 1789856741.1220505
     },
+    "44ead2c10be543108525": {
+      "certificate": {
+        "base_case": true,
+        "methods": [
+          "exact_integer_samples",
+          "sympy_interpolation",
+          "base_case",
+          "finite_difference_induction_step",
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "polynomial": "n*(n + 1)/2",
+        "recurrence": {
+          "counterexample": null,
+          "details": {
+            "lean": {
+              "ok": false,
+              "reason": "requires closed equality",
+              "status": "not_applicable"
+            },
+            "smt": {
+              "method": "z3_unsat_negation",
+              "ok": true,
+              "status": "verified"
+            },
+            "symbolic": {
+              "method": "sympy_normal_form",
+              "normal_form": "0",
+              "ok": true,
+              "status": "verified"
+            }
+          },
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "((n + 1)*(n + 2)/2)-(n*(n + 1)/2) = (n+1)^1",
+          "status": "verified"
+        },
+        "recurrence_nontrivial": true,
+        "sample_count": 5,
+        "status": "verified"
+      },
+      "dependencies": [],
+      "first_seen_at": 1789859218.5445113,
+      "id": "44ead2c10be543108525",
+      "sources": [],
+      "statement": "sum(k^1, k=1..n) = n*(n + 1)/2 for integer n>=0",
+      "status": "verified",
+      "updated_at": 1789859218.5445113
+    },
     "6fa35cc97a1d807c0b6f": {
       "certificate": {
         "counterexample": null,
@@ -803,6 +856,6 @@
       "updated_at": 1789857372.0146756
     }
   },
-  "updated_at": 1789858912.2154584,
+  "updated_at": 1789859218.5445113,
   "version": 1
 }
