@@ -83,6 +83,7 @@ The bootstrap enables the Airi-PC scheduler job `neuroevolution-maintenance` by 
 ./scripts/airi-evolve setup
 ./scripts/airi-evolve bootstrap-liar
 ./scripts/airi-evolve status
+./scripts/airi-evolve audit
 ./scripts/airi-evolve pipeline-status
 ./scripts/airi-evolve factcheck "claim to check"
 ./scripts/airi-evolve queue-list
