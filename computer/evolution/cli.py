@@ -46,6 +46,7 @@ def parser():
     sub.add_parser("setup")
     sub.add_parser("status")
     sub.add_parser("pipeline-status")
+    sub.add_parser("audit")
     boot = sub.add_parser("bootstrap-liar")
     boot.add_argument("--mode", choices=("safe", "experimental"), default="safe")
     boot.add_argument("--no-evolve", action="store_true")
@@ -103,6 +104,8 @@ def main(argv=None):
     if args.cmd == "setup": emit(runtime.setup(), 0)
     if args.cmd == "status": emit(runtime.status(), 0)
     if args.cmd == "pipeline-status": emit(runtime.pipeline_status(), 0)
+    if args.cmd == "audit":
+        result = runtime.audit(); emit(result, 0 if result.get("ok") else 2)
     if args.cmd == "bootstrap-liar":
         result = runtime.bootstrap_liar(auto_evolve=not args.no_evolve, mode=args.mode, enable_autopilot=not args.no_autopilot)
         emit(result, 0 if result.get("ok") else 2)
