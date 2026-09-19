@@ -269,6 +269,53 @@ def _save_json(path: Path, value: Any):
     tmp.replace(path)
 
 
+def _champion_complete(path: Path) -> bool:
+    path = Path(path)
+    return all((path / name).exists() for name in ("genome.json", "model.pt", "metrics.json", "provenance.json"))
+
+
+def _recover_champion_state(state_dir: Path) -> dict[str, Any]:
+    state_dir = Path(state_dir)
+    champion = state_dir / "champion"
+    backup = state_dir / ".champion-old"
+    pending = state_dir / ".champion-new"
+    actions: list[str] = []
+
+    if _champion_complete(champion):
+        if backup.exists():
+            shutil.rmtree(backup, ignore_errors=True)
+            actions.append("removed_stale_backup")
+        if pending.exists():
+            shutil.rmtree(pending, ignore_errors=True)
+            actions.append("removed_stale_pending")
+        return {"ok": True, "actions": actions}
+
+    if champion.exists():
+        corrupt = state_dir / f".champion-corrupt-{int(time.time())}"
+        try:
+            champion.rename(corrupt)
+            actions.append("quarantined_incomplete_champion")
+        except OSError:
+            shutil.rmtree(champion, ignore_errors=True)
+            actions.append("removed_incomplete_champion")
+
+    if _champion_complete(backup):
+        backup.rename(champion)
+        actions.append("restored_backup")
+        if pending.exists():
+            shutil.rmtree(pending, ignore_errors=True)
+        return {"ok": True, "actions": actions}
+
+    if _champion_complete(pending):
+        pending.rename(champion)
+        actions.append("promoted_complete_pending")
+        if backup.exists():
+            shutil.rmtree(backup, ignore_errors=True)
+        return {"ok": True, "actions": actions}
+
+    return {"ok": not (backup.exists() or pending.exists()), "actions": actions}
+
+
 def _load_champion(champion_dir: Path, vocab_size: int):
     import torch
     gp = champion_dir / "genome.json"
@@ -333,6 +380,9 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
 def _run_evolution_unlocked(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
     import torch
     state_dir = Path(state_dir)
+    recovery = _recover_champion_state(state_dir)
+    if not recovery.get("ok"):
+        raise RuntimeError(f"champion state recovery failed: {recovery}")
     data_path = state_dir / "data" / "verified.jsonl"
     champion_dir = state_dir / "champion"
     records = load_records(data_path)
