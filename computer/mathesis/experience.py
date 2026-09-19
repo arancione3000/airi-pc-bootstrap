@@ -36,7 +36,7 @@ class ExperienceAnalyzer:
         except Exception:
             return fallback
 
-    def replayable_theorems(self, limit: int = 16) -> list[str]:
+    def replayable_theorems(self, limit: int | None = None) -> list[str]:
         """Return bounded proof obligations for previously verified mathematics.
 
         Ordinary relation-style discoveries replay their theorem statement.
@@ -53,7 +53,7 @@ class ExperienceAnalyzer:
         )
         out: list[str] = []
         seen: set[str] = set()
-        target = max(1, min(64, int(limit)))
+        target = None if limit is None else max(1, min(64, int(limit)))
         verifier = CompositeVerifier()
 
         for row in rows:
@@ -93,7 +93,7 @@ class ExperienceAnalyzer:
                     continue
                 seen.add(candidate)
                 out.append(candidate)
-                if len(out) >= target:
+                if target is not None and len(out) >= target:
                     return list(reversed(out))
 
         return list(reversed(out))
