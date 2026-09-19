@@ -8,6 +8,7 @@ from typing import Any
 
 from .architecture import architecture_report, default_genome, generate_challengers
 from .benchmark import TRAINING_PHRASES, evaluate_genome
+from .experience import ExperienceAnalyzer
 from .kernel import IntegrityKernel, atomic_json
 from .knowledge import default_state_dir
 from .model_writer import write_model_module
@@ -88,16 +89,26 @@ class SelfEvolutionEngine:
         except Exception:
             pass
 
-    def evolve_once(self) -> EvolutionResult:
+    def evolve_once(self, *, extra_weaknesses: list[str] | None = None) -> EvolutionResult:
         before = self.kernel.snapshot()
         champion = self.load_champion()
         champion_router = self.load_router(champion)
-        champion_bench = evaluate_genome(champion, champion_router)
+        experience_analyzer = ExperienceAnalyzer(self.state_dir)
+        learned_theorems = experience_analyzer.replayable_theorems(limit=16)
+        champion_bench = evaluate_genome(
+            champion,
+            champion_router,
+            learned_theorems=learned_theorems,
+        )
 
         requested = int(os.environ.get("MATHESIS_CHALLENGERS", "3"))
+        weakness_hints = [str(x) for x in (extra_weaknesses or [])]
+        weakness_hints.extend(champion_bench.get("weaknesses", []))
+        weakness_hints = list(dict.fromkeys(weakness_hints))
+
         challengers = generate_challengers(
             champion,
-            weaknesses=champion_bench.get("weaknesses", []),
+            weaknesses=weakness_hints,
             count=max(1, min(6, requested)),
         )
 
@@ -105,7 +116,11 @@ class SelfEvolutionEngine:
         router_by_id: dict[str, GrowingNeuralRouter] = {}
         for index, candidate in enumerate(challengers):
             candidate_router = self._candidate_router(champion_router, candidate, index)
-            candidate_bench = evaluate_genome(candidate, candidate_router)
+            candidate_bench = evaluate_genome(
+                candidate,
+                candidate_router,
+                learned_theorems=learned_theorems,
+            )
             router_by_id[candidate.genome_id] = candidate_router
             trials.append({
                 "trial": index,
@@ -161,6 +176,8 @@ class SelfEvolutionEngine:
             "champion": champion.to_dict(),
             "candidate": candidate.to_dict(),
             "selected_trial": selected_trial["trial"],
+            "learned_theorems": learned_theorems,
+            "weakness_hints": weakness_hints,
             "trials": trials,
             "champion_benchmark": champion_bench,
             "candidate_benchmark": candidate_bench,
@@ -181,6 +198,8 @@ class SelfEvolutionEngine:
                 "candidate": candidate_bench,
                 "trials": trials,
                 "selected_trial": selected_trial["trial"],
+                "learned_theorems": learned_theorems,
+                "weakness_hints": weakness_hints,
                 "kernel_integrity": integrity,
             },
         )
@@ -188,7 +207,8 @@ class SelfEvolutionEngine:
     def status(self) -> dict[str, Any]:
         champion = self.load_champion()
         router = self.load_router(champion)
-        benchmark = evaluate_genome(champion, router)
+        learned_theorems = ExperienceAnalyzer(self.state_dir).replayable_theorems(limit=16)
+        benchmark = evaluate_genome(champion, router, learned_theorems=learned_theorems)
         return {
             "ok": benchmark["ok"],
             "champion": architecture_report(champion),
@@ -196,5 +216,6 @@ class SelfEvolutionEngine:
             "state_dir": str(self.state_dir),
             "self_rewrite_scope": "architecture DSL/router state only",
             "candidate_arena": {"max_challengers": 6, "default_challengers": 3},
+            "learned_theorems_replayed": learned_theorems,
             "kernel": self.kernel.snapshot(),
         }

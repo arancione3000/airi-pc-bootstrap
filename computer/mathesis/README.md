@@ -212,3 +212,28 @@ MATHESIS does not literally contain all mathematics ever written, cannot prove
 every true statement, and is not guaranteed error-free. Its design goal is to
 expand verified capability over time while explicitly abstaining or rejecting
 results that do not pass the available proof gates.
+
+
+### Experience feedback and anti-forgetting
+
+Verified mathematical work now affects later architecture search instead of
+remaining passive history.
+
+The experience layer converts bounded evidence into architecture hints:
+
+- verified binomial work can prioritize combinatorics;
+- verified Faulhaber/geometric work can prioritize sequences;
+- rejected conjectures can prioritize stronger search/falsification;
+- curriculum domains not yet represented by an expert can be proposed as gaps.
+
+These hints can only modify the bounded architecture DSL. They cannot rewrite
+the immutable verifier kernel or turn web text into mathematical truth.
+
+Previously verified relation-style discoveries are also replayed during every
+champion/challenger benchmark. They are critical promotion invariants: a new
+champion is rejected if it can no longer re-verify learned mathematical
+relations. This provides a bounded anti-forgetting mechanism.
+
+The five-minute GitHub schedule is written as an explicit minute list
+(3,8,13,...,58) and is backed by the duplicate-aware watchdog. GitHub Actions
+scheduling remains provider best-effort and can be delayed externally.

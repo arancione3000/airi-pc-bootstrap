@@ -18,6 +18,7 @@ from mathesis.engine import MathesisOmega
 from mathesis.discovery import ConjectureDiscoveryEngine
 from mathesis.sympy_lab import SymPyMathLab, DOMAIN_ATLAS
 from mathesis.evolution import SelfEvolutionEngine
+from mathesis.experience import ExperienceAnalyzer
 from mathesis.formalizer import FormalizerMesh
 from mathesis.kernel import IntegrityKernel
 from mathesis.model_writer import render_model_module
@@ -134,7 +135,11 @@ def test_self_evolution_writes_candidate_and_promotes_verified_improvement(tmp_p
     assert (tmp_path / "champion_model.py").exists()
     assert (tmp_path / "champion.json").exists()
     champion = json.loads((tmp_path / "champion.json").read_text(encoding="utf-8"))
-    assert "number_theory" in champion["experts"]
+    baseline = set(default_genome().experts)
+    evolved = set(champion["experts"])
+    assert champion["generation"] == 1
+    assert baseline.issubset(evolved)
+    assert len(evolved - baseline) >= 1
     assert result.benchmark["kernel_integrity"]["ok"] is True
 
 
@@ -320,3 +325,82 @@ def test_persisted_old_router_shape_is_migrated_instead_of_reinterpreted(tmp_pat
     migrated = evolution.load_router(genome)
     from mathesis.neural_graph import INTENTS
     assert migrated.output_size == len(INTENTS)
+
+
+def test_experience_feedback_turns_verified_math_into_architecture_signal(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    champion = evolution.load_champion()
+    feedback = ExperienceAnalyzer(tmp_path).signals(
+        champion,
+        latest_discovery={
+            "ok": True,
+            "status": "verified_discovery",
+            "theorem": {
+                "verified": True,
+                "strategy": "binomial_expansion",
+                "complexity": champion.symbolic_depth,
+            },
+        },
+    )
+    assert "missing_combinatorics_expert" in feedback["weaknesses"]
+    assert "symbolic_depth" in feedback["weaknesses"]
+
+
+def test_rejected_discovery_requests_stronger_search_not_direct_rewrite(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    champion = evolution.load_champion()
+    feedback = ExperienceAnalyzer(tmp_path).signals(
+        champion,
+        latest_discovery={
+            "ok": False,
+            "status": "rejected_conjecture",
+            "theorem": {
+                "verified": False,
+                "strategy": "faulhaber_interpolation",
+                "complexity": 4,
+            },
+        },
+    )
+    assert "counterexample" in feedback["weaknesses"]
+    assert "optimization" in feedback["weaknesses"]
+    assert "verifier" not in " ".join(feedback["weaknesses"]).lower()
+
+
+def test_experience_hint_changes_challenger_expert_selection(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    result = evolution.evolve_once(extra_weaknesses=["missing_combinatorics_expert"])
+    trial_experts = [trial["genome"]["experts"] for trial in result.benchmark["trials"]]
+    assert any("combinatorics" in experts for experts in trial_experts)
+    assert "missing_combinatorics_expert" in result.benchmark["weakness_hints"]
+
+
+def test_verified_discoveries_become_replayable_regression_theorems(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    first = discovery.discover_once()
+    assert first["ok"] is True
+
+    analyzer = ExperienceAnalyzer(tmp_path)
+    learned = analyzer.replayable_theorems(limit=16)
+    assert first["theorem"]["statement"] in learned
+
+
+def test_evolution_replays_learned_math_before_promotion(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    theorem = discovery.discover_once()["theorem"]["statement"]
+
+    evolution = SelfEvolutionEngine(tmp_path)
+    result = evolution.evolve_once()
+    assert theorem in result.benchmark["learned_theorems"]
+    candidate_replay = result.benchmark["candidate"]["learned_theorems_replayed"]
+    assert any(row["statement"] == theorem and row["ok"] for row in candidate_replay)
+
+
+def test_false_learned_relation_is_a_critical_regression_gate():
+    from mathesis.benchmark import evaluate_genome
+
+    benchmark = evaluate_genome(
+        default_genome(),
+        learned_theorems=["(x+1)^2=x^2+1"],
+    )
+    assert benchmark["ok"] is False
+    assert "learned_theorem:0" in benchmark["critical_failures"]
