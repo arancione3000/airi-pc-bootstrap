@@ -718,3 +718,16 @@ def test_faulhaber_replay_is_critical_for_future_promotion(tmp_path: Path):
     assert obligation in result.benchmark["learned_theorems"]
     replay = result.benchmark["candidate"]["learned_theorems_replayed"]
     assert any(row["statement"] == obligation and row["ok"] for row in replay)
+
+
+def test_curriculum_v1_state_is_read_as_v2_schema(tmp_path: Path):
+    legacy = {
+        "version": 1,
+        "cursor": 4,
+        "studies": [{"domain": "algebra", "status": "studied"}],
+    }
+    (tmp_path / "curriculum.json").write_text(json.dumps(legacy), encoding="utf-8")
+    status = MathematicalCurriculum(tmp_path).status()
+    assert status["version"] == 2
+    assert status["cursor"] == 4
+    assert status["retry_counts"] == {}
