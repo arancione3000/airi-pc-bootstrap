@@ -259,6 +259,56 @@ def prune_lab_storage(max_runs: int = 50, max_history_lines: int = 200) -> dict[
 
     return {"removed_runs": removed_runs, "trimmed_history_lines": trimmed}
 
+def _curriculum_profile(rows: list[dict[str, Any]]) -> tuple[dict[tuple[str, str], float], dict[str, Any]]:
+    groups: dict[tuple[str, str], dict[str, int]] = {}
+    for row in rows:
+        key = (
+            str(row.get("operation") or "unknown")[:80],
+            str(row.get("tool") or "unknown")[:120],
+        )
+        group = groups.setdefault(key, {"attempts": 0, "success": 0, "failure": 0})
+        group["attempts"] += 1
+        if normalize_label(row.get("label")) == 1:
+            group["success"] += 1
+        else:
+            group["failure"] += 1
+
+    weights: dict[tuple[str, str], float] = {}
+    ranked = []
+    for key, group in groups.items():
+        attempts = max(1, group["attempts"])
+        success_rate = group["success"] / attempts
+        # Ambiguity is highest when the same route succeeds and fails equally
+        # often. Those are the cases where additional model capacity/data is
+        # most useful. Pure always-success/always-fail groups remain weight 1.
+        ambiguity = 1.0 - abs(2.0 * success_rate - 1.0)
+        evidence_strength = min(1.0, attempts / 12.0)
+        weight = round(1.0 + 1.5 * ambiguity * evidence_strength, 4)
+        weights[key] = weight
+        ranked.append({
+            "operation": key[0],
+            "tool": key[1],
+            "attempts": attempts,
+            "success": group["success"],
+            "failure": group["failure"],
+            "success_rate": round(success_rate, 4),
+            "ambiguity": round(ambiguity, 4),
+            "curriculum_weight": weight,
+        })
+
+    ranked.sort(
+        key=lambda row: (row["curriculum_weight"], row["attempts"]),
+        reverse=True,
+    )
+    return weights, {
+        "version": 1,
+        "method": "verified_outcome_uncertainty_replay",
+        "groups": len(groups),
+        "focus": ranked[:25],
+        "max_weight": max(weights.values(), default=1.0),
+    }
+
+
 def rebuild_dataset(max_observations: int = 20_000) -> dict[str, Any]:
     ensure_state_boundary()
     compact_raw_observations()
@@ -266,6 +316,9 @@ def rebuild_dataset(max_observations: int = 20_000) -> dict[str, Any]:
     raw_observations = len(rows)
     if max_observations > 0:
         rows = rows[-int(max_observations):]
+
+    curriculum_weights, curriculum = _curriculum_profile(rows)
+    _json_write(LAB_STATE / "curriculum.json", curriculum)
 
     DATA.parent.mkdir(parents=True, exist_ok=True)
     tmp = DATA.with_suffix(".tmp")
@@ -280,6 +333,10 @@ def rebuild_dataset(max_observations: int = 20_000) -> dict[str, Any]:
             positives += int(label == 1)
             negatives += int(label == 0)
             features.add(feature_id)
+            key = (
+                str(row.get("operation") or "unknown")[:80],
+                str(row.get("tool") or "unknown")[:120],
+            )
             training_row = {
                 "id": str(row["id"]),
                 "feature_schema": FEATURE_SCHEMA,
@@ -287,6 +344,7 @@ def rebuild_dataset(max_observations: int = 20_000) -> dict[str, Any]:
                 "text_id": feature_id,
                 "label": label,
                 "source": "airi-shadow-route-observation",
+                "curriculum_weight": float(curriculum_weights.get(key, 1.0)),
                 "evidence": json.dumps(
                     {
                         "operation": row.get("operation"),
@@ -309,6 +367,7 @@ def rebuild_dataset(max_observations: int = 20_000) -> dict[str, Any]:
         "unique_route_features": len(features),
         "success": positives,
         "failure": negatives,
+        "curriculum": curriculum,
         "dataset": str(DATA),
     }
 
@@ -340,6 +399,7 @@ def status() -> dict[str, Any]:
         "last_cycle_raw_count": int(meta.get("last_cycle_raw_count", 0) or 0),
         "pending_observations": max(0, len(raw) - int(meta.get("last_cycle_raw_count", 0) or 0)),
         "champion": champion,
+        "curriculum": _json_read(LAB_STATE / "curriculum.json", None),
         "last_cycle": meta.get("last_cycle"),
     }
 
