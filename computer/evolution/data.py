@@ -38,7 +38,8 @@ def _dataset_lock(path: Path, timeout: float = 15.0, stale_after: float = 900.0)
                     except OSError:
                         owner_dead = True
                 age = time.time() - lock_path.stat().st_mtime
-                if owner_dead or age > max(5.0, float(stale_after)):
+                stale_by_age = owner_pid != os.getpid() and age > max(5.0, float(stale_after))
+                if owner_dead or stale_by_age:
                     lock_path.unlink(missing_ok=True)
                     continue
             except (OSError, ValueError):
