@@ -4,18 +4,36 @@ import ipaddress
 import json
 import re
 import socket
+import urllib.error
 import urllib.parse
 import urllib.request
+import unicodedata
 from difflib import SequenceMatcher
 from html.parser import HTMLParser
 from typing import Any
 
-STRONG_REAL = {"true", "correct", "accurate", "verified", "authentic", "fact", "factual"}
-STRONG_FAKE = {"false", "incorrect", "fake", "hoax", "fabricated", "pants on fire", "pants fire"}
+STRONG_REAL = {
+    "true", "correct", "accurate", "verified", "authentic", "fact", "factual",
+    "vero", "vera", "corretto", "corretta", "accurato", "accurata", "autentico", "autentica",
+    "verdadero", "verdadera", "cierto", "cierta",
+    "vrai", "vraie", "correct",
+    "wahr", "richtig",
+}
+STRONG_FAKE = {
+    "false", "incorrect", "fake", "hoax", "fabricated", "pants on fire", "pants fire",
+    "falso", "falsa", "errato", "errata", "bufala", "fabbricato", "fabbricata",
+    "falso", "falsa", "bulo",
+    "faux", "fausse",
+    "falsch",
+}
 AMBIGUOUS_MARKERS = {
     "mostly", "partly", "partial", "half", "mixture", "mixed", "misleading",
     "missing context", "needs context", "unproven", "unsupported", "satire",
     "outdated", "in dispute", "uncertain",
+    "parzialmente", "in parte", "fuorviante", "senza contesto", "non provato", "non verificato", "incerto", "incerta", "satira",
+    "parcialmente", "enganoso", "sin contexto", "no probado",
+    "partiellement", "trompeur", "sans contexte", "incertain",
+    "teilweise", "irrefuhrend", "ohne kontext", "unklar",
 }
 
 
@@ -65,7 +83,9 @@ def _is_claimreview(obj: dict) -> bool:
 
 
 def normalize_verdict(value: Any) -> str:
-    text = re.sub(r"[^a-z0-9 ]+", " ", str(value or "").lower())
+    text = unicodedata.normalize("NFKD", str(value or "").lower())
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = re.sub(r"[^a-z0-9 ]+", " ", text)
     return " ".join(text.split())
 
 
@@ -78,6 +98,69 @@ def verdict_to_binary(verdict: Any) -> int | None:
     if value in STRONG_FAKE:
         return 0
     return None
+
+
+COMMON_MULTI_LABEL_SUFFIXES = {
+    "co.uk", "org.uk", "gov.uk", "ac.uk",
+    "com.au", "net.au", "org.au",
+    "co.nz", "com.br", "com.mx", "co.jp",
+    "co.in", "com.sg", "com.tr", "com.cn",
+}
+
+
+def registrable_domain(host: str) -> str:
+    host = str(host or "").strip(".").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    try:
+        ipaddress.ip_address(host)
+        return host
+    except ValueError:
+        pass
+    parts = [part for part in host.split(".") if part]
+    if len(parts) <= 2:
+        return host
+    suffix2 = ".".join(parts[-2:])
+    if suffix2 in COMMON_MULTI_LABEL_SUFFIXES and len(parts) >= 3:
+        return ".".join(parts[-3:])
+    return suffix2
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _open_public_url(url: str, timeout: int, max_redirects: int = 4):
+    opener = urllib.request.build_opener(_NoRedirect)
+    current = url
+    original_scheme = urllib.parse.urlparse(str(url)).scheme.lower()
+    for _ in range(max(0, int(max_redirects)) + 1):
+        safe_url, _domain = _public_http_url(current)
+        request = urllib.request.Request(
+            safe_url,
+            headers={"User-Agent": "Airi-PC-NeuroEvolution/1.0"},
+        )
+        try:
+            response = opener.open(request, timeout=timeout)
+            final_url = response.geturl()
+            _public_http_url(final_url)
+            if original_scheme == "https" and urllib.parse.urlparse(final_url).scheme.lower() != "https":
+                response.close()
+                raise ValueError("HTTPS fact-check URL cannot downgrade to HTTP")
+            return response, final_url
+        except urllib.error.HTTPError as exc:
+            if 300 <= int(exc.code) < 400:
+                location = exc.headers.get("Location")
+                if not location:
+                    raise ValueError("redirect response is missing Location") from exc
+                current = urllib.parse.urljoin(safe_url, location)
+                _public_http_url(current)
+                if original_scheme == "https" and urllib.parse.urlparse(current).scheme.lower() != "https":
+                    raise ValueError("HTTPS fact-check URL cannot downgrade to HTTP")
+                continue
+            raise
+    raise ValueError("too many fact-check redirects")
 
 
 def _public_http_url(url: str) -> tuple[str, str]:
@@ -97,7 +180,7 @@ def _public_http_url(url: str) -> tuple[str, str]:
         ip = ipaddress.ip_address(info[4][0])
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
             raise ValueError("fact-check URL resolves to a non-public address")
-    domain = host[4:] if host.startswith("www.") else host
+    domain = registrable_domain(host)
     return parsed.geturl(), domain
 
 
@@ -105,7 +188,7 @@ def extract_claimreviews(html: str, url: str = "") -> list[dict[str, Any]]:
     parser = JsonLdParser()
     parser.feed(html)
     host = (urllib.parse.urlparse(url).hostname or "").lower()
-    domain = host[4:] if host.startswith("www.") else host
+    domain = registrable_domain(host)
     results = []
     for payload in parser.payloads:
         try:
@@ -134,9 +217,8 @@ def extract_claimreviews(html: str, url: str = "") -> list[dict[str, Any]]:
 
 
 def fetch_claimreviews(url: str, timeout: int = 25, max_bytes: int = 4_000_000) -> list[dict[str, Any]]:
-    safe_url, _domain = _public_http_url(url)
-    request = urllib.request.Request(safe_url, headers={"User-Agent": "Airi-PC-NeuroEvolution/1.0"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    response, final_url = _open_public_url(url, timeout)
+    with response:
         content_type = (response.headers.get("Content-Type") or "").lower()
         data = response.read(max_bytes + 1)
     if len(data) > max_bytes:
@@ -145,11 +227,13 @@ def fetch_claimreviews(url: str, timeout: int = 25, max_bytes: int = 4_000_000) 
     match = re.search(r"charset=([\w.-]+)", content_type)
     if match:
         charset = match.group(1)
-    return extract_claimreviews(data.decode(charset, errors="replace"), url=url)
+    return extract_claimreviews(data.decode(charset, errors="replace"), url=final_url)
 
 
 def _canon(text: str) -> str:
-    return " ".join(re.findall(r"[a-z0-9]+", str(text).lower()))
+    value = unicodedata.normalize("NFKD", str(text).lower())
+    value = "".join(ch for ch in value if not unicodedata.combining(ch))
+    return " ".join(re.findall(r"[a-z0-9]+", value))
 
 
 def claim_similarity(left: str, right: str) -> float:
@@ -187,7 +271,7 @@ def verify_consensus(claim: str, urls: list[str], min_sources: int = 2, min_simi
         if best.get("label") not in (0, 1):
             errors.append({"url": url, "error": "ambiguous ClaimReview verdict", "verdict": best.get("verdict")})
             continue
-        domain = best.get("domain") or (urllib.parse.urlparse(url).hostname or "").lower()
+        domain = best.get("domain") or registrable_domain(urllib.parse.urlparse(url).hostname or "")
         if not domain or domain in seen_domains:
             continue
         seen_domains.add(domain)

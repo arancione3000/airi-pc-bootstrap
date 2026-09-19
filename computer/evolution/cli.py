@@ -46,6 +46,7 @@ def parser():
     sub.add_parser("setup")
     sub.add_parser("status")
     sub.add_parser("pipeline-status")
+    sub.add_parser("audit")
     boot = sub.add_parser("bootstrap-liar")
     boot.add_argument("--mode", choices=("safe", "experimental"), default="safe")
     boot.add_argument("--no-evolve", action="store_true")
@@ -103,6 +104,8 @@ def main(argv=None):
     if args.cmd == "setup": emit(runtime.setup(), 0)
     if args.cmd == "status": emit(runtime.status(), 0)
     if args.cmd == "pipeline-status": emit(runtime.pipeline_status(), 0)
+    if args.cmd == "audit":
+        result = runtime.audit(); emit(result, 0 if result.get("ok") else 2)
     if args.cmd == "bootstrap-liar":
         result = runtime.bootstrap_liar(auto_evolve=not args.no_evolve, mode=args.mode, enable_autopilot=not args.no_autopilot)
         emit(result, 0 if result.get("ok") else 2)
@@ -130,7 +133,7 @@ def main(argv=None):
         result = runtime.edge_quantize(args.max_samples); emit(result, 0 if result.get("ok") else 2)
     if args.cmd == "ingest":
         result = runtime.ingest({"text": args.text, "label": args.label, "source": args.source, "evidence": args.evidence}, auto_evolve=not args.no_auto, mode=args.mode, trigger_samples=args.trigger_samples)
-        emit(result, 0)
+        emit(result, 0 if result.get("ok") else 2)
     if args.cmd == "start":
         result = runtime.start(mode=args.mode, population=args.population, generations=args.generations, candidate_epochs=args.candidate_epochs)
         emit(result, 0 if result.get("ok") else 2)

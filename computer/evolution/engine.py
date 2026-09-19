@@ -14,13 +14,14 @@ from typing import Any
 
 from .data import (
     DatasetView,
+    _dataset_lock,
     class_counts,
     encode_text,
     ensure_canary_partition,
     load_records,
+    persistent_split_records,
     source_family,
     source_family_counts,
-    split_records,
 )
 from .genome import Genome, crossover, mutate, random_genome
 from .model import build_model, parameter_count
@@ -268,6 +269,53 @@ def _save_json(path: Path, value: Any):
     tmp.replace(path)
 
 
+def _champion_complete(path: Path) -> bool:
+    path = Path(path)
+    return all((path / name).exists() for name in ("genome.json", "model.pt", "metrics.json", "provenance.json"))
+
+
+def _recover_champion_state(state_dir: Path) -> dict[str, Any]:
+    state_dir = Path(state_dir)
+    champion = state_dir / "champion"
+    backup = state_dir / ".champion-old"
+    pending = state_dir / ".champion-new"
+    actions: list[str] = []
+
+    if _champion_complete(champion):
+        if backup.exists():
+            shutil.rmtree(backup, ignore_errors=True)
+            actions.append("removed_stale_backup")
+        if pending.exists():
+            shutil.rmtree(pending, ignore_errors=True)
+            actions.append("removed_stale_pending")
+        return {"ok": True, "actions": actions}
+
+    if champion.exists():
+        corrupt = state_dir / f".champion-corrupt-{int(time.time())}"
+        try:
+            champion.rename(corrupt)
+            actions.append("quarantined_incomplete_champion")
+        except OSError:
+            shutil.rmtree(champion, ignore_errors=True)
+            actions.append("removed_incomplete_champion")
+
+    if _champion_complete(backup):
+        backup.rename(champion)
+        actions.append("restored_backup")
+        if pending.exists():
+            shutil.rmtree(pending, ignore_errors=True)
+        return {"ok": True, "actions": actions}
+
+    if _champion_complete(pending):
+        pending.rename(champion)
+        actions.append("promoted_complete_pending")
+        if backup.exists():
+            shutil.rmtree(backup, ignore_errors=True)
+        return {"ok": True, "actions": actions}
+
+    return {"ok": not (backup.exists() or pending.exists()), "actions": actions}
+
+
 def _load_champion(champion_dir: Path, vocab_size: int):
     import torch
     gp = champion_dir / "genome.json"
@@ -301,15 +349,60 @@ def _promotion_decision(candidate: dict, old: dict | None, cfg: EvolutionConfig)
     return False, "candidate did not beat champion promotion criteria"
 
 
+def _genome_parameter_count(genome: Genome, vocab_size: int) -> int:
+    model = build_model(genome, vocab_size=vocab_size)
+    return parameter_count(model)
+
+
+def _random_feasible_genome(rng: random.Random, genome_id: str, cfg: EvolutionConfig, generation: int = 0) -> Genome:
+    best = None
+    best_params = None
+    for attempt in range(40):
+        candidate = random_genome(rng, genome_id, cfg.mode, generation)
+        params = _genome_parameter_count(candidate, cfg.vocab_size)
+        if params <= cfg.max_params:
+            return candidate
+        if best is None or params < best_params:
+            best, best_params = candidate, params
+    raise RuntimeError(
+        f"unable to sample a genome under max_params={cfg.max_params}; smallest sampled={best_params}"
+    )
+
+
 def _select_parent(rows: list[dict], rng: random.Random) -> dict:
     k = min(3, len(rows))
     sample = rng.sample(rows, k)
     return max(sample, key=lambda x: x["fitness"])
 
 
+def _prune_old_trial_weights(state_dir: Path, keep_runs: int = 5) -> None:
+    runs_dir = Path(state_dir) / "runs"
+    if not runs_dir.exists():
+        return
+    run_dirs = sorted(
+        [path for path in runs_dir.iterdir() if path.is_dir()],
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for old_run in run_dirs[max(1, int(keep_runs)):]:
+        for pattern in ("selected-trial.pt", "promotion-trial-*.pt"):
+            for path in old_run.glob(pattern):
+                path.unlink(missing_ok=True)
+
+
 def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
+    state_dir = Path(state_dir)
+    state_dir.mkdir(parents=True, exist_ok=True)
+    with _dataset_lock(state_dir / "evolution-run", timeout=2.0, stale_after=21600.0):
+        return _run_evolution_unlocked(state_dir, cfg)
+
+
+def _run_evolution_unlocked(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
     import torch
     state_dir = Path(state_dir)
+    recovery = _recover_champion_state(state_dir)
+    if not recovery.get("ok"):
+        raise RuntimeError(f"champion state recovery failed: {recovery}")
     data_path = state_dir / "data" / "verified.jsonl"
     champion_dir = state_dir / "champion"
     records = load_records(data_path)
@@ -319,7 +412,7 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
     if min(counts.values()) < 4:
         raise ValueError("need at least 4 verified samples in each class")
     remaining, canary, canary_info = ensure_canary_partition(state_dir, records, seed=cfg.seed)
-    train, val, test = split_records(remaining, cfg.seed)
+    train, val, test, split_info = persistent_split_records(state_dir, remaining, cfg.seed)
     run_id = time.strftime("run-%Y%m%d-%H%M%S") + f"-{os.getpid()}"
     run_dir = state_dir / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -331,11 +424,12 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         "train": len(train),
         "val": len(val),
         "test": len(test),
+        "split_manifest": split_info,
         "canary": canary_info,
     })
 
     rng = random.Random(cfg.seed + int(time.time()) % 100_000)
-    population = [random_genome(rng, f"g0-{i:03d}", cfg.mode, 0) for i in range(cfg.population)]
+    population = [_random_feasible_genome(rng, f"g0-{i:03d}", cfg, 0) for i in range(cfg.population)]
     history: list[dict] = []
     best_row = None
     best_genome = None
@@ -345,6 +439,22 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         for idx, genome in enumerate(population):
             candidate_seed = cfg.seed + generation * 10_000 + idx
             try:
+                static_params = _genome_parameter_count(genome, cfg.vocab_size)
+                if static_params > cfg.max_params:
+                    row = {
+                        "generation": generation,
+                        "genome_id": genome.genome_id,
+                        "fitness": -1.0,
+                        "feasible": False,
+                        "params": static_params,
+                        "constraint_rejected": "max_params",
+                        "genome": genome.to_dict(),
+                    }
+                    rows.append(row)
+                    history.append(row)
+                    with (run_dir / "candidates.jsonl").open("a", encoding="utf-8") as f:
+                        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                    continue
                 model, train_info = train_model(genome, train, cfg.candidate_epochs, cfg.vocab_size, candidate_seed, cfg.replay_balance_power)
                 metrics = evaluate_model(model, genome, val, cfg.vocab_size)
                 fit = fitness(metrics, cfg)
@@ -448,6 +558,18 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
     selected_model.eval()
     candidate_final["source_families"] = evaluate_source_families(selected_model, best_genome, test, cfg.vocab_size)
 
+    # Keep only the selected trial weights for auditability; loser trial state dicts
+    # are redundant and would otherwise make long-running autopilot state grow quickly.
+    selected_trial_path = run_dir / f"promotion-trial-{selected_trial:02d}.pt"
+    selected_audit_path = run_dir / "selected-trial.pt"
+    if selected_trial_path.exists():
+        selected_trial_path.replace(selected_audit_path)
+    for path in run_dir.glob("promotion-trial-*.pt"):
+        path.unlink(missing_ok=True)
+    for row in promotion_trials:
+        row["state_path"] = str(selected_audit_path) if int(row["trial"]) == selected_trial and selected_audit_path.exists() else None
+    candidate_final["selected_trial_path"] = str(selected_audit_path) if selected_audit_path.exists() else None
+
     if promote:
         champion_dir.mkdir(parents=True, exist_ok=True)
         tmp_dir = state_dir / ".champion-new"
@@ -496,6 +618,7 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
     _save_json(run_dir / "result.json", result)
     with (state_dir / "history.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps({k: v for k, v in result.items() if k != "best_search_candidate"}, ensure_ascii=False) + "\n")
+    _prune_old_trial_weights(state_dir, keep_runs=5)
     return result
 
 

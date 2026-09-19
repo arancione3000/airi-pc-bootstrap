@@ -12,6 +12,15 @@ from .data import encode_text, load_records
 from .engine import decision_from_probability, load_champion_for_prediction
 
 
+def quantization_backend_info() -> dict[str, str]:
+    import torch
+    return {
+        "backend": "torch.ao.quantization.quantize_dynamic",
+        "torch_version": str(torch.__version__),
+        "migration_target": "torchao.quantization.quantize_",
+    }
+
+
 def edge_acceptance(
     *,
     float_bytes: int,
@@ -145,8 +154,10 @@ def quantize_champion(
     }
     edge_dir = state_dir / "edge"
     edge_dir.mkdir(parents=True, exist_ok=True)
+    backend = quantization_backend_info()
     attempt = {
         "format": "airi-pc-dynamic-int8-attempt-v1",
+        **backend,
         "created_at": time.time(),
         "genome_id": genome.genome_id,
         "accepted": bool(gate["accepted"]),
@@ -162,6 +173,7 @@ def quantize_champion(
             json.dumps(
                 {
                     "format": "airi-pc-dynamic-int8-v1",
+                    **backend,
                     "created_at": time.time(),
                     "genome_id": genome.genome_id,
                     "metrics": metrics,
@@ -172,7 +184,7 @@ def quantize_champion(
             ),
             encoding="utf-8",
         )
-    return {"ok": True, "saved": gate["accepted"], "attempt": str(edge_dir / "attempt.json"), "metrics": metrics}
+    return {"ok": True, "saved": gate["accepted"], **backend, "attempt": str(edge_dir / "attempt.json"), "metrics": metrics}
 
 
 def load_edge_model(state_dir: Path):

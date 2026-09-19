@@ -88,13 +88,17 @@ def verify_queued_claim(
         row["verified_at"] = time.time()
         row["verification"] = result
         if auto_ingest:
-            added = append_verified(state_dir / "data" / "verified.jsonl", {
-                "text": row["claim"],
-                "label": result["label"],
-                "source": "ClaimReview consensus: " + ", ".join(result.get("domains", [])),
-                "evidence": json.dumps(result, ensure_ascii=False, sort_keys=True),
-            })
-            row["ingest"] = added
+            try:
+                added = append_verified(state_dir / "data" / "verified.jsonl", {
+                    "text": row["claim"],
+                    "label": result["label"],
+                    "source": "ClaimReview consensus: " + ", ".join(result.get("domains", [])),
+                    "evidence": json.dumps(result, ensure_ascii=False, sort_keys=True),
+                })
+                row["ingest"] = added
+            except ValueError as exc:
+                row["status"] = "conflict"
+                row["ingest_error"] = str(exc)
     elif result.get("reason") == "independent ClaimReview sources disagree":
         row["status"] = "conflict"
     else:

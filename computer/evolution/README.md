@@ -83,6 +83,7 @@ The bootstrap enables the Airi-PC scheduler job `neuroevolution-maintenance` by 
 ./scripts/airi-evolve setup
 ./scripts/airi-evolve bootstrap-liar
 ./scripts/airi-evolve status
+./scripts/airi-evolve audit
 ./scripts/airi-evolve pipeline-status
 ./scripts/airi-evolve factcheck "claim to check"
 ./scripts/airi-evolve queue-list
@@ -142,3 +143,33 @@ The training sampler is provenance-aware. When multiple source families exist (f
 Final evaluation records per-source-family metrics. Champion provenance also stores source-family counts and canary metadata.
 
 Promotion trials are now auditable artifacts. The exact state dict of each independent trial is saved under the run directory, and if a challenger wins, the deployed `champion/model.pt` is copied from the selected evaluated trial itself. This guarantees that published champion metrics correspond to the actual deployed weights.
+
+
+## V6: audit hardening and long-running stability
+
+The evaluation partitions are now persistent across generations. The first train/validation/test assignment is written to a manifest, and later verified records are assigned deterministically without moving older records between splits. This prevents a sample that was once held out for testing from silently becoming training data in a later evolution.
+
+The golden canary set is frozen after its first creation. It can no longer grow by taking older records that a previous champion may already have seen.
+
+LIAR bootstrap ingestion is batched: the existing JSONL dataset is indexed once per batch rather than rescanned for every row. This removes the previous quadratic import path.
+
+Verified dataset writes use a cross-process lock with stale-lock recovery, preventing concurrent MCP/HTTP fact-check requests from racing while appending online training data.
+
+Promotion trial storage is bounded. Only the selected trial weights are retained for the current run, loser state dicts are deleted, and old selected-trial weights are pruned while JSON metrics/history remain.
+
+ClaimReview source independence is stricter: subdomains of the same registrable domain count as one organization, and HTTP redirects are revalidated before following so a public URL cannot redirect the verifier into localhost or a private network. Verdict normalization now conservatively recognizes common Italian and other European true/false labels while still excluding ambiguous ratings.
+
+Process start/stop is platform-aware on Windows and POSIX.
+
+Use the built-in self-audit at any time:
+
+```sh
+./scripts/airi-evolve audit
+```
+
+The audit checks dataset label conflicts, duplicate rows, canary/split overlap, missing/stale split assignments, champion completeness, edge/champion genome consistency, stale dataset locks, invalid queue files and redundant promotion-trial weights. The same operation is available to Airi as `computer_evolution_audit`.
+
+
+### INT8 backend compatibility note
+
+PyTorch is moving quantization development from legacy `torch.ao.quantization` APIs to TorchAO. Airi-PC currently keeps `torch.ao.quantization.quantize_dynamic` as a compatibility backend because this project still supports PyTorch 2.7+, while newer TorchAO releases target newer PyTorch bases. Every INT8 attempt records the active backend, PyTorch version and migration target (`torchao.quantization.quantize_`) so the backend can be migrated explicitly when the project's minimum PyTorch version is raised.

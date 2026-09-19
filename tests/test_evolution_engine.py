@@ -7,8 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "computer"))
 
-from evolution.data import append_verified, class_counts, encode_text, ensure_canary_partition, load_records, source_family, source_family_counts, split_records, text_fingerprint
-from evolution.engine import EvolutionConfig, _canary_decision, _metrics, _promotion_decision, decision_from_probability, fitness, pareto_front
+from evolution.data import _dataset_lock, append_verified, append_verified_many, class_counts, encode_text, ensure_canary_partition, load_records, persistent_split_records, source_family, source_family_counts, split_records, text_fingerprint
+from evolution.engine import EvolutionConfig, _canary_decision, _genome_parameter_count, _metrics, _promotion_decision, _random_feasible_genome, _recover_champion_state, decision_from_probability, fitness, pareto_front
 from evolution.edge import edge_acceptance
 from evolution.monitoring import detect_drift
 from evolution.genome import crossover, mutate, random_genome
@@ -220,3 +220,127 @@ def test_canary_gate_blocks_hidden_regression():
     ok, reason = _canary_decision(candidate, old, cfg)
     assert ok is False
     assert "canary" in reason
+
+
+def test_batch_verified_ingestion_handles_duplicates_and_conflicts(tmp_path: Path):
+    path = tmp_path / "verified.jsonl"
+    batch = append_verified_many(path, [
+        {"text": "Batch sample alpha is verified true", "label": 1},
+        {"text": "Batch sample beta is verified false", "label": 0},
+        {"text": "Batch sample alpha is verified true", "label": 1},
+        {"text": "Batch sample beta is verified false", "label": 1},
+        {"text": "x", "label": 1},
+    ])
+    assert batch["accepted"] == 2
+    assert batch["duplicates"] == 1
+    assert batch["conflicts"] == 1
+    assert batch["invalid"] == 1
+    assert len(load_records(path)) == 2
+
+
+def test_canary_never_grows_from_previously_seen_records(tmp_path: Path):
+    rows = []
+    for label in (0, 1):
+        for i in range(20):
+            text = f"initial hidden canary class {label} item {i}"
+            rows.append({"text": text, "text_id": text_fingerprint(text), "label": label, "source": "LIAR:test"})
+    remaining1, canary1, _ = ensure_canary_partition(tmp_path, rows, seed=11)
+    original = {row["text_id"] for row in canary1}
+
+    expanded = list(rows)
+    for label in (0, 1):
+        for i in range(20, 60):
+            text = f"later arriving class {label} item {i}"
+            expanded.append({"text": text, "text_id": text_fingerprint(text), "label": label, "source": "ClaimReview consensus: a.example,b.example"})
+    remaining2, canary2, info2 = ensure_canary_partition(tmp_path, expanded, seed=11)
+    assert {row["text_id"] for row in canary2} == original
+    assert info2["created_now"] is False
+    assert original.isdisjoint({row["text_id"] for row in remaining2})
+
+
+def test_persistent_split_assignments_do_not_move_when_data_grows(tmp_path: Path):
+    rows = []
+    for label in (0, 1):
+        for i in range(20):
+            text = f"stable split class {label} item {i}"
+            rows.append({"text": text, "text_id": text_fingerprint(text), "label": label})
+    tr1, va1, te1, manifest1 = persistent_split_records(tmp_path, rows, seed=17)
+    first = dict(manifest1["assignments"])
+
+    expanded = list(rows)
+    for label in (0, 1):
+        for i in range(20, 40):
+            text = f"stable split later class {label} item {i}"
+            expanded.append({"text": text, "text_id": text_fingerprint(text), "label": label})
+    tr2, va2, te2, manifest2 = persistent_split_records(tmp_path, expanded, seed=17)
+    for tid, split in first.items():
+        assert manifest2["assignments"][tid] == split
+    sets = [
+        {row["text_id"] for row in tr2},
+        {row["text_id"] for row in va2},
+        {row["text_id"] for row in te2},
+    ]
+    assert sets[0].isdisjoint(sets[1])
+    assert sets[0].isdisjoint(sets[2])
+    assert sets[1].isdisjoint(sets[2])
+
+
+def test_stale_dataset_lock_is_recovered(tmp_path: Path):
+    import os
+    import time
+    path = tmp_path / "verified.jsonl"
+    lock = path.with_suffix(path.suffix + ".lock")
+    lock.write_text("stale", encoding="utf-8")
+    old = time.time() - 1200
+    os.utime(lock, (old, old))
+    row = append_verified(path, {"text": "stale lock recovery sample text", "label": 1})
+    assert row["duplicate"] is False
+    assert not lock.exists()
+
+
+def test_corrupt_partition_manifests_are_regenerated(tmp_path: Path):
+    rows = []
+    for label in (0, 1):
+        for i in range(12):
+            text = f"manifest regeneration class {label} sample {i}"
+            rows.append({"text": text, "text_id": text_fingerprint(text), "label": label})
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True)
+    (data_dir / "canary_ids.json").write_text("{broken", encoding="utf-8")
+    remaining, canary, canary_info = ensure_canary_partition(tmp_path, rows, seed=9)
+    assert canary_info["created_now"] is True
+    assert len(canary) >= 4
+
+    (data_dir / "split_manifest.json").write_text('{"assignments":"bad"}', encoding="utf-8")
+    train, val, test, split_info = persistent_split_records(tmp_path, remaining, seed=9)
+    assert split_info["created_now"] is True
+    assert len(train) + len(val) + len(test) == len(remaining)
+
+
+def test_interrupted_champion_swap_restores_complete_backup(tmp_path: Path):
+    backup = tmp_path / ".champion-old"
+    backup.mkdir()
+    for name in ("genome.json", "model.pt", "metrics.json", "provenance.json"):
+        (backup / name).write_text("{}", encoding="utf-8")
+    result = _recover_champion_state(tmp_path)
+    assert result["ok"] is True
+    assert "restored_backup" in result["actions"]
+    assert (tmp_path / "champion" / "model.pt").exists()
+    assert not backup.exists()
+
+
+def test_same_process_lock_is_not_reaped_by_age(tmp_path: Path):
+    import pytest
+    target = tmp_path / "shared"
+    with _dataset_lock(target, timeout=0.2, stale_after=0.01):
+        with pytest.raises(TimeoutError):
+            with _dataset_lock(target, timeout=0.1, stale_after=0.01):
+                pass
+
+
+def test_initial_population_sampler_respects_parameter_budget():
+    import pytest
+    pytest.importorskip("torch")
+    cfg = EvolutionConfig.for_mode("safe")
+    genome = _random_feasible_genome(random.Random(123), "budget", cfg)
+    assert _genome_parameter_count(genome, cfg.vocab_size) <= cfg.max_params

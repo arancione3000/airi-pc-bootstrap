@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .data import append_verified, class_counts, load_records
+from .data import _dataset_lock, append_verified, class_counts, load_records
 
 ROOT = Path(os.environ.get("AIRI_ROOT") or Path(__file__).resolve().parents[2]).resolve()
 STATE = Path(os.environ.get("AIRI_EVOLUTION_STATE") or ROOT / ".ai" / "evolution").resolve()
@@ -113,6 +113,14 @@ def status() -> dict[str, Any]:
 
 
 def ingest(record: dict, *, auto_evolve: bool = True, mode: str = "safe", trigger_samples: int = DEFAULT_TRIGGER) -> dict[str, Any]:
+    source = str(record.get("source", "")).strip()
+    evidence = str(record.get("evidence", "")).strip()
+    if not source or not evidence:
+        return {
+            "ok": False,
+            "error": "verification_metadata_required",
+            "message": "manual ingest requires both source and evidence",
+        }
     row = append_verified(DATA, record)
     st = status()
     started = None
@@ -122,11 +130,35 @@ def ingest(record: dict, *, auto_evolve: bool = True, mode: str = "safe", trigge
 
 
 def start(*, mode: str = "safe", auto_setup: bool = True, population: int | None = None, generations: int | None = None, candidate_epochs: int | None = None) -> dict[str, Any]:
+    STATE.mkdir(parents=True, exist_ok=True)
+    try:
+        with _dataset_lock(STATE / "evolution-start", timeout=5.0, stale_after=300.0):
+            return _start_unlocked(
+                mode=mode,
+                auto_setup=auto_setup,
+                population=population,
+                generations=generations,
+                candidate_epochs=candidate_epochs,
+            )
+    except TimeoutError:
+        st = status()
+        return {
+            "ok": bool(st.get("running")),
+            "started": False,
+            "reason": "start_locked",
+            "pid": st.get("pid"),
+        }
+
+
+def _start_unlocked(*, mode: str = "safe", auto_setup: bool = True, population: int | None = None, generations: int | None = None, candidate_epochs: int | None = None) -> dict[str, Any]:
     st = status()
     if st["running"]:
         return {"ok": True, "started": False, "reason": "already_running", "pid": st["pid"]}
     if st["dataset_records"] < 40 or min(st["class_counts"].values()) < 4:
         return {"ok": False, "started": False, "reason": "insufficient_verified_data", "status": st}
+    state_audit = audit()
+    if not state_audit.get("ok", False):
+        return {"ok": False, "started": False, "reason": "state_audit_failed", "audit": state_audit, "status": st}
     ts = torch_status()
     if not ts.get("available") and auto_setup:
         installed = setup()
@@ -141,7 +173,21 @@ def start(*, mode: str = "safe", auto_setup: bool = True, population: int | None
         if value is not None:
             cmd.extend([flag, str(value)])
     log = LOG.open("ab", buffering=0)
-    proc = subprocess.Popen(cmd, cwd=str(ROOT / "computer"), stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env={**os.environ, "AIRI_ROOT": str(ROOT), "PYTHONPATH": str(ROOT / "computer") + os.pathsep + os.environ.get("PYTHONPATH", "")})
+    popen_kwargs = {
+        "cwd": str(ROOT / "computer"),
+        "stdout": log,
+        "stderr": subprocess.STDOUT,
+        "env": {
+            **os.environ,
+            "AIRI_ROOT": str(ROOT),
+            "PYTHONPATH": str(ROOT / "computer") + os.pathsep + os.environ.get("PYTHONPATH", ""),
+        },
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    else:
+        popen_kwargs["start_new_session"] = True
+    proc = subprocess.Popen(cmd, **popen_kwargs)
     PID.write_text(str(proc.pid), encoding="utf-8")
     _json_write(STATUS, {"state": "running", "pid": proc.pid, "mode": mode, "started_at": time.time(), "command": cmd})
     return {"ok": True, "started": True, "pid": proc.pid, "mode": mode, "log": str(LOG)}
@@ -155,8 +201,11 @@ def stop() -> dict[str, Any]:
         PID.unlink(missing_ok=True)
         return {"ok": True, "stopped": False, "reason": "stale_pid"}
     try:
-        os.killpg(pid, signal.SIGTERM)
-    except OSError:
+        if os.name != "nt" and hasattr(os, "killpg"):
+            os.killpg(pid, signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except (OSError, AttributeError):
         try:
             os.kill(pid, signal.SIGTERM)
         except OSError:
@@ -347,3 +396,9 @@ def autopilot(enable: bool = True, interval_seconds: int = 3600) -> dict[str, An
         return {"ok": True, "enabled": False, "already_disabled": True}
     cancelled = cancel_job(name)
     return {"ok": True, "enabled": False, "cancelled": cancelled}
+
+
+
+def audit() -> dict[str, Any]:
+    from .audit import audit_state
+    return audit_state(STATE)

@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from .data import append_verified, class_counts, load_records
+from .data import append_verified_many, class_counts, load_records
 
 LIAR_OFFICIAL_URL = "https://www.cs.ucsb.edu/~william/data/liar_dataset.zip"
 LIAR_MIRROR_RAW = {
@@ -42,11 +42,19 @@ def _extract(zip_path: Path, out_dir: Path) -> dict[str, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     wanted = {"train.tsv": "train", "valid.tsv": "valid", "test.tsv": "test"}
     found: dict[str, Path] = {}
+    extracted_bytes = 0
+    max_file_bytes = 100_000_000
+    max_total_bytes = 200_000_000
     with zipfile.ZipFile(zip_path) as archive:
         for info in archive.infolist():
             name = Path(info.filename).name
             if name not in wanted:
                 continue
+            if info.file_size < 0 or info.file_size > max_file_bytes:
+                raise ValueError(f"LIAR archive member exceeds safe extracted size: {name}")
+            extracted_bytes += int(info.file_size)
+            if extracted_bytes > max_total_bytes:
+                raise ValueError("LIAR archive exceeds safe total extracted size")
             target = out_dir / name
             with archive.open(info) as src, target.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
@@ -83,32 +91,35 @@ def acquire(cache_dir: Path) -> dict[str, Any]:
 
 def import_tsv(tsv_path: Path, verified_path: Path, split: str, source_url: str = LIAR_OFFICIAL_URL) -> dict[str, Any]:
     stats = {"split": split, "accepted": 0, "duplicates": 0, "ambiguous": 0, "conflicts": 0, "invalid": 0}
-    with Path(tsv_path).open("r", encoding="utf-8", errors="replace", newline="") as handle:
-        for row in csv.reader(handle, delimiter="\t"):
-            if len(row) < 3:
-                stats["invalid"] += 1
-                continue
-            item_id, raw_label, statement = row[0].strip(), row[1].strip().lower(), row[2].strip()
-            if raw_label in LIAR_AMBIGUOUS:
-                stats["ambiguous"] += 1
-                continue
-            if raw_label not in LIAR_LABEL_MAP or len(statement) < 8:
-                stats["invalid"] += 1
-                continue
-            evidence = {
-                "dataset": "LIAR v1.0", "split": split, "item_id": item_id,
-                "original_label": raw_label, "research_use_only": True,
-                "dataset_source": source_url,
-            }
-            try:
-                added = append_verified(verified_path, {
-                    "text": statement, "label": LIAR_LABEL_MAP[raw_label],
+
+    def iter_verified_rows():
+        with Path(tsv_path).open("r", encoding="utf-8", errors="replace", newline="") as handle:
+            for row in csv.reader(handle, delimiter="\t"):
+                if len(row) < 3:
+                    stats["invalid"] += 1
+                    continue
+                item_id, raw_label, statement = row[0].strip(), row[1].strip().lower(), row[2].strip()
+                if raw_label in LIAR_AMBIGUOUS:
+                    stats["ambiguous"] += 1
+                    continue
+                if raw_label not in LIAR_LABEL_MAP or len(statement) < 8:
+                    stats["invalid"] += 1
+                    continue
+                evidence = {
+                    "dataset": "LIAR v1.0", "split": split, "item_id": item_id,
+                    "original_label": raw_label, "research_use_only": True,
+                    "dataset_source": source_url,
+                }
+                yield {
+                    "text": statement,
+                    "label": LIAR_LABEL_MAP[raw_label],
                     "source": f"LIAR:{item_id}",
                     "evidence": json.dumps(evidence, ensure_ascii=False, sort_keys=True),
-                })
-                stats["duplicates" if added.get("duplicate") else "accepted"] += 1
-            except ValueError:
-                stats["conflicts"] += 1
+                }
+
+    batch = append_verified_many(verified_path, iter_verified_rows(), include_rows=False)
+    for key in ("accepted", "duplicates", "conflicts", "invalid"):
+        stats[key] += int(batch.get(key, 0))
     return stats
 
 
