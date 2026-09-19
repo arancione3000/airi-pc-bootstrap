@@ -227,8 +227,12 @@ jobs:
           assert st["training_records"] == 48, st
           assert st["last_cycle"] is not None, st
           assert st["last_cycle"].get("run_id"), st
-          assert st["champion"] is not None, st
+          assert st["last_cycle"].get("candidate") is not None, st
+          assert isinstance(st["last_cycle"].get("promoted"), bool), st
+          assert st["last_cycle"].get("promotion_reason"), st
           assert st["champion_compatible"] is True, st
+          # A weak synthetic candidate may be rejected by the real promotion gate.
+          # That is a successful safety outcome, not a training failure.
           print({"lab_status":st})
           PY
 
