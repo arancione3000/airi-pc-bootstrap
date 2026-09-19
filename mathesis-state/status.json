@@ -1,6 +1,6 @@
 {
   "curriculum": {
-    "cursor": 4,
+    "cursor": 5,
     "domains": [
       "algebra",
       "polynomials",
@@ -19,9 +19,9 @@
       "optimization"
     ],
     "last": {
-      "at": 1789856129.5377662,
-      "domain": "trigonometry",
-      "query": "trigonometry mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+      "at": 1789856742.9971228,
+      "domain": "number_theory",
+      "query": "number_theory mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
       "sources": [
         {
           "authority_hint": 0.75,
@@ -49,30 +49,31 @@
       "web_truth_policy": "source evidence is not a formal proof"
     },
     "ok": true,
-    "studies": 4
+    "retry_counts": {},
+    "studies": 5
   },
   "discovery": {
-    "cycle": 13,
+    "cycle": 14,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 8,
+    "stored": 9,
     "strategies": {
       "binomial_expansion": 4,
       "difference_of_powers": 3,
-      "faulhaber_interpolation": 2,
+      "faulhaber_interpolation": 3,
       "finite_geometric_identity": 3
     },
     "symbolic_depth": 12,
-    "verified": 8
+    "verified": 9
   },
   "evolution": {
     "benchmark": {
       "capability_score": 1.0,
-      "complexity_penalty": 0.011562000000000001,
+      "complexity_penalty": 0.011912,
       "critical_failures": [],
       "learned_theorems_replayed": [
         {
@@ -130,9 +131,9 @@
           "status": "verified"
         }
       ],
-      "neural_accuracy": 0.818182,
+      "neural_accuracy": 0.909091,
       "ok": true,
-      "score": 97.312074,
+      "score": 99.129906,
       "tasks": [
         {
           "critical": true,
@@ -190,8 +191,20 @@
         },
         {
           "critical": true,
-          "detail": 98.999683,
+          "detail": 98.999638,
           "name": "program:gcd",
+          "ok": true
+        },
+        {
+          "critical": false,
+          "detail": "verified capability",
+          "name": "domain:algebra",
+          "ok": true
+        },
+        {
+          "critical": false,
+          "detail": "verified capability",
+          "name": "domain:polynomials",
           "ok": true
         },
         {
@@ -324,7 +337,7 @@
         },
         {
           "critical": false,
-          "detail": 0.8182,
+          "detail": 0.9091,
           "name": "neural:intent_router",
           "ok": true
         }
@@ -409,6 +422,10 @@
             "combinatorics"
           ],
           [
+            "combinatorics",
+            "polynomials"
+          ],
+          [
             "program_synthesis",
             "counterexample"
           ],
@@ -467,6 +484,10 @@
           [
             "combinatorics",
             "counterexample"
+          ],
+          [
+            "polynomials",
+            "counterexample"
           ]
         ],
         "nodes": [
@@ -487,9 +508,10 @@
           "probability",
           "discrete_math",
           "optimization",
-          "combinatorics"
+          "combinatorics",
+          "polynomials"
         ],
-        "research_budget": 3,
+        "research_budget": 4,
         "strategy_portfolio": [
           "exact_symbolic",
           "smt_validity",
@@ -503,7 +525,7 @@
         ],
         "symbolic_depth": 12
       },
-      "fingerprint": "4df6b059dca276a3",
+      "fingerprint": "fe787b198574fd23",
       "genome": {
         "counterexample_radius": 9,
         "discovery_beam": 8,
@@ -525,20 +547,21 @@
           "probability",
           "discrete_math",
           "optimization",
-          "combinatorics"
+          "combinatorics",
+          "polynomials"
         ],
-        "generation": 14,
-        "genome_id": "omega-14-bb784c03",
+        "generation": 15,
+        "genome_id": "omega-15-06619f38",
         "max_proof_cells": 224,
-        "neural_hidden": 20,
-        "parent_id": "omega-13-f6ddf2ac",
+        "neural_hidden": 18,
+        "parent_id": "omega-14-bb784c03",
         "proof_order": [
           "symbolic",
           "smt",
           "counterexample",
           "lean"
         ],
-        "research_budget": 3,
+        "research_budget": 4,
         "strategy_portfolio": [
           "exact_symbolic",
           "smt_validity",
@@ -621,6 +644,10 @@
             "combinatorics"
           ],
           [
+            "combinatorics",
+            "polynomials"
+          ],
+          [
             "program_synthesis",
             "counterexample"
           ],
@@ -679,6 +706,10 @@
           [
             "combinatorics",
             "counterexample"
+          ],
+          [
+            "polynomials",
+            "counterexample"
           ]
         ]
       },
@@ -689,7 +720,7 @@
       ],
       "neural_router": {
         "growth_is_champion_challenger_gated": true,
-        "hidden_units": 20,
+        "hidden_units": 18,
         "kind": "growing_pure_python_mlp"
       },
       "proof_cells": {
@@ -721,21 +752,19 @@
     "state_dir": "/tmp/mathesis-runtime-state"
   },
   "experience": {
-    "champion": "omega-14-bb784c03",
+    "champion": "omega-15-06619f38",
     "ok": true,
     "policy": "experience proposes bounded architecture hints; it never edits verifier code",
     "reasons": [],
-    "weaknesses": [
-      "missing_polynomials_expert"
-    ]
+    "weaknesses": []
   },
   "guarantee": "proof-gated evolving system; not an infallibility or human-novelty guarantee",
   "knowledge": {
-    "nodes": 12,
+    "nodes": 13,
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/knowledge.json",
     "status_counts": {
-      "verified": 12
+      "verified": 13
     }
   },
   "model": {
@@ -811,6 +840,10 @@
           "combinatorics"
         ],
         [
+          "combinatorics",
+          "polynomials"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -869,6 +902,10 @@
         [
           "combinatorics",
           "counterexample"
+        ],
+        [
+          "polynomials",
+          "counterexample"
         ]
       ],
       "nodes": [
@@ -889,9 +926,10 @@
         "probability",
         "discrete_math",
         "optimization",
-        "combinatorics"
+        "combinatorics",
+        "polynomials"
       ],
-      "research_budget": 3,
+      "research_budget": 4,
       "strategy_portfolio": [
         "exact_symbolic",
         "smt_validity",
@@ -905,7 +943,7 @@
       ],
       "symbolic_depth": 12
     },
-    "fingerprint": "4df6b059dca276a3",
+    "fingerprint": "fe787b198574fd23",
     "genome": {
       "counterexample_radius": 9,
       "discovery_beam": 8,
@@ -927,20 +965,21 @@
         "probability",
         "discrete_math",
         "optimization",
-        "combinatorics"
+        "combinatorics",
+        "polynomials"
       ],
-      "generation": 14,
-      "genome_id": "omega-14-bb784c03",
+      "generation": 15,
+      "genome_id": "omega-15-06619f38",
       "max_proof_cells": 224,
-      "neural_hidden": 20,
-      "parent_id": "omega-13-f6ddf2ac",
+      "neural_hidden": 18,
+      "parent_id": "omega-14-bb784c03",
       "proof_order": [
         "symbolic",
         "smt",
         "counterexample",
         "lean"
       ],
-      "research_budget": 3,
+      "research_budget": 4,
       "strategy_portfolio": [
         "exact_symbolic",
         "smt_validity",
@@ -1023,6 +1062,10 @@
           "combinatorics"
         ],
         [
+          "combinatorics",
+          "polynomials"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -1081,6 +1124,10 @@
         [
           "combinatorics",
           "counterexample"
+        ],
+        [
+          "polynomials",
+          "counterexample"
         ]
       ]
     },
@@ -1091,7 +1138,7 @@
     ],
     "neural_router": {
       "growth_is_champion_challenger_gated": true,
-      "hidden_units": 20,
+      "hidden_units": 18,
       "kind": "growing_pure_python_mlp"
     },
     "proof_cells": {

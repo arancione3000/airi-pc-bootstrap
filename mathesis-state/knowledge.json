@@ -148,6 +148,59 @@
       "status": "verified",
       "updated_at": 1789854584.6533911
     },
+    "42bc893df49545f4cd2b": {
+      "certificate": {
+        "base_case": true,
+        "methods": [
+          "exact_integer_samples",
+          "sympy_interpolation",
+          "base_case",
+          "finite_difference_induction_step",
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "polynomial": "n**2*(n + 1)**2*(3*n**4 + 6*n**3 - n**2 - 4*n + 2)/24",
+        "recurrence": {
+          "counterexample": null,
+          "details": {
+            "lean": {
+              "ok": false,
+              "reason": "requires closed equality",
+              "status": "not_applicable"
+            },
+            "smt": {
+              "method": "z3_unsat_negation",
+              "ok": true,
+              "status": "verified"
+            },
+            "symbolic": {
+              "method": "sympy_normal_form",
+              "normal_form": "0",
+              "ok": true,
+              "status": "verified"
+            }
+          },
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "((n + 1)**2*(n + 2)**2*(-4*n + 3*(n + 1)**4 + 6*(n + 1)**3 - (n + 1)**2 - 2)/24)-(n**2*(n + 1)**2*(3*n**4 + 6*n**3 - n**2 - 4*n + 2)/24) = (n+1)^7",
+          "status": "verified"
+        },
+        "recurrence_nontrivial": true,
+        "sample_count": 11,
+        "status": "verified"
+      },
+      "dependencies": [],
+      "first_seen_at": 1789856741.1220505,
+      "id": "42bc893df49545f4cd2b",
+      "sources": [],
+      "statement": "sum(k^7, k=1..n) = n**2*(n + 1)**2*(3*n**4 + 6*n**3 - n**2 - 4*n + 2)/24 for integer n>=0",
+      "status": "verified",
+      "updated_at": 1789856741.1220505
+    },
     "6fa35cc97a1d807c0b6f": {
       "certificate": {
         "counterexample": null,
@@ -475,6 +528,6 @@
       "updated_at": 1789851676.4847248
     }
   },
-  "updated_at": 1789856447.9742522,
+  "updated_at": 1789856741.1220505,
   "version": 1
 }
