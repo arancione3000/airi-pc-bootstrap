@@ -253,3 +253,17 @@ Persistent state lives on the `airi-evolution-state` branch under `evolution-sta
 The local daemon and cloud workflow both use a finite search budget for each immutable dataset digest. This prevents endless repeated optimization against one frozen evaluation set. When new real observations change the dataset digest, the search budget resets and continual evolution resumes.
 
 The state sync verifies pushes with `git ls-remote`; a local success is not treated as persistent until the remote branch points to the same commit.
+
+
+### Continuous search mode
+
+The Evolution Continuum now searches continuously by default:
+
+- local resident daemon: another bounded search cycle about every 15 minutes while no worker is active;
+- cloud continuum: one independent bounded cycle every hour;
+- `AIRI_EVOLUTION_MAX_OFFLINE_CYCLES=0` and `AIRI_CLOUD_MAX_CYCLES_PER_DATASET=0` mean no search-cycle cap;
+- only one worker/cycle runs at a time;
+- old run artifacts are still pruned;
+- promotion gates are unchanged and never become easier because many attempts were made.
+
+This deliberately separates **continuous research** from **automatic promotion**. Repeated search can continue indefinitely for smaller/faster architectures on a frozen dataset. New real observations expand the evidence available for quality improvements. A candidate is promoted only when it independently satisfies the same F1/canary/efficiency gates as before.

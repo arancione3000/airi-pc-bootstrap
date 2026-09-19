@@ -11,7 +11,7 @@ from .data import class_counts, load_records
 from .engine import EvolutionConfig, run_evolution
 
 CLOUD_META = lab.LAB_STATE / "cloud-meta.json"
-MAX_CYCLES_PER_DATASET = max(1, int(os.environ.get("AIRI_CLOUD_MAX_CYCLES_PER_DATASET", "12")))
+MAX_CYCLES_PER_DATASET = max(0, int(os.environ.get("AIRI_CLOUD_MAX_CYCLES_PER_DATASET", "0")))
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -48,6 +48,7 @@ def run_cloud_cycle() -> dict[str, Any]:
         "class_counts": counts,
         "cycles_on_dataset": attempts,
         "max_cycles_per_dataset": MAX_CYCLES_PER_DATASET,
+        "continuous_search": MAX_CYCLES_PER_DATASET == 0,
     }
 
     if len(records) < 40 or min(counts.values()) < 4:
@@ -55,7 +56,7 @@ def run_cloud_cycle() -> dict[str, Any]:
         _write_json(CLOUD_META, {**result, "updated_at": time.time()})
         return result
 
-    if attempts >= MAX_CYCLES_PER_DATASET:
+    if MAX_CYCLES_PER_DATASET > 0 and attempts >= MAX_CYCLES_PER_DATASET:
         result = {**base, "ok": True, "trained": False, "reason": "dataset_search_budget_exhausted"}
         _write_json(CLOUD_META, {**result, "updated_at": time.time()})
         return result

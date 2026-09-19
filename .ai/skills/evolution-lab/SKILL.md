@@ -39,13 +39,14 @@ The Evolution Lab has a lifecycle independent from the chat/runtime session.
 - `computer/evolution/daemon.py` is the resident coordinator.
 - On Airi OS it runs as `airi-evolution-lab.service` with `Restart=always` and is not `PartOf=airi-pc.service`.
 - On generic bootstrap installations, `computer/start.sh` launches the daemon detached with `nohup`; server restarts do not target it.
-- The daemon checks for fresh observations, runs normal data-triggered cycles, and may run bounded offline search cycles every two hours.
-- Repeated search on one unchanged dataset is capped; new privacy-safe data resets the budget.
+- The daemon checks for fresh observations and, while idle, launches another bounded search cycle roughly every 15 minutes.
+- Search is continuous by default even on an unchanged dataset. Each individual cycle remains bounded and only one worker runs at a time.
+- Promotion thresholds never relax: continuous search may keep discovering candidates indefinitely, but a candidate replaces the champion only if it passes the normal independent promotion gates.
 - The daemon syncs state to the dedicated Git branch `airi-evolution-state` and verifies the pushed remote SHA.
 - State sync is bidirectional: privacy-safe records are merged, and a better remote/cloud champion can be imported locally.
 - A fresh runtime can restore state from the Git branch.
 
-GitHub Actions workflow `.github/workflows/evolution-continuum.yml` runs every two hours. It restores `airi-evolution-state`, performs one bounded cloud cycle when enough data exists, then pushes and verifies the resulting state. This means learning can continue when the Airi-PC host itself is offline.
+GitHub Actions workflow `.github/workflows/evolution-continuum.yml` runs every hour. It restores `airi-evolution-state`, performs one bounded cloud search cycle when enough data exists, then pushes and verifies the resulting state. The per-dataset cycle limit is `0` by default, meaning continuous search. This means research continues even when the Airi-PC host itself is offline.
 
 ### Public-state privacy contract
 
