@@ -89,6 +89,62 @@ def test_shadow_observations_rebuild_into_isolated_training_dataset(monkeypatch,
     assert {row["label"] for row in rows} == {0, 1}
 
 
+def test_curriculum_focuses_on_ambiguous_real_outcomes(monkeypatch, tmp_path: Path):
+    _, state = _patch_lab(monkeypatch, tmp_path)
+
+    # This route is genuinely hard: identical structural route context has
+    # mixed real outcomes, so it should receive bounded extra replay weight.
+    for i in range(12):
+        lab.record_execution(
+            goal="Open a medium web resource",
+            operation="browser_open",
+            tool="computer_browser_open",
+            args={"url": f"https://private.example/{i}"},
+            success=(i % 2 == 0),
+            latency_ms=300,
+            task_id=f"mixed-{i}",
+            candidates=["computer_browser_open", "computer_browser_text"],
+        )
+
+    # This route is already easy/predictable and should remain baseline weight.
+    for i in range(12):
+        lab.record_execution(
+            goal="Read a local project file",
+            operation="read",
+            tool="computer_file_read",
+            args={"path": f"/private/{i}.txt"},
+            success=True,
+            latency_ms=10,
+            task_id=f"easy-{i}",
+            candidates=["computer_file_read"],
+        )
+
+    result = lab.rebuild_dataset()
+    assert result["curriculum"]["method"] == "verified_outcome_uncertainty_replay"
+    focus = {
+        (row["operation"], row["tool"]): row
+        for row in result["curriculum"]["focus"]
+    }
+    mixed = focus[("browser_open", "computer_browser_open")]
+    easy = focus[("read", "computer_file_read")]
+    assert mixed["curriculum_weight"] > easy["curriculum_weight"]
+    assert 1.0 < mixed["curriculum_weight"] <= 2.5
+    assert easy["curriculum_weight"] == 1.0
+
+    rows = [
+        json.loads(line)
+        for line in (state / "data" / "verified.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    mixed_weights = {
+        row["curriculum_weight"]
+        for row in rows
+        if json.loads(row["evidence"])["operation"] == "browser_open"
+    }
+    assert len(mixed_weights) == 1
+    assert next(iter(mixed_weights)) > 1.0
+    assert (state / "curriculum.json").exists()
+
+
 def test_lab_write_boundary_rejects_state_outside_workspace(monkeypatch, tmp_path: Path):
     workspace = tmp_path / "airi"
     outside = tmp_path / "outside"

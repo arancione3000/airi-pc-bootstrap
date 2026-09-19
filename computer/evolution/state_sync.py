@@ -129,6 +129,12 @@ def privacy_audit_dataset(path: Path) -> dict[str, Any]:
             if str(row.get("source", "")) != "airi-shadow-route-observation":
                 errors.append(f"line {lineno}: unexpected training source")
             try:
+                curriculum_weight = float(row.get("curriculum_weight", 1.0) or 1.0)
+                if not 0.5 <= curriculum_weight <= 3.0:
+                    errors.append(f"line {lineno}: invalid curriculum weight")
+            except Exception:
+                errors.append(f"line {lineno}: malformed curriculum weight")
+            try:
                 evidence = json.loads(str(row.get("evidence", "{}")))
             except Exception:
                 errors.append(f"line {lineno}: malformed evidence")

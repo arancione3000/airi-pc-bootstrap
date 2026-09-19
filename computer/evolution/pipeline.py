@@ -8,6 +8,7 @@ from typing import Any
 
 from .claimreview import verify_consensus
 from .data import append_verified, load_records
+from .evidence_graph import record_verification
 
 
 def _json_write(path: Path, value: Any):
@@ -81,7 +82,20 @@ def verify_queued_claim(
     if not isinstance(row, dict):
         raise FileNotFoundError(f"queue claim not found: {qid}")
     result = verify_consensus(row["claim"], urls, min_sources=min_sources)
+    graph_node = record_verification(
+        state_dir,
+        row["claim"],
+        result,
+        candidate_urls=urls,
+    )
     attempt = {"at": time.time(), "urls": urls, "result": result}
+    row["evidence_graph"] = {
+        "decision": graph_node.get("decision"),
+        "label": graph_node.get("label"),
+        "evidence_confidence": graph_node.get("evidence_confidence"),
+        "source_count": graph_node.get("source_count"),
+        "domains": graph_node.get("domains"),
+    }
     row.setdefault("attempts", []).append(attempt)
     if result.get("verified"):
         row["status"] = "verified"
