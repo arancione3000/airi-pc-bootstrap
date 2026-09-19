@@ -187,7 +187,10 @@ def _start_unlocked(*, mode: str = "safe", auto_setup: bool = True, population: 
         popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     else:
         popen_kwargs["start_new_session"] = True
-    proc = subprocess.Popen(cmd, **popen_kwargs)
+    try:
+        proc = subprocess.Popen(cmd, **popen_kwargs)
+    finally:
+        log.close()
     PID.write_text(str(proc.pid), encoding="utf-8")
     _json_write(STATUS, {"state": "running", "pid": proc.pid, "mode": mode, "started_at": time.time(), "command": cmd})
     return {"ok": True, "started": True, "pid": proc.pid, "mode": mode, "log": str(LOG)}

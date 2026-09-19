@@ -36,9 +36,9 @@ The model never turns its own prediction into a training label.
 
 `airi-evolve bootstrap-liar` downloads LIAR at runtime instead of redistributing it in the repository. Only strong binary labels are used:
 
-- `true`, `mostly-true` -> real
+- `true` -> real
 - `false`, `pants-fire` -> fake
-- `half-true`, `barely-true` -> excluded
+- `mostly-true`, `half-true`, `barely-true` -> excluded as non-binary/ambiguous
 
 LIAR is research-use-only and its original sources retain copyright.
 

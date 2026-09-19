@@ -16,8 +16,8 @@ LIAR_MIRROR_RAW = {
     "valid": "https://raw.githubusercontent.com/tfs4/liar_dataset/master/valid.tsv",
     "test": "https://raw.githubusercontent.com/tfs4/liar_dataset/master/test.tsv",
 }
-LIAR_LABEL_MAP = {"true": 1, "mostly-true": 1, "false": 0, "pants-fire": 0}
-LIAR_AMBIGUOUS = {"half-true", "barely-true"}
+LIAR_LABEL_MAP = {"true": 1, "false": 0, "pants-fire": 0}
+LIAR_AMBIGUOUS = {"mostly-true", "half-true", "barely-true"}
 
 
 def _download(url: str, target: Path, timeout: int = 60, max_bytes: int = 200_000_000) -> Path:
