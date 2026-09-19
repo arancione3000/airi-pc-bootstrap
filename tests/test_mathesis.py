@@ -135,7 +135,11 @@ def test_self_evolution_writes_candidate_and_promotes_verified_improvement(tmp_p
     assert (tmp_path / "champion_model.py").exists()
     assert (tmp_path / "champion.json").exists()
     champion = json.loads((tmp_path / "champion.json").read_text(encoding="utf-8"))
-    assert "number_theory" in champion["experts"]
+    baseline = set(default_genome().experts)
+    evolved = set(champion["experts"])
+    assert champion["generation"] == 1
+    assert baseline.issubset(evolved)
+    assert len(evolved - baseline) >= 1
     assert result.benchmark["kernel_integrity"]["ok"] is True
 
 
