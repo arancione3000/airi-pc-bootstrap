@@ -282,3 +282,37 @@ def test_https_redirect_cannot_downgrade_to_http(monkeypatch):
     import pytest
     with pytest.raises(ValueError, match="cannot downgrade"):
         claimreview._open_public_url("https://8.8.8.8/start", timeout=1)
+
+
+def test_evolution_launcher_closes_parent_log_handle(monkeypatch, tmp_path: Path):
+    from types import SimpleNamespace
+
+    class FakeHandle:
+        def __init__(self):
+            self.closed = False
+        def close(self):
+            self.closed = True
+
+    class FakeLog:
+        def __init__(self):
+            self.handle = FakeHandle()
+        def open(self, *args, **kwargs):
+            return self.handle
+
+    fake_log = FakeLog()
+    monkeypatch.setattr(runtime, "STATE", tmp_path)
+    monkeypatch.setattr(runtime, "PID", tmp_path / "evolution.pid")
+    monkeypatch.setattr(runtime, "STATUS", tmp_path / "status.json")
+    monkeypatch.setattr(runtime, "LOG", fake_log)
+    monkeypatch.setattr(runtime, "status", lambda: {
+        "running": False,
+        "dataset_records": 40,
+        "class_counts": {"fake": 20, "real": 20},
+    })
+    monkeypatch.setattr(runtime, "audit", lambda: {"ok": True, "errors": [], "warnings": [], "checks": {}})
+    monkeypatch.setattr(runtime, "torch_status", lambda: {"available": True})
+    monkeypatch.setattr(runtime.subprocess, "Popen", lambda *args, **kwargs: SimpleNamespace(pid=4242))
+
+    result = runtime._start_unlocked(auto_setup=False)
+    assert result["started"] is True
+    assert fake_log.handle.closed is True
