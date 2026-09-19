@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT / "computer"))
 
 from evolution import claimreview, runtime
 from evolution.artifacts import report
+from evolution.audit import audit_state
 from evolution.data import load_records
 from evolution.liar import import_tsv
 from evolution.pipeline import queue_claim, queue_list, verify_queued_claim
@@ -155,3 +156,26 @@ def test_redirect_to_private_address_is_rejected_before_follow(monkeypatch):
     import pytest
     with pytest.raises(ValueError, match="non-public"):
         claimreview._open_public_url("http://8.8.8.8/start", timeout=1)
+
+
+def test_self_audit_detects_canary_split_overlap(tmp_path: Path):
+    from evolution.data import append_verified_many, ensure_canary_partition, persistent_split_records
+    path = tmp_path / "data" / "verified.jsonl"
+    records = []
+    for label in (0, 1):
+        for i in range(12):
+            records.append({"text": f"audit class {label} sample number {i}", "label": label})
+    append_verified_many(path, records)
+    rows = load_records(path)
+    remaining, canary, _ = ensure_canary_partition(tmp_path, rows, seed=5)
+    persistent_split_records(tmp_path, remaining, seed=5)
+    healthy = audit_state(tmp_path)
+    assert healthy["ok"] is True
+
+    split_path = tmp_path / "data" / "split_manifest.json"
+    split = json.loads(split_path.read_text(encoding="utf-8"))
+    split["assignments"][canary[0]["text_id"]] = "test"
+    split_path.write_text(json.dumps(split), encoding="utf-8")
+    broken = audit_state(tmp_path)
+    assert broken["ok"] is False
+    assert any("golden-canary" in msg for msg in broken["errors"])
