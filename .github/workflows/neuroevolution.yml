@@ -33,11 +33,63 @@ jobs:
 
       - name: Compile evolution and integration sources
         run: |
-          .venv/bin/python -m compileall -q computer/evolution computer/server.py computer/advanced.py computer/control_plane/orchestrator.py tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py tests/test_evolution_lab.py
+          .venv/bin/python -m compileall -q computer/evolution computer/server.py computer/advanced.py computer/control_plane/orchestrator.py tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py tests/test_evolution_lab.py tests/test_evolution_persistence.py
 
       - name: Focused evolution tests
         run: |
-          .venv/bin/python -m pytest -q tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py tests/test_evolution_lab.py tests/test_advanced.py
+          .venv/bin/python -m pytest -q tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py tests/test_evolution_lab.py tests/test_evolution_persistence.py tests/test_advanced.py
+
+      - name: Persistent daemon survives launcher exit and persists to Git
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+        run: |
+          set -eu
+          BASE="$RUNNER_TEMP/airi-daemon-smoke"
+          REMOTE="$RUNNER_TEMP/airi-evolution-remote.git"
+          SEED="$RUNNER_TEMP/airi-evolution-seed"
+          rm -rf "$BASE" "$REMOTE" "$SEED"
+          mkdir -p "$BASE"
+          git init --bare -q "$REMOTE"
+          git init -q "$SEED"
+          git -C "$SEED" config user.name Test
+          git -C "$SEED" config user.email test@example.com
+          mkdir -p "$SEED/evolution-state/shadow-router"
+          printf '%s\n' '{"version":1,"feature_schema":2,"exported_at":0,"state_digest":"","files":{},"privacy":{"raw_observations_exported":false,"goal_text_exported":false,"argument_values_exported":false,"dataset_audit":{"ok":true,"records":0,"errors":[]}}}' > "$SEED/evolution-state/shadow-router/manifest.json"
+          git -C "$SEED" add evolution-state
+          git -C "$SEED" commit -qm seed
+          git -C "$SEED" branch -M airi-evolution-state
+          git -C "$SEED" remote add origin "$REMOTE"
+          git -C "$SEED" push -q -u origin airi-evolution-state
+          BEFORE="$(git --git-dir="$REMOTE" rev-parse refs/heads/airi-evolution-state)"
+
+          sh -c 'nohup env             PYTHONPATH="'"$GITHUB_WORKSPACE"'/computer"             AIRI_ROOT="'"$BASE"'"             AIRI_EVOLUTION_LAB_STATE="'"$BASE"'/.ai/evolution-lab/shadow-router"             AIRI_EVOLUTION_SYNC_DIR="'"$BASE"'/.ai/evolution-git"             AIRI_EVOLUTION_GIT_URL="'"$REMOTE"'"             AIRI_EVOLUTION_DAEMON_INTERVAL=60             AIRI_EVOLUTION_SYNC_INTERVAL=900             AIRI_EVOLUTION_HEARTBEAT_SECONDS=1800             .venv/bin/python -m evolution.daemon             >"'"$BASE"'/daemon.log" 2>&1 < /dev/null &'
+
+          for _ in $(seq 1 20); do
+            [ -f "$BASE/.ai/evolution-lab/shadow-router/daemon.pid" ] && break
+            sleep 0.5
+          done
+          PID="$(cat "$BASE/.ai/evolution-lab/shadow-router/daemon.pid")"
+          kill -0 "$PID"
+
+          sleep 60 &
+          SESSION_PID=$!
+          kill "$SESSION_PID" 2>/dev/null || true
+          wait "$SESSION_PID" 2>/dev/null || true
+          kill -0 "$PID"
+
+          CHANGED=0
+          for _ in $(seq 1 30); do
+            AFTER="$(git --git-dir="$REMOTE" rev-parse refs/heads/airi-evolution-state)"
+            if [ "$AFTER" != "$BEFORE" ]; then CHANGED=1; break; fi
+            sleep 1
+          done
+          [ "$CHANGED" = "1" ] || { cat "$BASE/daemon.log"; exit 7; }
+          kill -TERM "$PID"
+          for _ in $(seq 1 20); do
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 0.2
+          done
+          echo "daemon survived launcher/session exit and persisted state"
 
       - name: PyTorch end-to-end evolution smoke test
         env:
