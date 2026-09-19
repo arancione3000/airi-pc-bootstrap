@@ -349,6 +349,26 @@ def _promotion_decision(candidate: dict, old: dict | None, cfg: EvolutionConfig)
     return False, "candidate did not beat champion promotion criteria"
 
 
+def _genome_parameter_count(genome: Genome, vocab_size: int) -> int:
+    model = build_model(genome, vocab_size=vocab_size)
+    return parameter_count(model)
+
+
+def _random_feasible_genome(rng: random.Random, genome_id: str, cfg: EvolutionConfig, generation: int = 0) -> Genome:
+    best = None
+    best_params = None
+    for attempt in range(40):
+        candidate = random_genome(rng, genome_id, cfg.mode, generation)
+        params = _genome_parameter_count(candidate, cfg.vocab_size)
+        if params <= cfg.max_params:
+            return candidate
+        if best is None or params < best_params:
+            best, best_params = candidate, params
+    raise RuntimeError(
+        f"unable to sample a genome under max_params={cfg.max_params}; smallest sampled={best_params}"
+    )
+
+
 def _select_parent(rows: list[dict], rng: random.Random) -> dict:
     k = min(3, len(rows))
     sample = rng.sample(rows, k)
@@ -409,7 +429,7 @@ def _run_evolution_unlocked(state_dir: Path, cfg: EvolutionConfig) -> dict[str, 
     })
 
     rng = random.Random(cfg.seed + int(time.time()) % 100_000)
-    population = [random_genome(rng, f"g0-{i:03d}", cfg.mode, 0) for i in range(cfg.population)]
+    population = [_random_feasible_genome(rng, f"g0-{i:03d}", cfg, 0) for i in range(cfg.population)]
     history: list[dict] = []
     best_row = None
     best_genome = None
@@ -419,6 +439,22 @@ def _run_evolution_unlocked(state_dir: Path, cfg: EvolutionConfig) -> dict[str, 
         for idx, genome in enumerate(population):
             candidate_seed = cfg.seed + generation * 10_000 + idx
             try:
+                static_params = _genome_parameter_count(genome, cfg.vocab_size)
+                if static_params > cfg.max_params:
+                    row = {
+                        "generation": generation,
+                        "genome_id": genome.genome_id,
+                        "fitness": -1.0,
+                        "feasible": False,
+                        "params": static_params,
+                        "constraint_rejected": "max_params",
+                        "genome": genome.to_dict(),
+                    }
+                    rows.append(row)
+                    history.append(row)
+                    with (run_dir / "candidates.jsonl").open("a", encoding="utf-8") as f:
+                        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                    continue
                 model, train_info = train_model(genome, train, cfg.candidate_epochs, cfg.vocab_size, candidate_seed, cfg.replay_balance_power)
                 metrics = evaluate_model(model, genome, val, cfg.vocab_size)
                 fit = fitness(metrics, cfg)
