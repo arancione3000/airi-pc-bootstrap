@@ -141,7 +141,21 @@ def start(*, mode: str = "safe", auto_setup: bool = True, population: int | None
         if value is not None:
             cmd.extend([flag, str(value)])
     log = LOG.open("ab", buffering=0)
-    proc = subprocess.Popen(cmd, cwd=str(ROOT / "computer"), stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env={**os.environ, "AIRI_ROOT": str(ROOT), "PYTHONPATH": str(ROOT / "computer") + os.pathsep + os.environ.get("PYTHONPATH", "")})
+    popen_kwargs = {
+        "cwd": str(ROOT / "computer"),
+        "stdout": log,
+        "stderr": subprocess.STDOUT,
+        "env": {
+            **os.environ,
+            "AIRI_ROOT": str(ROOT),
+            "PYTHONPATH": str(ROOT / "computer") + os.pathsep + os.environ.get("PYTHONPATH", ""),
+        },
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    else:
+        popen_kwargs["start_new_session"] = True
+    proc = subprocess.Popen(cmd, **popen_kwargs)
     PID.write_text(str(proc.pid), encoding="utf-8")
     _json_write(STATUS, {"state": "running", "pid": proc.pid, "mode": mode, "started_at": time.time(), "command": cmd})
     return {"ok": True, "started": True, "pid": proc.pid, "mode": mode, "log": str(LOG)}
@@ -155,8 +169,11 @@ def stop() -> dict[str, Any]:
         PID.unlink(missing_ok=True)
         return {"ok": True, "stopped": False, "reason": "stale_pid"}
     try:
-        os.killpg(pid, signal.SIGTERM)
-    except OSError:
+        if os.name != "nt" and hasattr(os, "killpg"):
+            os.killpg(pid, signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except (OSError, AttributeError):
         try:
             os.kill(pid, signal.SIGTERM)
         except OSError:
