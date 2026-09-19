@@ -81,3 +81,7 @@ tests pass.
 - curriculum no_sources/research_error retries now remain on the same mathematical domain;
 - successful retry clears the per-domain retry counter;
 - after three failures the curriculum advances to avoid permanent source-induced stalls.
+
+
+- structured anti-forgetting now replays verified Faulhaber induction recurrences;
+- rich sum-of-powers discoveries therefore contribute critical future promotion obligations even though their full theorem string is outside the simple relation parser.
