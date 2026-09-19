@@ -76,3 +76,8 @@ tests pass.
 - legacy Faulhaber discoveries are now re-proved with the new nontrivial induction obligation;
 - successful legacy proofs are upgraded in place; failed reproofs are archived out of the active theorem corpus;
 - quality migration persists immediately even if the current discovery cycle finds no new candidate.
+
+
+- curriculum no_sources/research_error retries now remain on the same mathematical domain;
+- successful retry clears the per-domain retry counter;
+- after three failures the curriculum advances to avoid permanent source-induced stalls.
