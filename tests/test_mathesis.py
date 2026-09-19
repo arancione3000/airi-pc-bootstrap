@@ -1395,6 +1395,11 @@ def test_antiforgetting_default_replays_more_than_sixteen_valid_theorems(tmp_pat
     assert len(replayed) == 20
     assert set(replayed) == {row["statement"] for row in theorems.values()}
 
+    from mathesis.benchmark import evaluate_genome
+    benchmark = evaluate_genome(default_genome(), learned_theorems=replayed)
+    assert len(benchmark["learned_theorems_replayed"]) == 20
+    assert all(row["ok"] for row in benchmark["learned_theorems_replayed"])
+
 
 def test_benchmark_rejects_unknown_strategy_and_proof_method():
     from mathesis.benchmark import evaluate_genome
