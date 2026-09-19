@@ -42,6 +42,10 @@ class EvolutionConfig:
     min_f1_first_champion: float = 0.55
     min_f1_improvement: float = 0.002
     max_f1_regression: float = 0.01
+    max_class_f1_regression: float = 0.03
+    max_brier_regression: float = 0.02
+    max_efficiency_accuracy_regression: float = 0.002
+    max_efficiency_brier_regression: float = 0.005
     promotion_repeats: int = 3
     min_promotion_votes: int = 2
     crossover_probability: float = 0.60
@@ -73,6 +77,10 @@ class EvolutionConfig:
         base.abstain_threshold = min(0.95, max(0.50, float(base.abstain_threshold)))
         base.replay_balance_power = min(1.0, max(0.0, float(base.replay_balance_power)))
         base.min_first_canary_f1 = min(1.0, max(0.0, float(base.min_first_canary_f1)))
+        base.max_class_f1_regression = min(0.5, max(0.0, float(base.max_class_f1_regression)))
+        base.max_brier_regression = min(0.5, max(0.0, float(base.max_brier_regression)))
+        base.max_efficiency_accuracy_regression = min(0.2, max(0.0, float(base.max_efficiency_accuracy_regression)))
+        base.max_efficiency_brier_regression = min(0.2, max(0.0, float(base.max_efficiency_brier_regression)))
         base.max_canary_f1_regression = min(0.5, max(0.0, float(base.max_canary_f1_regression)))
         base.max_canary_class_regression = min(0.5, max(0.0, float(base.max_canary_class_regression)))
         base.promotion_repeats = max(1, min(7, int(base.promotion_repeats)))
@@ -335,19 +343,49 @@ def _promotion_decision(candidate: dict, old: dict | None, cfg: EvolutionConfig)
     if old is None:
         ok = candidate["f1"] >= cfg.min_f1_first_champion
         return ok, "first champion threshold met" if ok else "first champion macro-F1 below threshold"
+
     if candidate["f1"] < old["f1"] - cfg.max_f1_regression:
         return False, "macro-F1 regression exceeds gate"
+
+    # Quality gates are evaluated before efficiency. A faster/smaller model is
+    # never promoted merely because it is cheaper if calibration or one class
+    # materially regresses.
+    for key in ("f1_real", "f1_fake"):
+        if key in candidate and key in old:
+            if float(candidate[key]) < float(old[key]) - cfg.max_class_f1_regression:
+                return False, f"{key} regression exceeds gate"
+    if "brier" in candidate and "brier" in old:
+        if float(candidate["brier"]) > float(old["brier"]) + cfg.max_brier_regression:
+            return False, "calibration regression exceeds gate"
+
     accuracy_win = candidate["f1"] >= old["f1"] + cfg.min_f1_improvement
-    compact_win = candidate["f1"] >= old["f1"] - 0.002 and candidate["params"] <= old["params"] * 0.90
-    latency_win = candidate["f1"] >= old["f1"] - 0.002 and candidate["latency_ms"] <= old["latency_ms"] * 0.85
+    efficiency_quality_ok = True
+    if "accuracy" in candidate and "accuracy" in old:
+        efficiency_quality_ok = efficiency_quality_ok and (
+            float(candidate["accuracy"]) >= float(old["accuracy"]) - cfg.max_efficiency_accuracy_regression
+        )
+    if "brier" in candidate and "brier" in old:
+        efficiency_quality_ok = efficiency_quality_ok and (
+            float(candidate["brier"]) <= float(old["brier"]) + cfg.max_efficiency_brier_regression
+        )
+
+    compact_win = (
+        candidate["f1"] >= old["f1"] - 0.002
+        and efficiency_quality_ok
+        and candidate["params"] <= old["params"] * 0.90
+    )
+    latency_win = (
+        candidate["f1"] >= old["f1"] - 0.002
+        and efficiency_quality_ok
+        and candidate["latency_ms"] <= old["latency_ms"] * 0.85
+    )
     if accuracy_win:
         return True, "macro-F1 improved"
     if compact_win:
-        return True, "similar macro-F1 with >=10% fewer parameters"
+        return True, "quality-stable candidate with >=10% fewer parameters"
     if latency_win:
-        return True, "similar macro-F1 with >=15% lower latency"
-    return False, "candidate did not beat champion promotion criteria"
-
+        return True, "quality-stable candidate with >=15% lower latency"
+    return False, "candidate did not beat champion quality/efficiency criteria"
 
 def _genome_parameter_count(genome: Genome, vocab_size: int) -> int:
     model = build_model(genome, vocab_size=vocab_size)
