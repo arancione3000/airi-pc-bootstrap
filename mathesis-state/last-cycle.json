@@ -1,6 +1,76 @@
 {
   "benchmark": {
     "candidate": {
+      "capability_score": 1.0,
+      "complexity_penalty": 0.00357,
+      "critical_failures": [],
+      "neural_accuracy": 0.857143,
+      "ok": true,
+      "score": 97.139287,
+      "tasks": [
+        {
+          "critical": true,
+          "detail": "arithmetic",
+          "name": "formalize:arithmetic",
+          "ok": true
+        },
+        {
+          "critical": true,
+          "detail": "equation",
+          "name": "formalize:equation",
+          "ok": true
+        },
+        {
+          "critical": true,
+          "detail": "identity",
+          "name": "formalize:identity",
+          "ok": true
+        },
+        {
+          "critical": true,
+          "detail": "evolve_model",
+          "name": "formalize:evolve_model",
+          "ok": true
+        },
+        {
+          "critical": true,
+          "detail": "verified",
+          "name": "proof:closed_arithmetic",
+          "ok": true
+        },
+        {
+          "critical": true,
+          "detail": "verified",
+          "name": "proof:algebra_identity",
+          "ok": true
+        },
+        {
+          "critical": true,
+          "detail": 98.999757,
+          "name": "program:gcd",
+          "ok": true
+        },
+        {
+          "critical": true,
+          "detail": 98.999816,
+          "name": "program:is_prime",
+          "ok": true
+        },
+        {
+          "critical": false,
+          "detail": "read-only researcher enabled",
+          "name": "capability:research",
+          "ok": true
+        },
+        {
+          "critical": false,
+          "detail": 0.8571,
+          "name": "neural:intent_router",
+          "ok": true
+        }
+      ]
+    },
+    "champion": {
       "capability_score": 0.9,
       "complexity_penalty": 0.00299,
       "critical_failures": [],
@@ -46,85 +116,15 @@
         },
         {
           "critical": true,
-          "detail": 98.999648,
+          "detail": 98.999771,
           "name": "program:gcd",
           "ok": true
         },
         {
           "critical": true,
-          "detail": 98.999532,
+          "detail": 98.999769,
           "name": "program:is_prime",
           "ok": true
-        },
-        {
-          "critical": false,
-          "detail": "research expert not yet in genome",
-          "name": "capability:research",
-          "ok": false
-        },
-        {
-          "critical": false,
-          "detail": 0.8571,
-          "name": "neural:intent_router",
-          "ok": true
-        }
-      ]
-    },
-    "champion": {
-      "capability_score": 0.8,
-      "complexity_penalty": 0.0024000000000000002,
-      "critical_failures": [],
-      "neural_accuracy": 0.857143,
-      "ok": true,
-      "score": 81.140457,
-      "tasks": [
-        {
-          "critical": true,
-          "detail": "arithmetic",
-          "name": "formalize:arithmetic",
-          "ok": true
-        },
-        {
-          "critical": true,
-          "detail": "equation",
-          "name": "formalize:equation",
-          "ok": true
-        },
-        {
-          "critical": true,
-          "detail": "identity",
-          "name": "formalize:identity",
-          "ok": true
-        },
-        {
-          "critical": true,
-          "detail": "evolve_model",
-          "name": "formalize:evolve_model",
-          "ok": true
-        },
-        {
-          "critical": true,
-          "detail": "verified",
-          "name": "proof:closed_arithmetic",
-          "ok": true
-        },
-        {
-          "critical": true,
-          "detail": "verified",
-          "name": "proof:algebra_identity",
-          "ok": true
-        },
-        {
-          "critical": true,
-          "detail": 98.999604,
-          "name": "program:gcd",
-          "ok": true
-        },
-        {
-          "critical": false,
-          "detail": "missing number_theory expert",
-          "name": "program:is_prime",
-          "ok": false
         },
         {
           "critical": false,
@@ -157,13 +157,14 @@
       "algebra",
       "counterexample",
       "program_synthesis",
-      "number_theory"
+      "number_theory",
+      "research"
     ],
-    "generation": 1,
-    "genome_id": "omega-1-ca2a20bf",
+    "generation": 2,
+    "genome_id": "omega-2-21b03a45",
     "max_proof_cells": 64,
-    "neural_hidden": 20,
-    "parent_id": "omega-g0",
+    "neural_hidden": 24,
+    "parent_id": "omega-1-ca2a20bf",
     "proof_order": [
       "symbolic",
       "smt",
@@ -171,7 +172,7 @@
       "lean"
     ]
   },
-  "candidate_score": 89.139867,
+  "candidate_score": 97.139287,
   "champion": {
     "counterexample_radius": 9,
     "experts": [
@@ -179,13 +180,14 @@
       "algebra",
       "counterexample",
       "program_synthesis",
-      "number_theory"
+      "number_theory",
+      "research"
     ],
-    "generation": 1,
-    "genome_id": "omega-1-ca2a20bf",
+    "generation": 2,
+    "genome_id": "omega-2-21b03a45",
     "max_proof_cells": 64,
-    "neural_hidden": 20,
-    "parent_id": "omega-g0",
+    "neural_hidden": 24,
+    "parent_id": "omega-1-ca2a20bf",
     "proof_order": [
       "symbolic",
       "smt",
@@ -193,7 +195,7 @@
       "lean"
     ]
   },
-  "champion_score": 81.140457,
+  "champion_score": 89.139867,
   "promoted": true,
   "reason": "candidate improved verified benchmark without critical regressions"
 }

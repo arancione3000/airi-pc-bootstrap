@@ -1,12 +1,12 @@
 {
   "evolution": {
     "benchmark": {
-      "capability_score": 0.9,
-      "complexity_penalty": 0.00299,
+      "capability_score": 1.0,
+      "complexity_penalty": 0.00357,
       "critical_failures": [],
       "neural_accuracy": 0.857143,
       "ok": true,
-      "score": 89.139867,
+      "score": 97.139287,
       "tasks": [
         {
           "critical": true,
@@ -46,21 +46,21 @@
         },
         {
           "critical": true,
-          "detail": 98.999636,
+          "detail": 98.999752,
           "name": "program:gcd",
           "ok": true
         },
         {
           "critical": true,
-          "detail": 98.999636,
+          "detail": 98.999805,
           "name": "program:is_prime",
           "ok": true
         },
         {
           "critical": false,
-          "detail": "research expert not yet in genome",
+          "detail": "read-only researcher enabled",
           "name": "capability:research",
-          "ok": false
+          "ok": true
         },
         {
           "critical": false,
@@ -71,7 +71,7 @@
       ]
     },
     "champion": {
-      "fingerprint": "73fe0486118b9094",
+      "fingerprint": "72cb7b123ddddcb5",
       "genome": {
         "counterexample_radius": 9,
         "experts": [
@@ -79,13 +79,14 @@
           "algebra",
           "counterexample",
           "program_synthesis",
-          "number_theory"
+          "number_theory",
+          "research"
         ],
-        "generation": 1,
-        "genome_id": "omega-1-ca2a20bf",
+        "generation": 2,
+        "genome_id": "omega-2-21b03a45",
         "max_proof_cells": 64,
-        "neural_hidden": 20,
-        "parent_id": "omega-g0",
+        "neural_hidden": 24,
+        "parent_id": "omega-1-ca2a20bf",
         "proof_order": [
           "symbolic",
           "smt",
@@ -100,7 +101,7 @@
       ],
       "neural_router": {
         "growth_is_champion_challenger_gated": true,
-        "hidden_units": 20,
+        "hidden_units": 24,
         "kind": "growing_pure_python_mlp"
       },
       "proof_cells": {
@@ -131,7 +132,7 @@
     "status_counts": {}
   },
   "model": {
-    "fingerprint": "73fe0486118b9094",
+    "fingerprint": "72cb7b123ddddcb5",
     "genome": {
       "counterexample_radius": 9,
       "experts": [
@@ -139,13 +140,14 @@
         "algebra",
         "counterexample",
         "program_synthesis",
-        "number_theory"
+        "number_theory",
+        "research"
       ],
-      "generation": 1,
-      "genome_id": "omega-1-ca2a20bf",
+      "generation": 2,
+      "genome_id": "omega-2-21b03a45",
       "max_proof_cells": 64,
-      "neural_hidden": 20,
-      "parent_id": "omega-g0",
+      "neural_hidden": 24,
+      "parent_id": "omega-1-ca2a20bf",
       "proof_order": [
         "symbolic",
         "smt",
@@ -160,7 +162,7 @@
     ],
     "neural_router": {
       "growth_is_champion_challenger_gated": true,
-      "hidden_units": 20,
+      "hidden_units": 24,
       "kind": "growing_pure_python_mlp"
     },
     "proof_cells": {
@@ -176,7 +178,7 @@
   },
   "ok": true,
   "verifiers": {
-    "lean_available": false,
+    "lean_available": true,
     "sympy": "1.14.0",
     "z3_available": true
   },
