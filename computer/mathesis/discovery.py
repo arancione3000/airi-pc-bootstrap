@@ -10,7 +10,7 @@ import sympy as sp
 
 from .kernel import atomic_json
 from .knowledge import KnowledgeGraph, default_state_dir
-from .safe_math import parse_relation
+from .safe_math import parse_expr, parse_relation
 from .verifiers import CompositeVerifier
 
 
@@ -178,12 +178,81 @@ class ConjectureDiscoveryEngine:
             "complexity": terms,
         }
 
+    def _revalidate_legacy_faulhaber(self, row: dict[str, Any]) -> bool:
+        cert = dict(row.get("certificate") or {})
+        polynomial_text = str(cert.get("polynomial", "")).strip()
+        power = int(row.get("complexity", 0) or 0)
+        if not polynomial_text or power < 1:
+            return False
+
+        try:
+            polynomial = parse_expr(polynomial_text)
+            symbols = sorted(polynomial.free_symbols, key=lambda s: s.name)
+            n = next((symbol for symbol in symbols if symbol.name == "n"), None)
+            if n is None:
+                return False
+
+            shifted = polynomial.subs(n, n + 1)
+            recurrence_statement = (
+                f"({sp.sstr(shifted)})-({sp.sstr(polynomial)}) = (n+1)^{power}"
+            )
+            recurrence_nontrivial = _relation_is_structurally_nontrivial(recurrence_statement)
+            recurrence_cert = self.verifier.verify_relation(recurrence_statement)
+            base_ok = sp.expand(polynomial.subs(n, 0)) == 0
+            sample_count = max(power + 4, int(cert.get("sample_count", 0) or 0))
+            sample_ok = all(
+                sp.expand(
+                    polynomial.subs(n, value)
+                    - sum(k**power for k in range(1, value + 1))
+                ) == 0
+                for value in range(sample_count)
+            )
+        except Exception:
+            return False
+
+        verified = bool(base_ok and sample_ok and recurrence_nontrivial and recurrence_cert.ok)
+        if not verified:
+            return False
+
+        cert.update({
+            "ok": True,
+            "status": "verified",
+            "base_case": bool(base_ok),
+            "sample_count": sample_count,
+            "recurrence_nontrivial": True,
+            "recurrence": recurrence_cert.to_dict(),
+            "polynomial": str(sp.factor(polynomial)),
+        })
+        row["certificate"] = cert
+        row["nontrivial"] = True
+        row["quality_gate"] = "structurally_nontrivial_and_proof_gated"
+        row["revalidated_at"] = time.time()
+        return True
+
     def _audit_legacy_discoveries(self, state: dict[str, Any]) -> dict[str, Any]:
         theorems = state.setdefault("theorems", {})
         discarded = state.setdefault("discarded", {})
         moved: list[str] = []
+        revalidated: list[str] = []
         for theorem_id, row in list(theorems.items()):
             statement = str(row.get("statement", ""))
+
+            if (
+                row.get("verified")
+                and row.get("strategy") == "faulhaber_interpolation"
+                and not bool((row.get("certificate") or {}).get("recurrence_nontrivial"))
+            ):
+                if self._revalidate_legacy_faulhaber(row):
+                    revalidated.append(theorem_id)
+                    continue
+                archived = dict(row)
+                archived["discarded_reason"] = "legacy_faulhaber_reproof_failed"
+                archived["discarded_at"] = time.time()
+                discarded[theorem_id] = archived
+                del theorems[theorem_id]
+                moved.append(theorem_id)
+                continue
+
             if row.get("verified") and not _relation_is_structurally_nontrivial(statement):
                 archived = dict(row)
                 archived["discarded_reason"] = "structural_tautology"
@@ -198,13 +267,15 @@ class ConjectureDiscoveryEngine:
                 reverse=True,
             )[:500]
             state["discarded"] = {row["id"]: row for row in newest}
-        if moved:
-            state["version"] = max(2, int(state.get("version", 1)))
+        if moved or revalidated:
+            state["version"] = max(3, int(state.get("version", 1)))
             state["last_quality_migration"] = {
                 "at": time.time(),
                 "moved": moved,
-                "reason": "structural_tautology",
+                "revalidated": revalidated,
+                "reason": "proof_quality_upgrade",
             }
+            self._save(state)
         return state
 
     def discover_once(self) -> dict[str, Any]:
