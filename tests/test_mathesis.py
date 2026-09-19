@@ -16,6 +16,7 @@ from mathesis.architecture import _ALLOWED_EXPERTS, default_genome
 from mathesis.benchmark import TRAINING_PHRASES, VALIDATION_PHRASES
 from mathesis.engine import MathesisOmega
 from mathesis.discovery import ConjectureDiscoveryEngine
+from mathesis.curriculum import MathematicalCurriculum
 from mathesis.sympy_lab import SymPyMathLab, DOMAIN_ATLAS
 from mathesis.evolution import SelfEvolutionEngine
 from mathesis.experience import ExperienceAnalyzer
@@ -626,3 +627,57 @@ def test_unreprovable_legacy_faulhaber_is_removed_from_active_corpus(tmp_path: P
     migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
     assert theorem_id not in migrated["theorems"]
     assert migrated["discarded"][theorem_id]["discarded_reason"] == "legacy_faulhaber_reproof_failed"
+
+
+def test_curriculum_retries_same_failed_domain_before_advancing(tmp_path: Path):
+    curriculum = MathematicalCurriculum(tmp_path)
+    curriculum.researcher.search = lambda query, max_sources=3: {
+        "ok": False,
+        "sources": [],
+        "errors": [],
+    }
+
+    first = curriculum.study_once()
+    second = curriculum.study_once()
+    state = json.loads((tmp_path / "curriculum.json").read_text(encoding="utf-8"))
+
+    assert first["domain"] == "algebra"
+    assert second["domain"] == "algebra"
+    assert state["cursor"] == 0
+    assert state["retry_counts"]["algebra"] == 2
+
+    third = curriculum.study_once()
+    state = json.loads((tmp_path / "curriculum.json").read_text(encoding="utf-8"))
+    assert third["domain"] == "algebra"
+    assert state["cursor"] == 1
+    assert "algebra" not in state["retry_counts"]
+
+
+def test_curriculum_success_clears_retry_and_advances(tmp_path: Path):
+    curriculum = MathematicalCurriculum(tmp_path)
+    attempts = {"count": 0}
+
+    def fake_search(query, max_sources=3):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            return {"ok": False, "sources": [], "errors": []}
+        return {
+            "ok": True,
+            "sources": [{
+                "url": "https://example.org/math",
+                "domain": "example.org",
+                "authority_hint": 0.75,
+                "excerpt": "mathematics",
+            }],
+            "errors": [],
+        }
+
+    curriculum.researcher.search = fake_search
+    first = curriculum.study_once()
+    second = curriculum.study_once()
+    state = json.loads((tmp_path / "curriculum.json").read_text(encoding="utf-8"))
+
+    assert first["domain"] == second["domain"] == "algebra"
+    assert second["status"] == "studied"
+    assert state["cursor"] == 1
+    assert "algebra" not in state["retry_counts"]
