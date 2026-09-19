@@ -292,7 +292,9 @@ class CompositeVerifier:
             try:
                 env: dict[str, Any] = {}
                 formula = _z3_relation(rel, env)
-                ztarget = env.get(target.name)\n                if ztarget is None:\n                    ztarget = z3.Real(target.name)
+                ztarget = env.get(target.name)
+                if ztarget is None:
+                    ztarget = z3.Real(target.name)
                 allowed = z3.Or(*[
                     ztarget == z3.RealVal(f"{int(sol.p)}/{int(sol.q)}")
                     for sol in solutions
