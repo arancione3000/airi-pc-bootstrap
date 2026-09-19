@@ -168,3 +168,8 @@ Use the built-in self-audit at any time:
 ```
 
 The audit checks dataset label conflicts, duplicate rows, canary/split overlap, missing/stale split assignments, champion completeness, edge/champion genome consistency, stale dataset locks, invalid queue files and redundant promotion-trial weights. The same operation is available to Airi as `computer_evolution_audit`.
+
+
+### INT8 backend compatibility note
+
+PyTorch is moving quantization development from legacy `torch.ao.quantization` APIs to TorchAO. Airi-PC currently keeps `torch.ao.quantization.quantize_dynamic` as a compatibility backend because this project still supports PyTorch 2.7+, while newer TorchAO releases target newer PyTorch bases. Every INT8 attempt records the active backend, PyTorch version and migration target (`torchao.quantization.quantize_`) so the backend can be migrated explicitly when the project's minimum PyTorch version is raised.
