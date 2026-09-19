@@ -52,26 +52,26 @@
     "studies": 2
   },
   "discovery": {
-    "cycle": 5,
-    "discovery_beam": 5,
+    "cycle": 7,
+    "discovery_beam": 6,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 5,
+    "stored": 6,
     "strategies": {
       "binomial_expansion": 2,
-      "difference_of_powers": 1,
+      "difference_of_powers": 2,
       "faulhaber_interpolation": 1,
       "finite_geometric_identity": 1
     },
-    "symbolic_depth": 6,
-    "verified": 5
+    "symbolic_depth": 7,
+    "verified": 6
   },
   "evolution": {
     "benchmark": {
-      "capability_score": 0.766667,
-      "complexity_penalty": 0.007072,
+      "capability_score": 0.806452,
+      "complexity_penalty": 0.007781999999999999,
       "critical_failures": [],
       "learned_theorems_replayed": [
         {
@@ -109,11 +109,20 @@
           "ok": true,
           "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
           "status": "verified"
+        },
+        {
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "x^8-y^8 = x**8 - y**8",
+          "status": "verified"
         }
       ],
       "neural_accuracy": 0.818182,
       "ok": true,
-      "score": 78.169898,
+      "score": 81.431983,
       "tasks": [
         {
           "critical": true,
@@ -171,7 +180,7 @@
         },
         {
           "critical": true,
-          "detail": 98.999671,
+          "detail": 98.999677,
           "name": "program:gcd",
           "ok": true
         },
@@ -219,9 +228,9 @@
         },
         {
           "critical": false,
-          "detail": "expert not present",
+          "detail": "verified capability",
           "name": "domain:inequalities",
-          "ok": false
+          "ok": true
         },
         {
           "critical": false,
@@ -262,7 +271,7 @@
         {
           "critical": false,
           "detail": {
-            "tested_exponent": 8
+            "tested_exponent": 9
           },
           "name": "search:symbolic_depth",
           "ok": true
@@ -292,16 +301,21 @@
           "ok": true
         },
         {
+          "critical": true,
+          "detail": "verified",
+          "name": "learned_theorem:4",
+          "ok": true
+        },
+        {
           "critical": false,
           "detail": 0.8182,
           "name": "neural:intent_router",
           "ok": true
         }
       ],
-      "verified_symbolic_depth": 6,
+      "verified_symbolic_depth": 7,
       "weaknesses": [
         "domain:combinatorics",
-        "domain:inequalities",
         "domain:special_functions",
         "domain:geometry",
         "domain:probability",
@@ -315,7 +329,7 @@
     },
     "champion": {
       "architecture_graph": {
-        "discovery_beam": 5,
+        "discovery_beam": 6,
         "edges": [
           [
             "formalization",
@@ -358,6 +372,10 @@
             "equations"
           ],
           [
+            "equations",
+            "inequalities"
+          ],
+          [
             "program_synthesis",
             "counterexample"
           ],
@@ -388,6 +406,10 @@
           [
             "equations",
             "counterexample"
+          ],
+          [
+            "inequalities",
+            "counterexample"
           ]
         ],
         "nodes": [
@@ -401,7 +423,8 @@
           "trigonometry",
           "sequences",
           "linear_algebra",
-          "equations"
+          "equations",
+          "inequalities"
         ],
         "research_budget": 2,
         "strategy_portfolio": [
@@ -415,12 +438,12 @@
           "exact_sampling",
           "read_only_research"
         ],
-        "symbolic_depth": 6
+        "symbolic_depth": 7
       },
-      "fingerprint": "01c0b052ae6c94f3",
+      "fingerprint": "67bd57d68c6e0fc2",
       "genome": {
         "counterexample_radius": 9,
-        "discovery_beam": 5,
+        "discovery_beam": 6,
         "experts": [
           "formalization",
           "algebra",
@@ -432,13 +455,14 @@
           "trigonometry",
           "sequences",
           "linear_algebra",
-          "equations"
+          "equations",
+          "inequalities"
         ],
-        "generation": 7,
-        "genome_id": "omega-7-e8150050",
-        "max_proof_cells": 128,
+        "generation": 8,
+        "genome_id": "omega-8-9bacf2e9",
+        "max_proof_cells": 144,
         "neural_hidden": 22,
-        "parent_id": "omega-6-96dc4d09",
+        "parent_id": "omega-7-e8150050",
         "proof_order": [
           "symbolic",
           "smt",
@@ -457,7 +481,7 @@
           "exact_sampling",
           "read_only_research"
         ],
-        "symbolic_depth": 6,
+        "symbolic_depth": 7,
         "topology": [
           [
             "formalization",
@@ -500,6 +524,10 @@
             "equations"
           ],
           [
+            "equations",
+            "inequalities"
+          ],
+          [
             "program_synthesis",
             "counterexample"
           ],
@@ -530,6 +558,10 @@
           [
             "equations",
             "counterexample"
+          ],
+          [
+            "inequalities",
+            "counterexample"
           ]
         ]
       },
@@ -551,7 +583,7 @@
           "candidate_result",
           "verification_status"
         ],
-        "max_cells": 128
+        "max_cells": 144
       }
     },
     "kernel": {
@@ -563,14 +595,15 @@
       "(x+y)^2 = x**2 + 2*x*y + y**2",
       "x^4-y^4 = x**4 - y**4",
       "x**5 - 1 = x**5 - 1",
-      "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6"
+      "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
+      "x^8-y^8 = x**8 - y**8"
     ],
     "ok": true,
     "self_rewrite_scope": "architecture DSL/router state only",
     "state_dir": "/tmp/mathesis-runtime-state"
   },
   "experience": {
-    "champion": "omega-7-e8150050",
+    "champion": "omega-8-9bacf2e9",
     "ok": true,
     "policy": "experience proposes bounded architecture hints; it never edits verifier code",
     "reasons": [
@@ -590,16 +623,16 @@
   },
   "guarantee": "proof-gated evolving system; not an infallibility or human-novelty guarantee",
   "knowledge": {
-    "nodes": 5,
+    "nodes": 6,
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/knowledge.json",
     "status_counts": {
-      "verified": 5
+      "verified": 6
     }
   },
   "model": {
     "architecture_graph": {
-      "discovery_beam": 5,
+      "discovery_beam": 6,
       "edges": [
         [
           "formalization",
@@ -642,6 +675,10 @@
           "equations"
         ],
         [
+          "equations",
+          "inequalities"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -672,6 +709,10 @@
         [
           "equations",
           "counterexample"
+        ],
+        [
+          "inequalities",
+          "counterexample"
         ]
       ],
       "nodes": [
@@ -685,7 +726,8 @@
         "trigonometry",
         "sequences",
         "linear_algebra",
-        "equations"
+        "equations",
+        "inequalities"
       ],
       "research_budget": 2,
       "strategy_portfolio": [
@@ -699,12 +741,12 @@
         "exact_sampling",
         "read_only_research"
       ],
-      "symbolic_depth": 6
+      "symbolic_depth": 7
     },
-    "fingerprint": "01c0b052ae6c94f3",
+    "fingerprint": "67bd57d68c6e0fc2",
     "genome": {
       "counterexample_radius": 9,
-      "discovery_beam": 5,
+      "discovery_beam": 6,
       "experts": [
         "formalization",
         "algebra",
@@ -716,13 +758,14 @@
         "trigonometry",
         "sequences",
         "linear_algebra",
-        "equations"
+        "equations",
+        "inequalities"
       ],
-      "generation": 7,
-      "genome_id": "omega-7-e8150050",
-      "max_proof_cells": 128,
+      "generation": 8,
+      "genome_id": "omega-8-9bacf2e9",
+      "max_proof_cells": 144,
       "neural_hidden": 22,
-      "parent_id": "omega-6-96dc4d09",
+      "parent_id": "omega-7-e8150050",
       "proof_order": [
         "symbolic",
         "smt",
@@ -741,7 +784,7 @@
         "exact_sampling",
         "read_only_research"
       ],
-      "symbolic_depth": 6,
+      "symbolic_depth": 7,
       "topology": [
         [
           "formalization",
@@ -784,6 +827,10 @@
           "equations"
         ],
         [
+          "equations",
+          "inequalities"
+        ],
+        [
           "program_synthesis",
           "counterexample"
         ],
@@ -814,6 +861,10 @@
         [
           "equations",
           "counterexample"
+        ],
+        [
+          "inequalities",
+          "counterexample"
         ]
       ]
     },
@@ -835,7 +886,7 @@
         "candidate_result",
         "verification_status"
       ],
-      "max_cells": 128
+      "max_cells": 144
     }
   },
   "ok": true,
