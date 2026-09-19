@@ -825,3 +825,34 @@ def test_continuum_health_gate_runs_before_state_persistence():
     persist_pos = workflow.index("Persist and verify state heartbeat")
     assert health_pos < persist_pos
     assert 'test -f "$MATHESIS_STATE_DIR/health.json"' in workflow
+
+
+def test_health_gate_rejects_corrupt_persisted_champion_instead_of_using_default(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+    (tmp_path / "champion.json").write_text("{not-valid-json", encoding="utf-8")
+
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    failed = {row["name"] for row in report["failed"]}
+    assert "state:champion_json_valid" in failed
+
+
+def test_health_gate_requires_lean_when_runtime_status_is_present(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+    status = {
+        "ok": True,
+        "evolution": {"benchmark": {"critical_failures": []}},
+        "verifiers": {
+            "sympy": "1.14.0",
+            "z3_available": True,
+            "lean_available": False,
+        },
+    }
+    (tmp_path / "status.json").write_text(json.dumps(status), encoding="utf-8")
+
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    failed = {row["name"] for row in report["failed"]}
+    assert "status:lean_available" in failed
