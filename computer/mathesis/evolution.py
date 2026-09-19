@@ -94,7 +94,7 @@ class SelfEvolutionEngine:
         champion = self.load_champion()
         champion_router = self.load_router(champion)
         experience_analyzer = ExperienceAnalyzer(self.state_dir)
-        learned_theorems = experience_analyzer.replayable_theorems(limit=16)
+        learned_theorems = experience_analyzer.replayable_theorems()
         champion_bench = evaluate_genome(
             champion,
             champion_router,
@@ -216,7 +216,7 @@ class SelfEvolutionEngine:
     def status(self) -> dict[str, Any]:
         champion = self.load_champion()
         router = self.load_router(champion)
-        learned_theorems = ExperienceAnalyzer(self.state_dir).replayable_theorems(limit=16)
+        learned_theorems = ExperienceAnalyzer(self.state_dir).replayable_theorems()
         benchmark = evaluate_genome(champion, router, learned_theorems=learned_theorems)
         return {
             "ok": benchmark["ok"],
