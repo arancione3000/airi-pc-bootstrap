@@ -286,7 +286,11 @@ def test_faulhaber_discovery_has_induction_style_certificate(tmp_path: Path):
     cert = theorem["certificate"]
     assert cert["ok"] is True
     assert cert["base_case"] is True
+    assert cert["recurrence_nontrivial"] is True
     assert cert["recurrence"]["ok"] is True
+    rel = parse_relation(cert["recurrence"]["statement"])
+    import sympy as sp
+    assert sp.srepr(rel.lhs) != sp.srepr(rel.rhs)
 
 
 def test_engine_calculus_analysis_and_discovery_end_to_end(tmp_path: Path):
