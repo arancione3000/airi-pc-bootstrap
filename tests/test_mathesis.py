@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 import sys
 sys.path.insert(0, str(ROOT / "computer"))
 
-from mathesis.architecture import default_genome
+from mathesis.architecture import _ALLOWED_EXPERTS, default_genome
 from mathesis.benchmark import TRAINING_PHRASES, VALIDATION_PHRASES
 from mathesis.engine import MathesisOmega
 from mathesis.discovery import ConjectureDiscoveryEngine
@@ -509,3 +509,23 @@ def test_legacy_structural_tautologies_are_migrated_out_of_active_theorems(tmp_p
     assert legacy_id not in migrated["theorems"]
     assert migrated["discarded"][legacy_id]["discarded_reason"] == "structural_tautology"
     assert migrated["last_quality_migration"]["reason"] == "structural_tautology"
+
+
+def test_every_math_lab_domain_is_evolvable_by_architecture():
+    assert set(DOMAIN_ATLAS).issubset(set(_ALLOWED_EXPERTS))
+
+
+def test_polynomial_feedback_can_be_resolved_by_a_challenger(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    result = evolution.evolve_once(extra_weaknesses=["missing_polynomials_expert"])
+    trial_experts = [set(trial["genome"]["experts"]) for trial in result.benchmark["trials"]]
+    assert any("polynomials" in experts for experts in trial_experts)
+
+
+def test_polynomial_expert_is_actually_benchmarked():
+    from mathesis.benchmark import evaluate_genome
+    genome = default_genome()
+    genome.experts.append("polynomials")
+    benchmark = evaluate_genome(genome)
+    task = next(row for row in benchmark["tasks"] if row["name"] == "domain:polynomials")
+    assert task["ok"] is True
