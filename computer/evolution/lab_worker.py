@@ -24,7 +24,12 @@ def install_sandbox_guard(root: Path) -> None:
     root.mkdir(parents=True, exist_ok=True)
 
     def guard(event: str, args):
-        if event.startswith("socket.") or event in {"subprocess.Popen", "os.system", "os.posix_spawn", "os.spawn"}:
+        blocked_network = {
+            "socket.connect", "socket.connect_ex", "socket.bind", "socket.listen",
+            "socket.sendto", "socket.sendmsg", "socket.getaddrinfo",
+            "socket.gethostbyname", "socket.gethostbyaddr",
+        }
+        if event in blocked_network or event in {"subprocess.Popen", "os.system", "os.posix_spawn", "os.spawn"}:
             raise PermissionError(f"Evolution Lab sandbox blocked capability: {event}")
 
         if event == "open" and args:
@@ -83,7 +88,12 @@ def main() -> int:
     except Exception:
         pass
 
-    result = lab.run_cycle()
+    result = lab.run_cycle(
+        population=int(os.environ.get("AIRI_LAB_POPULATION", "6")),
+        generations=int(os.environ.get("AIRI_LAB_GENERATIONS", "2")),
+        candidate_epochs=int(os.environ.get("AIRI_LAB_CANDIDATE_EPOCHS", "1")),
+        finalist_epochs=int(os.environ.get("AIRI_LAB_FINALIST_EPOCHS", "2")),
+    )
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result.get("ok") else 2
 
