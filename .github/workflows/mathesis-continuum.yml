@@ -141,16 +141,26 @@ jobs:
             sleep "$remaining"
           fi
 
-          active_other=0
           api_base="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/mathesis-continuum.yml/runs"
-          for status in pending queued in_progress; do
-            if payload="$(curl --fail-with-body -sS               -H "Accept: application/vnd.github+json"               -H "Authorization: Bearer ${GH_TOKEN}"               -H "X-GitHub-Api-Version: 2022-11-28"               "${api_base}?status=${status}&per_page=30")"; then
-              count="$(jq --argjson current "${GITHUB_RUN_ID}"                 '[.workflow_runs[] | select(.id != $current)] | length' <<<"$payload")"
-              active_other="$((active_other + count))"
-            else
-              echo "Could not inspect ${status} runs; continuing with serialized handoff."
-            fi
-          done
+          payload="$(curl --fail-with-body -sS \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api_base}?per_page=50")"
+
+          active_other="$(jq --argjson current "${GITHUB_RUN_ID}" '
+            [
+              .workflow_runs[]
+              | select(.id != $current)
+              | select(
+                  .status == "pending"
+                  or .status == "queued"
+                  or .status == "in_progress"
+                  or .status == "waiting"
+                  or .status == "requested"
+                )
+            ] | length
+          ' <<<"$payload")"
 
           if (( active_other > 0 )); then
             echo "Another MATHESIS continuum run is already queued/running; no duplicate handoff."
