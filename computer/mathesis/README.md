@@ -98,8 +98,9 @@ a counterexample is never treated as a proof.
 ## Continuous autonomous evolution
 
 `.github/workflows/mathesis-continuum.yml` runs a bounded champion/challenger
-cycle approximately hourly and stores model state on the dedicated
-`mathesis-state` branch.
+cycle on an approximately five-minute self-handoff cadence, with cron as a
+recovery trigger, and stores model state on the dedicated `mathesis-state`
+branch.
 
 `.github/workflows/mathesis-watchdog.yml` independently checks the state
 heartbeat twice per hour and dispatches a recovery cycle if the state becomes
@@ -195,9 +196,10 @@ The verifier kernel remains immutable across a promotion.
 
 ### Continuous operation
 
-The fast continuum is scheduled every five minutes with a five-minute job
-timeout. A duplicate-aware watchdog runs every ten minutes and dispatches a
-recovery only if state is stale and no continuum job is already active.
+The fast continuum is scheduled every five minutes with a 15-minute job
+timeout so cold setup plus persistence/handoff have enough margin. A
+duplicate-aware watchdog runs every ten minutes and dispatches a recovery only
+if state is stale and no continuum job is already active.
 
 GitHub Actions scheduling is best-effort. This design provides continuous
 attempted evolution while GitHub Actions is available; it cannot promise
@@ -327,3 +329,57 @@ metadata, benchmark critical failures and verifier/kernel status.
 
 A failed audit exits before persistence, so the previous remote state remains
 the last known-good checkpoint.
+
+
+### 2026-09-20 proof-integrity audit
+
+The persistent discovery corpus is now treated as untrusted input when it is
+loaded. A stored `verified=true` flag is not sufficient to enter health or
+anti-forgetting:
+
+- relation-style discoveries are rechecked with the current CompositeVerifier;
+- structural tautologies are rejected;
+- Faulhaber rows are rebuilt from the stored polynomial, and the displayed
+  theorem must match both the stored power and the re-proved polynomial;
+- Faulhaber base case, bounded exact samples and the nontrivial finite-
+  difference recurrence are rechecked;
+- legacy sample counts are bounded during migration so corrupted state cannot
+  request an unbounded revalidation loop;
+- failed legacy reproofs are archived outside the active corpus;
+- schema-v3 upgrades are persisted even when no theorem needed moving;
+- migrations are idempotent.
+
+Anti-forgetting consumes only currently valid active discoveries. A theorem
+that is discarded, unverified, structurally trivial, certificate-inconsistent
+or rejected by the current verifier is not turned into a promotion obligation.
+
+Novelty metadata is deliberately separated into three claims: novelty relative
+to the MATHESIS memory, novelty relative to consulted sources, and novelty to
+human mathematics. Only memory novelty is established automatically. Source
+novelty and human novelty remain `unassessed` unless a separate scholarly
+comparison establishes them.
+
+The architecture benchmark also verifies the genome itself. Duplicate or
+unknown experts, disconnected expert nodes, invalid topology edges and
+out-of-bounds architecture parameters are critical failures. Every SymPy lab
+domain has a real domain probe, and CI exercises the path from curriculum
+evidence to weakness, challenger expert, graph membership and benchmarked
+capability. Merely growing budgets cannot improve the score unless the
+corresponding measured capability improves.
+
+Evolution selects the best challenger only after hard eligibility gates are
+applied; an invalid high-scoring candidate cannot hide a lower-scoring safe
+candidate. Interactive promotion also rebuilds the discovery engine with the
+promoted symbolic-depth and discovery-beam settings immediately, without
+requiring a process restart.
+
+Self-rewrite path validation is a strict direct-file whitelist under
+`MATHESIS_STATE_DIR`. Nested paths, unknown filenames, the state-directory
+root and paths outside the state directory are rejected. Generated model
+modules remain data-only and cannot alter the verifier kernel, network policy,
+workflow permissions, promotion gate, secrets or host boundary.
+
+The continuum serializes all state writers through the
+`mathesis-omega-continuum` concurrency group and never force-pushes the
+`mathesis-state` branch. Health validation runs before persistence, so a
+failed state cannot replace the last known-good remote checkpoint.
