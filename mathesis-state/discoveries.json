@@ -1,5 +1,5 @@
 {
-  "cycle": 28,
+  "cycle": 31,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -173,7 +173,7 @@
   },
   "strategy_counts": {
     "binomial_expansion": 7,
-    "difference_of_powers": 7,
+    "difference_of_powers": 8,
     "faulhaber_interpolation": 5,
     "finite_geometric_identity": 7
   },
@@ -1037,6 +1037,46 @@
       "strategy": "faulhaber_interpolation",
       "verified": true
     },
+    "e96658b950bc3a2cfabc": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "x^4-y^4 = (x - y)*(x**3 + x**2*y + x*y**2 + y**3)",
+        "status": "verified"
+      },
+      "complexity": 4,
+      "discovered_at": 1789861117.2845192,
+      "human_novelty": "unassessed",
+      "id": "e96658b950bc3a2cfabc",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "x^4-y^4 = (x - y)*(x**3 + x**2*y + x*y**2 + y**3)",
+      "strategy": "difference_of_powers",
+      "verified": true
+    },
     "efb13ac5cb9a41475989": {
       "certificate": {
         "base_case": true,
@@ -1135,6 +1175,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789860803.5761566,
+  "updated_at": 1789861117.2845192,
   "version": 3
 }
