@@ -15,7 +15,7 @@ TOKEN_RE = re.compile(r"[\wÀ-ÿ']+|[^\w\s]", re.UNICODE)
 
 
 @contextmanager
-def _dataset_lock(path: Path, timeout: float = 15.0, stale_after: float = 120.0):
+def _dataset_lock(path: Path, timeout: float = 15.0, stale_after: float = 900.0):
     path = Path(path)
     lock_path = path.with_suffix(path.suffix + ".lock")
     deadline = time.time() + max(0.1, float(timeout))
