@@ -133,7 +133,7 @@ def main(argv=None):
         result = runtime.edge_quantize(args.max_samples); emit(result, 0 if result.get("ok") else 2)
     if args.cmd == "ingest":
         result = runtime.ingest({"text": args.text, "label": args.label, "source": args.source, "evidence": args.evidence}, auto_evolve=not args.no_auto, mode=args.mode, trigger_samples=args.trigger_samples)
-        emit(result, 0)
+        emit(result, 0 if result.get("ok") else 2)
     if args.cmd == "start":
         result = runtime.start(mode=args.mode, population=args.population, generations=args.generations, candidate_epochs=args.candidate_epochs)
         emit(result, 0 if result.get("ok") else 2)
