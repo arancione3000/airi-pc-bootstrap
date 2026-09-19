@@ -38,6 +38,8 @@ class MathesisOmega:
         self.discovery = ConjectureDiscoveryEngine(
             self.state_dir,
             counterexample_radius=self.genome.counterexample_radius,
+            symbolic_depth=self.genome.symbolic_depth,
+            discovery_beam=self.genome.discovery_beam,
         )
         self.curriculum = MathematicalCurriculum(self.state_dir)
 
