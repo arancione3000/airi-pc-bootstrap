@@ -287,3 +287,13 @@ Curriculum failures are retried on the same mathematical domain rather than
 silently skipping it. A successful retry clears the retry counter; after three
 consecutive failures the cursor advances so a temporarily unreachable source
 cannot stall the whole curriculum indefinitely.
+
+
+### Structured anti-forgetting
+
+Anti-forgetting is not limited to theorem statements that fit the simple
+relation parser. Verified Faulhaber discoveries replay their structurally
+nontrivial induction recurrence as a critical promotion obligation. This keeps
+rich sum-of-powers results represented in future champion benchmarks without
+pretending the relation parser directly understands the full quantified sum
+schema.
