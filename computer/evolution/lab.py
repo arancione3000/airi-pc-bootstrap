@@ -259,6 +259,7 @@ def rebuild_dataset(max_observations: int = 20_000) -> dict[str, Any]:
             features.add(feature_id)
             training_row = {
                 "id": str(row["id"]),
+                "feature_schema": FEATURE_SCHEMA,
                 "text": feature,
                 "text_id": feature_id,
                 "label": label,
