@@ -225,3 +225,25 @@ def test_manual_ingest_requires_source_and_evidence(monkeypatch, tmp_path: Path)
     assert result["ok"] is False
     assert result["error"] == "verification_metadata_required"
     assert not (tmp_path / "verified.jsonl").exists()
+
+
+def test_self_audit_detects_invalid_label_rows(tmp_path: Path):
+    data = tmp_path / "data" / "verified.jsonl"
+    data.parent.mkdir(parents=True)
+    data.write_text('{"text":"valid length but bad label","label":"maybe"}\n', encoding="utf-8")
+    result = audit_state(tmp_path)
+    assert result["ok"] is False
+    assert result["checks"]["dataset_unloadable_rows"] == 1
+
+
+def test_self_audit_allows_recoverable_champion_swap(tmp_path: Path):
+    champion = tmp_path / "champion"
+    champion.mkdir()
+    (champion / "genome.json").write_text("{}", encoding="utf-8")
+    backup = tmp_path / ".champion-old"
+    backup.mkdir()
+    for name in ("genome.json", "model.pt", "metrics.json", "provenance.json"):
+        (backup / name).write_text("{}", encoding="utf-8")
+    result = audit_state(tmp_path)
+    assert result["ok"] is True
+    assert result["checks"]["champion_swap_dirs"]["backup_complete"] is True
