@@ -281,3 +281,9 @@ automatically re-proved from their stored polynomial. Their base case, exact
 sample points and a structurally nontrivial finite-difference recurrence are
 checked again. A legacy result remains active only if that upgrade succeeds;
 otherwise it is archived outside the active theorem corpus.
+
+
+Curriculum failures are retried on the same mathematical domain rather than
+silently skipping it. A successful retry clears the retry counter; after three
+consecutive failures the cursor advances so a temporarily unreachable source
+cannot stall the whole curriculum indefinitely.
