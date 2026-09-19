@@ -62,8 +62,15 @@ def _sha256(path: Path) -> str:
 
 
 def _source_sha() -> str:
+    override = os.environ.get("AIRI_EVOLUTION_SOURCE_SHA", "").strip()
+    if override:
+        return override
     result = _run(["git", "-C", str(lab.ROOT), "rev-parse", "HEAD"], timeout=10)
     return result["stdout"].strip() if result["ok"] else ""
+
+
+def dataset_digest() -> str:
+    return _sha256(lab.DATA) if lab.DATA.exists() else ""
 
 
 def _git_url() -> str:
