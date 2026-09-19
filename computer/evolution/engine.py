@@ -472,6 +472,8 @@ def run_evolution(state_dir: Path, cfg: EvolutionConfig) -> dict[str, Any]:
         selected_trial_path.replace(selected_audit_path)
     for path in run_dir.glob("promotion-trial-*.pt"):
         path.unlink(missing_ok=True)
+    for row in promotion_trials:
+        row["state_path"] = str(selected_audit_path) if int(row["trial"]) == selected_trial and selected_audit_path.exists() else None
     candidate_final["selected_trial_path"] = str(selected_audit_path) if selected_audit_path.exists() else None
 
     if promote:
