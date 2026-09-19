@@ -138,41 +138,35 @@ def evaluate_genome(
         add("program:gcd", False, detail=repr(exc))
 
     domain_checks: dict[str, Any] = {
-        "algebra": lambda: lab.algebra_normal_forms("(x+1)^4-(x^4+4*x^3+6*x^2+4*x+1)").ok,
-        "polynomials": lambda: lab.polynomial_interpolate([(0, 1), (1, 4), (2, 9), (3, 16)]).ok,
-        "number_theory": lambda: synth.synthesize("is_prime").verified,
-        "research": lambda: True,
-        "calculus": lambda: (
-            lab.derivative("x^4+2*x").ok
-            and lab.antiderivative("3*x^2").ok
-        ),
-        "trigonometry": lambda: lab.trig_normal_form("sin(x)^2+cos(x)^2").ok,
-        "linear_algebra": lambda: lab.matrix_invariants([[2, 1], [1, 1]]).ok,
-        "combinatorics": lambda: verifier.evaluate("binomial(8,3)")[0] == 56,
-        "equations": lambda: verifier.solve_equation("x^2-5*x+6=0")[1].ok,
-        "inequalities": lambda: bool(sp.reduce_inequalities([sp.Symbol("x", real=True) ** 2 >= 0])),
-        "sequences": lambda: lab.polynomial_interpolate([(0, 0), (1, 1), (2, 4), (3, 9)]).ok,
-        "special_functions": lambda: verifier.evaluate("gamma(6)")[0] == 120,
-        "geometry": lambda: verifier.evaluate("3^2+4^2")[0] == 25,
-        "probability": lambda: verifier.evaluate("binomial(10,3)/2^10")[1].ok,
-        "discrete_math": lambda: lab.number_theory_profile(360).ok,
-        "optimization": lambda: lab.derivative("x^2-6*x+13").ok,
+        domain: (lambda domain=domain: lab.domain_probe(domain).ok)
+        for domain in DOMAIN_ATLAS
     }
-    missing_domain_benchmarks = sorted(set(DOMAIN_ATLAS) - set(domain_checks))
-    add(
-        "architecture:domain_benchmarks_complete",
-        not missing_domain_benchmarks,
-        detail=missing_domain_benchmarks,
-    )
 
     for domain, check in domain_checks.items():
         if domain not in genome.experts:
             add(f"domain:{domain}", False, critical=False, detail="expert not present")
             continue
         try:
-            add(f"domain:{domain}", bool(check()), critical=False, detail="verified capability")
+            # Once an architecture claims the expert, its real domain probe is a
+            # hard gate. A broken claimed capability cannot be hidden by score.
+            add(f"domain:{domain}", bool(check()), critical=True, detail="verified domain probe")
         except Exception as exc:
-            add(f"domain:{domain}", False, critical=False, detail=repr(exc))
+            add(f"domain:{domain}", False, critical=True, detail=repr(exc))
+
+    if "research" not in genome.experts:
+        add("capability:research", False, critical=False, detail="expert not present")
+    else:
+        research_ready = "read_only_research" in genome.strategy_portfolio
+        add(
+            "capability:research",
+            research_ready,
+            critical=True,
+            detail={
+                "read_only_research_strategy": research_ready,
+                "live_network_contract": "verified separately by CI; never used as a truth oracle",
+            },
+        )
+
 
     # The architecture search budget must correspond to a real symbolic workload.
     symbolic_depth_verified = False
