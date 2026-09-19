@@ -21,6 +21,7 @@ from mathesis.sympy_lab import SymPyMathLab, DOMAIN_ATLAS
 from mathesis.evolution import SelfEvolutionEngine
 from mathesis.experience import ExperienceAnalyzer
 from mathesis.formalizer import FormalizerMesh
+from mathesis.health import health_report
 from mathesis.kernel import IntegrityKernel
 from mathesis.model_writer import render_model_module
 from mathesis.neural_graph import GrowingNeuralRouter
@@ -721,3 +722,106 @@ def test_handoff_and_watchdog_have_bounded_network_fallbacks():
     assert "reason=continuum_run_lookup_failed" in watchdog
     assert 'echo "stale=true"' in watchdog
     assert '} >> "$GITHUB_OUTPUT"' in watchdog
+
+
+def test_faulhaber_induction_obligation_enters_antiforgetting_replay(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path, symbolic_depth=6, discovery_beam=8)
+    discovery.discover_once()  # binomial
+    faulhaber = discovery.discover_once()["theorem"]
+    assert faulhaber["strategy"] == "faulhaber_interpolation"
+    assert faulhaber["certificate"]["recurrence_nontrivial"] is True
+
+    learned = ExperienceAnalyzer(tmp_path).replayable_theorems(limit=16)
+    recurrence_statement = faulhaber["certificate"]["recurrence"]["statement"]
+    assert recurrence_statement in learned
+    assert faulhaber["statement"] not in learned
+
+
+def test_faulhaber_replay_is_critical_for_future_promotion(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path, symbolic_depth=6, discovery_beam=8)
+    discovery.discover_once()
+    faulhaber = discovery.discover_once()["theorem"]
+    obligation = faulhaber["certificate"]["recurrence"]["statement"]
+
+    evolution = SelfEvolutionEngine(tmp_path)
+    result = evolution.evolve_once()
+    assert obligation in result.benchmark["learned_theorems"]
+    replay = result.benchmark["candidate"]["learned_theorems_replayed"]
+    assert any(row["statement"] == obligation and row["ok"] for row in replay)
+
+
+def test_curriculum_v1_state_is_read_as_v2_schema(tmp_path: Path):
+    legacy = {
+        "version": 1,
+        "cursor": 4,
+        "studies": [{"domain": "algebra", "status": "studied"}],
+    }
+    (tmp_path / "curriculum.json").write_text(json.dumps(legacy), encoding="utf-8")
+    status = MathematicalCurriculum(tmp_path).status()
+    assert status["version"] == 2
+    assert status["cursor"] == 4
+    assert status["retry_counts"] == {}
+
+
+def test_health_gate_accepts_consistent_evolved_state(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    result = evolution.evolve_once()
+    assert result.benchmark["kernel_integrity"]["ok"] is True
+    report = health_report(tmp_path)
+    assert report["ok"] is True
+    assert report["failed"] == []
+
+
+def test_health_gate_rejects_topology_escape(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+    champion_path = tmp_path / "champion.json"
+    champion = json.loads(champion_path.read_text(encoding="utf-8"))
+    champion["topology"].append(["algebra", "imaginary_unregistered_expert"])
+    champion_path.write_text(json.dumps(champion), encoding="utf-8")
+
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    assert any(row["name"] == "architecture:topology_closed" for row in report["failed"])
+
+
+def test_health_gate_rejects_bad_active_faulhaber_certificate(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+
+    statement = "sum(k^2, k=1..n) = n*(n+1)*(2*n+1)/6 for integer n>=0"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    discoveries = {
+        "version": 3,
+        "cycle": 1,
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "faulhaber_interpolation",
+                "certificate": {
+                    "ok": True,
+                    "recurrence_nontrivial": False,
+                    "recurrence": {
+                        "ok": True,
+                        "statement": "n**2=n**2",
+                    },
+                },
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(discoveries), encoding="utf-8")
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    quality = next(row for row in report["failed"] if row["name"] == "discovery:verified_quality")
+    assert theorem_id in str(quality["detail"])
+
+
+def test_continuum_health_gate_runs_before_state_persistence():
+    workflow = (ROOT / ".github" / "workflows" / "mathesis-continuum.yml").read_text(encoding="utf-8")
+    health_pos = workflow.index("python -m mathesis.health")
+    persist_pos = workflow.index("Persist and verify state heartbeat")
+    assert health_pos < persist_pos
+    assert 'test -f "$MATHESIS_STATE_DIR/health.json"' in workflow

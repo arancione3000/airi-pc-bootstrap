@@ -23,6 +23,7 @@ MUTABLE_STATE_NAMES = {
     "discoveries.json",
     "discovery-history.jsonl",
     "curriculum.json",
+    "health.json",
 }
 
 

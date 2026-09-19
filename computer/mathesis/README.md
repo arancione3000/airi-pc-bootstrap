@@ -303,3 +303,27 @@ attempts one serialized successor dispatch rather than abandoning the chain.
 The GitHub concurrency group limits overlap. The watchdog treats an
 unreadable continuum-run listing as a stale/uncertain condition and attempts
 the normal recovery path.
+
+
+### Structured anti-forgetting
+
+Anti-forgetting is not limited to theorem statements that fit the simple
+relation parser. Verified Faulhaber discoveries replay their structurally
+nontrivial induction recurrence as a critical promotion obligation. This keeps
+rich sum-of-powers results represented in future champion benchmarks without
+pretending the relation parser directly understands the full quantified sum
+schema.
+
+Persistent curriculum metadata is migrated on read to schema v2, including
+per-domain retry counters. Status reports the effective schema version.
+
+### Persistent-state health gate
+
+Every autonomous continuum cycle runs a state health audit before pushing
+anything to the persistent `mathesis-state` branch. The audit checks
+architecture/domain closure, topology endpoints, genome bounds, router shape,
+verified discovery quality, Faulhaber recurrence certificates, curriculum retry
+metadata, benchmark critical failures and verifier/kernel status.
+
+A failed audit exits before persistence, so the previous remote state remains
+the last known-good checkpoint.

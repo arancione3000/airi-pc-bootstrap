@@ -92,3 +92,13 @@ tests pass.
 
 - if active-run lookup fails after bounded retries, continuum attempts one serialized continuity dispatch;
 - watchdog converts bounded run-list lookup failure into a stale recovery condition instead of crashing before recovery.
+
+
+## 2026-09-20 — Structured anti-forgetting + persistent-state Health Gate
+
+- structured anti-forgetting now replays verified Faulhaber induction recurrences;
+- rich sum-of-powers discoveries contribute critical future promotion obligations even when the full quantified theorem string is outside the simple relation parser;
+- persistent curriculum v1 metadata migrates in-memory to schema v2 with retry counters;
+- added a persistent-state Health Gate before every autonomous state push;
+- health checks architecture/domain closure, topology, router compatibility, discovery proof quality, Faulhaber certificates, curriculum retry bounds, benchmark failures and kernel/verifier status;
+- failed health audits cannot replace the previous known-good `mathesis-state` checkpoint.
