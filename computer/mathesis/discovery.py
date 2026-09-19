@@ -10,11 +10,21 @@ import sympy as sp
 
 from .kernel import atomic_json
 from .knowledge import KnowledgeGraph, default_state_dir
+from .safe_math import parse_relation
 from .verifiers import CompositeVerifier
 
 
 def _theorem_id(statement: str) -> str:
     return hashlib.sha256(statement.encode("utf-8")).hexdigest()[:20]
+
+
+def _relation_is_structurally_nontrivial(statement: str) -> bool:
+    """Reject relations whose two sides are already the same expression tree."""
+    try:
+        rel = parse_relation(statement)
+    except Exception:
+        return True
+    return sp.srepr(rel.lhs) != sp.srepr(rel.rhs)
 
 
 class ConjectureDiscoveryEngine:
@@ -46,10 +56,11 @@ class ConjectureDiscoveryEngine:
             if isinstance(value, dict):
                 value.setdefault("cycle", 0)
                 value.setdefault("theorems", {})
+                value.setdefault("discarded", {})
                 return value
         except Exception:
             pass
-        return {"version": 1, "cycle": 0, "theorems": {}, "strategy_counts": {}}
+        return {"version": 2, "cycle": 0, "theorems": {}, "discarded": {}, "strategy_counts": {}}
 
     def _save(self, value: dict[str, Any]) -> None:
         self.state_dir.mkdir(parents=True, exist_ok=True)
@@ -92,8 +103,9 @@ class ConjectureDiscoveryEngine:
         max_degree = min(16, 3 + self.symbolic_depth)
         exponent = 2 + (cycle % max(1, max_degree - 1))
         x, y = sp.symbols("x y", real=True)
-        rhs = (x - y) * sum(x ** (exponent - 1 - j) * y**j for j in range(exponent))
-        statement = f"x^{exponent}-y^{exponent} = {sp.sstr(sp.expand(rhs))}"
+        series = sum(x ** (exponent - 1 - j) * y**j for j in range(exponent))
+        rhs = (x - y) * series
+        statement = f"x^{exponent}-y^{exponent} = ({sp.sstr(x-y)})*({sp.sstr(series)})"
         cert = self.verifier.verify_relation(statement)
         return {
             "strategy": "difference_of_powers",
@@ -149,9 +161,10 @@ class ConjectureDiscoveryEngine:
         max_terms = min(16, 3 + self.symbolic_depth)
         terms = 2 + (cycle % max(1, max_terms - 1))
         x = sp.Symbol("x", real=True)
-        left = (x - 1) * sum(x**j for j in range(terms))
+        series = sum(x**j for j in range(terms))
+        left = (x - 1) * series
         right = x**terms - 1
-        statement = f"{sp.sstr(sp.expand(left))} = {sp.sstr(right)}"
+        statement = f"(x-1)*({sp.sstr(series)}) = x^{terms}-1"
         cert = self.verifier.verify_relation(statement)
         return {
             "strategy": "finite_geometric_identity",
@@ -161,8 +174,37 @@ class ConjectureDiscoveryEngine:
             "complexity": terms,
         }
 
+    def _audit_legacy_discoveries(self, state: dict[str, Any]) -> dict[str, Any]:
+        theorems = state.setdefault("theorems", {})
+        discarded = state.setdefault("discarded", {})
+        moved: list[str] = []
+        for theorem_id, row in list(theorems.items()):
+            statement = str(row.get("statement", ""))
+            if row.get("verified") and not _relation_is_structurally_nontrivial(statement):
+                archived = dict(row)
+                archived["discarded_reason"] = "structural_tautology"
+                archived["discarded_at"] = time.time()
+                discarded[theorem_id] = archived
+                del theorems[theorem_id]
+                moved.append(theorem_id)
+        if len(discarded) > 500:
+            newest = sorted(
+                discarded.values(),
+                key=lambda row: row.get("discarded_at", row.get("discovered_at", 0)),
+                reverse=True,
+            )[:500]
+            state["discarded"] = {row["id"]: row for row in newest}
+        if moved:
+            state["version"] = max(2, int(state.get("version", 1)))
+            state["last_quality_migration"] = {
+                "at": time.time(),
+                "moved": moved,
+                "reason": "structural_tautology",
+            }
+        return state
+
     def discover_once(self) -> dict[str, Any]:
-        state = self._load()
+        state = self._audit_legacy_discoveries(self._load())
         cycle = int(state.get("cycle", 0))
         strategies = (
             self._binomial_identity,
@@ -178,8 +220,13 @@ class ConjectureDiscoveryEngine:
             attempt_cycle = cycle + offset
             strategy = strategies[attempt_cycle % len(strategies)]
             row = strategy(attempt_cycle)
+            row["nontrivial"] = _relation_is_structurally_nontrivial(row["statement"])
             theorem_id = _theorem_id(row["statement"])
-            if theorem_id not in state["theorems"]:
+            if (
+                theorem_id not in state["theorems"]
+                and theorem_id not in state.get("discarded", {})
+                and row["nontrivial"]
+            ):
                 selected = row
                 cycle = attempt_cycle
                 break
@@ -194,6 +241,7 @@ class ConjectureDiscoveryEngine:
             **selected,
             "internal_novelty": True,
             "human_novelty": "unassessed",
+            "quality_gate": "structurally_nontrivial_and_proof_gated",
             "discovered_at": now,
         }
         state["cycle"] = cycle + 1
@@ -229,6 +277,7 @@ class ConjectureDiscoveryEngine:
             "stored": len(state["theorems"]),
             "verified": verified,
             "rejected": rejected,
+            "discarded": len(state.get("discarded", {})),
             "strategies": state.get("strategy_counts", {}),
             "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
             "symbolic_depth": self.symbolic_depth,

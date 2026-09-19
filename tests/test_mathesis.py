@@ -448,3 +448,60 @@ def test_failed_curriculum_retries_on_next_cycle():
 def test_watchdog_treats_pending_continuum_as_active():
     workflow = (ROOT / ".github" / "workflows" / "mathesis-watchdog.yml").read_text(encoding="utf-8")
     assert "for status in pending queued in_progress" in workflow
+
+
+def test_discovery_relations_are_structurally_nontrivial(tmp_path: Path):
+    engine = ConjectureDiscoveryEngine(tmp_path, symbolic_depth=6, discovery_beam=8)
+    results = [engine.discover_once() for _ in range(8)]
+    verified = [row["theorem"] for row in results if row.get("theorem") and row["theorem"].get("verified")]
+    assert verified
+    for theorem in verified:
+        statement = theorem["statement"]
+        if "sum(" in statement and "for integer" in statement:
+            continue
+        rel = parse_relation(statement)
+        import sympy as sp
+        assert sp.srepr(rel.lhs) != sp.srepr(rel.rhs)
+        assert theorem["nontrivial"] is True
+        assert theorem["quality_gate"] == "structurally_nontrivial_and_proof_gated"
+
+
+def test_difference_and_geometric_discoveries_preserve_nontrivial_forms(tmp_path: Path):
+    engine = ConjectureDiscoveryEngine(tmp_path, symbolic_depth=6, discovery_beam=8)
+    rows = [engine.discover_once()["theorem"] for _ in range(6)]
+    difference = next(row for row in rows if row["strategy"] == "difference_of_powers")
+    geometric = next(row for row in rows if row["strategy"] == "finite_geometric_identity")
+    assert ")*(" in difference["statement"]
+    assert "(x-1)*(" in geometric["statement"]
+    assert difference["verified"] is True
+    assert geometric["verified"] is True
+
+
+def test_legacy_structural_tautologies_are_migrated_out_of_active_theorems(tmp_path: Path):
+    legacy_statement = "x^4-y^4 = x**4-y**4"
+    legacy_id = __import__("hashlib").sha256(legacy_statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 1,
+        "cycle": 4,
+        "strategy_counts": {"difference_of_powers": 1},
+        "theorems": {
+            legacy_id: {
+                "id": legacy_id,
+                "statement": legacy_statement,
+                "verified": True,
+                "strategy": "difference_of_powers",
+                "discovered_at": 1.0,
+                "certificate": {"ok": True},
+            }
+        },
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+
+    engine = ConjectureDiscoveryEngine(tmp_path, discovery_beam=4)
+    result = engine.discover_once()
+    assert result["ok"] is True
+
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    assert legacy_id not in migrated["theorems"]
+    assert migrated["discarded"][legacy_id]["discarded_reason"] == "structural_tautology"
+    assert migrated["last_quality_migration"]["reason"] == "structural_tautology"
