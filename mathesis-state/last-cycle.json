@@ -4,63 +4,79 @@
     "status": "verified_discovery",
     "theorem": {
       "certificate": {
-        "counterexample": null,
-        "details": {
-          "lean": {
-            "ok": false,
-            "reason": "requires closed equality",
-            "status": "not_applicable"
-          },
-          "smt": {
-            "method": "z3_unsat_negation",
-            "ok": true,
-            "status": "verified"
-          },
-          "symbolic": {
-            "method": "sympy_normal_form",
-            "normal_form": "0",
-            "ok": true,
-            "status": "verified"
-          }
-        },
+        "base_case": true,
         "methods": [
+          "exact_integer_samples",
+          "sympy_interpolation",
+          "base_case",
+          "finite_difference_induction_step",
           "sympy_normal_form",
           "z3_unsat_negation"
         ],
         "ok": true,
-        "statement": "(x+y)^4 = x**4 + 4*x**3*y + 6*x**2*y**2 + 4*x*y**3 + y**4",
+        "polynomial": "n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30",
+        "recurrence": {
+          "counterexample": null,
+          "details": {
+            "lean": {
+              "ok": false,
+              "reason": "requires closed equality",
+              "status": "not_applicable"
+            },
+            "smt": {
+              "method": "z3_unsat_negation",
+              "ok": true,
+              "status": "verified"
+            },
+            "symbolic": {
+              "method": "sympy_normal_form",
+              "normal_form": "0",
+              "ok": true,
+              "status": "verified"
+            }
+          },
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "((n + 1)*(n + 2)*(2*n + 3)*(3*n + 3*(n + 1)**2 + 2)/30)-(n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30) = (n+1)^4",
+          "status": "verified"
+        },
+        "recurrence_nontrivial": true,
+        "sample_count": 8,
         "status": "verified"
       },
       "complexity": 4,
-      "discovered_at": 1789857681.189972,
+      "discovered_at": 1789857978.2641058,
       "human_novelty": "unassessed",
-      "id": "9cfbfce58063a96aeac9",
+      "id": "875d9d1eacdecb5ff5d3",
       "internal_novelty": true,
       "nontrivial": true,
       "quality_gate": "structurally_nontrivial_and_proof_gated",
-      "statement": "(x+y)^4 = x**4 + 4*x**3*y + 6*x**2*y**2 + 4*x*y**3 + y**4",
-      "strategy": "binomial_expansion",
+      "statement": "sum(k^4, k=1..n) = n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30 for integer n>=0",
+      "strategy": "faulhaber_interpolation",
       "verified": true
     },
-    "total_discoveries": 12
+    "total_discoveries": 13
   },
   "discovery_status": {
-    "cycle": 17,
+    "cycle": 18,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 12,
+    "stored": 13,
     "strategies": {
       "binomial_expansion": 5,
       "difference_of_powers": 4,
-      "faulhaber_interpolation": 3,
+      "faulhaber_interpolation": 4,
       "finite_geometric_identity": 4
     },
     "symbolic_depth": 12,
-    "verified": 12
+    "verified": 13
   },
   "evolution": {
     "benchmark": {
@@ -211,7 +227,7 @@
           },
           {
             "critical": true,
-            "detail": 98.999704,
+            "detail": 98.999653,
             "name": "program:gcd",
             "ok": true
           },
@@ -530,7 +546,7 @@
           },
           {
             "critical": true,
-            "detail": 98.999668,
+            "detail": 98.999639,
             "name": "program:gcd",
             "ok": true
           },
@@ -872,7 +888,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999704,
+                "detail": 98.999634,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -1381,7 +1397,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999691,
+                "detail": 98.999634,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -1890,7 +1906,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999704,
+                "detail": 98.999653,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -2642,10 +2658,10 @@
   },
   "ok": true,
   "study": {
-    "at": 1789857683.034979,
-    "domain": "equations",
+    "at": 1789857980.0668833,
+    "domain": "inequalities",
     "ok": true,
-    "query": "equations mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+    "query": "inequalities mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
     "raw": null,
     "sources": [
       {

@@ -275,6 +275,59 @@
       "status": "verified",
       "updated_at": 1789853655.2722967
     },
+    "875d9d1eacdecb5ff5d3": {
+      "certificate": {
+        "base_case": true,
+        "methods": [
+          "exact_integer_samples",
+          "sympy_interpolation",
+          "base_case",
+          "finite_difference_induction_step",
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "polynomial": "n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30",
+        "recurrence": {
+          "counterexample": null,
+          "details": {
+            "lean": {
+              "ok": false,
+              "reason": "requires closed equality",
+              "status": "not_applicable"
+            },
+            "smt": {
+              "method": "z3_unsat_negation",
+              "ok": true,
+              "status": "verified"
+            },
+            "symbolic": {
+              "method": "sympy_normal_form",
+              "normal_form": "0",
+              "ok": true,
+              "status": "verified"
+            }
+          },
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "((n + 1)*(n + 2)*(2*n + 3)*(3*n + 3*(n + 1)**2 + 2)/30)-(n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30) = (n+1)^4",
+          "status": "verified"
+        },
+        "recurrence_nontrivial": true,
+        "sample_count": 8,
+        "status": "verified"
+      },
+      "dependencies": [],
+      "first_seen_at": 1789857978.2656536,
+      "id": "875d9d1eacdecb5ff5d3",
+      "sources": [],
+      "statement": "sum(k^4, k=1..n) = n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30 for integer n>=0",
+      "status": "verified",
+      "updated_at": 1789857978.2656536
+    },
     "9cfbfce58063a96aeac9": {
       "certificate": {
         "counterexample": null,
@@ -639,6 +692,6 @@
       "updated_at": 1789857372.0146756
     }
   },
-  "updated_at": 1789857681.1911106,
+  "updated_at": 1789857978.2656536,
   "version": 1
 }

@@ -1,5 +1,5 @@
 {
-  "cycle": 17,
+  "cycle": 18,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -174,7 +174,7 @@
   "strategy_counts": {
     "binomial_expansion": 5,
     "difference_of_powers": 4,
-    "faulhaber_interpolation": 3,
+    "faulhaber_interpolation": 4,
     "finite_geometric_identity": 4
   },
   "theorems": {
@@ -351,6 +351,62 @@
       "nontrivial": true,
       "quality_gate": "structurally_nontrivial_and_proof_gated",
       "statement": "sum(k^7, k=1..n) = n**2*(n + 1)**2*(3*n**4 + 6*n**3 - n**2 - 4*n + 2)/24 for integer n>=0",
+      "strategy": "faulhaber_interpolation",
+      "verified": true
+    },
+    "875d9d1eacdecb5ff5d3": {
+      "certificate": {
+        "base_case": true,
+        "methods": [
+          "exact_integer_samples",
+          "sympy_interpolation",
+          "base_case",
+          "finite_difference_induction_step",
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "polynomial": "n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30",
+        "recurrence": {
+          "counterexample": null,
+          "details": {
+            "lean": {
+              "ok": false,
+              "reason": "requires closed equality",
+              "status": "not_applicable"
+            },
+            "smt": {
+              "method": "z3_unsat_negation",
+              "ok": true,
+              "status": "verified"
+            },
+            "symbolic": {
+              "method": "sympy_normal_form",
+              "normal_form": "0",
+              "ok": true,
+              "status": "verified"
+            }
+          },
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "((n + 1)*(n + 2)*(2*n + 3)*(3*n + 3*(n + 1)**2 + 2)/30)-(n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30) = (n+1)^4",
+          "status": "verified"
+        },
+        "recurrence_nontrivial": true,
+        "sample_count": 8,
+        "status": "verified"
+      },
+      "complexity": 4,
+      "discovered_at": 1789857978.2641058,
+      "human_novelty": "unassessed",
+      "id": "875d9d1eacdecb5ff5d3",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "sum(k^4, k=1..n) = n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30 for integer n>=0",
       "strategy": "faulhaber_interpolation",
       "verified": true
     },
@@ -703,6 +759,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789857681.189972,
+  "updated_at": 1789857978.2641058,
   "version": 3
 }
