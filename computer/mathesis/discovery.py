@@ -24,12 +24,21 @@ class ConjectureDiscoveryEngine:
     never claims a result is new to humanity without external scholarly review.
     """
 
-    def __init__(self, state_dir: str | Path | None = None, *, counterexample_radius: int = 10):
+    def __init__(
+        self,
+        state_dir: str | Path | None = None,
+        *,
+        counterexample_radius: int = 10,
+        symbolic_depth: int = 2,
+        discovery_beam: int = 1,
+    ):
         self.state_dir = Path(state_dir or default_state_dir()).resolve()
         self.path = self.state_dir / "discoveries.json"
         self.history_path = self.state_dir / "discovery-history.jsonl"
         self.knowledge = KnowledgeGraph(self.state_dir)
         self.verifier = CompositeVerifier(counterexample_radius=counterexample_radius)
+        self.symbolic_depth = max(1, min(12, int(symbolic_depth)))
+        self.discovery_beam = max(1, min(8, int(discovery_beam)))
 
     def _load(self) -> dict[str, Any]:
         try:
@@ -64,7 +73,8 @@ class ConjectureDiscoveryEngine:
             pass
 
     def _binomial_identity(self, cycle: int) -> dict[str, Any]:
-        exponent = 2 + (cycle % 10)
+        max_degree = min(16, 3 + self.symbolic_depth)
+        exponent = 2 + (cycle % max(1, max_degree - 1))
         x, y = sp.symbols("x y", real=True)
         lhs = (x + y) ** exponent
         rhs = sp.expand(lhs)
@@ -79,7 +89,8 @@ class ConjectureDiscoveryEngine:
         }
 
     def _difference_of_powers(self, cycle: int) -> dict[str, Any]:
-        exponent = 2 + (cycle % 10)
+        max_degree = min(16, 3 + self.symbolic_depth)
+        exponent = 2 + (cycle % max(1, max_degree - 1))
         x, y = sp.symbols("x y", real=True)
         rhs = (x - y) * sum(x ** (exponent - 1 - j) * y**j for j in range(exponent))
         statement = f"x^{exponent}-y^{exponent} = {sp.sstr(sp.expand(rhs))}"
@@ -93,7 +104,8 @@ class ConjectureDiscoveryEngine:
         }
 
     def _sum_of_powers(self, cycle: int) -> dict[str, Any]:
-        power = 1 + (cycle % 6)
+        max_power = min(8, max(2, 1 + self.symbolic_depth // 2))
+        power = 1 + (cycle % max_power)
         n = sp.Symbol("n", integer=True, nonnegative=True)
         sample_count = power + 4
         samples = []
@@ -134,7 +146,8 @@ class ConjectureDiscoveryEngine:
         }
 
     def _geometric_polynomial(self, cycle: int) -> dict[str, Any]:
-        terms = 2 + (cycle % 10)
+        max_terms = min(16, 3 + self.symbolic_depth)
+        terms = 2 + (cycle % max(1, max_terms - 1))
         x = sp.Symbol("x", real=True)
         left = (x - 1) * sum(x**j for j in range(terms))
         right = x**terms - 1
@@ -161,7 +174,7 @@ class ConjectureDiscoveryEngine:
         selected = None
         # Try several deterministic offsets so a previously-known theorem does not
         # stop a cycle from searching for a new internally-novel result.
-        for offset in range(16):
+        for offset in range(max(4, self.discovery_beam * 4)):
             attempt_cycle = cycle + offset
             strategy = strategies[attempt_cycle % len(strategies)]
             row = strategy(attempt_cycle)
@@ -218,5 +231,7 @@ class ConjectureDiscoveryEngine:
             "rejected": rejected,
             "strategies": state.get("strategy_counts", {}),
             "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
+            "symbolic_depth": self.symbolic_depth,
+            "discovery_beam": self.discovery_beam,
             "path": str(self.path),
         }
