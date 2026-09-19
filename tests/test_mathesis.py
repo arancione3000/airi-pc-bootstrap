@@ -709,3 +709,14 @@ def test_autonomous_workflow_api_calls_are_time_bounded_and_retried():
 
     continuum = workflows[0].read_text(encoding="utf-8")
     assert "timeout-minutes: 15" in continuum
+
+
+def test_handoff_and_watchdog_have_bounded_network_fallbacks():
+    continuum = (ROOT / ".github" / "workflows" / "mathesis-continuum.yml").read_text(encoding="utf-8")
+    watchdog = (ROOT / ".github" / "workflows" / "mathesis-watchdog.yml").read_text(encoding="utf-8")
+
+    assert "Could not inspect active runs after bounded retries; attempting one continuity dispatch." in continuum
+    assert "active_other=0" in continuum
+
+    assert "reason=continuum_run_lookup_failed" in watchdog
+    assert 'echo "stale=true" >> "$GITHUB_OUTPUT"' in watchdog
