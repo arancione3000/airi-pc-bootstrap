@@ -115,7 +115,27 @@ class ExperienceAnalyzer:
             })
 
         discoveries = self._json("discoveries.json", {"theorems": {}})
-        rows = list((discoveries.get("theorems") or {}).values())
+        rows = sorted(
+            (discoveries.get("theorems") or {}).values(),
+            key=lambda row: (float(row.get("discovered_at", 0)), str(row.get("id", ""))),
+        )
+
+        # Verified discoveries keep exerting architectural pressure until the
+        # corresponding mathematical expert actually exists. This prevents a
+        # useful signal from disappearing just because a different challenger
+        # won the immediately following generation.
+        for learned in rows[-50:]:
+            if not learned.get("verified"):
+                continue
+            learned_strategy = str(learned.get("strategy", ""))
+            learned_domain = _DISCOVERY_DOMAIN.get(learned_strategy)
+            if learned_domain and learned_domain not in champion.experts:
+                weaknesses.append(f"missing_{learned_domain}_expert")
+                reasons.append({
+                    "signal": learned_domain,
+                    "reason": f"persistent verified discovery used {learned_strategy} but champion still lacks {learned_domain}",
+                })
+
         rejected = sum(1 for row in rows[-50:] if not row.get("verified"))
         if rejected >= 3:
             weaknesses.append("optimization")
