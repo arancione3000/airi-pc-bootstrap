@@ -68,9 +68,10 @@ def install_sandbox_guard(root: Path) -> None:
 
 
 def main() -> int:
-    from . import lab
-
-    root = lab.LAB_STATE.resolve()
+    configured = os.environ.get("AIRI_EVOLUTION_LAB_STATE")
+    if not configured:
+        raise RuntimeError("AIRI_EVOLUTION_LAB_STATE is required for the sandbox worker")
+    root = Path(configured).resolve(strict=False)
     tmp = root / "tmp"
     cache = root / "cache"
     tmp.mkdir(parents=True, exist_ok=True)
@@ -83,6 +84,10 @@ def main() -> int:
     os.environ["XDG_CACHE_HOME"] = str(cache)
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
+    from . import lab
+    if lab.LAB_STATE.resolve(strict=False) != root:
+        raise RuntimeError("sandbox worker state mismatch")
 
     install_sandbox_guard(root)
 
