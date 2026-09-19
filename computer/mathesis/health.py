@@ -4,13 +4,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .architecture import _ALLOWED_EXPERTS, _ALLOWED_STRATEGIES
+from .architecture import _ALLOWED_EXPERTS, _ALLOWED_STRATEGIES, default_genome
 from .discovery import DISCOVERY_SCHEMA_VERSION, validate_verified_discovery
 from .evolution import SelfEvolutionEngine
 from .knowledge import default_state_dir
 from .neural_graph import INTENTS, GrowingNeuralRouter
 from .safe_math import parse_relation
 from .sympy_lab import DOMAIN_ATLAS
+from .types import ArchitectureGenome
 from .verifiers import CompositeVerifier
 
 
@@ -24,11 +25,34 @@ def _read_json(path: Path, fallback: Any) -> Any:
 def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
     root = Path(state_dir or default_state_dir()).resolve()
     engine = SelfEvolutionEngine(root)
-    champion = engine.load_champion()
+
+    champion_path = root / "champion.json"
+    champion_load_error: str | None = None
+    try:
+        champion_raw = json.loads(champion_path.read_text(encoding="utf-8"))
+        if not isinstance(champion_raw, dict):
+            raise ValueError("champion state must be a JSON object")
+        champion = ArchitectureGenome.from_dict(champion_raw)
+    except Exception as exc:
+        champion = default_genome()
+        champion_load_error = repr(exc)
+
     checks: list[dict[str, Any]] = []
 
     def check(name: str, ok: bool, detail: Any = None) -> None:
         checks.append({"name": name, "ok": bool(ok), "detail": detail})
+
+    def parse_int(value: Any) -> tuple[int, bool]:
+        try:
+            return int(value), True
+        except Exception:
+            return -1, False
+
+    check(
+        "state:champion_loadable",
+        champion_load_error is None,
+        champion_load_error or champion.genome_id,
+    )
 
     # Architecture / curriculum closure.
     missing_domains = sorted(set(DOMAIN_ATLAS) - set(_ALLOWED_EXPERTS))
@@ -94,10 +118,12 @@ def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
         check("router:present", False, str(router_path))
 
     discoveries = _read_json(root / "discoveries.json", {"theorems": {}, "discarded": {}})
+    discovery_version_raw = discoveries.get("version", 0) if isinstance(discoveries, dict) else 0
+    discovery_version, discovery_version_ok = parse_int(discovery_version_raw)
     check(
         "discovery:schema",
-        int(discoveries.get("version", 0) or 0) >= DISCOVERY_SCHEMA_VERSION,
-        discoveries.get("version"),
+        discovery_version_ok and discovery_version >= DISCOVERY_SCHEMA_VERSION,
+        discovery_version_raw,
     )
     active = discoveries.get("theorems") or {}
     discarded = discoveries.get("discarded") or {}
@@ -117,10 +143,13 @@ def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
 
     curriculum = _read_json(root / "curriculum.json", None)
     if isinstance(curriculum, dict):
-        effective_version = max(2, int(curriculum.get("version", 1)))
-        check("curriculum:schema", effective_version >= 2, effective_version)
-        cursor = int(curriculum.get("cursor", 0))
-        check("curriculum:cursor_nonnegative", cursor >= 0, cursor)
+        raw_version = curriculum.get("version", 1)
+        parsed_version, version_ok = parse_int(raw_version)
+        effective_version = max(2, parsed_version) if version_ok else -1
+        check("curriculum:schema", version_ok and effective_version >= 2, raw_version)
+        raw_cursor = curriculum.get("cursor", 0)
+        cursor, cursor_ok = parse_int(raw_cursor)
+        check("curriculum:cursor_nonnegative", cursor_ok and cursor >= 0, raw_cursor)
         bad_retries = {
             str(domain): count
             for domain, count in (curriculum.get("retry_counts") or {}).items()
