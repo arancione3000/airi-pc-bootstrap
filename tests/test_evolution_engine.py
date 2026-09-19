@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "computer"))
 
-from evolution.data import append_verified, class_counts, encode_text, ensure_canary_partition, load_records, source_family, source_family_counts, split_records, text_fingerprint
+from evolution.data import append_verified, append_verified_many, class_counts, encode_text, ensure_canary_partition, load_records, persistent_split_records, source_family, source_family_counts, split_records, text_fingerprint
 from evolution.engine import EvolutionConfig, _canary_decision, _metrics, _promotion_decision, decision_from_probability, fitness, pareto_front
 from evolution.edge import edge_acceptance
 from evolution.monitoring import detect_drift
@@ -220,3 +220,66 @@ def test_canary_gate_blocks_hidden_regression():
     ok, reason = _canary_decision(candidate, old, cfg)
     assert ok is False
     assert "canary" in reason
+
+
+def test_batch_verified_ingestion_handles_duplicates_and_conflicts(tmp_path: Path):
+    path = tmp_path / "verified.jsonl"
+    batch = append_verified_many(path, [
+        {"text": "Batch sample alpha is verified true", "label": 1},
+        {"text": "Batch sample beta is verified false", "label": 0},
+        {"text": "Batch sample alpha is verified true", "label": 1},
+        {"text": "Batch sample beta is verified false", "label": 1},
+        {"text": "x", "label": 1},
+    ])
+    assert batch["accepted"] == 2
+    assert batch["duplicates"] == 1
+    assert batch["conflicts"] == 1
+    assert batch["invalid"] == 1
+    assert len(load_records(path)) == 2
+
+
+def test_canary_never_grows_from_previously_seen_records(tmp_path: Path):
+    rows = []
+    for label in (0, 1):
+        for i in range(20):
+            text = f"initial hidden canary class {label} item {i}"
+            rows.append({"text": text, "text_id": text_fingerprint(text), "label": label, "source": "LIAR:test"})
+    remaining1, canary1, _ = ensure_canary_partition(tmp_path, rows, seed=11)
+    original = {row["text_id"] for row in canary1}
+
+    expanded = list(rows)
+    for label in (0, 1):
+        for i in range(20, 60):
+            text = f"later arriving class {label} item {i}"
+            expanded.append({"text": text, "text_id": text_fingerprint(text), "label": label, "source": "ClaimReview consensus: a.example,b.example"})
+    remaining2, canary2, info2 = ensure_canary_partition(tmp_path, expanded, seed=11)
+    assert {row["text_id"] for row in canary2} == original
+    assert info2["created_now"] is False
+    assert original.isdisjoint({row["text_id"] for row in remaining2})
+
+
+def test_persistent_split_assignments_do_not_move_when_data_grows(tmp_path: Path):
+    rows = []
+    for label in (0, 1):
+        for i in range(20):
+            text = f"stable split class {label} item {i}"
+            rows.append({"text": text, "text_id": text_fingerprint(text), "label": label})
+    tr1, va1, te1, manifest1 = persistent_split_records(tmp_path, rows, seed=17)
+    first = dict(manifest1["assignments"])
+
+    expanded = list(rows)
+    for label in (0, 1):
+        for i in range(20, 40):
+            text = f"stable split later class {label} item {i}"
+            expanded.append({"text": text, "text_id": text_fingerprint(text), "label": label})
+    tr2, va2, te2, manifest2 = persistent_split_records(tmp_path, expanded, seed=17)
+    for tid, split in first.items():
+        assert manifest2["assignments"][tid] == split
+    sets = [
+        {row["text_id"] for row in tr2},
+        {row["text_id"] for row in va2},
+        {row["text_id"] for row in te2},
+    ]
+    assert sets[0].isdisjoint(sets[1])
+    assert sets[0].isdisjoint(sets[2])
+    assert sets[1].isdisjoint(sets[2])
