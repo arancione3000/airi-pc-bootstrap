@@ -1,5 +1,5 @@
 {
-  "cycle": 19,
+  "cycle": 20,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -175,7 +175,7 @@
     "binomial_expansion": 5,
     "difference_of_powers": 5,
     "faulhaber_interpolation": 4,
-    "finite_geometric_identity": 4
+    "finite_geometric_identity": 5
   },
   "theorems": {
     "1a9f202b40ac12dfe986": {
@@ -256,6 +256,46 @@
       "quality_gate": "structurally_nontrivial_and_proof_gated",
       "statement": "(x+y)^14 = x**14 + 14*x**13*y + 91*x**12*y**2 + 364*x**11*y**3 + 1001*x**10*y**4 + 2002*x**9*y**5 + 3003*x**8*y**6 + 3432*x**7*y**7 + 3003*x**6*y**8 + 2002*x**5*y**9 + 1001*x**4*y**10 + 364*x**3*y**11 + 91*x**2*y**12 + 14*x*y**13 + y**14",
       "strategy": "binomial_expansion",
+      "verified": true
+    },
+    "29dcf6f58e0884f81100": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
+        "status": "verified"
+      },
+      "complexity": 7,
+      "discovered_at": 1789858602.601222,
+      "human_novelty": "unassessed",
+      "id": "29dcf6f58e0884f81100",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
+      "strategy": "finite_geometric_identity",
       "verified": true
     },
     "2f64c86003bd7167441f": {
@@ -799,6 +839,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789858294.1706212,
+  "updated_at": 1789858602.601222,
   "version": 3
 }

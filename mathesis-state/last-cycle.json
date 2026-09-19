@@ -28,39 +28,39 @@
           "z3_unsat_negation"
         ],
         "ok": true,
-        "statement": "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
+        "statement": "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
         "status": "verified"
       },
-      "complexity": 6,
-      "discovered_at": 1789858294.1706212,
+      "complexity": 7,
+      "discovered_at": 1789858602.601222,
       "human_novelty": "unassessed",
-      "id": "32a25047b45a31e91fb0",
+      "id": "29dcf6f58e0884f81100",
       "internal_novelty": true,
       "nontrivial": true,
       "quality_gate": "structurally_nontrivial_and_proof_gated",
-      "statement": "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
-      "strategy": "difference_of_powers",
+      "statement": "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
+      "strategy": "finite_geometric_identity",
       "verified": true
     },
-    "total_discoveries": 14
+    "total_discoveries": 15
   },
   "discovery_status": {
-    "cycle": 19,
+    "cycle": 20,
     "discarded": 4,
     "discovery_beam": 8,
     "novelty_policy": "internal novelty only; human novelty is never inferred automatically",
     "ok": true,
     "path": "/tmp/mathesis-runtime-state/discoveries.json",
     "rejected": 0,
-    "stored": 14,
+    "stored": 15,
     "strategies": {
       "binomial_expansion": 5,
       "difference_of_powers": 5,
       "faulhaber_interpolation": 4,
-      "finite_geometric_identity": 4
+      "finite_geometric_identity": 5
     },
     "symbolic_depth": 12,
-    "verified": 14
+    "verified": 15
   },
   "evolution": {
     "benchmark": {
@@ -194,6 +194,15 @@
             "ok": true,
             "statement": "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
             "status": "verified"
+          },
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
+            "status": "verified"
           }
         ],
         "neural_accuracy": 0.909091,
@@ -256,7 +265,7 @@
           },
           {
             "critical": true,
-            "detail": 98.999627,
+            "detail": 98.99962,
             "name": "program:gcd",
             "ok": true
           },
@@ -446,6 +455,12 @@
             "critical": true,
             "detail": "verified",
             "name": "learned_theorem:13",
+            "ok": true
+          },
+          {
+            "critical": true,
+            "detail": "verified",
+            "name": "learned_theorem:14",
             "ok": true
           },
           {
@@ -588,6 +603,15 @@
             "ok": true,
             "statement": "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
             "status": "verified"
+          },
+          {
+            "methods": [
+              "sympy_normal_form",
+              "z3_unsat_negation"
+            ],
+            "ok": true,
+            "statement": "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
+            "status": "verified"
           }
         ],
         "neural_accuracy": 0.909091,
@@ -650,7 +674,7 @@
           },
           {
             "critical": true,
-            "detail": 98.999608,
+            "detail": 98.999605,
             "name": "program:gcd",
             "ok": true
           },
@@ -843,6 +867,12 @@
             "ok": true
           },
           {
+            "critical": true,
+            "detail": "verified",
+            "name": "learned_theorem:14",
+            "ok": true
+          },
+          {
             "critical": false,
             "detail": 0.9091,
             "name": "neural:intent_router",
@@ -875,7 +905,8 @@
         "(x-1)*(x**2 + x + 1) = x^3-1",
         "(x+y)^4 = x**4 + 4*x**3*y + 6*x**2*y**2 + 4*x*y**3 + y**4",
         "((n + 1)*(n + 2)*(2*n + 3)*(3*n + 3*(n + 1)**2 + 2)/30)-(n*(n + 1)*(2*n + 1)*(3*n**2 + 3*n - 1)/30) = (n+1)^4",
-        "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)"
+        "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
+        "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1"
       ],
       "selected_trial": 2,
       "trials": [
@@ -1010,6 +1041,15 @@
                 "ok": true,
                 "statement": "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -1072,7 +1112,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.9996,
+                "detail": 98.999579,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -1262,6 +1302,12 @@
                 "critical": true,
                 "detail": "verified",
                 "name": "learned_theorem:13",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "verified",
+                "name": "learned_theorem:14",
                 "ok": true
               },
               {
@@ -1594,6 +1640,15 @@
                 "ok": true,
                 "statement": "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -1656,7 +1711,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999599,
+                "detail": 98.999637,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -1846,6 +1901,12 @@
                 "critical": true,
                 "detail": "verified",
                 "name": "learned_theorem:13",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "verified",
+                "name": "learned_theorem:14",
                 "ok": true
               },
               {
@@ -2178,6 +2239,15 @@
                 "ok": true,
                 "statement": "x^6-y^6 = (x - y)*(x**5 + x**4*y + x**3*y**2 + x**2*y**3 + x*y**4 + y**5)",
                 "status": "verified"
+              },
+              {
+                "methods": [
+                  "sympy_normal_form",
+                  "z3_unsat_negation"
+                ],
+                "ok": true,
+                "statement": "(x-1)*(x**6 + x**5 + x**4 + x**3 + x**2 + x + 1) = x^7-1",
+                "status": "verified"
               }
             ],
             "neural_accuracy": 0.909091,
@@ -2240,7 +2310,7 @@
               },
               {
                 "critical": true,
-                "detail": 98.999627,
+                "detail": 98.99962,
                 "name": "program:gcd",
                 "ok": true
               },
@@ -2430,6 +2500,12 @@
                 "critical": true,
                 "detail": "verified",
                 "name": "learned_theorem:13",
+                "ok": true
+              },
+              {
+                "critical": true,
+                "detail": "verified",
+                "name": "learned_theorem:14",
                 "ok": true
               },
               {
@@ -3022,10 +3098,10 @@
   },
   "ok": true,
   "study": {
-    "at": 1789858295.9369986,
-    "domain": "sequences",
+    "at": 1789858605.1017156,
+    "domain": "special_functions",
     "ok": true,
-    "query": "sequences mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
+    "query": "special_functions mathematics SymPy documentation Lean mathlib theorem proving definitions theorems algorithms",
     "raw": null,
     "sources": [
       {
