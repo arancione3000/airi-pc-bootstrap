@@ -78,6 +78,21 @@ class ArchitectureGenome:
     counterexample_radius: int = 8
     max_proof_cells: int = 64
     neural_hidden: int = 16
+    symbolic_depth: int = 2
+    discovery_beam: int = 1
+    research_budget: int = 1
+    strategy_portfolio: list[str] = field(default_factory=lambda: [
+        "exact_symbolic",
+        "smt_validity",
+        "counterexample",
+        "lean",
+        "conjecture_discovery",
+    ])
+    topology: list[tuple[str, str]] = field(default_factory=lambda: [
+        ("formalization", "algebra"),
+        ("algebra", "counterexample"),
+        ("counterexample", "program_synthesis"),
+    ])
     parent_id: str | None = None
     genome_id: str = "omega-g0"
 
@@ -93,6 +108,21 @@ class ArchitectureGenome:
             counterexample_radius=int(value.get("counterexample_radius", 8)),
             max_proof_cells=int(value.get("max_proof_cells", 64)),
             neural_hidden=int(value.get("neural_hidden", 16)),
+            symbolic_depth=int(value.get("symbolic_depth", 2)),
+            discovery_beam=int(value.get("discovery_beam", 1)),
+            research_budget=int(value.get("research_budget", 1)),
+            strategy_portfolio=[str(x) for x in value.get("strategy_portfolio", [
+                "exact_symbolic", "smt_validity", "counterexample", "lean", "conjecture_discovery"
+            ])],
+            topology=[
+                (str(edge[0]), str(edge[1]))
+                for edge in value.get("topology", [
+                    ["formalization", "algebra"],
+                    ["algebra", "counterexample"],
+                    ["counterexample", "program_synthesis"],
+                ])
+                if isinstance(edge, (list, tuple)) and len(edge) == 2
+            ],
             parent_id=value.get("parent_id"),
             genome_id=str(value.get("genome_id", "omega-g0")),
         )

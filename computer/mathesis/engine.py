@@ -5,12 +5,15 @@ from typing import Any
 
 from .architecture import architecture_report
 from .evolution import SelfEvolutionEngine
+from .discovery import ConjectureDiscoveryEngine
+from .curriculum import MathematicalCurriculum
 from .formalizer import FormalizerMesh
 from .knowledge import KnowledgeGraph, default_state_dir
 from .proof_cells import ProofCellGraph
 from .research import ReadOnlyResearcher
 from .safe_math import parse_relation
 from .synthesis import ProgramSynthesizer
+from .sympy_lab import SymPyMathLab
 from .verifiers import CompositeVerifier
 
 
@@ -31,6 +34,14 @@ class MathesisOmega:
         self.synthesizer = ProgramSynthesizer()
         self.researcher = ReadOnlyResearcher()
         self.knowledge = KnowledgeGraph(self.state_dir)
+        self.math_lab = SymPyMathLab()
+        self.discovery = ConjectureDiscoveryEngine(
+            self.state_dir,
+            counterexample_radius=self.genome.counterexample_radius,
+            symbolic_depth=self.genome.symbolic_depth,
+            discovery_beam=self.genome.discovery_beam,
+        )
+        self.curriculum = MathematicalCurriculum(self.state_dir)
 
     def understand(self, prompt: str) -> dict[str, Any]:
         intent = self.formalizer.formalize(prompt)
@@ -111,6 +122,57 @@ class MathesisOmega:
                     "proof_graph": graph.to_dict(),
                 }
 
+            if intent.kind == "derivative":
+                expression = intent.expression or intent.raw
+                cell = graph.add(expression, strategy="sympy_rule_derivative_plus_numeric_check", parent=root_id)
+                result = self.math_lab.derivative(expression, intent.variable or "x")
+                graph.complete(cell.cell_id, result.to_dict(), status="proved" if result.ok else "unverified")
+                graph.complete(root_id, result.result, status="proved" if result.ok else "unverified")
+                return {
+                    **base,
+                    "ok": result.ok,
+                    "math": result.to_dict(),
+                    "proof_graph": graph.to_dict(),
+                }
+
+            if intent.kind == "integral":
+                expression = intent.expression or intent.raw
+                cell = graph.add(expression, strategy="sympy_integrate_plus_differentiate_back", parent=root_id)
+                result = self.math_lab.antiderivative(expression, intent.variable or "x")
+                graph.complete(cell.cell_id, result.to_dict(), status="proved" if result.ok else "unverified")
+                graph.complete(root_id, result.result, status="proved" if result.ok else "unverified")
+                return {
+                    **base,
+                    "ok": result.ok,
+                    "math": result.to_dict(),
+                    "proof_graph": graph.to_dict(),
+                }
+
+            if intent.kind == "analyze_math":
+                expression = intent.expression or intent.raw
+                cell = graph.add(expression, strategy="specific_sympy_normal_forms", parent=root_id)
+                result = self.math_lab.algebra_normal_forms(expression)
+                graph.complete(cell.cell_id, result.to_dict(), status="proved" if result.ok else "unverified")
+                graph.complete(root_id, result.result, status="proved" if result.ok else "unverified")
+                return {
+                    **base,
+                    "ok": result.ok,
+                    "math": result.to_dict(),
+                    "proof_graph": graph.to_dict(),
+                }
+
+            if intent.kind == "discover_math":
+                cell = graph.add("generate conjecture and require proof gate", strategy="autonomous_conjecture_discovery", parent=root_id)
+                result = self.discovery.discover_once()
+                graph.complete(cell.cell_id, result, status="proved" if result.get("ok") else "rejected")
+                graph.complete(root_id, result.get("status"), status="proved" if result.get("ok") else "checked")
+                return {
+                    **base,
+                    "ok": bool(result.get("ok")),
+                    "discovery": result,
+                    "proof_graph": graph.to_dict(),
+                }
+
             if intent.kind == "synthesize_program":
                 task = intent.target or ""
                 cell = graph.add(task, strategy="candidate_program_arena", parent=root_id)
@@ -168,6 +230,10 @@ class MathesisOmega:
                 result = self.evolution.evolve_once()
                 self.genome = self.evolution.load_champion()
                 self.verifier = CompositeVerifier(counterexample_radius=self.genome.counterexample_radius)
+                self.discovery = ConjectureDiscoveryEngine(
+                    self.state_dir,
+                    counterexample_radius=self.genome.counterexample_radius,
+                )
                 graph.complete(cell.cell_id, result.to_dict(), status="proved" if result.promoted else "checked")
                 graph.complete(root_id, self.genome.genome_id, status="proved")
                 return {
@@ -203,10 +269,13 @@ class MathesisOmega:
         self.genome = self.evolution.load_champion()
         return {
             "ok": True,
-            "version": "0.1.0",
+            "version": "0.2.0",
             "model": architecture_report(self.genome),
             "evolution": self.evolution.status(),
             "knowledge": self.knowledge.status(),
+            "discovery": self.discovery.status(),
+            "curriculum": self.curriculum.status(),
+            "sympy_lab": self.math_lab.manifest(),
             "verifiers": self.verifier.diagnostics(),
-            "guarantee": "proof-gated prototype; not an infallibility guarantee",
+            "guarantee": "proof-gated evolving system; not an infallibility or human-novelty guarantee",
         }

@@ -3,7 +3,7 @@ name: MATHESIS Omega Continuum
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 * * * *'
+    - cron: '3-58/5 * * * *'
   push:
     branches: [main]
     paths:
@@ -20,11 +20,13 @@ concurrency:
 jobs:
   evolve:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     env:
       PYTHONPATH: computer
       MATHESIS_STATE_DIR: /tmp/mathesis-runtime-state
       STATE_REPO: /tmp/mathesis-state-repo
+      MATHESIS_CHALLENGERS: '3'
+      MATHESIS_STUDY_EVERY: '12'
     steps:
       - uses: actions/checkout@v4
 
@@ -38,13 +40,23 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check -r computer/mathesis/requirements.txt
 
+      - name: Cache Lean toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: mathesis-lean-${{ runner.os }}-v4.34.0
+
       - name: Install stable Lean 4 verifier
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf \
-            https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
-            -o /tmp/elan-init.sh
-          sh /tmp/elan-init.sh -y --default-toolchain leanprover/lean4:v4.34.0
+          set -euo pipefail
+          if [ ! -x "$HOME/.elan/bin/lean" ]; then
+            curl --proto '=https' --tlsv1.2 -sSf \
+              https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+              -o /tmp/elan-init.sh
+            sh /tmp/elan-init.sh -y --default-toolchain leanprover/lean4:v4.34.0
+          fi
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" default leanprover/lean4:v4.34.0
           "$HOME/.elan/bin/lean" --version
 
       - name: Restore or initialize persistent MATHESIS state branch
@@ -85,6 +97,8 @@ jobs:
           test -f "$MATHESIS_STATE_DIR/champion.json"
           test -f "$MATHESIS_STATE_DIR/router.json"
           test -f "$MATHESIS_STATE_DIR/champion_model.py"
+          test -f "$MATHESIS_STATE_DIR/discoveries.json"
+          test -f "$MATHESIS_STATE_DIR/discovery-history.jsonl"
 
       - name: Persist and verify state heartbeat
         env:

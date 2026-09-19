@@ -65,6 +65,41 @@ def _keyword_vote(raw: str) -> _Vote | None:
     if any(pattern in lower for pattern in _EVOLVE_PATTERNS):
         return _Vote("evolve_model", None, None, "next_architecture", 1.0, "keyword")
 
+    if any(pattern in lower for pattern in (
+        "scopri nuova matematica", "scopri matematica", "trova un nuovo teorema",
+        "formula una congettura", "discover new mathematics", "discover a theorem",
+        "generate a conjecture",
+    )):
+        return _Vote("discover_math", None, None, "autonomous_conjecture", 1.0, "keyword")
+
+    if any(word in lower for word in ("deriva", "derivata", "differentia", "derivative")):
+        expr = _extract_after_prefix(raw, ("calcola la derivata di", "derivata di", "deriva", "differentiate", "derivative of"))
+        variable = None
+        m = re.search(r"\b(?:rispetto a|per|with respect to|wrt)\s+([A-Za-z][A-Za-z0-9_]*)\b", expr, flags=re.I)
+        if m:
+            variable = m.group(1)
+            expr = expr[:m.start()].strip()
+        return _Vote("derivative", expr, variable or "x", None, 0.98, "keyword")
+
+    if any(word in lower for word in ("integra", "integrale", "integrate", "antiderivata")):
+        expr = _extract_after_prefix(raw, ("calcola l'integrale di", "integrale di", "integra", "integrate", "antiderivata di"))
+        variable = None
+        m = re.search(r"\b(?:rispetto a|per|with respect to|wrt)\s+([A-Za-z][A-Za-z0-9_]*)\b", expr, flags=re.I)
+        if m:
+            variable = m.group(1)
+            expr = expr[:m.start()].strip()
+        return _Vote("integral", expr, variable or "x", None, 0.98, "keyword")
+
+    if any(pattern in lower for pattern in (
+        "analizza matematicamente", "analizza simbolicamente", "forma normale",
+        "factorizza", "fattorizza", "expand and factor", "analyze mathematically",
+    )):
+        expr = _extract_after_prefix(
+            raw,
+            ("analizza matematicamente", "analizza simbolicamente", "forma normale", "factorizza", "fattorizza", "analyze mathematically"),
+        )
+        return _Vote("analyze_math", expr, None, "symbolic_lab", 0.96, "keyword")
+
     target = _program_target(lower)
     if target and any(word in lower for word in ("scrivi", "crea", "implementa", "funzione", "write", "implement", "code")):
         return _Vote("synthesize_program", None, None, target, 0.97, "keyword")
@@ -121,6 +156,8 @@ def _semantic_vote(raw: str) -> _Vote | None:
     if "modello" in lower or "model" in lower:
         if any(x in lower for x in ("prossimo", "next", "evol", "miglior")):
             return _Vote("evolve_model", None, None, "next_architecture", 0.82, "semantic")
+    if any(x in lower for x in ("congettura", "conjecture", "nuovo teorema", "new theorem")):
+        return _Vote("discover_math", None, None, "autonomous_conjecture", 0.84, "semantic")
     if "=" in raw and any(ch.isalpha() for ch in raw):
         return _Vote("equation", raw.strip().rstrip("?"), None, None, 0.60, "semantic")
     return None

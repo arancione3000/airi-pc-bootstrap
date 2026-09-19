@@ -11,6 +11,7 @@ on:
       - '.github/workflows/mathesis.yml'
       - '.github/workflows/mathesis-continuum.yml'
       - '.github/workflows/mathesis-watchdog.yml'
+      - '.github/workflows/mathesis-deep-math.yml'
       - '.ai/PROJECT_MEMORY.md'
 
 permissions:
@@ -87,6 +88,10 @@ jobs:
           python -m mathesis.cli "dimostra che (x+1)^2=x^2+2*x+1"
           python -m mathesis.cli "scrivi una funzione mcd"
           python -m mathesis.cli "scrivimi il tuo prossimo modello"
+          python -m mathesis.cli "deriva x^3+2*x"
+          python -m mathesis.cli "integra 2*x"
+          python -m mathesis.cli "scopri nuova matematica"
+          python -m mathesis.evolution_cycle
           python -m mathesis.cli --status
 
       - name: Verify transactional self-rewrite artifacts
@@ -96,6 +101,8 @@ jobs:
           test -f "$MATHESIS_STATE_DIR/candidate_model.py"
           test -f "$MATHESIS_STATE_DIR/champion_model.py"
           test -f "$MATHESIS_STATE_DIR/history.jsonl"
+          test -f "$MATHESIS_STATE_DIR/discoveries.json"
+          test -f "$MATHESIS_STATE_DIR/discovery-history.jsonl"
           python - <<'PY'
           import ast
           import json

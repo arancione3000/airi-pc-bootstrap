@@ -131,3 +131,84 @@ powerful AI. Natural-language coverage and theorem domains are intentionally
 small. The important property is that unsupported tasks abstain and that the
 architecture can be extended while retaining independently testable proof and
 promotion gates.
+
+
+## v1 autonomous discovery architecture
+
+MATHESIS-Ω v1 extends the v0 proof-gated solver with a bounded mathematical
+discovery loop.
+
+Each fast cycle now performs:
+
+1. generate one bounded conjecture candidate;
+2. attempt exact symbolic + SMT/counterexample verification;
+3. store only proof-gated discoveries as mathematical knowledge;
+4. periodically study read-only public mathematical sources;
+5. generate multiple architecture challengers;
+6. benchmark each challenger across mathematical domains;
+7. promote only the best challenger if the verifier kernel stayed unchanged and
+   no critical regression appeared;
+8. persist model, router, discoveries, curriculum and history on
+   `mathesis-state`.
+
+### SymPy mathematical laboratory
+
+The v1 lab exposes domain-specific operations for algebra, polynomials,
+calculus, trigonometry, number theory, linear algebra, combinatorics, equations,
+inequalities, sequences, special functions, geometry, probability,
+discrete mathematics and optimization.
+
+Generic `simplify()` is not treated as a proof oracle. The implementation
+prefers explicit transformations such as expansion/factorization and verifies
+results independently when possible.
+
+### Autonomous discoveries
+
+The discovery engine currently explores bounded families including binomial
+identities, finite geometric identities, difference-of-powers identities and
+Faulhaber-style sum-of-powers formulas inferred by exact interpolation and
+checked through base cases plus finite-difference induction steps.
+
+A discovery is labelled:
+
+- `internal_novelty: true` when it is new to the persistent MATHESIS state;
+- `human_novelty: unassessed` unless an external scholarly process establishes
+  otherwise.
+
+MATHESIS must never infer "new to humanity" merely because a web search failed
+to find a matching formula.
+
+### Evolving architecture
+
+The mutable model is an architecture DSL containing experts, graph topology,
+neural width, proof-cell budget, symbolic depth, conjecture beam and research
+budget. These values affect the following discovery cycles; they are not
+decorative metadata.
+
+Three bounded challenger styles are tried by default on every cycle:
+
+- broader mathematical coverage;
+- deeper proof/discovery search;
+- smaller/faster architecture.
+
+The verifier kernel remains immutable across a promotion.
+
+### Continuous operation
+
+The fast continuum is scheduled every five minutes with a five-minute job
+timeout. A duplicate-aware watchdog runs every ten minutes and dispatches a
+recovery only if state is stale and no continuum job is already active.
+
+GitHub Actions scheduling is best-effort. This design provides continuous
+attempted evolution while GitHub Actions is available; it cannot promise
+literal zero downtime during provider outages, queue delays or account limits.
+
+A separate deep workflow uses Lean 4.34.0 + Mathlib 4.34.0 on a slower cadence,
+with caches for the heavy theorem library.
+
+### What v1 does not claim
+
+MATHESIS does not literally contain all mathematics ever written, cannot prove
+every true statement, and is not guaranteed error-free. Its design goal is to
+expand verified capability over time while explicitly abstaining or rejecting
+results that do not pass the available proof gates.
