@@ -15,6 +15,10 @@ INTENTS = (
     "synthesize_program",
     "research_claim",
     "evolve_model",
+    "derivative",
+    "integral",
+    "analyze_math",
+    "discover_math",
     "unknown",
 )
 
