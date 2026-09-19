@@ -33,11 +33,29 @@ jobs:
 
       - name: Compile evolution and integration sources
         run: |
-          .venv/bin/python -m compileall -q computer/evolution computer/server.py computer/advanced.py computer/control_plane/orchestrator.py tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py tests/test_evolution_lab.py tests/test_evolution_persistence.py
+          .venv/bin/python -m compileall -q computer/evolution computer/server.py computer/advanced.py computer/control_plane/orchestrator.py tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py tests/test_evolution_lab.py tests/test_evolution_persistence.py tests/test_evolution_evidence_v2.py
 
       - name: Focused evolution tests
         run: |
-          .venv/bin/python -m pytest -q tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py tests/test_evolution_lab.py tests/test_evolution_persistence.py tests/test_advanced.py
+          .venv/bin/python -m pytest -q tests/test_evolution_engine.py tests/test_evolution_pipeline.py tests/test_evolution_integration.py tests/test_evolution_lab.py tests/test_evolution_persistence.py tests/test_evolution_evidence_v2.py tests/test_advanced.py
+
+      - name: Read-only web contract smoke test
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+        run: |
+          .venv/bin/python - <<'PY'
+          from evolution.read_only_research import fetch_text
+
+          page = fetch_text(
+              "https://www.iana.org/domains/reserved",
+              timeout=20,
+              max_bytes=750_000,
+          )
+          assert page["url"].startswith("https://")
+          assert page["bytes"] > 100
+          assert "IANA" in page["text"] or "Reserved Domains" in page["text"]
+          print({"ok": True, "url": page["url"], "bytes": page["bytes"]})
+          PY
 
       - name: Persistent daemon survives launcher exit and persists to Git
         env:
