@@ -16,6 +16,9 @@ STATE = lab.LAB_STATE
 PID = STATE / "worker.pid"
 LOG = STATE / "worker.log"
 AUTOPILOT_DISABLED = STATE / "autopilot.disabled"
+DAEMON_PID = STATE / "daemon.pid"
+DAEMON_STATUS = STATE / "daemon-status.json"
+SYNC_META = STATE / "sync-meta.json"
 DEFAULT_TRIGGER = max(40, int(os.environ.get("AIRI_EVOLUTION_LAB_TRIGGER", "40")))
 DEFAULT_INTERVAL = max(300, int(os.environ.get("AIRI_EVOLUTION_LAB_INTERVAL", "900")))
 
@@ -150,6 +153,19 @@ def audit() -> dict[str, Any]:
 def status() -> dict[str, Any]:
     base = lab.status()
     worker = _pid()
+    try:
+        daemon_pid = int(DAEMON_PID.read_text(encoding="utf-8").strip())
+    except Exception:
+        daemon_pid = None
+    daemon_running = bool(daemon_pid and _pid_alive(daemon_pid))
+    try:
+        daemon_status = json.loads(DAEMON_STATUS.read_text(encoding="utf-8")) if DAEMON_STATUS.exists() else None
+    except Exception:
+        daemon_status = None
+    try:
+        sync_meta = json.loads(SYNC_META.read_text(encoding="utf-8")) if SYNC_META.exists() else None
+    except Exception:
+        sync_meta = None
     return {
         **base,
         "worker_running": bool(worker),
@@ -158,6 +174,10 @@ def status() -> dict[str, Any]:
         "autopilot_interval_seconds": DEFAULT_INTERVAL,
         "audit": audit(),
         "autopilot_enabled": not AUTOPILOT_DISABLED.exists(),
+        "daemon_running": daemon_running,
+        "daemon_pid": daemon_pid if daemon_running else None,
+        "daemon_status": daemon_status,
+        "git_sync": sync_meta,
     }
 
 
