@@ -4,10 +4,11 @@ from typing import Any
 
 import sympy as sp
 
+from .architecture import _ALLOWED_EXPERTS
 from .formalizer import FormalizerMesh
 from .neural_graph import GrowingNeuralRouter
 from .synthesis import ProgramSynthesizer
-from .sympy_lab import SymPyMathLab
+from .sympy_lab import DOMAIN_ATLAS, SymPyMathLab
 from .types import ArchitectureGenome
 from .verifiers import CompositeVerifier
 
@@ -70,6 +71,41 @@ def evaluate_genome(
     def add(name: str, ok: bool, critical: bool = True, detail: Any = None):
         tasks.append({"name": name, "ok": bool(ok), "critical": critical, "detail": detail})
 
+    # Architecture claims are part of the benchmark surface, not trusted metadata.
+    experts = list(genome.experts)
+    expert_set = set(experts)
+    topology_nodes = {node for edge in genome.topology for node in edge}
+    unknown_experts = sorted(expert_set - set(_ALLOWED_EXPERTS))
+    bad_edges = [
+        list(edge)
+        for edge in genome.topology
+        if len(edge) != 2 or edge[0] not in expert_set or edge[1] not in expert_set
+    ]
+    disconnected = sorted(expert_set - topology_nodes) if len(experts) > 1 else []
+    add("architecture:unique_experts", len(experts) == len(expert_set), detail=experts)
+    add("architecture:known_experts", not unknown_experts, detail=unknown_experts)
+    add("architecture:topology_closed", not bad_edges, detail=bad_edges)
+    add("architecture:experts_connected", not disconnected, detail=disconnected)
+    add(
+        "architecture:bounded_genome",
+        (
+            1 <= genome.counterexample_radius <= 40
+            and 1 <= genome.max_proof_cells <= 256
+            and 12 <= genome.neural_hidden <= 128
+            and 1 <= genome.symbolic_depth <= 12
+            and 1 <= genome.discovery_beam <= 8
+            and 1 <= genome.research_budget <= 4
+        ),
+        detail={
+            "counterexample_radius": genome.counterexample_radius,
+            "max_proof_cells": genome.max_proof_cells,
+            "neural_hidden": genome.neural_hidden,
+            "symbolic_depth": genome.symbolic_depth,
+            "discovery_beam": genome.discovery_beam,
+            "research_budget": genome.research_budget,
+        },
+    )
+
     intent_cases = [
         ("calcola 10+15", "arithmetic"),
         ("risolvi 3*x=12", "equation"),
@@ -122,6 +158,12 @@ def evaluate_genome(
         "discrete_math": lambda: lab.number_theory_profile(360).ok,
         "optimization": lambda: lab.derivative("x^2-6*x+13").ok,
     }
+    missing_domain_benchmarks = sorted(set(DOMAIN_ATLAS) - set(domain_checks))
+    add(
+        "architecture:domain_benchmarks_complete",
+        not missing_domain_benchmarks,
+        detail=missing_domain_benchmarks,
+    )
 
     for domain, check in domain_checks.items():
         if domain not in genome.experts:
