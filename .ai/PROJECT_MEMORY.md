@@ -85,3 +85,7 @@ tests pass.
 
 - structured anti-forgetting now replays verified Faulhaber induction recurrences;
 - rich sum-of-powers discoveries therefore contribute critical future promotion obligations even though their full theorem string is outside the simple relation parser.
+
+
+- persistent curriculum v1 metadata is migrated in-memory to schema v2 with retry_counts;
+- curriculum status now exposes the effective schema version.
