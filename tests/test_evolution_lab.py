@@ -220,3 +220,21 @@ def test_scheduler_has_default_persistent_shadow_lab_job():
     assert "evolution-lab-shadow-router" in text
     assert "evolution_lab_maintenance" in text
     assert "autopilot.disabled" in text
+
+
+def test_insufficient_cycle_marks_observations_seen_and_waits_for_new_data(monkeypatch, tmp_path: Path):
+    _, state = _patch_lab(monkeypatch, tmp_path)
+    for i in range(10):
+        lab.record_execution(
+            goal=f"Repeated route sample {i}",
+            operation="read",
+            tool="computer_file_read",
+            args={"path": f"/private/{i}.txt"},
+            success=True,
+        )
+    result = lab.run_cycle(population=4, generations=1, candidate_epochs=1, finalist_epochs=1)
+    assert result["trained"] is False
+    meta = json.loads((state / "lab-meta.json").read_text(encoding="utf-8"))
+    assert meta["last_cycle_raw_count"] == 10
+    st = lab.status()
+    assert st["pending_observations"] == 0
