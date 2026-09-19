@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -62,6 +63,26 @@ def _safe_env() -> dict[str, str]:
         "TORCH_HOME": str(STATE / "cache" / "torch"),
     })
     return env
+
+
+def _sandbox_command() -> tuple[list[str], str]:
+    base = [sys.executable, "-m", "evolution.lab_worker"]
+    if os.name != "nt":
+        unshare = shutil.which("unshare")
+        if unshare:
+            try:
+                probe = subprocess.run(
+                    [unshare, "-n", "--", "true"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=3,
+                    check=False,
+                )
+                if probe.returncode == 0:
+                    return [unshare, "-n", "--", *base], "network_namespace+python_audit_hook"
+            except Exception:
+                pass
+    return base, "python_audit_hook"
 
 
 def _apply_resource_limits(pid: int) -> dict[str, Any]:
@@ -159,7 +180,7 @@ def start(*, auto_setup: bool = True) -> dict[str, Any]:
     for directory in (STATE, STATE / "tmp", STATE / "cache"):
         directory.mkdir(parents=True, exist_ok=True)
 
-    command = [sys.executable, "-m", "evolution.lab_worker"]
+    command, network_isolation = _sandbox_command()
     if LOG.exists() and LOG.stat().st_size > 10 * 1024 * 1024:
         rotated = LOG.with_suffix(".log.1")
         rotated.unlink(missing_ok=True)
@@ -189,6 +210,7 @@ def start(*, auto_setup: bool = True) -> dict[str, Any]:
         "state_dir": str(STATE),
         "resource_limits": limits,
         "shadow_only": True,
+        "network_isolation": network_isolation,
     }
 
 
