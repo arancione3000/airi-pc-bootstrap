@@ -17,6 +17,7 @@ CHECKOUT = SYNC_ROOT / "checkout"
 EXPORT_REL = Path("evolution-state") / "shadow-router"
 SYNC_META = lab.LAB_STATE / "sync-meta.json"
 HEARTBEAT_SECONDS = max(1800, int(os.environ.get("AIRI_EVOLUTION_HEARTBEAT_SECONDS", "7200")))
+SOURCE_ROOT = Path(os.environ.get("AIRI_ROOT") or lab.ROOT)
 
 
 def _run(args: list[str], cwd: Path | None = None, timeout: int = 90) -> dict[str, Any]:
@@ -65,7 +66,7 @@ def _source_sha() -> str:
     override = os.environ.get("AIRI_EVOLUTION_SOURCE_SHA", "").strip()
     if override:
         return override
-    result = _run(["git", "-C", str(lab.ROOT), "rev-parse", "HEAD"], timeout=10)
+    result = _run(["git", "-C", str(SOURCE_ROOT), "rev-parse", "HEAD"], timeout=10)
     return result["stdout"].strip() if result["ok"] else ""
 
 
@@ -77,7 +78,7 @@ def _git_url() -> str:
     override = os.environ.get("AIRI_EVOLUTION_GIT_URL", "").strip()
     if override:
         return override
-    result = _run(["git", "-C", str(lab.ROOT), "remote", "get-url", "origin"], timeout=10)
+    result = _run(["git", "-C", str(SOURCE_ROOT), "remote", "get-url", "origin"], timeout=10)
     if not result["ok"] or not result["stdout"].strip():
         raise RuntimeError("evolution state sync requires a configured git origin")
     return result["stdout"].strip()
@@ -339,7 +340,7 @@ def reconcile_from_checkout() -> dict[str, Any]:
         "champion_imported": champion_imported,
     }
 
-def sync_to_git(*, force_heartbeat: bool = False) -> dict[str, Any]:
+def sync_to_git(*, force_heartbeat: bool = False, _retry: bool = True) -> dict[str, Any]:
     checkout = _ensure_checkout()
     if not checkout["ok"]:
         return checkout
@@ -379,6 +380,10 @@ def sync_to_git(*, force_heartbeat: bool = False) -> dict[str, Any]:
     sha = _run(["git", "rev-parse", "HEAD"], cwd=CHECKOUT)["stdout"].strip()
     push = _run(["git", "push", "origin", f"HEAD:{STATE_BRANCH}"], cwd=CHECKOUT, timeout=120)
     if not push["ok"]:
+        if _retry:
+            refreshed = _ensure_checkout()
+            if refreshed.get("ok"):
+                return sync_to_git(force_heartbeat=True, _retry=False)
         return {"ok": False, "synced": False, "reason": "push_failed", "local_commit": sha, "git": push}
 
     verify = _run(["git", "ls-remote", "origin", f"refs/heads/{STATE_BRANCH}"], cwd=CHECKOUT, timeout=60)
