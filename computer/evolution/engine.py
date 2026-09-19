@@ -122,8 +122,20 @@ def _loader(records: list[dict], genome: Genome, vocab_size: int, shuffle: bool,
     if shuffle and records:
         families = [source_family(row) for row in records]
         counts = Counter(families)
-        if len(counts) > 1 and balance_power > 0:
-            weights = [1.0 / (counts[family] ** float(balance_power)) for family in families]
+        use_family_balance = len(counts) > 1 and balance_power > 0
+        curriculum = [
+            max(0.5, min(3.0, float(row.get("curriculum_weight", 1.0) or 1.0)))
+            for row in records
+        ]
+        use_curriculum = any(abs(weight - 1.0) > 1e-9 for weight in curriculum)
+        if use_family_balance or use_curriculum:
+            weights = []
+            for family, curriculum_weight in zip(families, curriculum):
+                family_weight = (
+                    1.0 / (counts[family] ** float(balance_power))
+                    if use_family_balance else 1.0
+                )
+                weights.append(family_weight * curriculum_weight)
             sampler = WeightedRandomSampler(
                 torch.tensor(weights, dtype=torch.double),
                 num_samples=len(records),
