@@ -764,6 +764,8 @@ def test_curriculum_v1_state_is_read_as_v2_schema(tmp_path: Path):
 
 
 def test_health_gate_accepts_consistent_evolved_state(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    assert discovery.discover_once()["ok"] is True
     evolution = SelfEvolutionEngine(tmp_path)
     result = evolution.evolve_once()
     assert result.benchmark["kernel_integrity"]["ok"] is True
