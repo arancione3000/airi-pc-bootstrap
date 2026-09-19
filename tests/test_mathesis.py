@@ -692,3 +692,29 @@ def test_curriculum_success_clears_retry_and_advances(tmp_path: Path):
     assert second["status"] == "studied"
     assert state["cursor"] == 1
     assert "algebra" not in state["retry_counts"]
+
+
+def test_faulhaber_induction_obligation_enters_antiforgetting_replay(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path, symbolic_depth=6, discovery_beam=8)
+    discovery.discover_once()  # binomial
+    faulhaber = discovery.discover_once()["theorem"]
+    assert faulhaber["strategy"] == "faulhaber_interpolation"
+    assert faulhaber["certificate"]["recurrence_nontrivial"] is True
+
+    learned = ExperienceAnalyzer(tmp_path).replayable_theorems(limit=16)
+    recurrence_statement = faulhaber["certificate"]["recurrence"]["statement"]
+    assert recurrence_statement in learned
+    assert faulhaber["statement"] not in learned
+
+
+def test_faulhaber_replay_is_critical_for_future_promotion(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path, symbolic_depth=6, discovery_beam=8)
+    discovery.discover_once()
+    faulhaber = discovery.discover_once()["theorem"]
+    obligation = faulhaber["certificate"]["recurrence"]["statement"]
+
+    evolution = SelfEvolutionEngine(tmp_path)
+    result = evolution.evolve_once()
+    assert obligation in result.benchmark["learned_theorems"]
+    replay = result.benchmark["candidate"]["learned_theorems_replayed"]
+    assert any(row["statement"] == obligation and row["ok"] for row in replay)
