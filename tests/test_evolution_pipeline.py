@@ -260,3 +260,25 @@ def test_edge_backend_metadata_contract(monkeypatch):
         "torch_version": "test-version",
         "migration_target": "torchao.quantization.quantize_",
     }
+
+
+def test_claim_similarity_preserves_accented_words():
+    left = "Perché questa affermazione è falsa?"
+    right = "Perche questa affermazione e falsa"
+    assert claimreview.claim_similarity(left, right) > 0.95
+
+
+def test_https_redirect_cannot_downgrade_to_http(monkeypatch):
+    import urllib.error
+    from email.message import Message
+
+    class FakeOpener:
+        def open(self, request, timeout=None):
+            headers = Message()
+            headers["Location"] = "http://8.8.8.8/plain"
+            raise urllib.error.HTTPError(request.full_url, 302, "Found", headers, None)
+
+    monkeypatch.setattr(claimreview.urllib.request, "build_opener", lambda *args, **kwargs: FakeOpener())
+    import pytest
+    with pytest.raises(ValueError, match="cannot downgrade"):
+        claimreview._open_public_url("https://8.8.8.8/start", timeout=1)
