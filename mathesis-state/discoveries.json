@@ -1,7 +1,7 @@
 {
-  "cycle": 4,
+  "cycle": 5,
   "strategy_counts": {
-    "binomial_expansion": 1,
+    "binomial_expansion": 2,
     "difference_of_powers": 1,
     "faulhaber_interpolation": 1,
     "finite_geometric_identity": 1
@@ -121,6 +121,44 @@
       "strategy": "binomial_expansion",
       "verified": true
     },
+    "e11bc23db5c90ef972ce": {
+      "certificate": {
+        "counterexample": null,
+        "details": {
+          "lean": {
+            "ok": false,
+            "reason": "requires closed equality",
+            "status": "not_applicable"
+          },
+          "smt": {
+            "method": "z3_unsat_negation",
+            "ok": true,
+            "status": "verified"
+          },
+          "symbolic": {
+            "method": "sympy_normal_form",
+            "normal_form": "0",
+            "ok": true,
+            "status": "verified"
+          }
+        },
+        "methods": [
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
+        "status": "verified"
+      },
+      "complexity": 6,
+      "discovered_at": 1789854275.6424706,
+      "human_novelty": "unassessed",
+      "id": "e11bc23db5c90ef972ce",
+      "internal_novelty": true,
+      "statement": "(x+y)^6 = x**6 + 6*x**5*y + 15*x**4*y**2 + 20*x**3*y**3 + 15*x**2*y**4 + 6*x*y**5 + y**6",
+      "strategy": "binomial_expansion",
+      "verified": true
+    },
     "efb13ac5cb9a41475989": {
       "certificate": {
         "base_case": true,
@@ -175,6 +213,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789853959.78055,
+  "updated_at": 1789854275.6424706,
   "version": 1
 }
