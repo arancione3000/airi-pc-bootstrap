@@ -17,6 +17,7 @@ LAB_STATE = Path(os.environ.get("AIRI_EVOLUTION_LAB_STATE") or ROOT / ".ai" / "e
 RAW = LAB_STATE / "raw" / "observations.jsonl"
 DATA = LAB_STATE / "data" / "verified.jsonl"
 META = LAB_STATE / "lab-meta.json"
+FEATURE_SCHEMA = 2
 
 _SECRET_RE = re.compile(
     r"(?i)(token|secret|password|cookie|authorization|api[_-]?key)\s*[:=]\s*[^\s,;}]+"
@@ -129,9 +130,7 @@ def _read_observations() -> list[dict[str, Any]]:
         for line in handle:
             try:
                 row = json.loads(line)
-                if isinstance(row, dict) and row.get("feature") and row.get("label") in (0, 1):
-                    out.append(row)
-            except Exception:
+                if (isinstance(row, dict) and row.get("feature") and row.get("label") in (0, 1)\n                        and int(row.get("feature_schema", 0) or 0) == FEATURE_SCHEMA):\n                    out.append(row)\n            except Exception:
                 continue
     return out
 
@@ -156,6 +155,7 @@ def record_execution(
     ).hexdigest()[:20]
     row = {
         "id": raw_id,
+        "feature_schema": FEATURE_SCHEMA,
         "created_at": stamp,
         "feature": feature,
         "feature_id": text_fingerprint(feature),
@@ -287,10 +287,13 @@ def status() -> dict[str, Any]:
     records = load_records(DATA)
     counts = class_counts(records)
     meta = _json_read(META, {})
-    champion = _json_read(LAB_STATE / "champion" / "metrics.json", None)
+    compatible = int(meta.get("feature_schema", 0) or 0) == FEATURE_SCHEMA
+    champion = _json_read(LAB_STATE / "champion" / "metrics.json", None) if compatible else None
     return {
         "ok": True,
         "mode": "shadow_only",
+        "feature_schema": FEATURE_SCHEMA,
+        "champion_compatible": compatible,
         "isolation": {
             "production_write_access": False,
             "network_required_for_training": False,
@@ -328,6 +331,7 @@ def run_cycle(
         }
         _json_write(META, {
             **_json_read(META, {}),
+            "feature_schema": FEATURE_SCHEMA,
             "last_cycle_raw_count": rebuilt["raw_observations"],
             "last_cycle": result,
             "updated_at": time.time(),
@@ -351,7 +355,8 @@ def run_cycle(
     result = run_evolution(LAB_STATE, cfg)
     meta = _json_read(META, {})
     meta.update({
-        "last_cycle_raw_count": rebuilt["observations"],
+        "feature_schema": FEATURE_SCHEMA,
+        "last_cycle_raw_count": rebuilt["raw_observations"],
         "last_cycle": {
             "run_id": result.get("run_id"),
             "promoted": result.get("promoted"),
@@ -372,7 +377,16 @@ def score_candidates(
     candidates: list[str],
     args: Any = None,
 ) -> dict[str, Any]:
+    meta = _json_read(META, {})
     champion = LAB_STATE / "champion" / "model.pt"
+    if int(meta.get("feature_schema", 0) or 0) != FEATURE_SCHEMA:
+        return {
+            "ok": False,
+            "available": False,
+            "reason": "champion_requires_privacy_safe_retraining",
+            "candidates": [],
+            "shadow_only": True,
+        }
     if not champion.exists():
         return {
             "ok": False,
