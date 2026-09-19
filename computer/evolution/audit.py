@@ -22,8 +22,26 @@ def audit_state(state_dir: Path) -> dict[str, Any]:
     checks: dict[str, Any] = {}
 
     data_path = state_dir / "data" / "verified.jsonl"
+    malformed_lines = 0
+    raw_lines = 0
+    if data_path.exists():
+        with data_path.open("r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                raw_lines += 1
+                try:
+                    row = json.loads(line)
+                    if not isinstance(row, dict) or not str(row.get("text", "")).strip():
+                        malformed_lines += 1
+                except Exception:
+                    malformed_lines += 1
     records = load_records(data_path)
+    checks["dataset_raw_lines"] = raw_lines
+    checks["dataset_malformed_lines"] = malformed_lines
     checks["dataset_records"] = len(records)
+    if malformed_lines:
+        errors.append(f"verified dataset contains {malformed_lines} malformed JSONL rows")
     checks["class_counts"] = class_counts(records)
 
     labels_by_text: dict[str, set[int]] = {}
