@@ -18,6 +18,8 @@ MUTABLE_STATE_NAMES = {
     "router.json",
     "history.jsonl",
     "knowledge.json",
+    "candidate_model.py",
+    "champion_model.py",
 }
 
 
