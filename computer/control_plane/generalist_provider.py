@@ -88,6 +88,22 @@ def _foundation_runtime_options() -> tuple[dict[str, Any], str | None]:
     }, None
 
 
+def _stable_policy_cache_key(value: dict[str, Any]) -> str:
+    def normalize(item: Any) -> Any:
+        if isinstance(item, dict):
+            return {
+                str(key): normalize(val)
+                for key, val in sorted(item.items(), key=lambda row: str(row[0]))
+            }
+        if isinstance(item, (list, tuple)):
+            return [normalize(x) for x in item]
+        if isinstance(item, Path):
+            return str(item)
+        return item
+
+    return json.dumps(normalize(value), sort_keys=True, separators=(",", ":"), default=str)
+
+
 def enabled() -> bool:
     return os.environ.get("AIRI_GENERALIST_ENABLE", "0").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -122,7 +138,15 @@ def status() -> dict[str, Any]:
             foundation_dir,
             attestation_path=foundation_attestation_path(foundation_dir),
         )
-        qualified = bool(attestation.get("qualified"))
+        attestation_qualified = bool(attestation.get("qualified"))
+        attested_profile = attestation.get("inference_profile")
+        runtime_profile = {"torch_dtype": str(load_policy.get("torch_dtype") or "auto")}
+        profile_match = bool(
+            attestation_qualified
+            and isinstance(attested_profile, dict)
+            and attested_profile == runtime_profile
+        )
+        qualified = bool(attestation_qualified and profile_match)
         manifest_path = foundation_dir / FOUNDATION_MANIFEST_FILENAME
         checkpoint_complete = bool(
             foundation_dir.exists()
@@ -163,13 +187,19 @@ def status() -> dict[str, Any]:
                 "attestation": foundation_attestation_path(foundation_dir).exists(),
             },
             "qualification": attestation,
+            "qualification_profile_match": profile_match,
+            "runtime_inference_profile": runtime_profile,
             "load_policy": load_policy,
             "configuration_error": policy_error,
             "reason": (
                 "qualified Foundation model is enabled with a valid hardware load policy"
                 if available
                 else policy_error
-                or "provider requires AIRI_GENERALIST_ENABLE=1, torch+transformers, Accelerate when device_map is active, a Foundation manifest, and an exact-digest Foundation qualification"
+                or (
+                    "Foundation runtime dtype differs from the qualified inference profile; requalify with the intended dtype"
+                    if attestation_qualified and not profile_match
+                    else "provider requires AIRI_GENERALIST_ENABLE=1, torch+transformers, Accelerate when device_map is active, a Foundation manifest, and an exact-digest Foundation qualification"
+                )
             ),
         }
 
@@ -267,7 +297,7 @@ def _backend():
         qualification.get("current_manifest_digest") or qualification.get("manifest_digest"),
         qualification.get("current_suite_digest") or qualification.get("suite_digest"),
         device,
-        json.dumps(load_policy, sort_keys=True, default=str),
+        _stable_policy_cache_key(load_policy),
     )
     key = repr(identity)
     with _BACKEND_LOCK:
