@@ -8,6 +8,7 @@ from typing import Any
 
 from .benchmarks import qualification_suite, run_benchmark
 from .foundation import (
+    FOUNDATION_DOMAINS,
     FOUNDATION_MANIFEST_FILENAME,
     foundation_manifest_digest,
     load_foundation_manifest,
@@ -350,6 +351,36 @@ def foundation_qualification_status(
         current_model = transformers_model_digest(root, exclude_path=target)
         current_manifest = foundation_manifest_digest(root)
         current_suite = foundation_suite_digest()
+
+        report = value.get("report")
+        minimum_score = value.get("minimum_score")
+        report_score = report.get("score") if isinstance(report, dict) else None
+        domain_scores = report.get("domain_scores") if isinstance(report, dict) else None
+        critical_failures = report.get("critical_failures") if isinstance(report, dict) else None
+        try:
+            minimum_score_value = float(minimum_score)
+            report_score_value = float(report_score)
+            score_values = (
+                [float(domain_scores[name]) for name in FOUNDATION_DOMAINS]
+                if isinstance(domain_scores, dict)
+                and all(name in domain_scores for name in FOUNDATION_DOMAINS)
+                else []
+            )
+            semantics_ok = bool(
+                math.isfinite(minimum_score_value)
+                and FOUNDATION_MINIMUM_SCORE <= minimum_score_value <= 100.0
+                and math.isfinite(report_score_value)
+                and report_score_value >= minimum_score_value
+                and report_score_value <= 100.0
+                and report.get("ok") is True
+                and isinstance(critical_failures, list)
+                and not critical_failures
+                and len(score_values) == len(FOUNDATION_DOMAINS)
+                and all(math.isfinite(score) and 0.0 <= score <= 1.0 for score in score_values)
+            )
+        except (TypeError, ValueError, OverflowError):
+            semantics_ok = False
+
         integrity_ok = bool(
             value.get("backend_type") == "transformers-foundation"
             and value.get("attested_by") == "airi-generalist-foundation-qualification-v2"
@@ -361,10 +392,12 @@ def foundation_qualification_status(
             and value.get("model_digest") == current_model
             and value.get("manifest_digest") == current_manifest
             and value.get("suite_digest") == current_suite
+            and semantics_ok
         )
         return {
             **value,
             "integrity_ok": integrity_ok,
+            "qualification_semantics_ok": semantics_ok,
             "qualified": bool(value.get("qualified") and integrity_ok),
             "current_model_digest": current_model,
             "current_manifest_digest": current_manifest,
@@ -374,5 +407,6 @@ def foundation_qualification_status(
         return {
             "qualified": False,
             "integrity_ok": False,
+            "qualification_semantics_ok": False,
             "reason": f"missing_or_invalid_foundation_attestation:{type(exc).__name__}",
         }
