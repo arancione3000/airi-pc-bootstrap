@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -137,65 +138,84 @@ def repository_corpus(
     excluded_sensitive = 0
     excluded_budget = 0
 
-    for path in sorted(p for p in root.rglob("*") if p.is_file()):
-        if files >= max_files or bytes_read >= max_bytes or len(docs) >= max_documents:
-            excluded_budget += 1
-            break
-        try:
-            rel = _relative(root, path)
-        except Exception:
-            # Includes symlinks resolving outside the repository.
-            excluded_sensitive += 1
-            continue
-        if _protected_path(rel):
-            excluded_protected += 1
-            continue
-        if _sensitive_path(rel):
-            excluded_sensitive += 1
-            continue
-        if path.suffix.lower() not in _ALLOWED_SUFFIXES:
-            continue
-        try:
-            size = path.stat().st_size
-        except OSError:
-            continue
-        if size <= 0 or size > max_file_bytes or bytes_read + size > max_bytes:
-            excluded_budget += 1
-            continue
-        try:
-            raw = path.read_bytes()
-        except OSError:
-            continue
-        if b"\x00" in raw:
-            continue
-        try:
-            decoded = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            continue
-
-        text = _redact_secrets(decoded).strip()
-        if not text:
-            continue
-        files += 1
-        bytes_read += len(raw)
-
-        for offset in range(0, len(text), chunk_chars):
-            if len(docs) >= max_documents:
+    stop = False
+    for current, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+        current_path = Path(current)
+        dirnames[:] = sorted(
+            name
+            for name in dirnames
+            if name.lower() not in _BLOCKED_PARTS
+            and not (current_path / name).is_symlink()
+        )
+        for filename in sorted(filenames):
+            if files >= max_files or bytes_read >= max_bytes or len(docs) >= max_documents:
                 excluded_budget += 1
+                stop = True
                 break
-            piece = text[offset:offset + chunk_chars].strip()
-            if len(piece) < 64:
+            path = current_path / filename
+            try:
+                rel = _relative(root, path)
+            except Exception:
+                # Includes symlinks resolving outside the repository.
+                excluded_sensitive += 1
                 continue
-            payload = f"{rel}\0{offset}\0{piece}".encode("utf-8")
-            digest = hashlib.sha256(payload).hexdigest()
-            docs.append(
-                CorpusDocument(
-                    source=f"repo:{rel}#{offset}",
-                    text=f"FILE: {rel}\n{piece}",
-                    sha256=digest,
-                    bytes=len(piece.encode("utf-8")),
+            if _protected_path(rel):
+                excluded_protected += 1
+                continue
+            if _sensitive_path(rel):
+                excluded_sensitive += 1
+                continue
+            if path.is_symlink():
+                excluded_sensitive += 1
+                continue
+            if path.suffix.lower() not in _ALLOWED_SUFFIXES:
+                continue
+            try:
+                size = path.stat().st_size
+            except OSError:
+                continue
+            if size <= 0 or size > max_file_bytes or bytes_read + size > max_bytes:
+                excluded_budget += 1
+                continue
+            try:
+                raw = path.read_bytes()
+            except OSError:
+                continue
+            if b"\x00" in raw:
+                continue
+            try:
+                decoded = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+
+            text = _redact_secrets(decoded).strip()
+            if not text:
+                continue
+            files += 1
+            bytes_read += len(raw)
+
+            for offset in range(0, len(text), chunk_chars):
+                if len(docs) >= max_documents:
+                    excluded_budget += 1
+                    stop = True
+                    break
+                piece = text[offset:offset + chunk_chars].strip()
+                if len(piece) < 64:
+                    continue
+                payload = f"{rel}\0{offset}\0{piece}".encode("utf-8")
+                digest = hashlib.sha256(payload).hexdigest()
+                docs.append(
+                    CorpusDocument(
+                        source=f"repo:{rel}#{offset}",
+                        text=f"FILE: {rel}\n{piece}",
+                        sha256=digest,
+                        bytes=len(piece.encode("utf-8")),
+                    )
                 )
-            )
+            if stop:
+                break
+        if stop:
+            break
 
     manifest_digest = hashlib.sha256(
         "\n".join(f"{d.sha256}:{d.source}" for d in docs).encode("utf-8")
