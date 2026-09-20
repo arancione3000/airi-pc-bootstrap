@@ -777,6 +777,15 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_CURRICULUM_MAX_ROWS", "1200")), 20_000),
     )
 
+    bpe_vocab_size = max(
+        BYTE_VOCAB_SIZE,
+        min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_BPE_VOCAB", "384")), 2048),
+    )
+    bpe_max_bytes = max(
+        8_192,
+        min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_BPE_MAX_BYTES", "256000")), 5_000_000),
+    )
+
     pretrain_steps = max(
         0,
         min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_PRETRAIN_STEPS", "0")), 100),
@@ -849,6 +858,11 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
     if mathesis_dir and Path(mathesis_dir).exists():
         mathesis = mathesis_signals(mathesis_dir)
         signals.extend(mathesis.get("signals") or [])
+    if (
+        champion_genome.tokenizer_version == "byte-v1"
+        and float(champion_report.get("generation_exact_accuracy", 0.0)) < 1.0
+    ):
+        signals.append("tokenizer_efficiency_gap")
     signals = list(dict.fromkeys(signals))
 
     curriculum_memory = CurriculumMemory(root, max_rows=curriculum_max_rows)
@@ -901,12 +915,21 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         winner = (continual_genome, continual_runtime, continual_report)
 
     for index, genome in enumerate(challengers):
+        candidate_tokenizer = _tokenizer_for_genome(
+            genome,
+            source_runtime=champion_runtime,
+            replay_rows=replay_rows,
+            pretrain_documents=corpus_documents,
+            bpe_vocab_size=bpe_vocab_size,
+            bpe_max_bytes=bpe_max_bytes,
+        )
         budget_reason = _research_budget_reason(
             genome,
             max_params=max_params,
             max_context=max_context,
             max_width=max_width,
             max_layers=max_layers,
+            vocab_size=candidate_tokenizer.vocab_size,
         )
         if budget_reason:
             trials.append({
@@ -924,6 +947,8 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             device=device,
             replay_rows=replay_rows,
             source_model=champion_runtime.model,
+            source_tokenizer=champion_runtime.tokenizer,
+            tokenizer=candidate_tokenizer,
             gradient_accumulation_steps=gradient_accumulation_steps,
             precision=precision,
             pretrain_documents=corpus_documents,
@@ -1017,6 +1042,14 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             "architecture_weight_transfer": {
                 "enabled": True,
                 "exact_name_and_shape_only": True,
+                "byte_to_bpe_embedding_migration": True,
+            },
+            "tokenizer_research": {
+                "allowed": ["byte-v1", "bpe-v1"],
+                "comparison_metric": "nll_per_byte",
+                "bpe_vocab_size": bpe_vocab_size,
+                "bpe_max_training_bytes": bpe_max_bytes,
+                "protected_eval_rows_excluded_from_tokenizer_training": True,
             },
         },
         "updated_at": time.time(),
