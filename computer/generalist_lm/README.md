@@ -43,3 +43,27 @@ A checkpoint is not an Airi-PC reasoning provider just because it exists. `quali
 CI verifies that the causal model generates tokens, supervised fine-tuning lowers loss, checkpoints round-trip, tool output is allowlisted data, benchmark domains are independent, architecture mutation stays inside the DSL, and MATHESIS contributes only proof-gated research signals.
 
 What is not claimed: a tiny CI model has frontier-level knowledge. Reaching that level requires a qualified pretrained foundation model or large-scale pretraining/fine-tuning plus broader benchmarks.
+
+## Provider and agent integration
+
+Airi-PC can expose the local checkpoint through
+`control_plane/generalist_provider.py`, but the provider is fail-closed:
+
+1. `config.json`, `model.pt`, `metadata.json` and `benchmark.json` must exist;
+2. the benchmark attestation must be bound to the exact SHA-256 checkpoint
+   digest;
+3. the checkpoint must be benchmark-qualified;
+4. `AIRI_GENERALIST_ENABLE=1` must be set;
+5. the router only prefers it when `AIRI_GENERALIST_PREFER=1` is also set.
+
+Vision remains routed to ChatGPT unless a future independently benchmarked
+vision-capable local model is added.
+
+The bounded `GeneralistAgent` implements model -> tool request -> Control
+Plane result -> model loops. Unknown tools are rejected before execution,
+tool results are size-bounded and every run has a hard maximum number of
+steps. Model text never directly executes shell, browser or file actions.
+
+Checkpoint qualification is invalidated automatically if config, weights or
+metadata change after benchmarking. This prevents stale benchmark results from
+silently qualifying new weights.
