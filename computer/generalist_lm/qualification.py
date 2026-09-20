@@ -96,3 +96,104 @@ def qualification_status(state_dir: str | Path) -> dict[str, Any]:
             "integrity_ok": False,
             "reason": f"missing_or_invalid_benchmark:{type(exc).__name__}",
         }
+
+
+_TRANSFORMERS_DIGEST_CACHE: dict[tuple, str] = {}
+
+
+def transformers_model_digest(model_dir: str | Path) -> str:
+    root = Path(model_dir).expanduser().resolve()
+    if not root.exists() or not root.is_dir():
+        raise FileNotFoundError("transformers model directory does not exist")
+    files = [
+        path for path in sorted(root.rglob("*"))
+        if path.is_file()
+        and ".git" not in path.parts
+        and path.name not in {".airi-qualification.json"}
+    ]
+    if not files:
+        raise FileNotFoundError("transformers model directory is empty")
+    key = tuple((str(p.relative_to(root)), p.stat().st_size, p.stat().st_mtime_ns) for p in files)
+    cached = _TRANSFORMERS_DIGEST_CACHE.get(key)
+    if cached:
+        return cached
+    digest = hashlib.sha256()
+    for path in files:
+        digest.update(str(path.relative_to(root)).encode("utf-8"))
+        digest.update(b"\0")
+        with path.open("rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        digest.update(b"\0")
+    value = digest.hexdigest()
+    _TRANSFORMERS_DIGEST_CACHE.clear()
+    _TRANSFORMERS_DIGEST_CACHE[key] = value
+    return value
+
+
+def qualify_transformers_model(
+    model_dir: str | Path,
+    *,
+    attestation_path: str | Path | None = None,
+    minimum_score: float = 85.0,
+) -> dict[str, Any]:
+    from .hf_backend import LocalTransformersBackend
+
+    root = Path(model_dir).expanduser().resolve()
+    backend = LocalTransformersBackend(root, local_files_only=True)
+    report = run_benchmark(backend)
+    digest = transformers_model_digest(root)
+    qualified = bool(
+        report.get("ok")
+        and float(report.get("score", 0.0)) >= float(minimum_score)
+        and not report.get("critical_failures")
+    )
+    target = Path(attestation_path or (root / ".airi-qualification.json"))
+    result = {
+        "qualification_version": QUALIFICATION_VERSION,
+        "attested_by": "airi-generalist-transformers-qualification-v1",
+        "backend_type": "transformers",
+        "model_dir": str(root),
+        "model_digest": digest,
+        "qualified": qualified,
+        "minimum_score": float(minimum_score),
+        "report": report,
+        "policy": "local-files-only, trust_remote_code disabled, exact model digest bound",
+    }
+    target.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    return result
+
+
+def transformers_qualification_status(
+    model_dir: str | Path,
+    *,
+    attestation_path: str | Path | None = None,
+) -> dict[str, Any]:
+    root = Path(model_dir).expanduser().resolve()
+    target = Path(attestation_path or (root / ".airi-qualification.json"))
+    try:
+        value = json.loads(target.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise ValueError("transformers qualification attestation must be an object")
+        current = transformers_model_digest(root)
+        integrity_ok = bool(
+            value.get("backend_type") == "transformers"
+            and value.get("attested_by") == "airi-generalist-transformers-qualification-v1"
+            and int(value.get("qualification_version", 0)) == QUALIFICATION_VERSION
+            and value.get("model_digest") == current
+        )
+        return {
+            **value,
+            "integrity_ok": integrity_ok,
+            "qualified": bool(value.get("qualified") and integrity_ok),
+            "current_model_digest": current,
+        }
+    except Exception as exc:
+        return {
+            "qualified": False,
+            "integrity_ok": False,
+            "reason": f"missing_or_invalid_transformers_attestation:{type(exc).__name__}",
+        }
