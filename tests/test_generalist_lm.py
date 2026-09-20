@@ -553,3 +553,66 @@ def test_generalist_continuum_has_serialized_self_handoff_and_nonforce_state_pus
     assert "git push --quiet origin HEAD:generalist-state" in workflow
     assert "git push --force" not in workflow
     assert "git push -f" not in workflow
+
+
+@pytest.mark.parametrize("norm_type", ["layernorm", "rmsnorm"])
+@pytest.mark.parametrize("position_encoding", ["learned", "sinusoidal"])
+@pytest.mark.parametrize("ff_variant", ["swiglu", "gelu"])
+def test_evolvable_transformer_variants_are_real_and_parameter_estimator_exact(
+    norm_type,
+    position_encoding,
+    ff_variant,
+):
+    pytest.importorskip("torch")
+    from generalist_lm.model import estimate_parameter_count
+
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        dropout=0.0,
+        norm_type=norm_type,
+        position_encoding=position_encoding,
+        ff_variant=ff_variant,
+    ).validate()
+    model = CausalTransformerLM(cfg)
+    assert parameter_count(model) == estimate_parameter_count(cfg)
+
+
+def test_generalist_exploration_rotates_without_changing_weakness_priority():
+    champion = GeneralistGenome(
+        code_adapter=False,
+        data_adapter=False,
+        retrieval_adapter=False,
+        symbolic_adapter=False,
+        reasoning_depth=1,
+    ).validate()
+    first = generate_challengers(champion, signals=[], count=2, exploration_offset=0)
+    second = generate_challengers(champion, signals=[], count=2, exploration_offset=2)
+    first_shapes = {(row.norm_type, row.position_encoding, row.ff_variant, row.d_model, row.n_layers) for row in first}
+    second_shapes = {(row.norm_type, row.position_encoding, row.ff_variant, row.d_model, row.n_layers) for row in second}
+    assert first_shapes != second_shapes
+
+    directed = generate_challengers(
+        champion,
+        signals=["coding_gap"],
+        count=1,
+        exploration_offset=7,
+    )[0]
+    assert directed.code_adapter is True
+    assert directed.reasoning_depth > champion.reasoning_depth
+
+
+def test_genome_training_seed_is_stable_for_same_effective_architecture():
+    from dataclasses import replace
+    from generalist_lm.research_cycle import _genome_training_seed
+
+    genome = GeneralistGenome().validate()
+    renamed = replace(genome, genome_id="another-id", generation=99, parent_id="different-parent")
+    assert _genome_training_seed(genome) == _genome_training_seed(renamed)
+
+    changed = replace(genome, norm_type="rmsnorm")
+    assert _genome_training_seed(genome) != _genome_training_seed(changed)
