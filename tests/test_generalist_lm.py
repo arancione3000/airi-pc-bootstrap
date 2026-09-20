@@ -1321,3 +1321,44 @@ def test_research_health_rejects_corrupted_persistent_curriculum(tmp_path: Path,
     report = research_health(tmp_path)
     assert report["ok"] is False
     assert any(row["name"] == "curriculum_memory:loadable" for row in report["failed"])
+
+
+def test_production_qualification_is_disjoint_from_all_research_curricula():
+    from generalist_lm.benchmarks import qualification_manifest, qualification_suite
+    from generalist_lm.curriculum import DOMAINS, train_rows, validation_rows
+    from generalist_lm.curriculum_memory import _mechanical_rows, canary_rows
+
+    protected = qualification_suite()
+    protected_prompts = {task.prompt for task in protected}
+    assert protected_prompts
+    assert set(qualification_manifest()["critical_domains"]) == set(DOMAINS)
+
+    fixed_research_prompts = {
+        row.messages[0]["content"]
+        for row in [*train_rows(), *validation_rows()]
+    }
+    assert protected_prompts.isdisjoint(fixed_research_prompts)
+
+    # Sample a long horizon of the deterministic autonomous replay/canary
+    # generator. Production qualification must never become training replay.
+    generated_prompts = set()
+    for cycle in range(1, 257):
+        for row in _mechanical_rows(
+            cycle,
+            ["coding_gap", "data_gap", "reasoning_gap", "tool_gap", "symbolic_reasoning_signal"],
+        ):
+            generated_prompts.add(row.messages[0]["content"])
+        for row in canary_rows(cycle):
+            generated_prompts.add(row.messages[0]["content"])
+    assert protected_prompts.isdisjoint(generated_prompts)
+
+
+def test_qualification_suite_has_critical_gate_for_every_generalist_domain():
+    from generalist_lm.benchmarks import qualification_suite
+    from generalist_lm.curriculum import DOMAINS
+
+    tasks = qualification_suite()
+    for domain in DOMAINS:
+        domain_tasks = [task for task in tasks if task.domain == domain]
+        assert domain_tasks, domain
+        assert any(task.critical for task in domain_tasks), domain
