@@ -242,6 +242,29 @@ def test_mathesis_bridge_reproves_persisted_math_instead_of_trusting_metadata(tm
     assert "research_curriculum_signal" in result["signals"]
 
 
+def test_mathesis_bridge_fails_closed_when_verifier_is_unavailable(tmp_path: Path, monkeypatch):
+    import generalist_lm.mathesis_bridge as bridge
+
+    (tmp_path / "discoveries.json").write_text(
+        json.dumps({"theorems": {}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "curriculum.json").write_text('{"cursor":99}', encoding="utf-8")
+    (tmp_path / "champion.json").write_text(
+        '{"generation":15,"symbolic_depth":12}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        bridge,
+        "_current_verified_math_items",
+        lambda theorems: ([], {}, False),
+    )
+    result = bridge.mathesis_signals(tmp_path)
+    assert result["ok"] is False
+    assert result["verifier_available"] is False
+    assert result["signals"] == []
+
+
 def test_local_transformers_backend_refuses_missing_or_remote_model_paths(tmp_path: Path):
     with pytest.raises(FileNotFoundError):
         LocalTransformersBackend(tmp_path / "not-downloaded")
