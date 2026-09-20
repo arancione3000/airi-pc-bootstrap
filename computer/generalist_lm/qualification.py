@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import hashlib
 import json
 from pathlib import Path
@@ -19,7 +20,8 @@ from .foundation_benchmarks import (
 from .runtime import GeneralistRuntime
 
 QUALIFICATION_VERSION = 2
-FOUNDATION_QUALIFICATION_VERSION = 1
+FOUNDATION_QUALIFICATION_VERSION = 2
+FOUNDATION_MINIMUM_SCORE = 90.0
 _DIGEST_CACHE: dict[tuple, str] = {}
 
 
@@ -77,7 +79,7 @@ def qualify_checkpoint(
     digest = checkpoint_digest(root)
     qualified = bool(
         report.get("ok")
-        and float(report.get("score", 0.0)) >= float(minimum_score)
+        and float(report.get("score", 0.0)) >= threshold
         and not report.get("critical_failures")
     )
     result = {
@@ -85,7 +87,7 @@ def qualify_checkpoint(
         "attested_by": "airi-generalist-qualification-v2",
         "checkpoint_digest": digest,
         "qualified": qualified,
-        "minimum_score": float(minimum_score),
+        "minimum_score": threshold,
         "report": report,
         "policy": "qualification is bound to the exact checkpoint digest and critical-domain benchmark result",
     }
@@ -257,6 +259,15 @@ def qualify_foundation_model(
     max_memory: dict[Any, Any] | None = None,
     offload_folder: str | Path | None = None,
 ) -> dict[str, Any]:
+    threshold = float(minimum_score)
+    if not math.isfinite(threshold) or threshold < FOUNDATION_MINIMUM_SCORE or threshold > 100.0:
+        raise ValueError(
+            f"foundation minimum_score must be between {FOUNDATION_MINIMUM_SCORE:.1f} and 100.0"
+        )
+    canonical_dtype = str(torch_dtype or "auto").strip().lower()
+    if canonical_dtype not in {"auto", "float16", "bfloat16", "float32"}:
+        raise ValueError("unsupported Foundation inference dtype")
+
     """Qualify a first-class open-weight foundation candidate.
 
     Foundation candidates are stricter than the generic Transformers adapter:
@@ -299,11 +310,18 @@ def qualify_foundation_model(
         "minimum_score": float(minimum_score),
         "manifest": manifest.to_dict(),
         "report": report,
+        "inference_profile": {
+            "torch_dtype": canonical_dtype,
+        },
         "load_policy": {
             "device": str(device),
             "device_map": device_map,
-            "torch_dtype": torch_dtype,
-            "max_memory": max_memory,
+            "torch_dtype": canonical_dtype,
+            "max_memory": (
+                {str(key): value for key, value in max_memory.items()}
+                if isinstance(max_memory, dict)
+                else None
+            ),
             "offload_folder": str(Path(offload_folder).expanduser().resolve()) if offload_folder else None,
         },
         "policy": (
@@ -338,6 +356,8 @@ def foundation_qualification_status(
             and int(value.get("qualification_version", 0)) == QUALIFICATION_VERSION
             and int(value.get("foundation_qualification_version", 0)) == FOUNDATION_QUALIFICATION_VERSION
             and int(value.get("suite_version", 0)) == FOUNDATION_SUITE_VERSION
+            and isinstance(value.get("inference_profile"), dict)
+            and value.get("inference_profile", {}).get("torch_dtype") in {"auto", "float16", "bfloat16", "float32"}
             and value.get("model_digest") == current_model
             and value.get("manifest_digest") == current_manifest
             and value.get("suite_digest") == current_suite
