@@ -374,6 +374,35 @@ def _research_budget_reason(
     return None
 
 
+def _transfer_compatible_weights(source_model, target_model) -> dict[str, Any]:
+    """Copy only exact-name/exact-shape tensors from champion to challenger."""
+    source = source_model.state_dict()
+    target = target_model.state_dict()
+    copied: dict[str, Any] = {}
+    copied_params = 0
+    total_params = 0
+
+    for name, tensor in target.items():
+        total_params += int(tensor.numel())
+        old = source.get(name)
+        if old is None or tuple(old.shape) != tuple(tensor.shape):
+            continue
+        copied[name] = old.detach().to(device=tensor.device, dtype=tensor.dtype).clone()
+        copied_params += int(tensor.numel())
+
+    target_model.load_state_dict(copied, strict=False)
+    return {
+        "copied_tensors": len(copied),
+        "target_tensors": len(target),
+        "copied_parameters": copied_params,
+        "target_parameters": total_params,
+        "parameter_fraction": (
+            float(copied_params / total_params) if total_params else 0.0
+        ),
+        "policy": "exact name and exact shape only",
+    }
+
+
 def _train_genome(
     genome: GeneralistGenome,
     *,
@@ -381,9 +410,22 @@ def _train_genome(
     seed: int,
     device: str,
     replay_rows: list[ResearchRow] | None = None,
+    source_model=None,
 ) -> tuple[GeneralistRuntime, dict[str, Any]]:
     tokenizer = ByteTokenizer()
     model = CausalTransformerLM(genome.model_config(tokenizer.vocab_size))
+    transfer = (
+        _transfer_compatible_weights(source_model, model)
+        if source_model is not None
+        else {
+            "copied_tensors": 0,
+            "target_tensors": len(model.state_dict()),
+            "copied_parameters": 0,
+            "target_parameters": parameter_count(model),
+            "parameter_fraction": 0.0,
+            "policy": "fresh initialization",
+        }
+    )
     report = train_sft(
         model,
         tokenizer,
@@ -400,6 +442,7 @@ def _train_genome(
     validation["parameters"] = parameter_count(runtime.model)
     validation["score"] = _research_score(validation, validation["parameters"])
     validation["training"] = report
+    validation["weight_transfer"] = transfer
     return runtime, validation
 
 
@@ -584,6 +627,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             seed=_genome_training_seed(genome),
             device=device,
             replay_rows=replay_rows,
+            source_model=champion_runtime.model,
         )
         report["canary_cycle"] = cycle
         report["canary"] = _grouped_validation(
@@ -652,6 +696,10 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
                 "enabled": True,
                 "training_excluded": True,
                 "domains": 6,
+            },
+            "architecture_weight_transfer": {
+                "enabled": True,
+                "exact_name_and_shape_only": True,
             },
         },
         "updated_at": time.time(),
