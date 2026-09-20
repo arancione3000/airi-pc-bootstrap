@@ -26,11 +26,30 @@ def _append_history(path: Path, payload: dict[str, Any]) -> None:
 
 def _copy_checkpoint(source: Path, target: Path, *, source_digest: str) -> None:
     target.mkdir(parents=True, exist_ok=True)
-    for name in ("config.json", "model.pt", "metadata.json"):
+    config_path = source / "config.json"
+    if not config_path.exists() or not config_path.is_file():
+        raise FileNotFoundError("research checkpoint is missing config.json")
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    if not isinstance(config, dict):
+        raise ValueError("research checkpoint config must be a JSON object")
+    tokenizer_version = str(config.get("tokenizer_version", "byte-v1"))
+
+    names = ["config.json", "model.pt", "metadata.json"]
+    if tokenizer_version == "bpe-v1":
+        names.append("tokenizer.json")
+    elif tokenizer_version != "byte-v1":
+        raise ValueError(f"unsupported checkpoint tokenizer version: {tokenizer_version}")
+
+    for name in names:
         src = source / name
         if not src.exists() or not src.is_file():
             raise FileNotFoundError(f"research checkpoint is missing {name}")
         shutil.copy2(src, target / name)
+
+    # A byte checkpoint must never inherit a stale tokenizer artifact from an
+    # interrupted/previous candidate directory.
+    if tokenizer_version == "byte-v1":
+        (target / "tokenizer.json").unlink(missing_ok=True)
 
     metadata_path = target / "metadata.json"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
