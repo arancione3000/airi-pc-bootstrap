@@ -13,7 +13,7 @@ def _torch():
 
 
 _ALLOWED_NORMS = {"layernorm", "rmsnorm"}
-_ALLOWED_POSITIONS = {"learned", "sinusoidal"}
+_ALLOWED_POSITIONS = {"learned", "sinusoidal", "rope"}
 _ALLOWED_FF = {"swiglu", "gelu"}
 
 
@@ -46,6 +46,8 @@ class GeneralistLMConfig:
             raise ValueError("unsupported norm_type")
         if self.position_encoding not in _ALLOWED_POSITIONS:
             raise ValueError("unsupported position_encoding")
+        if self.position_encoding == "rope" and (self.d_model // self.n_heads) % 2:
+            raise ValueError("RoPE requires an even attention head dimension")
         if self.ff_variant not in _ALLOWED_FF:
             raise ValueError("unsupported ff_variant")
         return self
@@ -88,6 +90,38 @@ class CausalTransformerLM:
                 self.qkv = nn.Linear(config.d_model, 3 * config.d_model, bias=config.bias)
                 self.out = nn.Linear(config.d_model, config.d_model, bias=config.bias)
                 self.dropout = config.dropout
+                if config.position_encoding == "rope":
+                    inv_freq = 1.0 / (
+                        10000.0
+                        ** (
+                            torch.arange(0, self.head_dim, 2, dtype=torch.float32)
+                            / self.head_dim
+                        )
+                    )
+                    self.register_buffer("rope_inv_freq", inv_freq, persistent=False)
+                else:
+                    self.register_buffer("rope_inv_freq", torch.empty(0), persistent=False)
+
+            @staticmethod
+            def _rotate_half(x):
+                even = x[..., 0::2]
+                odd = x[..., 1::2]
+                return torch.stack((-odd, even), dim=-1).flatten(-2)
+
+            def _apply_rope(self, q, k):
+                seqlen = q.shape[-2]
+                positions = torch.arange(
+                    seqlen,
+                    device=q.device,
+                    dtype=self.rope_inv_freq.dtype,
+                )
+                freqs = torch.outer(positions, self.rope_inv_freq.to(q.device))
+                angles = torch.repeat_interleave(freqs, 2, dim=-1)
+                cos = angles.cos().to(dtype=q.dtype)[None, None, :, :]
+                sin = angles.sin().to(dtype=q.dtype)[None, None, :, :]
+                q_rot = q * cos + self._rotate_half(q) * sin
+                k_rot = k * cos + self._rotate_half(k) * sin
+                return q_rot, k_rot
 
             def forward(self, x):
                 bsz, seqlen, width = x.shape
@@ -96,6 +130,8 @@ class CausalTransformerLM:
                 q = q.transpose(1, 2)
                 k = k.transpose(1, 2)
                 v = v.transpose(1, 2)
+                if config.position_encoding == "rope":
+                    q, k = self._apply_rope(q, k)
                 y = F.scaled_dot_product_attention(
                     q, k, v,
                     dropout_p=self.dropout if self.training else 0.0,
@@ -145,7 +181,7 @@ class CausalTransformerLM:
                 if config.position_encoding == "learned":
                     self.position_embedding = nn.Embedding(config.context_length, config.d_model)
                     self.register_buffer("fixed_position_encoding", torch.empty(0), persistent=False)
-                else:
+                elif config.position_encoding == "sinusoidal":
                     self.position_embedding = None
                     position = torch.arange(config.context_length, dtype=torch.float32).unsqueeze(1)
                     div = torch.exp(
@@ -157,6 +193,13 @@ class CausalTransformerLM:
                     odd = pe[:, 1::2].shape[1]
                     pe[:, 1::2] = torch.cos(position * div[:odd])
                     self.register_buffer("fixed_position_encoding", pe, persistent=True)
+                else:
+                    self.position_embedding = None
+                    self.register_buffer(
+                        "fixed_position_encoding",
+                        torch.zeros(config.context_length, config.d_model),
+                        persistent=False,
+                    )
                 self.blocks = nn.ModuleList([Block() for _ in range(config.n_layers)])
                 self.final_norm = norm()
                 self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
