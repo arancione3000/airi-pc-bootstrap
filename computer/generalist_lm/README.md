@@ -234,3 +234,30 @@ reasoning provider until protected qualification succeeds.
 Autoregressive decoding supports a bounded per-layer KV cache. Cached greedy decoding is regression-tested against the original full-prefix path across the supported positional-encoding variants, and the cache is discarded/recomputed when the configured context window is reached so stale absolute positions are not reused.
 
 Supervised fine-tuning supports gradient accumulation and explicit fp32/bf16/fp16 precision policies. Unsafe precision/device combinations fail closed. These execution optimizations do not alter qualification, protected-domain regression gates, tool permissions or the MATHESIS verifier boundary.
+
+
+## Grounded repository pretraining
+
+The research continuum can optionally perform a small amount of causal
+pretraining on the repository's own code and documentation before supervised
+generalist training. This is intended to improve project vocabulary, APIs,
+coding syntax and architectural context without teaching the model its exam.
+
+The corpus builder is bounded and deterministic. It:
+
+- prunes VCS, virtualenv, build, node_modules, state and internal .ai trees;
+- excludes all tests;
+- excludes Generalist benchmark, qualification, production-promotion,
+  research-health/evolution and Control Plane governance files;
+- rejects symlink escapes and sensitive file paths;
+- redacts common credential/token patterns from otherwise safe source files;
+- limits files, bytes, per-file size and emitted training documents.
+
+Causal-pretraining loss evaluation is sampled deterministically with a bounded
+number of blocks. Training may sample the larger permitted corpus, but measuring
+pretraining progress cannot accidentally turn a modest corpus into thousands of
+extra full-model forward passes per candidate.
+
+Repository pretraining is research-only. It cannot qualify or promote a model
+to production by itself. Held-out generalist validation, rotating canaries and
+production qualification remain separate.
