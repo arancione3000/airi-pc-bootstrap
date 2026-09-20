@@ -98,6 +98,7 @@ GENERALIST_PROTECTED_PATHS = {
     ".github/workflows/generalist-watchdog.yml",
 }
 GENERALIST_PROTECTED_PREFIXES = (
+    "computer/generalist_lm/",
     ".ai/generalist-lm/",
     ".ai/generalist-research/",
     "generalist-state/",
