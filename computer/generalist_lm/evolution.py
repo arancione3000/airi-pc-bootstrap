@@ -110,18 +110,20 @@ def generate_challengers(
         {"d_model": max(32, champion.d_model - 32), "d_ff": max(champion.d_model, champion.d_ff - 64)},
         {"dropout": min(0.5, champion.dropout + 0.05)},
     ]
-    if "coding_gap" in signals:
-        variants.insert(0, {"code_adapter": True, "reasoning_depth": min(16, champion.reasoning_depth + 1)})
-    if "data_gap" in signals:
-        variants.insert(0, {"data_adapter": True, "context_length": min(8192, champion.context_length * 2)})
-    if "tool_gap" in signals:
-        variants.insert(0, {"retrieval_adapter": True})
-    if "symbolic_reasoning_signal" in signals:
-        variants.insert(0, {"symbolic_adapter": True, "reasoning_depth": min(16, champion.reasoning_depth + 1)})
-
     if variants:
         shift = int(exploration_offset) % len(variants)
         variants = variants[shift:] + variants[:shift]
+
+    directed: list[dict[str, Any]] = []
+    if "coding_gap" in signals:
+        directed.append({"code_adapter": True, "reasoning_depth": min(16, champion.reasoning_depth + 1)})
+    if "data_gap" in signals:
+        directed.append({"data_adapter": True, "context_length": min(8192, champion.context_length * 2)})
+    if "tool_gap" in signals:
+        directed.append({"retrieval_adapter": True})
+    if "symbolic_reasoning_signal" in signals:
+        directed.append({"symbolic_adapter": True, "reasoning_depth": min(16, champion.reasoning_depth + 1)})
+    variants = directed + variants
 
     out: list[GeneralistGenome] = []
     seen: set[str] = set()
