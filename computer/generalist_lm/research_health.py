@@ -50,8 +50,23 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
     if isinstance(status, dict) and status:
         report = status.get("champion_report") or {}
         domain_loss = report.get("domain_loss") or {}
+        domain_accuracy = report.get("domain_token_accuracy") or {}
         check("report:finite", bool(report.get("finite")), report.get("loss"))
         check("report:domains", bool(domain_loss) and all(float(v) >= 0 for v in domain_loss.values()), domain_loss)
+        accuracy = report.get("target_token_accuracy")
+        check(
+            "report:target_token_accuracy",
+            isinstance(accuracy, (int, float)) and 0.0 <= float(accuracy) <= 1.0,
+            accuracy,
+        )
+        check(
+            "report:domain_token_accuracy",
+            bool(domain_accuracy)
+            and all(isinstance(v, (int, float)) and 0.0 <= float(v) <= 1.0 for v in domain_accuracy.values()),
+            domain_accuracy,
+        )
+        solved = report.get("solved_items")
+        check("report:solved_items", isinstance(solved, list), len(solved) if isinstance(solved, list) else type(solved).__name__)
         policy = status.get("policy") or {}
         check("policy:research_only", policy.get("research_only") is True, policy)
         check("policy:production_separate", policy.get("production_qualification_separate") is True, policy)
