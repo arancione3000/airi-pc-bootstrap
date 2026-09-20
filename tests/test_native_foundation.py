@@ -238,7 +238,7 @@ def test_native_bpe_root_binds_tokenizer_digest(tmp_path: Path):
     tokenizer.write_text('{"version":"bpe-v1","merges":[]}', encoding="utf-8")
     root = tmp_path / "native"
     cfg = NativeFoundationConfig(
-        vocab_size=512,
+        vocab_size=264,
         context_length=32,
         d_model=32,
         n_heads=4,
@@ -265,7 +265,7 @@ def test_native_bpe_root_requires_own_tokenizer_artifact(tmp_path: Path):
     from generalist_lm.native_foundation import NativeFoundationConfig, create_native_root_checkpoint
 
     cfg = NativeFoundationConfig(
-        vocab_size=512,
+        vocab_size=264,
         context_length=32,
         d_model=32,
         n_heads=4,
