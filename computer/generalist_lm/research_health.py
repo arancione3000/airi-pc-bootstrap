@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .curriculum import DOMAINS, curriculum_manifest
 from .evolution import GeneralistGenome
 from .model import parameter_count
 from .runtime import GeneralistRuntime
@@ -46,6 +47,21 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
         check("checkpoint:layers_match", cfg.n_layers == genome.n_layers, [cfg.n_layers, genome.n_layers])
         check("checkpoint:heads_match", cfg.n_heads == genome.n_heads, [cfg.n_heads, genome.n_heads])
         check("checkpoint:ff_match", cfg.d_ff == genome.d_ff, [cfg.d_ff, genome.d_ff])
+
+    curriculum = curriculum_manifest()
+    check("curriculum:no_prompt_overlap", curriculum.get("prompt_overlap") == [], curriculum.get("prompt_overlap"))
+    check(
+        "curriculum:all_domains_train",
+        set((curriculum.get("train_domains") or {})) == set(DOMAINS)
+        and all(int(value) >= 1 for value in (curriculum.get("train_domains") or {}).values()),
+        curriculum.get("train_domains"),
+    )
+    check(
+        "curriculum:all_domains_validation",
+        set((curriculum.get("validation_domains") or {})) == set(DOMAINS)
+        and all(int(value) >= 1 for value in (curriculum.get("validation_domains") or {}).values()),
+        curriculum.get("validation_domains"),
+    )
 
     if isinstance(status, dict) and status:
         report = status.get("champion_report") or {}
