@@ -182,3 +182,29 @@ def test_bpe_tokenizer_is_bound_to_qualification_digest(tmp_path: Path):
 def test_model_config_rejects_unknown_tokenizer_version():
     with pytest.raises(ValueError, match="unsupported tokenizer_version"):
         GeneralistLMConfig(tokenizer_version="download-me-v99").validate()
+
+
+
+def test_production_checkpoint_copy_preserves_bpe_tokenizer(tmp_path: Path):
+    pytest.importorskip("torch")
+    from generalist_lm.production_promotion import _copy_checkpoint
+
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    tokenizer = train_bpe(training_texts(), vocab_size=320)
+    config = GeneralistLMConfig(
+        vocab_size=tokenizer.vocab_size,
+        tokenizer_version="bpe-v1",
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+    ).validate()
+    GeneralistRuntime.fresh(config, tokenizer=tokenizer).save_checkpoint(source)
+    digest = checkpoint_digest(source)
+    _copy_checkpoint(source, target, source_digest=digest)
+
+    assert (target / "tokenizer.json").exists()
+    restored = GeneralistRuntime.from_checkpoint(target)
+    assert restored.tokenizer.digest == tokenizer.digest
