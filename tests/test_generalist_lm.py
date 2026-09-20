@@ -444,3 +444,31 @@ def test_research_budget_blocks_runaway_architecture_before_training():
     )
     assert reason is not None
     assert "exceeds research max" in reason
+
+
+def test_qualification_suite_is_broader_than_research_smoke_and_has_core_per_domain():
+    from generalist_lm.benchmarks import qualification_suite
+
+    tasks = qualification_suite()
+    assert len(tasks) >= 20
+    domains = {task.domain for task in tasks}
+    assert domains == {"language", "coding", "data", "reasoning", "tools", "structured"}
+    for domain in domains:
+        assert any(task.domain == domain and task.critical for task in tasks)
+
+
+def test_strategy_genes_change_actual_training_curriculum():
+    from dataclasses import replace
+    from generalist_lm.research_cycle import _training_rows_for_genome, research_seed
+
+    seed = research_seed()
+    base = _training_rows_for_genome(seed)
+
+    coding = replace(seed, code_adapter=True)
+    coding_rows = _training_rows_for_genome(coding)
+    assert len(coding_rows) > len(base)
+    assert sum(row.domain == "coding" for row in coding_rows) > sum(row.domain == "coding" for row in base)
+
+    symbolic = replace(seed, symbolic_adapter=True, reasoning_depth=3)
+    symbolic_rows = _training_rows_for_genome(symbolic)
+    assert sum(row.domain == "reasoning" for row in symbolic_rows) > sum(row.domain == "reasoning" for row in base)
