@@ -94,10 +94,20 @@ def _extract_json_array(text: str) -> list[dict[str, Any]]:
         if not isinstance(item, dict):
             raise RuntimeError("each proposed change must be an object")
         path = str(item.get("path", "")).strip()
+        if not path:
+            raise RuntimeError("each proposed change requires path")
         content = item.get("content")
-        if not path or not isinstance(content, str):
-            raise RuntimeError("each proposed change requires path and string content")
-        rows.append({"path": path, "content": content})
+        old = item.get("old")
+        new = item.get("new")
+        if isinstance(content, str) and old is None and new is None:
+            rows.append({"path": path, "content": content})
+            continue
+        if isinstance(old, str) and isinstance(new, str) and content is None:
+            if not old:
+                raise RuntimeError("patch old text must not be empty")
+            rows.append({"path": path, "old": old, "new": new})
+            continue
+        raise RuntimeError("each proposed change requires either string content or string old+new")
     return rows
 
 
@@ -112,9 +122,11 @@ def ask_local_model_changes(
     _require_generalist()
     base = Path(root or ROOT).resolve()
     prompt = (
-        "Return ONLY a JSON array of proposed file replacements. "
-        "Each item must be {\"path\":\"relative/path\",\"content\":\"full new content\"}. "
-        "Do not use markdown. Do not propose .git, .ssh, credentials, secrets, or paths outside the repository.\n\n"
+        "Return ONLY a JSON array of proposed repository edits. "
+        "Each item must be either {\"path\":\"relative/path\",\"old\":\"exact old text\",\"new\":\"replacement\"} "
+        "for a focused patch, or {\"path\":\"relative/path\",\"content\":\"full new content\"} for a full replacement. "
+        "Prefer focused old/new patches for existing large files. Do not use markdown. "
+        "Do not propose .git, .ssh, credentials, secrets, or paths outside the repository.\n\n"
         f"GOAL:\n{goal}\n\nCONTEXT:\n{context[:60000]}"
     )
     if feedback:
