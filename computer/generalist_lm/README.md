@@ -354,7 +354,9 @@ python -m generalist_lm.cli foundation-init /models/foundation \
   --parameter-count 7000000000 \
   --dtype bfloat16
 
-python -m generalist_lm.cli qualify-foundation /models/foundation
+python -m generalist_lm.cli qualify-foundation /models/foundation \
+  --device-map auto \
+  --torch-dtype auto
 python -m generalist_lm.cli foundation-status /models/foundation
 ```
 
