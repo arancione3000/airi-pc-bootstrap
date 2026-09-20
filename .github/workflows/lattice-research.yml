@@ -1,0 +1,444 @@
+name: AIRI Lattice Free-Speed Research
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/native_lattice.py'
+      - 'computer/generalist_lm/lattice_*.py'
+      - '.github/workflows/lattice-research.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/native_lattice.py'
+      - 'computer/generalist_lm/lattice_*.py'
+      - '.github/workflows/lattice-research.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: airi-lattice-free-speed
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU test runtime
+        run: |
+          python -m pip install --disable-pip-version-check pytest
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+      - name: Validate Lattice swarm modules
+        env:
+          PYTHONPATH: computer
+        run: |
+          python -m compileall -q             computer/generalist_lm/native_lattice.py             computer/generalist_lm/lattice_math.py             computer/generalist_lm/lattice_evolution.py             computer/generalist_lm/lattice_lab.py             computer/generalist_lm/lattice_swarm.py
+          python -m pytest -q tests/test_native_evolution.py -k 'lattice_swarm or airi_lattice'
+
+  plan:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      cycle: ${{ steps.matrix.outputs.cycle }}
+    env:
+      PYTHONPATH: computer
+      STATE_REPO: /tmp/airi-lattice-state-repo
+      STATE_DIR: /tmp/airi-lattice-state
+      CORPUS_ROOT: /tmp/airi-lattice-corpus
+      PLAN_FILE: /tmp/airi-lattice-bundle/plan.json
+      SIGNALS_FILE: /tmp/airi-lattice-bundle/signals.json
+      RESEARCH_FILE: /tmp/airi-lattice-bundle/research.json
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install planner runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check -r computer/mathesis/requirements.txt
+
+      - name: Restore persistent architecture state and verified signals
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone --quiet             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"             "${STATE_REPO}"
+          cd "${STATE_REPO}"
+          git config user.name "AIRI Lattice Research"
+          git config user.email "airi-lattice@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin lattice-research-state >/dev/null 2>&1; then
+            git fetch --quiet origin lattice-research-state:lattice-research-state
+            git checkout --quiet lattice-research-state
+          else
+            git checkout --orphan lattice-research-state
+            git rm -rf . >/dev/null 2>&1 || true
+            mkdir -p lattice-research-state
+            printf '%s\n'               'Persistent verifier-gated AIRI Lattice architecture research state.'               > lattice-research-state/README.txt
+            git add lattice-research-state/README.txt
+            git commit -m "lattice-research-state: initialize"
+            git push --quiet origin HEAD:lattice-research-state
+          fi
+
+          mkdir -p "${STATE_DIR}" /tmp/mathesis-signal-root /tmp/native-signal-root
+          cp -a "${STATE_REPO}/lattice-research-state/." "${STATE_DIR}/" || true
+
+          if git ls-remote --exit-code --heads origin mathesis-state >/dev/null 2>&1; then
+            git fetch --quiet origin mathesis-state:refs/remotes/origin/mathesis-state
+            git archive refs/remotes/origin/mathesis-state mathesis-state               | tar -xf - -C /tmp/mathesis-signal-root
+          fi
+
+          if git ls-remote --exit-code --heads origin native-evolution-state >/dev/null 2>&1; then
+            git fetch --quiet origin native-evolution-state:refs/remotes/origin/native-evolution-state
+            git archive refs/remotes/origin/native-evolution-state native-evolution-state               | tar -xf - -C /tmp/native-signal-root
+          fi
+
+      - name: Build deterministic project-owned architecture corpus
+        run: |
+          set -euo pipefail
+          rm -rf "${CORPUS_ROOT}" /tmp/airi-lattice-bundle
+          mkdir -p "${CORPUS_ROOT}/files" /tmp/airi-lattice-bundle
+
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          workspace = Path.cwd()
+          output = Path("/tmp/airi-lattice-corpus")
+          files = output / "files"
+          rows = []
+          seen = set()
+          candidates = []
+          for base in (
+              workspace / "computer" / "generalist_lm",
+              workspace / "computer" / "mathesis",
+          ):
+              if not base.is_dir():
+                  continue
+              for path in sorted(base.rglob("*")):
+                  if not path.is_file() or path.suffix.lower() not in {".py", ".md", ".txt"}:
+                      continue
+                  size = path.stat().st_size
+                  if 384 <= size <= 100_000:
+                      candidates.append(path)
+
+          for index, source in enumerate(candidates[:32]):
+              blob = source.read_bytes()
+              digest = hashlib.sha256(blob).hexdigest()
+              if digest in seen:
+                  continue
+              seen.add(digest)
+              route = source.as_posix().lower()
+              if "mathesis" in route:
+                  domain = "math" if index % 2 else "reasoning"
+              elif source.suffix.lower() == ".py":
+                  domain = ("code", "tool-use", "data-analysis")[index % 3]
+              elif "readme" in source.name.lower():
+                  domain = "language-en"
+              else:
+                  domain = "general"
+              target = files / f"{index:03d}-{source.name}"
+              target.write_bytes(blob)
+              rows.append({
+                  "path": target.relative_to(output).as_posix(),
+                  "domain": domain,
+                  "language": "en",
+                  "license": "project-owned-repository",
+                  "source_type": "owned",
+                  "approved_for_training": True,
+                  "weight": 1.0,
+              })
+
+          if len(rows) < 8:
+              raise SystemExit("not enough project-owned corpus rows")
+          (output / "native-corpus.json").write_text(
+              json.dumps({"version": "native-corpus-v1", "documents": rows}, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Re-verify MATHESIS signals and prepare research context
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          signals = {"ok": False, "signals": []}
+          state = Path("/tmp/mathesis-signal-root/mathesis-state")
+          if state.exists():
+              try:
+                  from generalist_lm.mathesis_bridge import mathesis_signals
+                  signals = mathesis_signals(state)
+              except Exception as exc:
+                  signals = {"ok": False, "signals": [], "reason": f"{type(exc).__name__}:{exc}"}
+
+          research_path = Path("/tmp/native-signal-root/native-evolution-state/online-research.json")
+          research = {}
+          if research_path.is_file():
+              try:
+                  research = json.loads(research_path.read_text(encoding="utf-8"))
+              except Exception:
+                  research = {}
+
+          Path("/tmp/airi-lattice-bundle/signals.json").write_text(
+              json.dumps(signals, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          Path("/tmp/airi-lattice-bundle/research.json").write_text(
+              json.dumps(research, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Plan eight parallel architecture challengers
+        id: matrix
+        run: |
+          set -euo pipefail
+          cycle="$(
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("/tmp/airi-lattice-state/lattice-status.json")
+          if not path.is_file():
+              print(1)
+          else:
+              try:
+                  print(int(json.loads(path.read_text())["cycle"]) + 1)
+              except Exception:
+                  print(1)
+          PY
+          )"
+
+          python -m generalist_lm.lattice_swarm prepare             "${STATE_DIR}" "${PLAN_FILE}"             --cycle "${cycle}"             --signals-json "${SIGNALS_FILE}"             --research-json "${RESEARCH_FILE}"             --population-size 8             --exploration-offset "${cycle}"
+
+          cp -a "${CORPUS_ROOT}" /tmp/airi-lattice-bundle/corpus
+          matrix="$(jq -c '.matrix' "${PLAN_FILE}")"
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+          echo "cycle=${cycle}" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lattice-plan
+          path: /tmp/airi-lattice-bundle
+          retention-days: 1
+
+  stage1:
+    needs: plan
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: computer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU worker
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+      - uses: actions/download-artifact@v4
+        with:
+          name: lattice-plan
+          path: /tmp/lattice
+      - name: Tiny-budget parallel trial
+        run: |
+          python -m generalist_lm.lattice_swarm worker             /tmp/lattice/plan.json             /tmp/lattice/corpus/native-corpus.json             "/tmp/stage1-${{ matrix.index }}.json"             --allowed-root /tmp/lattice/corpus             --index "${{ matrix.index }}"             --stage 1 --steps 2 --repeat-seeds 1 --max-eval-blocks 4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage1-${{ matrix.index }}
+          path: /tmp/stage1-${{ matrix.index }}.json
+          retention-days: 1
+
+  reduce1:
+    needs: [plan, stage1]
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.reduce.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stage1-*
+          path: /tmp/stage1
+          merge-multiple: true
+      - name: Pareto-reduce eight to four
+        id: reduce
+        env:
+          PYTHONPATH: computer
+        run: |
+          python -m generalist_lm.lattice_swarm select             /tmp/stage2.json /tmp/stage1 --survivors 4
+          matrix="$(jq -c '.matrix' /tmp/stage2.json)"
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+
+  stage2:
+    needs: [plan, reduce1]
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.reduce1.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: computer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+      - uses: actions/download-artifact@v4
+        with:
+          name: lattice-plan
+          path: /tmp/lattice
+      - name: Medium-budget survivor trial
+        run: |
+          python -m generalist_lm.lattice_swarm worker             /tmp/lattice/plan.json             /tmp/lattice/corpus/native-corpus.json             "/tmp/stage2-${{ matrix.index }}.json"             --allowed-root /tmp/lattice/corpus             --index "${{ matrix.index }}"             --stage 2 --steps 6 --repeat-seeds 1 --max-eval-blocks 6
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage2-${{ matrix.index }}
+          path: /tmp/stage2-${{ matrix.index }}.json
+          retention-days: 1
+
+  reduce2:
+    needs: [plan, stage2]
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.reduce.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stage2-*
+          path: /tmp/stage2-results
+          merge-multiple: true
+      - name: Pareto-reduce four to two
+        id: reduce
+        env:
+          PYTHONPATH: computer
+        run: |
+          python -m generalist_lm.lattice_swarm select             /tmp/stage3.json /tmp/stage2-results --survivors 2
+          matrix="$(jq -c '.matrix' /tmp/stage3.json)"
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+
+  stage3:
+    needs: [plan, reduce2]
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.reduce2.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: computer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+      - uses: actions/download-artifact@v4
+        with:
+          name: lattice-plan
+          path: /tmp/lattice
+      - name: Multi-seed final architecture trial
+        run: |
+          python -m generalist_lm.lattice_swarm worker             /tmp/lattice/plan.json             /tmp/lattice/corpus/native-corpus.json             "/tmp/stage3-${{ matrix.index }}.json"             --allowed-root /tmp/lattice/corpus             --index "${{ matrix.index }}"             --stage 3 --steps 18 --repeat-seeds 2 --max-eval-blocks 8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage3-${{ matrix.index }}
+          path: /tmp/stage3-${{ matrix.index }}.json
+          retention-days: 1
+
+  finalize:
+    needs: [plan, stage3]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: computer
+      STATE_REPO: /tmp/airi-lattice-state-repo
+      STATE_DIR: /tmp/airi-lattice-state
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: lattice-plan
+          path: /tmp/lattice
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stage3-*
+          path: /tmp/stage3
+          merge-multiple: true
+
+      - name: Restore state branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone --quiet             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"             "${STATE_REPO}"
+          cd "${STATE_REPO}"
+          git config user.name "AIRI Lattice Research"
+          git config user.email "airi-lattice@users.noreply.github.com"
+          git fetch --quiet origin lattice-research-state:lattice-research-state
+          git checkout --quiet lattice-research-state
+          mkdir -p "${STATE_DIR}"
+          cp -a lattice-research-state/. "${STATE_DIR}/" || true
+
+      - name: External final reducer and promotion gate
+        run: |
+          python -m generalist_lm.lattice_swarm finalize             "${STATE_DIR}"             /tmp/lattice/plan.json             /tmp/lattice/final-status.json             /tmp/stage3
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          status = json.loads(Path("/tmp/lattice/final-status.json").read_text())
+          assert status["ok"]
+          assert status["policy"]["candidate_can_self_promote"] is False
+          assert status["policy"]["external_reducer"] is True
+          assert status["policy"]["equal_budget_transformer_gate_required"] is True
+          assert status["policy"]["final_multi_seed_gate_required"] is True
+          print({
+              "cycle": status["cycle"],
+              "promoted": status["promoted"],
+              "champion": status["champion"]["genome_id"],
+          })
+          PY
+
+      - name: Persist verifier-gated architecture state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "${STATE_REPO}"
+          rm -rf lattice-research-state
+          mkdir -p lattice-research-state
+          cp -a "${STATE_DIR}/." lattice-research-state/
+
+          git add -A lattice-research-state
+          git commit --allow-empty -m             "lattice-research-state: cycle ${{ needs.plan.outputs.cycle }}"
+          git push --quiet origin HEAD:lattice-research-state
+
+          local_sha="$(git rev-parse HEAD)"
+          remote_sha="$(git ls-remote origin refs/heads/lattice-research-state | awk '{print $1}')"
+          test -n "${remote_sha}"
+          test "${local_sha}" = "${remote_sha}"
+          echo "AIRI Lattice state persisted at ${remote_sha}"
