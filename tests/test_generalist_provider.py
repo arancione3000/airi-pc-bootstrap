@@ -590,6 +590,7 @@ def test_foundation_provider_requires_strict_attestation_and_accelerate(tmp_path
             "current_model_digest": "model-digest",
             "current_manifest_digest": "manifest-digest",
             "current_suite_digest": "suite-digest",
+            "inference_profile": {"torch_dtype": "auto"},
         },
     )
     real_find = generalist_provider.importlib.util.find_spec
@@ -627,7 +628,11 @@ def test_foundation_provider_can_disable_device_map_without_accelerate(tmp_path:
     monkeypatch.setattr(
         generalist_provider,
         "foundation_qualification_status",
-        lambda model_dir, attestation_path=None: {"qualified": True, "integrity_ok": True},
+        lambda model_dir, attestation_path=None: {
+            "qualified": True,
+            "integrity_ok": True,
+            "inference_profile": {"torch_dtype": "auto"},
+        },
     )
     real_find = generalist_provider.importlib.util.find_spec
     monkeypatch.setattr(
@@ -645,6 +650,53 @@ def test_foundation_provider_can_disable_device_map_without_accelerate(tmp_path:
     assert row["load_policy"]["device_map"] is None
     assert row["dependencies"]["accelerate"] is False
     assert row["dependencies"]["accelerate_required"] is False
+
+
+
+
+def test_foundation_provider_rejects_dtype_drift(tmp_path: Path, monkeypatch):
+    from control_plane import generalist_provider
+
+    model = tmp_path / "foundation-dtype"
+    model.mkdir()
+    (model / "airi-foundation-manifest.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("AIRI_GENERALIST_ENABLE", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_FOUNDATION_MODEL", str(model))
+    monkeypatch.setenv("AIRI_GENERALIST_FOUNDATION_DTYPE", "float16")
+    monkeypatch.delenv("AIRI_GENERALIST_TRANSFORMERS_MODEL", raising=False)
+    monkeypatch.setattr(
+        generalist_provider,
+        "foundation_qualification_status",
+        lambda model_dir, attestation_path=None: {
+            "qualified": True,
+            "integrity_ok": True,
+            "inference_profile": {"torch_dtype": "bfloat16"},
+        },
+    )
+    real_find = generalist_provider.importlib.util.find_spec
+    monkeypatch.setattr(
+        generalist_provider.importlib.util,
+        "find_spec",
+        lambda name: object() if name in {"torch", "transformers", "accelerate"} else real_find(name),
+    )
+
+    row = generalist_provider.status()
+    assert row["available"] is False
+    assert row["qualification_profile_match"] is False
+    assert "requalify" in row["reason"]
+
+
+def test_foundation_policy_cache_key_handles_gpu_and_cpu_memory_keys():
+    from control_plane import generalist_provider
+
+    key = generalist_provider._stable_policy_cache_key({
+        "device_map": "auto",
+        "torch_dtype": "auto",
+        "max_memory": {0: "14GiB", "cpu": "32GiB"},
+        "offload_folder": None,
+    })
+    decoded = json.loads(key)
+    assert decoded["max_memory"] == {"0": "14GiB", "cpu": "32GiB"}
 
 
 def test_foundation_provider_rejects_ambiguous_generic_and_foundation_models(tmp_path: Path, monkeypatch):
