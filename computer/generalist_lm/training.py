@@ -114,10 +114,16 @@ def nll_stats_on_examples(model, tokenizer, examples: list[SFTExample], *, devic
         )
 
     target_tokens = int((targets != -100).sum().item())
-    target_bytes = sum(
-        len(str(example.messages[-1]["content"]).encode("utf-8", errors="replace"))
-        for example in examples
-    )
+    target_bytes = 0
+    labels_cpu = labels.detach().cpu()
+    for row in labels_cpu:
+        supervised = [int(token) for token in row.tolist() if int(token) != -100]
+        target_bytes += len(
+            tokenizer.decode(supervised, skip_special=True).encode(
+                "utf-8",
+                errors="replace",
+            )
+        )
     nll = float(total_nll.detach().cpu())
     per_token = nll / max(1, target_tokens)
     per_byte = nll / max(1, target_bytes)
