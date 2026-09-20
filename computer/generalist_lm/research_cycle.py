@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+from dataclasses import replace
 import hashlib
 import json
 import math
@@ -11,6 +13,7 @@ import time
 from typing import Any
 
 from .curriculum import ResearchRow, train_rows, validation_rows
+from .curriculum_memory import CurriculumMemory
 from .evolution import GeneralistGenome, generate_challengers
 from .mathesis_bridge import mathesis_signals
 from .model import CausalTransformerLM, estimate_parameter_count, parameter_count
@@ -215,9 +218,12 @@ def _save_champion(root: Path, genome: GeneralistGenome, runtime: GeneralistRunt
     _atomic_json(genome_path, genome.to_dict())
 
 
-def _training_rows_for_genome(genome: GeneralistGenome) -> list[ResearchRow]:
-    """Turn strategy genes into real curriculum weighting, never metadata-only."""
-    base = list(train_rows())
+def _training_rows_for_genome(
+    genome: GeneralistGenome,
+    replay_rows: list[ResearchRow] | None = None,
+) -> list[ResearchRow]:
+    """Turn strategy genes into real curriculum weighting with persistent replay."""
+    base = list(train_rows()) + list(replay_rows or [])
     extra: list[ResearchRow] = []
     if genome.code_adapter:
         extra.extend(row for row in base if row.domain == "coding")
@@ -258,13 +264,14 @@ def _train_genome(
     steps: int,
     seed: int,
     device: str,
+    replay_rows: list[ResearchRow] | None = None,
 ) -> tuple[GeneralistRuntime, dict[str, Any]]:
     tokenizer = ByteTokenizer()
     model = CausalTransformerLM(genome.model_config(tokenizer.vocab_size))
     report = train_sft(
         model,
         tokenizer,
-        [row.sft() for row in _training_rows_for_genome(genome)],
+        [row.sft() for row in _training_rows_for_genome(genome, replay_rows)],
         steps=steps,
         batch_size=4,
         learning_rate=genome.learning_rate,
@@ -280,6 +287,57 @@ def _train_genome(
     return runtime, validation
 
 
+def _continual_candidate_genome(champion: GeneralistGenome, cycle: int) -> GeneralistGenome:
+    tag = hashlib.sha256(
+        f"{champion.genome_id}\0{int(cycle)}\0continual".encode("utf-8")
+    ).hexdigest()[:8]
+    return replace(
+        champion,
+        generation=champion.generation + 1,
+        parent_id=champion.genome_id,
+        genome_id=f"generalist-{champion.generation + 1}-continual-{tag}",
+    ).validate()
+
+
+def _continue_champion(
+    champion_genome: GeneralistGenome,
+    champion_runtime: GeneralistRuntime,
+    replay_rows: list[ResearchRow],
+    *,
+    steps: int,
+    seed: int,
+    device: str,
+    cycle: int,
+) -> tuple[GeneralistGenome, GeneralistRuntime, dict[str, Any]]:
+    """Fine-tune a copy of the current champion with full replay.
+
+    This is the cumulative-learning path. Architecture challengers still train
+    independently, but knowledge can now improve without forcing a topology
+    change every generation.
+    """
+    genome = _continual_candidate_genome(champion_genome, cycle)
+    tokenizer = champion_runtime.tokenizer
+    model = copy.deepcopy(champion_runtime.model)
+    report = train_sft(
+        model,
+        tokenizer,
+        [row.sft() for row in _training_rows_for_genome(genome, replay_rows)],
+        steps=steps,
+        batch_size=4,
+        learning_rate=genome.learning_rate,
+        weight_decay=0.0,
+        seed=seed,
+        device=device,
+    )
+    runtime = GeneralistRuntime(model, genome.model_config(tokenizer.vocab_size), tokenizer, device=device)
+    validation = _grouped_validation(runtime.model, tokenizer, validation_rows(), device=device)
+    validation["parameters"] = parameter_count(runtime.model)
+    validation["score"] = _research_score(validation, validation["parameters"])
+    validation["training"] = report
+    validation["continual_learning"] = True
+    return genome, runtime, validation
+
+
 def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
     root = Path(state_dir or os.environ.get("AIRI_GENERALIST_RESEARCH_STATE", ".ai/generalist-research")).resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -293,6 +351,10 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
     max_context = max(64, int(os.environ.get("AIRI_GENERALIST_RESEARCH_MAX_CONTEXT", "512")))
     max_width = max(32, int(os.environ.get("AIRI_GENERALIST_RESEARCH_MAX_WIDTH", "256")))
     max_layers = max(1, int(os.environ.get("AIRI_GENERALIST_RESEARCH_MAX_LAYERS", "6")))
+    curriculum_max_rows = max(
+        60,
+        min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_CURRICULUM_MAX_ROWS", "1200")), 20_000),
+    )
 
     previous = {}
     try:
@@ -329,6 +391,10 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         signals.extend(mathesis.get("signals") or [])
     signals = list(dict.fromkeys(signals))
 
+    curriculum_memory = CurriculumMemory(root, max_rows=curriculum_max_rows)
+    curriculum_report = curriculum_memory.expand(cycle, signals=signals)
+    replay_rows = curriculum_memory.rows()
+
     challengers = generate_challengers(
         champion_genome,
         signals=signals,
@@ -337,6 +403,31 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
     )
     trials: list[dict[str, Any]] = []
     winner: tuple[GeneralistGenome, GeneralistRuntime, dict[str, Any]] | None = None
+
+    continual_genome, continual_runtime, continual_report = _continue_champion(
+        champion_genome,
+        champion_runtime,
+        replay_rows,
+        steps=steps,
+        seed=_genome_training_seed(champion_genome, namespace=f"continual-{cycle}"),
+        device=device,
+        cycle=cycle,
+    )
+    continual_eligible, continual_reason = _research_eligible(
+        champion_report,
+        continual_report,
+        minimum_loss_gain=minimum_loss_gain,
+        max_domain_regression=max_domain_regression,
+    )
+    trials.append({
+        "kind": "continual_learning",
+        "genome": continual_genome.to_dict(),
+        "report": continual_report,
+        "eligible": continual_eligible,
+        "reason": continual_reason,
+    })
+    if continual_eligible:
+        winner = (continual_genome, continual_runtime, continual_report)
 
     for index, genome in enumerate(challengers):
         budget_reason = _research_budget_reason(
@@ -348,6 +439,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         )
         if budget_reason:
             trials.append({
+                "kind": "architecture",
                 "genome": genome.to_dict(),
                 "report": None,
                 "eligible": False,
@@ -359,6 +451,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             steps=steps,
             seed=_genome_training_seed(genome),
             device=device,
+            replay_rows=replay_rows,
         )
         eligible, reason = _research_eligible(
             champion_report,
@@ -367,6 +460,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             max_domain_regression=max_domain_regression,
         )
         trials.append({
+            "kind": "architecture",
             "genome": genome.to_dict(),
             "report": report,
             "eligible": eligible,
@@ -389,6 +483,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         "champion_report": champion_report,
         "signals": signals,
         "mathesis": mathesis,
+        "curriculum_memory": curriculum_report,
         "trials": trials,
         "policy": {
             "research_only": True,
@@ -400,6 +495,11 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
                 "max_context": max_context,
                 "max_width": max_width,
                 "max_layers": max_layers,
+            },
+            "continual_learning": {
+                "enabled": True,
+                "full_replay": True,
+                "curriculum_max_rows": curriculum_max_rows,
             },
         },
         "updated_at": time.time(),
