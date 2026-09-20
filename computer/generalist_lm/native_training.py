@@ -49,6 +49,9 @@ class NativeTrainConfig:
     min_learning_rate: float = 3e-5
     warmup_steps: int = 100
     weight_decay: float = 0.1
+    adam_beta1: float = 0.9
+    adam_beta2: float = 0.95
+    adam_eps: float = 1e-8
     grad_clip: float = 1.0
     validation_fraction: float = 0.05
     max_eval_blocks: int = 128
@@ -68,6 +71,9 @@ class NativeTrainConfig:
         self.learning_rate = float(self.learning_rate)
         self.min_learning_rate = float(self.min_learning_rate)
         self.weight_decay = float(self.weight_decay)
+        self.adam_beta1 = float(self.adam_beta1)
+        self.adam_beta2 = float(self.adam_beta2)
+        self.adam_eps = float(self.adam_eps)
         self.grad_clip = float(self.grad_clip)
         self.validation_fraction = float(self.validation_fraction)
         self.device = str(self.device).strip().lower()
@@ -87,6 +93,12 @@ class NativeTrainConfig:
             raise ValueError("warmup_steps must be smaller than max_steps")
         if not (0.0 <= self.weight_decay <= 1.0):
             raise ValueError("weight_decay out of bounds")
+        if not (0.0 < self.adam_beta1 < 1.0):
+            raise ValueError("adam_beta1 out of bounds")
+        if not (0.0 < self.adam_beta2 < 1.0):
+            raise ValueError("adam_beta2 out of bounds")
+        if not (1e-12 <= self.adam_eps <= 1e-3):
+            raise ValueError("adam_eps out of bounds")
         if not (0.0 < self.grad_clip <= 100.0):
             raise ValueError("grad_clip out of bounds")
         if not (0.0 < self.validation_fraction < 0.5):
@@ -516,8 +528,8 @@ def train_native_foundation(
         optimizer = torch.optim.AdamW(
             model.parameters(),
             lr=train_config.learning_rate,
-            betas=(0.9, 0.95),
-            eps=1e-8,
+            betas=(train_config.adam_beta1, train_config.adam_beta2),
+            eps=train_config.adam_eps,
             weight_decay=train_config.weight_decay,
         )
         rng = random.Random(train_config.seed + context.rank)
