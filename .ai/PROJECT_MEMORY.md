@@ -144,3 +144,41 @@ tests pass.
 - real continuum logs were observed carrying persistent discovery state across
   consecutive cycles and self-dispatching the successor; GitHub availability
   remains an external best-effort dependency.
+
+
+## 2026-09-20 — AIRI Generalist LM foundation
+
+A new general-purpose generative-model layer is being added behind Airi-PC.
+
+Architecture decisions:
+- the generalist model is a real decoder-only causal Transformer, separate from
+  the old factual classifier and separate from MATHESIS-Ω;
+- MATHESIS remains a proof-gated research/evolution signal source, not the user-
+  facing language model and not a direct source of LM truth or weights;
+- the mutable GeneralistGenome is bounded to architecture/training/reasoning
+  parameters and adapters; verifier, permissions, tool execution policy,
+  qualification and host boundaries remain outside the mutable genome;
+- benchmark domains are separated into language, coding, data, reasoning,
+  structured output and tool protocol so aggregate score cannot hide protected-
+  domain regressions;
+- supervised fine-tuning masks prompt tokens and optimizes assistant targets;
+- tool calls are parsed as allowlisted JSON requests and are executed only by an
+  injected Control Plane executor; unknown tools never reach execution and the
+  agent loop has a hard step cap;
+- a local checkpoint is not a production reasoning provider just because
+  weights exist: config/weights/metadata/benchmark must be complete, benchmark
+  qualification must be bound to the exact checkpoint SHA-256 digest, and both
+  AIRI_GENERALIST_ENABLE=1 and AIRI_GENERALIST_PREFER=1 are required before the
+  model can be preferred over ChatGPT;
+- vision remains routed to ChatGPT until a separately benchmarked local vision
+  model exists;
+- already-downloaded Hugging Face causal models may be benchmarked locally via
+  LocalTransformersBackend, using local_files_only=True and
+  trust_remote_code=False. Autonomous model-code downloads are not allowed.
+
+Capability honesty:
+- CI uses a deliberately tiny model to prove causal generation, SFT learning,
+  checkpointing and gating mechanics;
+- no claim is made that the tiny CI model is GPT/Claude-class;
+- useful general capability requires high-quality pretrained weights or
+  substantial pretraining/fine-tuning plus a much broader held-out benchmark.
