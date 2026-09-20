@@ -58,8 +58,10 @@ class GeneralistGenome:
             raise ValueError("reasoning_depth out of bounded DSL")
         if self.norm_type not in {"layernorm", "rmsnorm"}:
             raise ValueError("unauthorized norm_type")
-        if self.position_encoding not in {"learned", "sinusoidal"}:
+        if self.position_encoding not in {"learned", "sinusoidal", "rope"}:
             raise ValueError("unauthorized position_encoding")
+        if self.position_encoding == "rope" and (self.d_model // self.n_heads) % 2:
+            raise ValueError("RoPE requires an even attention head dimension")
         if self.ff_variant not in {"swiglu", "gelu"}:
             raise ValueError("unauthorized ff_variant")
         return self
@@ -101,7 +103,13 @@ def generate_challengers(
     signals = list(signals or [])
     variants = [
         {"norm_type": "rmsnorm" if champion.norm_type == "layernorm" else "layernorm"},
-        {"position_encoding": "sinusoidal" if champion.position_encoding == "learned" else "learned"},
+        {
+            "position_encoding": (
+                "rope"
+                if champion.position_encoding == "learned"
+                else ("sinusoidal" if champion.position_encoding == "rope" else "learned")
+            )
+        },
         {"ff_variant": "gelu" if champion.ff_variant == "swiglu" else "swiglu"},
         {"d_model": min(4096, champion.d_model + 32), "d_ff": min(16384, champion.d_ff + 96)},
         {"n_layers": min(96, champion.n_layers + 1)},
