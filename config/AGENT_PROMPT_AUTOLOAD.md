@@ -3,7 +3,7 @@
 At bootstrap, load these files in order:
 
 1. `config/AIRI_SYSTEM_MANIFEST.json`
-2. `config/AIRI_CHATGPT_ONLY.json`
+2. `config/AIRI_REASONING_POLICY.json`
 3. `config/DEFAULT_REASONING_DIRECTIVE.md`
 4. `config/AGENT_PROMPT_CONFIG.json`
 
