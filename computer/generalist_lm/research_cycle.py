@@ -30,7 +30,11 @@ def research_seed() -> GeneralistGenome:
         d_ff=128,
         dropout=0.0,
         learning_rate=3e-3,
-        reasoning_depth=2,
+        retrieval_adapter=False,
+        symbolic_adapter=False,
+        code_adapter=False,
+        data_adapter=False,
+        reasoning_depth=1,
     ).validate()
 
 
