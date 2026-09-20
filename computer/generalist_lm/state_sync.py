@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 from typing import Any
 
-from .qualification import qualification_status
+from .qualification import qualification_status, qualify_checkpoint
 
 
 _SAFE_REF = re.compile(r"^[A-Za-z0-9._/-]+$")
@@ -90,17 +90,16 @@ def sync_production_checkpoint(
                 candidate / name,
             )
 
-        status = qualification_status(candidate)
+        # Never trust the remote benchmark JSON as the authority. Re-run the
+        # protected qualification suite locally against the copied weights.
+        minimum_score = float(os.environ.get("AIRI_GENERALIST_PRODUCTION_MIN_SCORE", "85"))
+        status = qualify_checkpoint(candidate, minimum_score=minimum_score)
         if not status.get("qualified"):
             raise RuntimeError(
-                "remote Generalist production checkpoint is not qualification-valid: "
-                + str(status.get("reason") or "qualification failed")
+                "remote Generalist production checkpoint failed local requalification"
             )
 
-        remote_digest = (
-            status.get("current_checkpoint_digest")
-            or status.get("checkpoint_digest")
-        )
+        remote_digest = status.get("checkpoint_digest")
         current = qualification_status(target) if target.exists() else {"qualified": False}
         current_digest = (
             current.get("current_checkpoint_digest")
