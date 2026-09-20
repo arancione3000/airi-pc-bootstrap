@@ -138,7 +138,15 @@ def transformers_model_digest(model_dir: str | Path, *, exclude_path: str | Path
     ]
     if not files:
         raise FileNotFoundError("transformers model directory is empty")
-    key = tuple((str(p.relative_to(root)), p.stat().st_size, p.stat().st_mtime_ns) for p in files)
+    key = tuple(
+        (
+            str(p.relative_to(root)),
+            p.stat().st_size,
+            p.stat().st_mtime_ns,
+            p.stat().st_ctime_ns,
+        )
+        for p in files
+    )
     cached = _TRANSFORMERS_DIGEST_CACHE.get(key)
     if cached:
         return cached

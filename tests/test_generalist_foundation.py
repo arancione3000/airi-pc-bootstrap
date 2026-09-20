@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -154,6 +155,23 @@ def test_transformers_digest_ignores_attestations_but_not_foundation_manifest(tm
     raw = json.loads((model / "airi-foundation-manifest.json").read_text(encoding="utf-8"))
     raw["source_revision"] = "reviewed-revision-002"
     (model / "airi-foundation-manifest.json").write_text(json.dumps(raw), encoding="utf-8")
+    assert transformers_model_digest(model) != before
+
+
+def test_transformers_digest_cache_detects_same_size_tamper_with_restored_mtime(tmp_path: Path):
+    from generalist_lm.qualification import transformers_model_digest
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+    weight = model / "model.safetensors"
+    original = weight.stat()
+    before = transformers_model_digest(model)
+
+    replacement = b"FOUNDATION-WEIGHTS"
+    assert len(replacement) == weight.stat().st_size
+    weight.write_bytes(replacement)
+    os.utime(weight, ns=(original.st_atime_ns, original.st_mtime_ns))
+
     assert transformers_model_digest(model) != before
 
 

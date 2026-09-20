@@ -166,7 +166,7 @@ def _model_inventory(root: Path) -> dict[str, Any]:
         "weight_bytes": sum(path.stat().st_size for path in weight_files),
         "tokenizer_files": [path.relative_to(root).as_posix() for path in tokenizer_files],
         "attestations": sorted(name for name in relative if Path(name).name in _ATTESTATION_FILENAMES),
-        "config_context_limit": max(declared_contexts) if declared_contexts else None,
+        "config_context_limit": min(declared_contexts) if declared_contexts else None,
     }
 
 

@@ -331,7 +331,7 @@ local-files-only and `trust_remote_code` is permanently disabled.
 
 Foundation qualification is separate from both the tiny research benchmark and
 generic Transformers qualification. It adds protected long-context and
-robustness domains and binds the attestation to three independent identities:
+robustness domains and binds the attestation to three integrity identities:
 
 1. the exact local model-tree digest;
 2. the canonical foundation-manifest digest;
