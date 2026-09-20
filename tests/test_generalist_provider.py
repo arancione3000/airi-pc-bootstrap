@@ -363,3 +363,61 @@ def test_model_change_parser_accepts_focused_patch_and_rejects_ambiguous_edit():
         local_agent._extract_json_array(
             '[{"path":"demo.py","content":"x","old":"a","new":"b"}]'
         )
+
+
+def test_readonly_generalist_table_profile_and_groupby():
+    from control_plane.generalist_agent_bridge import execute_readonly_tool
+
+    rows = [
+        {"team": "a", "score": 10, "cost": 2.0},
+        {"team": "a", "score": 20, "cost": None},
+        {"team": "b", "score": 30, "cost": 4.0},
+    ]
+    profile = execute_readonly_tool("table_profile", {"rows": rows})
+    assert profile["row_count"] == 3
+    assert profile["profile"]["score"]["mean"] == 20.0
+    assert profile["profile"]["cost"]["missing"] == 1
+    assert profile["profile"]["cost"]["numeric_count"] == 2
+
+    grouped = execute_readonly_tool(
+        "table_aggregate",
+        {
+            "rows": rows,
+            "operation": "mean",
+            "column": "score",
+            "group_by": "team",
+        },
+    )
+    assert grouped["groups"] == {"a": 15.0, "b": 30.0}
+
+    counted = execute_readonly_tool(
+        "table_aggregate",
+        {"rows": rows, "operation": "count", "group_by": "team"},
+    )
+    assert counted["groups"] == {"a": 2, "b": 1}
+
+
+def test_readonly_generalist_table_tools_reject_non_numeric_and_excessive_groups():
+    from control_plane.generalist_agent_bridge import execute_readonly_tool
+
+    with pytest.raises(ValueError, match="numeric value"):
+        execute_readonly_tool(
+            "table_aggregate",
+            {
+                "rows": [{"group": "a", "value": "not-a-number"}],
+                "operation": "mean",
+                "column": "value",
+            },
+        )
+
+    rows = [{"group": f"g{i}", "value": i} for i in range(201)]
+    with pytest.raises(ValueError, match="too many groups"):
+        execute_readonly_tool(
+            "table_aggregate",
+            {
+                "rows": rows,
+                "operation": "sum",
+                "column": "value",
+                "group_by": "group",
+            },
+        )
