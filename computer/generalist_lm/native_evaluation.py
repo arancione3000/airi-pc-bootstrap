@@ -168,6 +168,34 @@ def evaluate_native_checkpoint(
     }
 
 
+def native_continual_decision(
+    champion: dict[str, Any],
+    control: dict[str, Any],
+    *,
+    minimum_gain: float = 0.002,
+    max_domain_regression: float = 0.0,
+) -> tuple[bool, str]:
+    for label, report in (("champion", champion), ("control", control)):
+        if not report.get("ok") or not report.get("integrity_ok"):
+            return False, f"{label} evaluation is invalid"
+        if report.get("external_pretrained") is not False:
+            return False, f"{label} permits external pretrained weights"
+    if str(champion.get("corpus_digest")) != str(control.get("corpus_digest")):
+        return False, "control was not evaluated on the champion corpus"
+    if float(champion["loss"]) - float(control["loss"]) < max(0.0, float(minimum_gain)):
+        return False, "equal-budget continual training did not improve held-out loss"
+
+    champion_domains = champion.get("domain_loss") or {}
+    control_domains = control.get("domain_loss") or {}
+    tolerance = max(0.0, float(max_domain_regression))
+    for domain, old_value in champion_domains.items():
+        if domain not in control_domains:
+            return False, f"control lost held-out domain: {domain}"
+        if float(control_domains[domain]) > float(old_value) + tolerance:
+            return False, f"control regressed in held-out domain: {domain}"
+    return True, "continual training improved held-out loss without domain regressions"
+
+
 def native_promotion_decision(
     champion: dict[str, Any],
     control: dict[str, Any],
