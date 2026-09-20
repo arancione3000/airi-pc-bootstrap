@@ -16,6 +16,17 @@ from .native_foundation import (
     native_parameter_count,
     native_scale_profile,
 )
+from .native_data import (
+    NATIVE_CORPUS_DOMAINS,
+    audit_native_corpus,
+    load_native_corpus,
+    train_native_bpe,
+)
+from .native_training import (
+    NativeTrainConfig,
+    native_training_status,
+    train_native_foundation,
+)
 from .pretraining import load_local_corpus, pretrain_causal
 from .qualification import (
     qualify_checkpoint,
@@ -115,6 +126,59 @@ def parser() -> argparse.ArgumentParser:
 
     nfs = sub.add_parser("native-foundation-status")
     nfs.add_argument("state")
+
+    nca = sub.add_parser(
+        "native-corpus-audit",
+        help="audit a local provenance-governed AIRI Native corpus manifest",
+    )
+    nca.add_argument("manifest")
+    nca.add_argument("--allowed-root", action="append", required=True)
+    nca.add_argument("--require-domain", action="append")
+    nca.add_argument("--max-total-bytes", type=int, default=2_000_000_000)
+
+    ntt = sub.add_parser(
+        "native-tokenizer-train",
+        help="train AIRI's own BPE tokenizer from the approved Native corpus",
+    )
+    ntt.add_argument("manifest")
+    ntt.add_argument("output")
+    ntt.add_argument("--allowed-root", action="append", required=True)
+    ntt.add_argument("--vocab-size", type=int, default=32768)
+    ntt.add_argument("--min-frequency", type=int, default=2)
+    ntt.add_argument("--max-bytes", type=int, default=500_000_000)
+    ntt.add_argument("--max-total-bytes", type=int, default=2_000_000_000)
+
+    nt = sub.add_parser(
+        "native-train",
+        help="pretrain AIRI Native Foundation from its own checkpoint and corpus",
+    )
+    nt.add_argument("state")
+    nt.add_argument("manifest")
+    nt.add_argument("--allowed-root", action="append", required=True)
+    nt.add_argument("--output", required=True)
+    nt.add_argument("--max-steps", type=int, default=1000)
+    nt.add_argument("--micro-batch-size", type=int, default=2)
+    nt.add_argument("--gradient-accumulation-steps", type=int, default=8)
+    nt.add_argument("--learning-rate", type=float, default=3e-4)
+    nt.add_argument("--min-learning-rate", type=float, default=3e-5)
+    nt.add_argument("--warmup-steps", type=int, default=100)
+    nt.add_argument("--weight-decay", type=float, default=0.1)
+    nt.add_argument("--grad-clip", type=float, default=1.0)
+    nt.add_argument("--validation-fraction", type=float, default=0.05)
+    nt.add_argument("--max-eval-blocks", type=int, default=128)
+    nt.add_argument("--seed", type=int, default=17)
+    nt.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    nt.add_argument(
+        "--precision",
+        choices=("auto", "fp32", "fp16", "bf16"),
+        default="auto",
+    )
+    nt.add_argument("--domain-weights-json")
+    nt.add_argument("--max-total-bytes", type=int, default=2_000_000_000)
+    nt.add_argument("--no-optimizer-state", action="store_true")
+
+    nts = sub.add_parser("native-training-status")
+    nts.add_argument("state")
 
     rc = sub.add_parser("research-cycle")
     rc.add_argument("--state", default=os.environ.get("AIRI_GENERALIST_RESEARCH_STATE", ".ai/generalist-research"))
@@ -282,6 +346,66 @@ def main(argv=None) -> int:
 
     elif args.cmd == "native-foundation-status":
         result = native_checkpoint_status(args.state)
+
+    elif args.cmd == "native-corpus-audit":
+        corpus = load_native_corpus(
+            args.manifest,
+            allowed_roots=args.allowed_root,
+            max_total_bytes=args.max_total_bytes,
+        )
+        result = audit_native_corpus(
+            corpus,
+            required_domains=args.require_domain or NATIVE_CORPUS_DOMAINS,
+        )
+
+    elif args.cmd == "native-tokenizer-train":
+        corpus = load_native_corpus(
+            args.manifest,
+            allowed_roots=args.allowed_root,
+            max_total_bytes=args.max_total_bytes,
+        )
+        result = train_native_bpe(
+            corpus,
+            args.output,
+            vocab_size=args.vocab_size,
+            min_frequency=args.min_frequency,
+            max_bytes=args.max_bytes,
+        )
+
+    elif args.cmd == "native-train":
+        domain_weights = None
+        if args.domain_weights_json:
+            domain_weights = json.loads(args.domain_weights_json)
+            if not isinstance(domain_weights, dict):
+                raise ValueError("--domain-weights-json must be a JSON object")
+        train_config = NativeTrainConfig(
+            max_steps=args.max_steps,
+            micro_batch_size=args.micro_batch_size,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            learning_rate=args.learning_rate,
+            min_learning_rate=args.min_learning_rate,
+            warmup_steps=args.warmup_steps,
+            weight_decay=args.weight_decay,
+            grad_clip=args.grad_clip,
+            validation_fraction=args.validation_fraction,
+            max_eval_blocks=args.max_eval_blocks,
+            seed=args.seed,
+            device=args.device,
+            precision=args.precision,
+            save_optimizer_state=not args.no_optimizer_state,
+            domain_weights=domain_weights,
+        ).validate()
+        result = train_native_foundation(
+            args.state,
+            args.manifest,
+            allowed_roots=args.allowed_root,
+            output_dir=args.output,
+            config=train_config,
+            max_total_bytes=args.max_total_bytes,
+        )
+
+    elif args.cmd == "native-training-status":
+        result = native_training_status(args.state)
 
     elif args.cmd == "research-cycle":
         result = run_research_cycle(args.state)
