@@ -15,6 +15,7 @@ on:
       - 'tests/test_generalist_foundation.py'
       - 'tests/test_native_foundation.py'
       - 'tests/test_native_training.py'
+      - 'tests/test_native_acquisition.py'
       - 'computer/control_plane/generalist_provider.py'
       - 'computer/control_plane/model_router.py'
       - 'computer/control_plane/local_agent.py'
@@ -42,6 +43,7 @@ on:
       - 'tests/test_generalist_foundation.py'
       - 'tests/test_native_foundation.py'
       - 'tests/test_native_training.py'
+      - 'tests/test_native_acquisition.py'
       - 'computer/control_plane/generalist_provider.py'
       - 'computer/control_plane/model_router.py'
       - 'computer/control_plane/local_agent.py'
@@ -88,13 +90,13 @@ jobs:
 
       - name: Compile generalist LM
         run: |
-          .venv/bin/python -m compileall -q computer/generalist_lm computer/control_plane/generalist_provider.py computer/control_plane/model_router.py computer/control_plane/local_agent.py computer/control_plane/model_gateway.py computer/control_plane/generalist_agent_bridge.py computer/code_agent.py tests/test_generalist_lm.py tests/test_generalist_scalable_learning.py tests/test_generalist_grounded_learning.py tests/test_generalist_bpe.py tests/test_generalist_bpe_evolution.py tests/test_generalist_retention.py tests/test_generalist_provider.py tests/test_generalist_foundation.py tests/test_native_foundation.py tests/test_native_training.py tests/test_model_gateway.py tests/test_local_agent.py tests/test_openrouter_provider.py
+          .venv/bin/python -m compileall -q computer/generalist_lm computer/control_plane/generalist_provider.py computer/control_plane/model_router.py computer/control_plane/local_agent.py computer/control_plane/model_gateway.py computer/control_plane/generalist_agent_bridge.py computer/code_agent.py tests/test_generalist_lm.py tests/test_generalist_scalable_learning.py tests/test_generalist_grounded_learning.py tests/test_generalist_bpe.py tests/test_generalist_bpe_evolution.py tests/test_generalist_retention.py tests/test_generalist_provider.py tests/test_generalist_foundation.py tests/test_native_foundation.py tests/test_native_training.py tests/test_native_acquisition.py tests/test_model_gateway.py tests/test_local_agent.py tests/test_openrouter_provider.py
 
       - name: Run generalist LM regressions and learning smoke
         env:
           PYTHONPATH: ${{ github.workspace }}/computer
         run: |
-          .venv/bin/python -m pytest -q tests/test_generalist_lm.py tests/test_generalist_scalable_learning.py tests/test_generalist_grounded_learning.py tests/test_generalist_bpe.py tests/test_generalist_bpe_evolution.py tests/test_generalist_retention.py tests/test_generalist_provider.py tests/test_generalist_foundation.py tests/test_native_foundation.py tests/test_native_training.py tests/test_model_gateway.py tests/test_local_agent.py tests/test_openrouter_provider.py
+          .venv/bin/python -m pytest -q tests/test_generalist_lm.py tests/test_generalist_scalable_learning.py tests/test_generalist_grounded_learning.py tests/test_generalist_bpe.py tests/test_generalist_bpe_evolution.py tests/test_generalist_retention.py tests/test_generalist_provider.py tests/test_generalist_foundation.py tests/test_native_foundation.py tests/test_native_training.py tests/test_native_acquisition.py tests/test_model_gateway.py tests/test_local_agent.py tests/test_openrouter_provider.py
 
       - name: Qualified local gateway end-to-end smoke
         env:
