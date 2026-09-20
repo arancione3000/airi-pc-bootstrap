@@ -38,6 +38,39 @@ def _prompt_set(rows: list[ResearchRow]) -> set[str]:
     }
 
 
+def canary_rows(cycle: int) -> list[ResearchRow]:
+    """Return a rotating held-out canary never added to training replay."""
+    c = max(1, int(cycle))
+    base = 50_000 + c * 131
+    token = f"CANARY{c:04d}"
+    return [
+        ResearchRow("language", [
+            {"role": "user", "content": f"Reply with exactly {token} and nothing else."},
+            {"role": "assistant", "content": token},
+        ]),
+        ResearchRow("coding", [
+            {"role": "user", "content": f"Return only Python code defining canary_sub_{c}(x) that returns x - {c % 11 + 3}."},
+            {"role": "assistant", "content": f"def canary_sub_{c}(x):\n    return x - {c % 11 + 3}"},
+        ]),
+        ResearchRow("data", [
+            {"role": "user", "content": f"Sum of {base},{base + 2},{base + 5}? Number only."},
+            {"role": "assistant", "content": str(base * 3 + 7)},
+        ]),
+        ResearchRow("reasoning", [
+            {"role": "user", "content": f"Sequence {base},{base + 4},{base + 8},{base + 12}. Next term only."},
+            {"role": "assistant", "content": str(base + 16)},
+        ]),
+        ResearchRow("tools", [
+            {"role": "user", "content": f"Use calculator for {base}*{c % 5 + 2}."},
+            {"role": "assistant", "content": f'<tool_call>{{"name":"calculator","arguments":{{"expression":"{base}*{c % 5 + 2}"}}}}</tool_call>'},
+        ]),
+        ResearchRow("structured", [
+            {"role": "user", "content": f'Return exactly this JSON object: {{"canary":{c},"value":{base}}}'},
+            {"role": "assistant", "content": f'{{"canary":{c},"value":{base}}}'},
+        ]),
+    ]
+
+
 def _mechanical_rows(cycle: int, signals: list[str]) -> list[ResearchRow]:
     """Generate exact-label training rows from deterministic rules.
 
