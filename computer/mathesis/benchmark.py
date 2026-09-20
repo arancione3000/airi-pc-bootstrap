@@ -4,10 +4,11 @@ from typing import Any
 
 import sympy as sp
 
+from .architecture import _ALLOWED_EXPERTS, _ALLOWED_STRATEGIES
 from .formalizer import FormalizerMesh
 from .neural_graph import GrowingNeuralRouter
 from .synthesis import ProgramSynthesizer
-from .sympy_lab import SymPyMathLab
+from .sympy_lab import DOMAIN_ATLAS, SymPyMathLab
 from .types import ArchitectureGenome
 from .verifiers import CompositeVerifier
 
@@ -70,6 +71,60 @@ def evaluate_genome(
     def add(name: str, ok: bool, critical: bool = True, detail: Any = None):
         tasks.append({"name": name, "ok": bool(ok), "critical": critical, "detail": detail})
 
+    # Architecture claims are part of the benchmark surface, not trusted metadata.
+    experts = list(genome.experts)
+    expert_set = set(experts)
+    topology_nodes = {node for edge in genome.topology for node in edge}
+    unknown_experts = sorted(expert_set - set(_ALLOWED_EXPERTS))
+    bad_edges = [
+        list(edge)
+        for edge in genome.topology
+        if len(edge) != 2 or edge[0] not in expert_set or edge[1] not in expert_set
+    ]
+    disconnected = sorted(expert_set - topology_nodes) if len(experts) > 1 else []
+    add("architecture:unique_experts", len(experts) == len(expert_set), detail=experts)
+    add("architecture:known_experts", not unknown_experts, detail=unknown_experts)
+    add("architecture:topology_closed", not bad_edges, detail=bad_edges)
+    add("architecture:experts_connected", not disconnected, detail=disconnected)
+
+    strategies = list(genome.strategy_portfolio)
+    unknown_strategies = sorted(set(strategies) - set(_ALLOWED_STRATEGIES))
+    add("architecture:unique_strategies", len(strategies) == len(set(strategies)), detail=strategies)
+    add("architecture:known_strategies", not unknown_strategies, detail=unknown_strategies)
+    add(
+        "architecture:research_strategy_coupled",
+        "research" not in expert_set or "read_only_research" in strategies,
+        detail={"research_expert": "research" in expert_set, "read_only_research": "read_only_research" in strategies},
+    )
+
+    proof_order = list(genome.proof_order)
+    allowed_proof_order = {"symbolic", "smt", "counterexample", "lean"}
+    add("architecture:unique_proof_order", len(proof_order) == len(set(proof_order)), detail=proof_order)
+    add(
+        "architecture:known_proof_order",
+        bool(proof_order) and set(proof_order) <= allowed_proof_order,
+        detail=proof_order,
+    )
+    add(
+        "architecture:bounded_genome",
+        (
+            1 <= genome.counterexample_radius <= 40
+            and 1 <= genome.max_proof_cells <= 256
+            and 12 <= genome.neural_hidden <= 128
+            and 1 <= genome.symbolic_depth <= 12
+            and 1 <= genome.discovery_beam <= 8
+            and 1 <= genome.research_budget <= 4
+        ),
+        detail={
+            "counterexample_radius": genome.counterexample_radius,
+            "max_proof_cells": genome.max_proof_cells,
+            "neural_hidden": genome.neural_hidden,
+            "symbolic_depth": genome.symbolic_depth,
+            "discovery_beam": genome.discovery_beam,
+            "research_budget": genome.research_budget,
+        },
+    )
+
     intent_cases = [
         ("calcola 10+15", "arithmetic"),
         ("risolvi 3*x=12", "equation"),
@@ -102,25 +157,8 @@ def evaluate_genome(
         add("program:gcd", False, detail=repr(exc))
 
     domain_checks: dict[str, Any] = {
-        "algebra": lambda: lab.algebra_normal_forms("(x+1)^4-(x^4+4*x^3+6*x^2+4*x+1)").ok,
-        "polynomials": lambda: lab.polynomial_interpolate([(0, 1), (1, 4), (2, 9), (3, 16)]).ok,
-        "number_theory": lambda: synth.synthesize("is_prime").verified,
-        "research": lambda: True,
-        "calculus": lambda: (
-            lab.derivative("x^4+2*x").ok
-            and lab.antiderivative("3*x^2").ok
-        ),
-        "trigonometry": lambda: lab.trig_normal_form("sin(x)^2+cos(x)^2").ok,
-        "linear_algebra": lambda: lab.matrix_invariants([[2, 1], [1, 1]]).ok,
-        "combinatorics": lambda: verifier.evaluate("binomial(8,3)")[0] == 56,
-        "equations": lambda: verifier.solve_equation("x^2-5*x+6=0")[1].ok,
-        "inequalities": lambda: bool(sp.reduce_inequalities([sp.Symbol("x", real=True) ** 2 >= 0])),
-        "sequences": lambda: lab.polynomial_interpolate([(0, 0), (1, 1), (2, 4), (3, 9)]).ok,
-        "special_functions": lambda: verifier.evaluate("gamma(6)")[0] == 120,
-        "geometry": lambda: verifier.evaluate("3^2+4^2")[0] == 25,
-        "probability": lambda: verifier.evaluate("binomial(10,3)/2^10")[1].ok,
-        "discrete_math": lambda: lab.number_theory_profile(360).ok,
-        "optimization": lambda: lab.derivative("x^2-6*x+13").ok,
+        domain: (lambda domain=domain: lab.domain_probe(domain).ok)
+        for domain in DOMAIN_ATLAS
     }
 
     for domain, check in domain_checks.items():
@@ -128,9 +166,26 @@ def evaluate_genome(
             add(f"domain:{domain}", False, critical=False, detail="expert not present")
             continue
         try:
-            add(f"domain:{domain}", bool(check()), critical=False, detail="verified capability")
+            # Once an architecture claims the expert, its real domain probe is a
+            # hard gate. A broken claimed capability cannot be hidden by score.
+            add(f"domain:{domain}", bool(check()), critical=True, detail="verified domain probe")
         except Exception as exc:
-            add(f"domain:{domain}", False, critical=False, detail=repr(exc))
+            add(f"domain:{domain}", False, critical=True, detail=repr(exc))
+
+    if "research" not in genome.experts:
+        add("capability:research", False, critical=False, detail="expert not present")
+    else:
+        research_ready = "read_only_research" in genome.strategy_portfolio
+        add(
+            "capability:research",
+            research_ready,
+            critical=True,
+            detail={
+                "read_only_research_strategy": research_ready,
+                "live_network_contract": "verified separately by CI; never used as a truth oracle",
+            },
+        )
+
 
     # The architecture search budget must correspond to a real symbolic workload.
     symbolic_depth_verified = False
@@ -145,7 +200,7 @@ def evaluate_genome(
         add("search:symbolic_depth", False, critical=False, detail=repr(exc))
 
     learned_results: list[dict[str, Any]] = []
-    for index, statement in enumerate((learned_theorems or [])[:16]):
+    for index, statement in enumerate(learned_theorems or []):
         try:
             cert = verifier.verify_relation(statement)
             ok = bool(cert.ok)

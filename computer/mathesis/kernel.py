@@ -66,9 +66,11 @@ class IntegrityKernel:
     def validate_state_path(self, state_dir: str | Path, path: str | Path) -> Path:
         root = Path(state_dir).resolve()
         target = Path(path).resolve()
-        if target != root and root not in target.parents:
-            raise PermissionError("self-rewrite target escapes state directory")
-        if target.name and target.name not in MUTABLE_STATE_NAMES and target.parent == root:
+        if target == root or root not in target.parents:
+            raise PermissionError("self-rewrite target must be an authorized state file")
+        if target.parent != root:
+            raise PermissionError("self-rewrite target cannot use nested state paths")
+        if target.name not in MUTABLE_STATE_NAMES:
             raise PermissionError(f"self-rewrite target is not authorized: {target.name}")
         return target
 

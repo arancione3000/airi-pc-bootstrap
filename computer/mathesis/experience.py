@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .discovery import validate_verified_discovery
 from .knowledge import default_state_dir
 from .safe_math import parse_relation
+from .verifiers import CompositeVerifier
 from .types import ArchitectureGenome
 
 
@@ -34,7 +36,7 @@ class ExperienceAnalyzer:
         except Exception:
             return fallback
 
-    def replayable_theorems(self, limit: int = 16) -> list[str]:
+    def replayable_theorems(self, limit: int | None = None) -> list[str]:
         """Return bounded proof obligations for previously verified mathematics.
 
         Ordinary relation-style discoveries replay their theorem statement.
@@ -51,10 +53,14 @@ class ExperienceAnalyzer:
         )
         out: list[str] = []
         seen: set[str] = set()
-        target = max(1, min(64, int(limit)))
+        target = None if limit is None else max(1, min(64, int(limit)))
+        verifier = CompositeVerifier()
 
         for row in rows:
             if not row.get("verified"):
+                continue
+            still_valid, _reason = validate_verified_discovery(row, verifier)
+            if not still_valid:
                 continue
 
             candidates: list[str] = []
@@ -87,7 +93,7 @@ class ExperienceAnalyzer:
                     continue
                 seen.add(candidate)
                 out.append(candidate)
-                if len(out) >= target:
+                if target is not None and len(out) >= target:
                     return list(reversed(out))
 
         return list(reversed(out))

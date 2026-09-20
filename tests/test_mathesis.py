@@ -272,6 +272,8 @@ def test_discovery_engine_creates_only_proof_gated_internal_novelty(tmp_path: Pa
         theorem = row["theorem"]
         assert theorem["verified"] is True
         assert theorem["internal_novelty"] is True
+        assert theorem["memory_novelty"] == "not_previously_stored"
+        assert theorem["source_novelty"] == "unassessed"
         assert theorem["human_novelty"] == "unassessed"
     status = engine.status()
     assert status["verified"] >= 4
@@ -764,6 +766,8 @@ def test_curriculum_v1_state_is_read_as_v2_schema(tmp_path: Path):
 
 
 def test_health_gate_accepts_consistent_evolved_state(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    assert discovery.discover_once()["ok"] is True
     evolution = SelfEvolutionEngine(tmp_path)
     result = evolution.evolve_once()
     assert result.benchmark["kernel_integrity"]["ok"] is True
@@ -825,3 +829,648 @@ def test_continuum_health_gate_runs_before_state_persistence():
     persist_pos = workflow.index("Persist and verify state heartbeat")
     assert health_pos < persist_pos
     assert 'test -f "$MATHESIS_STATE_DIR/health.json"' in workflow
+
+
+def test_discovery_schema_upgrade_persists_even_without_theorem_changes(tmp_path: Path):
+    state = {
+        "version": 2,
+        "cycle": 0,
+        "strategy_counts": {},
+        "theorems": {},
+        "discarded": {},
+    }
+    path = tmp_path / "discoveries.json"
+    path.write_text(json.dumps(state), encoding="utf-8")
+    engine = ConjectureDiscoveryEngine(tmp_path)
+    engine._audit_legacy_discoveries(engine._load())
+    migrated = json.loads(path.read_text(encoding="utf-8"))
+    assert migrated["version"] == 3
+    assert migrated["last_quality_migration"]["schema_upgraded"] is True
+
+
+def test_legacy_faulhaber_migration_is_idempotent(tmp_path: Path):
+    statement = "sum(k^2, k=1..n) = n*(n + 1)*(2*n + 1)/6 for integer n>=0"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 2,
+        "cycle": 2,
+        "strategy_counts": {"faulhaber_interpolation": 1},
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "faulhaber_interpolation",
+                "complexity": 2,
+                "discovered_at": 1.0,
+                "certificate": {
+                    "ok": True,
+                    "sample_count": 6,
+                    "polynomial": "n*(n + 1)*(2*n + 1)/6",
+                },
+            }
+        },
+        "discarded": {},
+    }
+    path = tmp_path / "discoveries.json"
+    path.write_text(json.dumps(state), encoding="utf-8")
+    engine = ConjectureDiscoveryEngine(tmp_path)
+
+    engine._audit_legacy_discoveries(engine._load())
+    once = path.read_text(encoding="utf-8")
+    first = json.loads(once)
+    assert first["theorems"][theorem_id]["certificate"]["recurrence_nontrivial"] is True
+    assert first["theorems"][theorem_id]["certificate"]["recurrence"]["ok"] is True
+
+    engine._audit_legacy_discoveries(engine._load())
+    twice = path.read_text(encoding="utf-8")
+    second = json.loads(twice)
+    assert twice == once
+    assert list(second["theorems"]).count(theorem_id) == 1
+    assert theorem_id not in second["discarded"]
+
+
+def test_legacy_faulhaber_statement_must_match_reproved_polynomial(tmp_path: Path):
+    # The polynomial/certificate is the true sum-of-squares formula, but the
+    # displayed theorem is deliberately false. Metadata must not rescue it.
+    statement = "sum(k^2, k=1..n) = n*(n + 1)/2 for integer n>=0"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 2,
+        "cycle": 1,
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "faulhaber_interpolation",
+                "complexity": 2,
+                "certificate": {
+                    "ok": True,
+                    "sample_count": 6,
+                    "polynomial": "n*(n + 1)*(2*n + 1)/6",
+                },
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+    engine = ConjectureDiscoveryEngine(tmp_path)
+    engine._audit_legacy_discoveries(engine._load())
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    assert theorem_id not in migrated["theorems"]
+    assert migrated["discarded"][theorem_id]["discarded_reason"] == "legacy_faulhaber_reproof_failed"
+
+
+def test_legacy_faulhaber_reproof_bounds_untrusted_sample_count(tmp_path: Path):
+    statement = "sum(k^2, k=1..n) = n*(n + 1)*(2*n + 1)/6 for integer n>=0"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 2,
+        "cycle": 1,
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "faulhaber_interpolation",
+                "complexity": 2,
+                "certificate": {
+                    "ok": True,
+                    "sample_count": 10**12,
+                    "polynomial": "n*(n + 1)*(2*n + 1)/6",
+                },
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+    engine = ConjectureDiscoveryEngine(tmp_path)
+    engine._audit_legacy_discoveries(engine._load())
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    assert migrated["theorems"][theorem_id]["certificate"]["sample_count"] <= 64
+
+
+def test_valid_legacy_non_faulhaber_is_reproved_without_damage(tmp_path: Path):
+    statement = "x^4-y^4 = (x - y)*(x**3 + x**2*y + x*y**2 + y**3)"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 2,
+        "cycle": 1,
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "difference_of_powers",
+                "complexity": 4,
+                "certificate": {"ok": True},
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+    engine = ConjectureDiscoveryEngine(tmp_path)
+    engine._audit_legacy_discoveries(engine._load())
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    theorem = migrated["theorems"][theorem_id]
+    assert theorem["verified"] is True
+    assert theorem["certificate"]["ok"] is True
+    assert theorem["quality_gate"] == "structurally_nontrivial_and_proof_gated"
+    assert theorem_id not in migrated["discarded"]
+
+
+def test_false_verified_metadata_is_archived_by_quality_audit(tmp_path: Path):
+    statement = "x+1=x+2"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 3,
+        "cycle": 1,
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "difference_of_powers",
+                "complexity": 2,
+                "quality_gate": "structurally_nontrivial_and_proof_gated",
+                "certificate": {"ok": True, "status": "verified"},
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+    engine = ConjectureDiscoveryEngine(tmp_path)
+    engine._audit_legacy_discoveries(engine._load())
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    assert theorem_id not in migrated["theorems"]
+    assert migrated["discarded"][theorem_id]["discarded_reason"] == "verified_discovery_revalidation_failed"
+
+
+def test_antiforgetting_replays_only_currently_valid_active_theorems(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    valid = discovery.discover_once()["theorem"]
+    path = tmp_path / "discoveries.json"
+    state = json.loads(path.read_text(encoding="utf-8"))
+
+    false_statement = "x+1=x+2"
+    false_id = __import__("hashlib").sha256(false_statement.encode("utf-8")).hexdigest()[:20]
+    state["theorems"][false_id] = {
+        "id": false_id,
+        "statement": false_statement,
+        "verified": True,
+        "strategy": "difference_of_powers",
+        "quality_gate": "structurally_nontrivial_and_proof_gated",
+        "certificate": {"ok": True, "status": "verified"},
+        "discovered_at": valid["discovered_at"] + 1,
+    }
+    discarded_statement = "(x+2)^2=x^2+4*x+4"
+    discarded_id = __import__("hashlib").sha256(discarded_statement.encode("utf-8")).hexdigest()[:20]
+    state["discarded"][discarded_id] = {
+        "id": discarded_id,
+        "statement": discarded_statement,
+        "verified": True,
+        "quality_gate": "structurally_nontrivial_and_proof_gated",
+        "certificate": {"ok": True},
+    }
+    path.write_text(json.dumps(state), encoding="utf-8")
+
+    learned = ExperienceAnalyzer(tmp_path).replayable_theorems(limit=16)
+    assert valid["statement"] in learned
+    assert false_statement not in learned
+    assert discarded_statement not in learned
+
+
+def test_all_sympy_domains_complete_curriculum_to_benchmark_chain(tmp_path: Path):
+    from mathesis.architecture import generate_challengers
+    from mathesis.benchmark import evaluate_genome
+
+    for domain in DOMAIN_ATLAS:
+        champion = default_genome()
+        champion.experts = [expert for expert in champion.experts if expert != domain]
+        feedback = ExperienceAnalyzer(tmp_path / domain).signals(
+            champion,
+            latest_study={"ok": True, "status": "studied", "domain": domain},
+        )
+        weakness = f"missing_{domain}_expert"
+        assert weakness in feedback["weaknesses"], domain
+
+        challenger = generate_challengers(
+            champion,
+            weaknesses=feedback["weaknesses"],
+            count=1,
+        )[0]
+        assert domain in challenger.experts, domain
+        benchmark = evaluate_genome(challenger)
+        task = next(row for row in benchmark["tasks"] if row["name"] == f"domain:{domain}")
+        assert task["ok"] is True, (domain, task)
+
+
+def test_polynomials_real_curriculum_study_reaches_real_benchmark(tmp_path: Path):
+    from mathesis.architecture import generate_challengers
+    from mathesis.benchmark import evaluate_genome
+
+    curriculum = MathematicalCurriculum(tmp_path)
+    (tmp_path / "curriculum.json").write_text(
+        json.dumps({"version": 2, "cursor": list(DOMAIN_ATLAS).index("polynomials"), "studies": [], "retry_counts": {}}),
+        encoding="utf-8",
+    )
+    curriculum.researcher.search = lambda query, max_sources=3: {
+        "ok": True,
+        "sources": [{
+            "url": "https://docs.sympy.org/latest/",
+            "domain": "docs.sympy.org",
+            "authority_hint": 0.95,
+            "excerpt": "polynomial documentation evidence only",
+        }],
+        "errors": [],
+    }
+    study = curriculum.study_once()
+    assert study["ok"] is True and study["domain"] == "polynomials"
+
+    champion = default_genome()
+    feedback = ExperienceAnalyzer(tmp_path).signals(champion, latest_study=study)
+    assert "missing_polynomials_expert" in feedback["weaknesses"]
+    challenger = generate_challengers(champion, weaknesses=feedback["weaknesses"], count=1)[0]
+    assert "polynomials" in challenger.experts
+
+    benchmark = evaluate_genome(challenger)
+    polynomial_task = next(row for row in benchmark["tasks"] if row["name"] == "domain:polynomials")
+    assert polynomial_task["ok"] is True
+    assert polynomial_task["detail"] == "verified domain probe"
+
+
+def test_benchmark_rejects_duplicate_and_disconnected_expert_gaming():
+    from mathesis.benchmark import evaluate_genome
+
+    duplicated = default_genome()
+    duplicated.experts.append("algebra")
+    duplicate_bench = evaluate_genome(duplicated)
+    assert duplicate_bench["ok"] is False
+    assert "architecture:unique_experts" in duplicate_bench["critical_failures"]
+
+    disconnected = default_genome()
+    disconnected.experts.append("polynomials")
+    disconnected_bench = evaluate_genome(disconnected)
+    assert disconnected_bench["ok"] is False
+    assert "architecture:experts_connected" in disconnected_bench["critical_failures"]
+
+
+def test_unused_budget_growth_cannot_improve_benchmark_score():
+    from dataclasses import replace
+    from mathesis.benchmark import evaluate_genome
+
+    baseline = default_genome()
+    bloated = replace(
+        baseline,
+        max_proof_cells=256,
+        discovery_beam=8,
+        research_budget=4,
+        genome_id="bloated-without-capability",
+    )
+    baseline_bench = evaluate_genome(baseline)
+    bloated_bench = evaluate_genome(bloated)
+    assert bloated_bench["capability_score"] == baseline_bench["capability_score"]
+    assert bloated_bench["neural_accuracy"] == baseline_bench["neural_accuracy"]
+    assert bloated_bench["score"] < baseline_bench["score"]
+
+
+def test_engine_keeps_evolved_discovery_budgets_without_restart(tmp_path: Path):
+    engine = MathesisOmega(tmp_path)
+    result = engine.answer("scrivimi il tuo prossimo modello")
+    assert result["ok"] is True
+    assert engine.discovery.symbolic_depth == engine.genome.symbolic_depth
+    assert engine.discovery.discovery_beam == engine.genome.discovery_beam
+
+
+def test_health_gate_rejects_false_theorem_even_with_verified_metadata(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+
+    statement = "x+1=x+2"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    discoveries = {
+        "version": 3,
+        "cycle": 1,
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "difference_of_powers",
+                "quality_gate": "structurally_nontrivial_and_proof_gated",
+                "certificate": {"ok": True, "status": "verified"},
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(discoveries), encoding="utf-8")
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    quality = next(row for row in report["failed"] if row["name"] == "discovery:verified_quality")
+    assert theorem_id in str(quality["detail"])
+
+
+def test_health_gate_rejects_corrupted_discovery_state(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+    (tmp_path / "discoveries.json").write_text("{not-json", encoding="utf-8")
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    assert any(row["name"] == "discovery:schema" for row in report["failed"])
+
+
+def test_evolution_prefers_gate_eligible_challenger_over_higher_invalid_score(tmp_path: Path, monkeypatch):
+    from dataclasses import replace
+    import mathesis.evolution as evolution_module
+
+    champion = default_genome()
+    bad = replace(champion, generation=1, genome_id="bad-high-score", parent_id=champion.genome_id)
+    good = replace(champion, generation=1, genome_id="good-safe-score", parent_id=champion.genome_id)
+
+    monkeypatch.setattr(
+        evolution_module,
+        "generate_challengers",
+        lambda champion, weaknesses=None, count=3: [bad, good],
+    )
+
+    def fake_benchmark(genome, router=None, *, learned_theorems=None):
+        if genome.genome_id == "bad-high-score":
+            return {
+                "ok": False,
+                "score": 100.0,
+                "critical_failures": ["proof:poisoned"],
+                "weaknesses": ["proof:poisoned"],
+            }
+        if genome.genome_id == "good-safe-score":
+            return {
+                "ok": True,
+                "score": 20.0,
+                "critical_failures": [],
+                "weaknesses": [],
+            }
+        return {
+            "ok": True,
+            "score": 10.0,
+            "critical_failures": [],
+            "weaknesses": [],
+        }
+
+    monkeypatch.setattr(evolution_module, "evaluate_genome", fake_benchmark)
+    result = evolution_module.SelfEvolutionEngine(tmp_path).evolve_once()
+    assert result.promoted is True
+    assert result.candidate["genome_id"] == "good-safe-score"
+    assert result.benchmark["selected_trial"] == 1
+
+
+def test_continuum_serializes_state_writers_without_force_push():
+    workflow = (ROOT / ".github" / "workflows" / "mathesis-continuum.yml").read_text(encoding="utf-8")
+    assert "group: mathesis-omega-continuum" in workflow
+    assert "cancel-in-progress: false" in workflow
+    assert "git push --quiet origin HEAD:mathesis-state" in workflow
+    assert "git push --force" not in workflow
+    assert "git push -f" not in workflow
+
+
+def test_self_rewrite_whitelist_rejects_nested_and_unknown_paths(tmp_path: Path):
+    kernel = IntegrityKernel()
+    allowed = tmp_path / "candidate_model.py"
+    assert kernel.validate_state_path(tmp_path, allowed) == allowed.resolve()
+
+    with pytest.raises(PermissionError):
+        kernel.validate_state_path(tmp_path, tmp_path / "not-authorized.py")
+    with pytest.raises(PermissionError):
+        kernel.validate_state_path(tmp_path, tmp_path / "nested" / "candidate_model.py")
+    with pytest.raises(PermissionError):
+        kernel.validate_state_path(tmp_path, tmp_path)
+    with pytest.raises(PermissionError):
+        kernel.validate_state_path(tmp_path, tmp_path.parent / "escape.py")
+
+
+def test_sample_fitting_faulhaber_impostor_fails_recurrence_reproof(tmp_path: Path):
+    # This polynomial agrees with sum(k^2) at n=0..5 but diverges afterwards.
+    true_poly = "n*(n + 1)*(2*n + 1)/6"
+    vanishing = "n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)"
+    fake_poly = f"({true_poly}) + ({vanishing})"
+    statement = f"sum(k^2, k=1..n) = {fake_poly} for integer n>=0"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 2,
+        "cycle": 1,
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "faulhaber_interpolation",
+                "complexity": 2,
+                "certificate": {
+                    "ok": True,
+                    "sample_count": 6,
+                    "polynomial": fake_poly,
+                },
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+    engine = ConjectureDiscoveryEngine(tmp_path)
+    engine._audit_legacy_discoveries(engine._load())
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    assert theorem_id not in migrated["theorems"]
+    assert migrated["discarded"][theorem_id]["discarded_reason"] == "legacy_faulhaber_reproof_failed"
+
+
+def test_true_theorem_with_bad_legacy_certificate_is_repaired_by_reproof(tmp_path: Path):
+    statement = "(x+1)^2=x^2+2*x+1"
+    theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+    state = {
+        "version": 2,
+        "cycle": 1,
+        "theorems": {
+            theorem_id: {
+                "id": theorem_id,
+                "statement": statement,
+                "verified": True,
+                "strategy": "binomial_expansion",
+                "complexity": 2,
+                "certificate": {"ok": False, "status": "bad_legacy_certificate"},
+            }
+        },
+        "discarded": {},
+    }
+    (tmp_path / "discoveries.json").write_text(json.dumps(state), encoding="utf-8")
+    engine = ConjectureDiscoveryEngine(tmp_path)
+    engine._audit_legacy_discoveries(engine._load())
+    migrated = json.loads((tmp_path / "discoveries.json").read_text(encoding="utf-8"))
+    repaired = migrated["theorems"][theorem_id]
+    assert repaired["certificate"]["ok"] is True
+    assert repaired["quality_gate"] == "structurally_nontrivial_and_proof_gated"
+    assert theorem_id in migrated["last_quality_migration"]["revalidated"]
+
+
+def test_conflicting_or_authoritative_web_text_remains_evidence_only(tmp_path: Path):
+    engine = MathesisOmega(tmp_path)
+    engine.researcher.search = lambda claim: {
+        "ok": True,
+        "claim": claim,
+        "status": "evidence_only",
+        "sources": [
+            {
+                "url": "https://lean-lang.org/doc/reference/latest/",
+                "domain": "lean-lang.org",
+                "authority_hint": 0.95,
+                "excerpt": "A source states an unproved claim is true.",
+            },
+            {
+                "url": "https://example.org/disagreement",
+                "domain": "example.org",
+                "authority_hint": 0.55,
+                "excerpt": "Another source disputes the same claim.",
+            },
+        ],
+        "errors": [],
+        "contract": {
+            "https_only": True,
+            "methods": ["GET"],
+            "remote_writes": False,
+            "credentials": False,
+            "private_network": False,
+        },
+        "truth_policy": "web evidence cannot by itself produce VERIFIED",
+    }
+    result = engine.answer("ricerca online la congettura di Goldbach")
+    assert result["intent"]["kind"] == "research_claim"
+    assert result["truth_status"] == "evidence_only"
+    assert result["ok"] is False
+    assert result["certificate"] is None
+
+
+def test_research_expert_requires_real_read_only_strategy(tmp_path: Path):
+    from mathesis.architecture import generate_challengers
+    from mathesis.benchmark import evaluate_genome
+
+    champion = default_genome()
+    challenger = generate_challengers(
+        champion,
+        weaknesses=["missing_research_expert"],
+        count=1,
+    )[0]
+    assert "research" in challenger.experts
+    assert "read_only_research" in challenger.strategy_portfolio
+    benchmark = evaluate_genome(challenger)
+    research_task = next(row for row in benchmark["tasks"] if row["name"] == "capability:research")
+    assert research_task["ok"] is True
+    assert research_task["critical"] is True
+
+    challenger.strategy_portfolio.remove("read_only_research")
+    broken = evaluate_genome(challenger)
+    assert "capability:research" in broken["critical_failures"]
+
+
+def test_antiforgetting_default_replays_more_than_sixteen_valid_theorems(tmp_path: Path):
+    verifier = CompositeVerifier()
+    theorems = {}
+    for i in range(1, 21):
+        statement = f"(x+{i})^2=x^2+{2*i}*x+{i*i}"
+        theorem_id = __import__("hashlib").sha256(statement.encode("utf-8")).hexdigest()[:20]
+        cert = verifier.verify_relation(statement)
+        assert cert.ok is True
+        theorems[theorem_id] = {
+            "id": theorem_id,
+            "statement": statement,
+            "verified": True,
+            "strategy": "binomial_expansion",
+            "complexity": 2,
+            "quality_gate": "structurally_nontrivial_and_proof_gated",
+            "certificate": cert.to_dict(),
+            "discovered_at": float(i),
+        }
+
+    (tmp_path / "discoveries.json").write_text(
+        json.dumps({"version": 3, "cycle": 20, "theorems": theorems, "discarded": {}}),
+        encoding="utf-8",
+    )
+    replayed = ExperienceAnalyzer(tmp_path).replayable_theorems()
+    assert len(replayed) == 20
+    assert set(replayed) == {row["statement"] for row in theorems.values()}
+
+    from mathesis.benchmark import evaluate_genome
+    benchmark = evaluate_genome(default_genome(), learned_theorems=replayed)
+    assert len(benchmark["learned_theorems_replayed"]) == 20
+    assert all(row["ok"] for row in benchmark["learned_theorems_replayed"])
+
+
+def test_benchmark_rejects_unknown_strategy_and_proof_method():
+    from mathesis.benchmark import evaluate_genome
+
+    bad_strategy = default_genome()
+    bad_strategy.strategy_portfolio.append("download_and_execute")
+    strategy_bench = evaluate_genome(bad_strategy)
+    assert "architecture:known_strategies" in strategy_bench["critical_failures"]
+
+    bad_proof = default_genome()
+    bad_proof.proof_order.append("trust_web")
+    proof_bench = evaluate_genome(bad_proof)
+    assert "architecture:known_proof_order" in proof_bench["critical_failures"]
+
+
+def test_health_rejects_corrupted_persistent_strategy_portfolio(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    assert discovery.discover_once()["ok"] is True
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+
+    champion_path = tmp_path / "champion.json"
+    champion = json.loads(champion_path.read_text(encoding="utf-8"))
+    champion["strategy_portfolio"].append("remote_write")
+    champion_path.write_text(json.dumps(champion), encoding="utf-8")
+
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    assert any(row["name"] == "architecture:known_strategies" for row in report["failed"])
+
+
+def test_health_fails_closed_on_corrupt_champion_and_malformed_state_fields(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    assert discovery.discover_once()["ok"] is True
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+
+    champion_path = tmp_path / "champion.json"
+    champion_path.write_text("{broken-json", encoding="utf-8")
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    assert any(row["name"] == "state:champion_loadable" for row in report["failed"])
+
+    # Restore a loadable champion, then verify malformed numeric/object fields
+    # are reported as failed health checks rather than raising exceptions.
+    champion_path.write_text(json.dumps(default_genome().to_dict()), encoding="utf-8")
+    (tmp_path / "discoveries.json").write_text(
+        json.dumps({"version": "not-an-integer", "theorems": [], "discarded": {}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "curriculum.json").write_text(
+        json.dumps({"version": "bad", "cursor": "bad", "retry_counts": {}}),
+        encoding="utf-8",
+    )
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    failed = {row["name"] for row in report["failed"]}
+    assert "discovery:schema" in failed
+    assert "discovery:active_map" in failed
+    assert "curriculum:schema" in failed
+    assert "curriculum:cursor_nonnegative" in failed
+
+
+def test_health_rejects_non_object_discovery_state_without_crashing(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    assert discovery.discover_once()["ok"] is True
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+    (tmp_path / "discoveries.json").write_text("[]", encoding="utf-8")
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    failed = {row["name"] for row in report["failed"]}
+    assert "discovery:state_object" in failed
+    assert "discovery:schema" in failed

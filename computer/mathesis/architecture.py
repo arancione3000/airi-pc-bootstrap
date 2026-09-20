@@ -98,6 +98,11 @@ def mutate_genome(
         experts.append(missing[variant % len(missing)])
 
     portfolio = list(dict.fromkeys(champion.strategy_portfolio))
+    # Research is a coupled expert+strategy capability. Adding the expert name
+    # alone must never unlock a free benchmark point.
+    if "research" in experts and "read_only_research" not in portfolio:
+        portfolio.append("read_only_research")
+
     strategy_missing = [s for s in _ALLOWED_STRATEGIES if s not in portfolio]
     if strategy_missing and (variant % 2 == 1 or not missing):
         portfolio.append(strategy_missing[0])

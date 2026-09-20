@@ -94,7 +94,7 @@ class SelfEvolutionEngine:
         champion = self.load_champion()
         champion_router = self.load_router(champion)
         experience_analyzer = ExperienceAnalyzer(self.state_dir)
-        learned_theorems = experience_analyzer.replayable_theorems(limit=16)
+        learned_theorems = experience_analyzer.replayable_theorems()
         champion_bench = evaluate_genome(
             champion,
             champion_router,
@@ -128,7 +128,16 @@ class SelfEvolutionEngine:
                 "benchmark": candidate_bench,
             })
 
-        selected_trial = max(trials, key=lambda row: float(row["benchmark"]["score"]))
+        # Never let an ineligible high score hide a lower-scoring safe challenger.
+        # Score chooses among candidates only after the hard promotion gates pass.
+        eligible_trials = [
+            row for row in trials
+            if row["benchmark"]["ok"]
+            and len(row["benchmark"]["critical_failures"])
+            <= len(champion_bench["critical_failures"])
+        ]
+        selection_pool = eligible_trials or trials
+        selected_trial = max(selection_pool, key=lambda row: float(row["benchmark"]["score"]))
         candidate = ArchitectureGenome.from_dict(selected_trial["genome"])
         candidate_bench = selected_trial["benchmark"]
         candidate_router = router_by_id[candidate.genome_id]
@@ -207,7 +216,7 @@ class SelfEvolutionEngine:
     def status(self) -> dict[str, Any]:
         champion = self.load_champion()
         router = self.load_router(champion)
-        learned_theorems = ExperienceAnalyzer(self.state_dir).replayable_theorems(limit=16)
+        learned_theorems = ExperienceAnalyzer(self.state_dir).replayable_theorems()
         benchmark = evaluate_genome(champion, router, learned_theorems=learned_theorems)
         return {
             "ok": benchmark["ok"],

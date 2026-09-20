@@ -234,6 +234,8 @@ class MathesisOmega:
                 self.discovery = ConjectureDiscoveryEngine(
                     self.state_dir,
                     counterexample_radius=self.genome.counterexample_radius,
+                    symbolic_depth=self.genome.symbolic_depth,
+                    discovery_beam=self.genome.discovery_beam,
                 )
                 graph.complete(cell.cell_id, result.to_dict(), status="proved" if result.promoted else "checked")
                 graph.complete(root_id, self.genome.genome_id, status="proved")
