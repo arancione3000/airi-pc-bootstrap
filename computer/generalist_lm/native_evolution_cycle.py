@@ -537,6 +537,7 @@ def run_native_evolution_cycle(
             "version": research.get("version"),
             "evidence_digest": research.get("evidence_digest"),
             "tag_counts": research.get("tag_counts") or {},
+            "source_candidates": research.get("source_candidates") or [],
             "errors": research.get("errors") or [],
             "remote_code_execution": False,
             "remote_content_trusted": False,
