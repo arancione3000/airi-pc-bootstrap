@@ -125,6 +125,41 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
         )
         solved = report.get("solved_items")
         check("report:solved_items", isinstance(solved, list), len(solved) if isinstance(solved, list) else type(solved).__name__)
+
+        generation_accuracy = report.get("generation_exact_accuracy")
+        check(
+            "report:generation_exact_accuracy",
+            isinstance(generation_accuracy, (int, float))
+            and 0.0 <= float(generation_accuracy) <= 1.0,
+            generation_accuracy,
+        )
+        generation_domains = report.get("domain_generation_accuracy")
+        check(
+            "report:domain_generation_accuracy",
+            isinstance(generation_domains, dict)
+            and set(generation_domains) == set(DOMAINS)
+            and all(
+                isinstance(value, (int, float))
+                and 0.0 <= float(value) <= 1.0
+                for value in generation_domains.values()
+            ),
+            generation_domains,
+        )
+        generated_solved = report.get("generated_solved_items")
+        check(
+            "report:generated_solved_items",
+            isinstance(generated_solved, list),
+            len(generated_solved) if isinstance(generated_solved, list) else type(generated_solved).__name__,
+        )
+        generation_probe = report.get("generation_probe")
+        check(
+            "report:generation_probe",
+            isinstance(generation_probe, list)
+            and len(generation_probe) == len(DOMAINS)
+            and {row.get("domain") for row in generation_probe if isinstance(row, dict)} == set(DOMAINS),
+            generation_probe,
+        )
+
         policy = status.get("policy") or {}
         check("policy:research_only", policy.get("research_only") is True, policy)
         check("policy:production_separate", policy.get("production_qualification_separate") is True, policy)
