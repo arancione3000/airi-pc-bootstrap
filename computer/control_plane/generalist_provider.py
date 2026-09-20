@@ -38,7 +38,7 @@ def transformers_attestation_path(model_dir: Path) -> Path:
 
 def foundation_model_dir() -> Path | None:
     raw = os.environ.get("AIRI_GENERALIST_FOUNDATION_MODEL", "").strip()
-    return Path(raw).expanduser().resolve() if raw else None
+    return Path(raw).expanduser() if raw else None
 
 
 def foundation_attestation_path(model_dir: Path) -> Path:
