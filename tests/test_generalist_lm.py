@@ -790,3 +790,42 @@ def test_production_promotion_requires_meaningful_gain_over_existing_champion(tm
     assert result["promoted"] is False
     assert "promotion margin" in result["reason"]
     assert qualification_status(production)["current_checkpoint_digest"] == old_digest
+
+
+def test_research_health_rejects_tampered_production_checkpoint(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    import generalist_lm.production_promotion as promotion
+    from generalist_lm.research_cycle import run_research_cycle
+    from generalist_lm.research_health import research_health
+
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_MIN_LOSS_GAIN", "999")
+    run_research_cycle(tmp_path)
+
+    def fake_qualify(path, minimum_score=85.0):
+        return _fake_qualified_attestation(Path(path), score=100.0)
+
+    monkeypatch.setattr(promotion, "qualify_checkpoint", fake_qualify)
+    promoted = promotion.attempt_production_promotion(
+        tmp_path / "champion",
+        tmp_path / "production",
+    )
+    assert promoted["promoted"] is True
+    assert research_health(tmp_path)["ok"] is True
+
+    metadata = json.loads((tmp_path / "production" / "metadata.json").read_text(encoding="utf-8"))
+    metadata["tampered"] = True
+    (tmp_path / "production" / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+    report = research_health(tmp_path)
+    assert report["ok"] is False
+    assert any(row["name"] == "production:qualified_integrity" for row in report["failed"])
+
+
+def test_generalist_continuum_attempts_production_qualification_before_persist():
+    workflow = (ROOT / ".github" / "workflows" / "generalist-continuum.yml").read_text(encoding="utf-8")
+    assert "python -m generalist_lm.production_promotion" in workflow
+    assert "AIRI_GENERALIST_PRODUCTION_MIN_SCORE: '85'" in workflow
+    assert "AIRI_GENERALIST_PRODUCTION_MIN_GAIN: '2'" in workflow
+    assert workflow.index("python -m generalist_lm.production_promotion") < workflow.index("Persist only health-gated research state")
