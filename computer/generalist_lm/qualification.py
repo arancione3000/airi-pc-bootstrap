@@ -6,9 +6,16 @@ from pathlib import Path
 from typing import Any
 
 from .benchmarks import qualification_suite, run_benchmark
+from .foundation import foundation_manifest_digest, load_foundation_manifest
+from .foundation_benchmarks import (
+    FOUNDATION_SUITE_VERSION,
+    foundation_suite,
+    foundation_suite_digest,
+)
 from .runtime import GeneralistRuntime
 
 QUALIFICATION_VERSION = 2
+FOUNDATION_QUALIFICATION_VERSION = 1
 _DIGEST_CACHE: dict[tuple, str] = {}
 
 
@@ -126,7 +133,7 @@ def transformers_model_digest(model_dir: str | Path, *, exclude_path: str | Path
         path for path in sorted(root.rglob("*"))
         if path.is_file()
         and ".git" not in path.parts
-        and path.name not in {".airi-qualification.json"}
+        and path.name not in {".airi-qualification.json", ".airi-foundation-qualification.json"}
         and (excluded is None or path.resolve() != excluded)
     ]
     if not files:

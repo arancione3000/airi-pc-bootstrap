@@ -7,12 +7,15 @@ from pathlib import Path
 
 from .distillation import DistillationPrompt, distill_prompts, save_distilled_jsonl
 from .hf_backend import LocalTransformersBackend
+from .foundation import FoundationManifest, foundation_identity, write_foundation_manifest
 from .pretraining import load_local_corpus, pretrain_causal
 from .qualification import (
     qualify_checkpoint,
     qualify_transformers_model,
     qualification_status,
     transformers_qualification_status,
+    qualify_foundation_model,
+    foundation_qualification_status,
 )
 from .research_cycle import run_research_cycle
 from .research_health import research_health
@@ -40,6 +43,26 @@ def parser() -> argparse.ArgumentParser:
     ts = sub.add_parser("transformers-status")
     ts.add_argument("model_dir")
     ts.add_argument("--attestation")
+
+    fi = sub.add_parser("foundation-init", help="write a reviewed local foundation-model manifest")
+    fi.add_argument("model_dir")
+    fi.add_argument("--model-id", required=True)
+    fi.add_argument("--revision", required=True)
+    fi.add_argument("--license", required=True)
+    fi.add_argument("--architecture", required=True)
+    fi.add_argument("--context-length", type=int, required=True)
+    fi.add_argument("--parameter-count", type=int, default=0)
+    fi.add_argument("--dtype", default="unknown")
+    fi.add_argument("--quantization", default="none")
+
+    fq = sub.add_parser("qualify-foundation", help="run the harder protected foundation suite")
+    fq.add_argument("model_dir")
+    fq.add_argument("--attestation")
+    fq.add_argument("--minimum-score", type=float, default=90.0)
+
+    fs = sub.add_parser("foundation-status")
+    fs.add_argument("model_dir")
+    fs.add_argument("--attestation")
 
     rc = sub.add_parser("research-cycle")
     rc.add_argument("--state", default=os.environ.get("AIRI_GENERALIST_RESEARCH_STATE", ".ai/generalist-research"))
@@ -118,6 +141,38 @@ def main(argv=None) -> int:
             args.model_dir,
             attestation_path=args.attestation,
         )
+
+    elif args.cmd == "foundation-init":
+        result = write_foundation_manifest(
+            args.model_dir,
+            FoundationManifest(
+                model_id=args.model_id,
+                source_revision=args.revision,
+                license=args.license,
+                architecture=args.architecture,
+                context_length=args.context_length,
+                parameter_count=args.parameter_count,
+                dtype=args.dtype,
+                quantization=args.quantization,
+            ),
+        )
+
+    elif args.cmd == "qualify-foundation":
+        result = qualify_foundation_model(
+            args.model_dir,
+            attestation_path=args.attestation,
+            minimum_score=args.minimum_score,
+        )
+
+    elif args.cmd == "foundation-status":
+        status = foundation_qualification_status(
+            args.model_dir,
+            attestation_path=args.attestation,
+        )
+        result = {
+            **status,
+            "identity": foundation_identity(args.model_dir),
+        }
 
     elif args.cmd == "research-cycle":
         result = run_research_cycle(args.state)
