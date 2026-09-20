@@ -8,7 +8,7 @@ from typing import Any
 from .benchmarks import qualification_suite, run_benchmark
 from .runtime import GeneralistRuntime
 
-QUALIFICATION_VERSION = 1
+QUALIFICATION_VERSION = 2
 _DIGEST_CACHE: dict[tuple, str] = {}
 
 
@@ -55,7 +55,7 @@ def qualify_checkpoint(
     )
     result = {
         "qualification_version": QUALIFICATION_VERSION,
-        "attested_by": "airi-generalist-qualification-v1",
+        "attested_by": "airi-generalist-qualification-v2",
         "checkpoint_digest": digest,
         "qualified": qualified,
         "minimum_score": float(minimum_score),
@@ -82,7 +82,7 @@ def qualification_status(state_dir: str | Path) -> dict[str, Any]:
             expected
             and expected == current
             and int(value.get("qualification_version", 0)) == QUALIFICATION_VERSION
-            and value.get("attested_by") == "airi-generalist-qualification-v1"
+            and value.get("attested_by") == "airi-generalist-qualification-v2"
         )
         return {
             **value,
@@ -156,7 +156,7 @@ def qualify_transformers_model(
     )
     result = {
         "qualification_version": QUALIFICATION_VERSION,
-        "attested_by": "airi-generalist-transformers-qualification-v1",
+        "attested_by": "airi-generalist-transformers-qualification-v2",
         "backend_type": "transformers",
         "model_dir": str(root),
         "model_digest": digest,
@@ -183,7 +183,7 @@ def transformers_qualification_status(
         current = transformers_model_digest(root, exclude_path=target)
         integrity_ok = bool(
             value.get("backend_type") == "transformers"
-            and value.get("attested_by") == "airi-generalist-transformers-qualification-v1"
+            and value.get("attested_by") == "airi-generalist-transformers-qualification-v2"
             and int(value.get("qualification_version", 0)) == QUALIFICATION_VERSION
             and value.get("model_digest") == current
         )
