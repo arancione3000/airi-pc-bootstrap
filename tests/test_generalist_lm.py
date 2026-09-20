@@ -1050,3 +1050,86 @@ def test_research_cycle_reports_real_generation_probe(tmp_path: Path, monkeypatc
     assert set(report["domain_generation_accuracy"]) == set(DOMAINS)
     assert len(report["generation_probe"]) == len(DOMAINS)
     assert isinstance(report["generated_solved_items"], list)
+
+
+def test_rotating_canary_is_multi_domain_and_excluded_from_persistent_training(tmp_path: Path):
+    from generalist_lm.curriculum import DOMAINS
+    from generalist_lm.curriculum_memory import CurriculumMemory, canary_rows
+
+    memory = CurriculumMemory(tmp_path)
+    memory.expand(9, signals=["coding_gap", "data_gap", "tool_gap", "reasoning_gap"])
+    training_prompts = {row.messages[0]["content"] for row in memory.rows()}
+    canary = canary_rows(9)
+    canary_prompts = {row.messages[0]["content"] for row in canary}
+
+    assert {row.domain for row in canary} == set(DOMAINS)
+    assert len(canary) == len(DOMAINS)
+    assert canary_prompts.isdisjoint(training_prompts)
+
+
+def test_research_promotion_rejects_rotating_canary_regression():
+    from generalist_lm.research_cycle import _research_eligible
+
+    base_report = {
+        "loss": 1.0,
+        "domain_loss": {"language": 1.0},
+        "finite": True,
+        "target_token_accuracy": 0.5,
+        "domain_token_accuracy": {"language": 0.5},
+        "solved_items": [],
+        "generation_exact_accuracy": 0.0,
+        "domain_generation_accuracy": {"language": 0.0},
+        "generated_solved_items": [],
+        "canary": {
+            "loss": 1.0,
+            "domain_loss": {"language": 1.0},
+            "finite": True,
+            "generation_exact_accuracy": 0.0,
+            "domain_generation_accuracy": {"language": 0.0},
+            "generated_solved_items": [],
+        },
+    }
+    candidate = {
+        **base_report,
+        "loss": 0.7,
+        "domain_loss": {"language": 0.7},
+        "target_token_accuracy": 0.6,
+        "domain_token_accuracy": {"language": 0.6},
+        "canary": {
+            "loss": 1.5,
+            "domain_loss": {"language": 1.5},
+            "finite": True,
+            "generation_exact_accuracy": 0.0,
+            "domain_generation_accuracy": {"language": 0.0},
+            "generated_solved_items": [],
+        },
+    }
+    ok, reason = _research_eligible(
+        base_report,
+        candidate,
+        minimum_loss_gain=0.02,
+        max_domain_regression=0.10,
+    )
+    assert ok is False
+    assert "rotating canary" in reason
+
+
+def test_research_cycle_persists_rotating_canary_contract(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    from generalist_lm.curriculum import DOMAINS
+    from generalist_lm.research_cycle import run_research_cycle
+    from generalist_lm.research_health import research_health
+
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_MIN_LOSS_GAIN", "999")
+
+    result = run_research_cycle(tmp_path)
+    assert result["rotating_canary"]["cycle"] == 1
+    assert set(result["rotating_canary"]["domains"]) == set(DOMAINS)
+    assert result["rotating_canary"]["training_overlap"] == []
+    assert result["policy"]["rotating_canary"]["training_excluded"] is True
+    assert result["champion_report"]["canary_cycle"] == 1
+    assert set(result["champion_report"]["canary"]["domain_loss"]) == set(DOMAINS)
+    assert research_health(tmp_path)["ok"] is True
