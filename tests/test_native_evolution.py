@@ -122,6 +122,37 @@ def test_online_research_treats_remote_text_as_untrusted_metadata():
     assert all("changes" not in row for row in report["evidence"])
 
 
+def test_online_research_uses_provider_specific_accept_headers():
+    from generalist_lm.native_online_research import search_arxiv, search_github_repositories
+
+    seen = {}
+
+    def opener(request, timeout):
+        seen[request.full_url] = request.get_header("Accept")
+        if request.full_url.startswith("https://export.arxiv.org/"):
+            return _FakeResponse(
+                b'<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>',
+                request.full_url,
+            )
+        if request.full_url.startswith("https://api.github.com/"):
+            return _FakeResponse(b'{"items":[]}', request.full_url)
+        raise AssertionError(request.full_url)
+
+    search_arxiv(["optimizer"], max_results_per_topic=1, opener=opener)
+    search_github_repositories(["optimizer"], max_results_per_topic=1, opener=opener)
+
+    arxiv_accept = next(
+        value for url, value in seen.items()
+        if url.startswith("https://export.arxiv.org/")
+    )
+    github_accept = next(
+        value for url, value in seen.items()
+        if url.startswith("https://api.github.com/")
+    )
+    assert arxiv_accept == "application/atom+xml"
+    assert github_accept == "application/vnd.github+json"
+
+
 def test_online_research_rejects_redirect_outside_provider_allowlist():
     from generalist_lm.native_online_research import search_arxiv
 
