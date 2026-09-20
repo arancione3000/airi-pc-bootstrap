@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .curriculum import DOMAINS, curriculum_manifest
+from .curriculum_memory import CurriculumMemory
 from .evolution import GeneralistGenome
 from .model import parameter_count
 from .qualification import qualification_status
@@ -80,6 +81,30 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
         curriculum.get("validation_domains"),
     )
 
+    try:
+        memory = CurriculumMemory(root)
+        memory_manifest = memory.manifest()
+        check(
+            "curriculum_memory:bounded",
+            int(memory_manifest.get("stored", 0)) <= int(memory_manifest.get("max_rows", 0)),
+            memory_manifest,
+        )
+        check(
+            "curriculum_memory:no_validation_overlap",
+            memory_manifest.get("validation_overlap") == [],
+            memory_manifest.get("validation_overlap"),
+        )
+        memory_domains = memory_manifest.get("domains") or {}
+        if int(memory_manifest.get("stored", 0)) > 0:
+            check(
+                "curriculum_memory:all_domains",
+                set(memory_domains) == set(DOMAINS)
+                and all(int(memory_domains.get(domain, 0)) >= 1 for domain in DOMAINS),
+                memory_domains,
+            )
+    except Exception as exc:
+        check("curriculum_memory:loadable", False, repr(exc))
+
     if isinstance(status, dict) and status:
         report = status.get("champion_report") or {}
         domain_loss = report.get("domain_loss") or {}
@@ -103,6 +128,12 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
         policy = status.get("policy") or {}
         check("policy:research_only", policy.get("research_only") is True, policy)
         check("policy:production_separate", policy.get("production_qualification_separate") is True, policy)
+        continual = policy.get("continual_learning") or {}
+        check(
+            "policy:continual_full_replay",
+            continual.get("enabled") is True and continual.get("full_replay") is True,
+            continual,
+        )
 
     failed = [row for row in checks if not row["ok"]]
     return {"ok": not failed, "checks": checks, "failed": failed}
