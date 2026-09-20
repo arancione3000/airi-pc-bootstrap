@@ -80,6 +80,32 @@ def ask_local_model(goal: str, feedback: str = "") -> str:
     return generalist_provider.chat(messages, max_new_tokens=512)
 
 
+GENERALIST_PROTECTED_PATHS = {
+    "computer/generalist_lm/qualification.py",
+    "computer/generalist_lm/production_promotion.py",
+    "computer/generalist_lm/research_health.py",
+    "computer/control_plane/generalist_provider.py",
+    "computer/control_plane/model_router.py",
+    "config/AIRI_REASONING_POLICY.json",
+    ".github/workflows/generalist-lm.yml",
+    ".github/workflows/generalist-continuum.yml",
+    ".github/workflows/generalist-watchdog.yml",
+}
+GENERALIST_PROTECTED_PREFIXES = (
+    ".ai/generalist-lm/",
+    ".ai/generalist-research/",
+    "generalist-state/",
+)
+
+
+def _assert_generalist_editable_path(relative_path: str) -> None:
+    rel = str(relative_path).replace("\\", "/").lstrip("./")
+    if rel in GENERALIST_PROTECTED_PATHS:
+        raise RuntimeError(f"Generalist model cannot modify protected self-governance path: {rel}")
+    if any(rel.startswith(prefix) for prefix in GENERALIST_PROTECTED_PREFIXES):
+        raise RuntimeError(f"Generalist model cannot modify protected state path: {rel}")
+
+
 def _extract_json_array(text: str) -> list[dict[str, Any]]:
     raw = str(text).strip()
     if raw.startswith("~~~"):
@@ -147,6 +173,7 @@ def ask_local_model_changes(
             raise RuntimeError(f"Unsafe model change path: {rel}")
         if any(token in rel.lower() for token in blocked):
             raise RuntimeError(f"Unsafe model change path: {rel}")
+        _assert_generalist_editable_path(rel)
         candidate = (base / rel).resolve()
         if base not in candidate.parents and candidate != base:
             raise RuntimeError(f"Model change escapes repository: {rel}")
