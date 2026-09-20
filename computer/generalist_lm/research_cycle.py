@@ -336,12 +336,33 @@ def _save_champion(root: Path, genome: GeneralistGenome, runtime: GeneralistRunt
     _atomic_json(genome_path, genome.to_dict())
 
 
+def _domain_balanced_rows(rows: list[ResearchRow]) -> list[ResearchRow]:
+    """Equalize replay mass across observed generalist domains deterministically.
+
+    Persistent curriculum growth is signal-directed and therefore intentionally
+    uneven. Before SFT, equalizing the base replay prevents accidental domain
+    frequency from becoming a hidden forgetting pressure. Explicit genome focus
+    genes are applied only after this neutral baseline is constructed.
+    """
+    grouped: dict[str, list[ResearchRow]] = {}
+    for row in rows:
+        grouped.setdefault(row.domain, []).append(row)
+    if not grouped:
+        return []
+    target = max(len(items) for items in grouped.values())
+    balanced: list[ResearchRow] = []
+    for domain in sorted(grouped):
+        items = grouped[domain]
+        balanced.extend(items[index % len(items)] for index in range(target))
+    return balanced
+
+
 def _training_rows_for_genome(
     genome: GeneralistGenome,
     replay_rows: list[ResearchRow] | None = None,
 ) -> list[ResearchRow]:
-    """Turn strategy genes into real curriculum weighting with persistent replay."""
-    base = list(train_rows()) + list(replay_rows or [])
+    """Turn strategy genes into domain-balanced curriculum weighting."""
+    base = _domain_balanced_rows(list(train_rows()) + list(replay_rows or []))
     extra: list[ResearchRow] = []
     if genome.code_adapter:
         extra.extend(row for row in base if row.domain == "coding")
@@ -805,6 +826,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             "continual_learning": {
                 "enabled": True,
                 "full_replay": True,
+                "domain_balanced_base_replay": True,
                 "curriculum_max_rows": curriculum_max_rows,
                 "gradient_accumulation_steps": gradient_accumulation_steps,
                 "precision": precision,
