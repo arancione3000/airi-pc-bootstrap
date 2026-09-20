@@ -195,3 +195,6 @@ Capability honesty:
 - Airi-PC keeps ChatGPT as the default reasoning authority. A local Generalist provider appears only with an explicitly enabled, exact-digest qualified checkpoint; preference for it is a separate opt-in;
 - added research-to-production promotion: a changed research champion is qualified once per digest, compared to the previous production champion with protected-domain anti-regression, atomically swapped, post-swap reverified and rolled back on integrity failure;
 - research and production promotion logic remain outside the evolvable genome.
+
+- Generalist autocoding now requires an explicit declared file scope and an explicit real test command; generated edits remain behind snapshot/rollback/diff/guardrail checks.
+- Generalist data analysis now has bounded deterministic table profiling and aggregate/group-by tools in addition to calculator/basic statistics, without arbitrary code execution.
