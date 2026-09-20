@@ -67,3 +67,22 @@ steps. Model text never directly executes shell, browser or file actions.
 Checkpoint qualification is invalidated automatically if config, weights or
 metadata change after benchmarking. This prevents stale benchmark results from
 silently qualifying new weights.
+
+## Research-to-production promotion
+
+The autonomous generalist research champion is not automatically the operational Airi-PC model.
+After a research champion changes, the continuum attempts a digest-cached protected qualification:
+
+1. copy the exact research checkpoint into an isolated production candidate;
+2. run the broader generative qualification suite;
+3. bind the attestation to the exact checkpoint digest;
+4. if no production champion exists, require the configured minimum score;
+5. if a production champion already exists, additionally require a meaningful aggregate score gain and zero protected-domain regression;
+6. atomically swap the candidate into production;
+7. re-read qualification after the swap and roll back on any integrity failure;
+8. persist promotion history together with the research state.
+
+A failed qualification is a normal research outcome and does not stop future research cycles.
+The same failed research checkpoint is not repeatedly re-qualified: its digest is cached until the research champion really changes.
+
+Research can experiment continuously, while production promotion stays conservative and cannot rewrite its own qualification rules.
