@@ -208,3 +208,29 @@ def test_production_checkpoint_copy_preserves_bpe_tokenizer(tmp_path: Path):
     assert (target / "tokenizer.json").exists()
     restored = GeneralistRuntime.from_checkpoint(target)
     assert restored.tokenizer.digest == tokenizer.digest
+
+
+
+def test_provider_status_requires_bpe_tokenizer_file(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    from control_plane import generalist_provider
+
+    tokenizer = train_bpe(training_texts(), vocab_size=320)
+    config = GeneralistLMConfig(
+        vocab_size=tokenizer.vocab_size,
+        tokenizer_version="bpe-v1",
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+    ).validate()
+    GeneralistRuntime.fresh(config, tokenizer=tokenizer).save_checkpoint(tmp_path)
+    (tmp_path / "tokenizer.json").unlink()
+
+    monkeypatch.setenv("AIRI_GENERALIST_STATE", str(tmp_path))
+    monkeypatch.setenv("AIRI_GENERALIST_ENABLE", "1")
+    status = generalist_provider.status()
+    assert status["checkpoint_complete"] is False
+    assert status["files"]["tokenizer"] is False
+    assert status["available"] is False
