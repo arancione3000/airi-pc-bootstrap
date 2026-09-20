@@ -658,7 +658,7 @@ def _fake_qualified_attestation(path: Path, *, score: float, domain_scores: dict
     }
     payload = {
         "qualification_version": QUALIFICATION_VERSION,
-        "attested_by": "airi-generalist-qualification-v1",
+        "attested_by": "airi-generalist-qualification-v2",
         "checkpoint_digest": checkpoint_digest(path),
         "qualified": True,
         "minimum_score": 85.0,
@@ -1362,3 +1362,26 @@ def test_qualification_suite_has_critical_gate_for_every_generalist_domain():
         domain_tasks = [task for task in tasks if task.domain == domain]
         assert domain_tasks, domain
         assert any(task.critical for task in domain_tasks), domain
+
+
+def test_legacy_v1_qualification_attestation_is_rejected(tmp_path: Path):
+    import json
+    import torch
+    from generalist_lm.qualification import checkpoint_digest, qualification_status
+    from generalist_lm.runtime import GeneralistRuntime
+
+    runtime = GeneralistRuntime.fresh(tiny_config())
+    runtime.save_checkpoint(tmp_path)
+    digest = checkpoint_digest(tmp_path)
+    (tmp_path / "benchmark.json").write_text(json.dumps({
+        "qualification_version": 1,
+        "attested_by": "airi-generalist-qualification-v1",
+        "checkpoint_digest": digest,
+        "qualified": True,
+        "minimum_score": 0.0,
+        "report": {"ok": True, "score": 100.0, "critical_failures": []},
+    }), encoding="utf-8")
+
+    status = qualification_status(tmp_path)
+    assert status["qualified"] is False
+    assert status["integrity_ok"] is False
