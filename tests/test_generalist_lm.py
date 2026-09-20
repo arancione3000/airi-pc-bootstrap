@@ -1722,3 +1722,29 @@ def test_training_rejects_fp16_on_cpu():
             precision="fp16",
             device="cpu",
         )
+
+
+def test_research_cycle_uses_configured_gradient_accumulation(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    from generalist_lm.research_cycle import run_research_cycle
+
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_GRADIENT_ACCUMULATION", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_PRECISION", "fp32")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_MIN_LOSS_GAIN", "999")
+
+    result = run_research_cycle(tmp_path)
+    training = result["champion_report"]["training"]
+    assert training["gradient_accumulation_steps"] == 2
+    assert training["effective_batch_size"] == 8
+    assert training["precision"] == "fp32"
+
+
+def test_research_cycle_rejects_unknown_precision_before_training(tmp_path: Path, monkeypatch):
+    from generalist_lm.research_cycle import run_research_cycle
+
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_PRECISION", "int4-magic")
+    with pytest.raises(ValueError, match="must be fp32, bf16, or fp16"):
+        run_research_cycle(tmp_path)
