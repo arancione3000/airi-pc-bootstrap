@@ -221,9 +221,9 @@ def run_native_evolution_cycle(
     keep_trial_checkpoints: bool = False,
     lattice_research: bool = False,
     lattice_population_size: int = 8,
-    lattice_empirical_candidates: int = 1,
-    lattice_benchmark_steps: int = 1,
-    lattice_repeat_seeds: int = 1,
+    lattice_empirical_candidates: int = 2,
+    lattice_benchmark_steps: int = 4,
+    lattice_repeat_seeds: int = 2,
 ) -> dict[str, Any]:
     """Run one proof-gated AIRI Native self-evolution cycle.
 
@@ -643,15 +643,15 @@ def main() -> int:
         ),
         lattice_empirical_candidates=max(
             1,
-            min(int(os.environ.get("AIRI_LATTICE_EMPIRICAL", "1")), 4),
+            min(int(os.environ.get("AIRI_LATTICE_EMPIRICAL", "2")), 4),
         ),
         lattice_benchmark_steps=max(
             1,
-            min(int(os.environ.get("AIRI_LATTICE_BENCHMARK_STEPS", "1")), 100),
+            min(int(os.environ.get("AIRI_LATTICE_BENCHMARK_STEPS", "4")), 100),
         ),
         lattice_repeat_seeds=max(
             1,
-            min(int(os.environ.get("AIRI_LATTICE_REPEAT_SEEDS", "1")), 4),
+            min(int(os.environ.get("AIRI_LATTICE_REPEAT_SEEDS", "2")), 4),
         ),
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
