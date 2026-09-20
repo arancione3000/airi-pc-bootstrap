@@ -101,7 +101,9 @@ def generate_challengers(
 ) -> list[GeneralistGenome]:
     champion.validate()
     signals = list(signals or [])
-    variants = [
+    target_count = max(1, int(count))
+
+    structural = [
         {"norm_type": "rmsnorm" if champion.norm_type == "layernorm" else "layernorm"},
         {
             "position_encoding": (
@@ -118,9 +120,9 @@ def generate_challengers(
         {"d_model": max(32, champion.d_model - 32), "d_ff": max(champion.d_model, champion.d_ff - 64)},
         {"dropout": min(0.5, champion.dropout + 0.05)},
     ]
-    if variants:
-        shift = int(exploration_offset) % len(variants)
-        variants = variants[shift:] + variants[:shift]
+    if structural:
+        shift = int(exploration_offset) % len(structural)
+        structural = structural[shift:] + structural[:shift]
 
     directed: list[dict[str, Any]] = []
     if "tokenizer_efficiency_gap" in signals:
@@ -135,28 +137,47 @@ def generate_challengers(
         directed.append({"retrieval_adapter": True})
     if "symbolic_reasoning_signal" in signals:
         directed.append({"symbolic_adapter": True, "reasoning_depth": min(16, champion.reasoning_depth + 1)})
-    variants = directed + variants
 
+    # Weakness-directed search must not starve architecture exploration. With
+    # two or more challenger slots, reserve at least one for the rotating
+    # structural portfolio. Remaining directed variants stay available as
+    # fallback if structural variants are invalid/no-ops.
+    if directed and target_count > 1 and structural:
+        directed_slots = target_count - 1
+        variants = directed[:directed_slots] + structural + directed[directed_slots:]
+    else:
+        variants = directed + structural
+
+    def signature(genome: GeneralistGenome) -> str:
+        return json.dumps(
+            {
+                k: v
+                for k, v in genome.to_dict().items()
+                if k not in {"genome_id", "parent_id", "generation"}
+            },
+            sort_keys=True,
+        )
+
+    champion_signature = signature(champion)
     out: list[GeneralistGenome] = []
-    seen: set[str] = set()
+    seen: set[str] = {champion_signature}
     for variant in variants:
-        if len(out) >= max(1, int(count)):
+        if len(out) >= target_count:
             break
         payload = {**champion.to_dict(), **variant}
         payload["generation"] = champion.generation + 1
         payload["parent_id"] = champion.genome_id
         payload["genome_id"] = _id(champion, len(out), payload)
-        candidate = GeneralistGenome(**payload).validate()
-        signature = json.dumps(
-            {k: v for k, v in candidate.to_dict().items() if k not in {"genome_id", "parent_id", "generation"}},
-            sort_keys=True,
-        )
-        if signature in seen:
+        try:
+            candidate = GeneralistGenome(**payload).validate()
+        except (TypeError, ValueError):
             continue
-        seen.add(signature)
+        candidate_signature = signature(candidate)
+        if candidate_signature in seen:
+            continue
+        seen.add(candidate_signature)
         out.append(candidate)
     return out
-
 
 def evolution_cost(genome: GeneralistGenome) -> dict[str, Any]:
     cfg = genome.model_config()
