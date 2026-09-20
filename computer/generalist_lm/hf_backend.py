@@ -48,22 +48,32 @@ class LocalTransformersBackend:
         encoded = self.tokenizer(str(prompt), return_tensors="pt")
         encoded = {k: v.to(self.device) for k, v in encoded.items()}
         with torch.no_grad():
+            pad_token_id = self.tokenizer.pad_token_id
+            if pad_token_id is None:
+                pad_token_id = self.tokenizer.eos_token_id
             out = self.model.generate(
                 **encoded,
                 max_new_tokens=int(max_new_tokens),
                 do_sample=False,
-                pad_token_id=self.tokenizer.eos_token_id,
+                pad_token_id=pad_token_id,
             )
         generated = out[0, encoded["input_ids"].shape[1]:]
         return self.tokenizer.decode(generated, skip_special_tokens=True)
 
     def chat(self, messages: list[dict[str, str]], *, max_new_tokens: int = 256) -> str:
+        prompt = None
         if hasattr(self.tokenizer, "apply_chat_template"):
-            prompt = self.tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True,
-            )
-        else:
-            prompt = "\n".join(f"{m.get('role','user')}: {m.get('content','')}" for m in messages) + "\nassistant:"
+            try:
+                prompt = self.tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                )
+            except (ValueError, TypeError):
+                prompt = None
+        if not prompt:
+            prompt = "\n".join(
+                f"{m.get('role','user')}: {m.get('content','')}"
+                for m in messages
+            ) + "\nassistant:"
         return self.generate(prompt, max_new_tokens=max_new_tokens)
