@@ -1,6 +1,30 @@
 name: AIRI Generalist LM verification
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/**'
+      - 'tests/test_generalist_lm.py'
+      - 'tests/test_generalist_scalable_learning.py'
+      - 'tests/test_generalist_grounded_learning.py'
+      - 'tests/test_generalist_bpe.py'
+      - 'tests/test_generalist_bpe_evolution.py'
+      - 'tests/test_generalist_retention.py'
+      - 'tests/test_generalist_provider.py'
+      - 'computer/control_plane/generalist_provider.py'
+      - 'computer/control_plane/model_router.py'
+      - 'computer/control_plane/local_agent.py'
+      - 'computer/control_plane/model_gateway.py'
+      - 'computer/control_plane/generalist_agent_bridge.py'
+      - 'computer/code_agent.py'
+      - 'computer/start.sh'
+      - 'tests/test_model_gateway.py'
+      - 'tests/test_local_agent.py'
+      - 'tests/test_openrouter_provider.py'
+      - '.github/workflows/generalist-lm.yml'
+      - '.github/workflows/generalist-continuum.yml'
+      - '.github/workflows/generalist-watchdog.yml'
   pull_request:
     branches: [main]
     paths:
