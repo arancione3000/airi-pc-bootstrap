@@ -13,7 +13,7 @@ import time
 from typing import Any
 
 from .curriculum import ResearchRow, train_rows, validation_rows
-from .curriculum_memory import CurriculumMemory
+from .curriculum_memory import CurriculumMemory, canary_rows
 from .evolution import GeneralistGenome, generate_challengers
 from .mathesis_bridge import mathesis_signals
 from .model import CausalTransformerLM, estimate_parameter_count, parameter_count
@@ -252,7 +252,32 @@ def _research_eligible(
     if generated_forgotten:
         return False, f"candidate forgot {len(generated_forgotten)} generated held-out items"
 
-    return True, "held-out multi-domain loss, generation, and anti-forgetting gates passed"
+    old_canary = champion.get("canary")
+    new_canary = candidate.get("canary")
+    if isinstance(old_canary, dict):
+        if not isinstance(new_canary, dict):
+            return False, "candidate is missing the rotating held-out canary"
+        if not new_canary.get("finite"):
+            return False, "candidate rotating canary validation is non-finite"
+        if float(new_canary.get("loss", float("inf"))) > float(old_canary.get("loss", 0.0)) + float(max_domain_regression):
+            return False, "candidate regressed on rotating canary loss"
+        old_canary_domains = old_canary.get("domain_loss") or {}
+        new_canary_domains = new_canary.get("domain_loss") or {}
+        for domain, old_value in old_canary_domains.items():
+            if domain not in new_canary_domains:
+                return False, f"candidate lost rotating canary domain: {domain}"
+            if float(new_canary_domains[domain]) > float(old_value) + float(max_domain_regression):
+                return False, f"candidate regressed on rotating canary domain: {domain}"
+        old_canary_generation = float(old_canary.get("generation_exact_accuracy", 0.0))
+        new_canary_generation = float(new_canary.get("generation_exact_accuracy", 0.0))
+        if new_canary_generation + 1e-12 < old_canary_generation:
+            return False, "candidate regressed on rotating canary generation"
+        old_canary_solved = set(old_canary.get("generated_solved_items") or [])
+        new_canary_solved = set(new_canary.get("generated_solved_items") or [])
+        if old_canary_solved - new_canary_solved:
+            return False, "candidate forgot a solved rotating canary item"
+
+    return True, "held-out loss, rotating canary, generation, and anti-forgetting gates passed"
 
 
 def _weaknesses(report: dict[str, Any]) -> list[str]:
@@ -474,6 +499,15 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         champion_report["score"] = _research_score(champion_report, champion_report["parameters"])
         bootstrapped = False
 
+    rotating_canary = canary_rows(cycle)
+    champion_report["canary_cycle"] = cycle
+    champion_report["canary"] = _grouped_validation(
+        champion_runtime.model,
+        champion_runtime.tokenizer,
+        rotating_canary,
+        device=device,
+    )
+
     signals = _weaknesses(champion_report)
     mathesis = None
     mathesis_dir = os.environ.get("MATHESIS_STATE_DIR")
@@ -503,6 +537,13 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         seed=_genome_training_seed(champion_genome, namespace=f"continual-{cycle}"),
         device=device,
         cycle=cycle,
+    )
+    continual_report["canary_cycle"] = cycle
+    continual_report["canary"] = _grouped_validation(
+        continual_runtime.model,
+        continual_runtime.tokenizer,
+        rotating_canary,
+        device=device,
     )
     continual_eligible, continual_reason = _research_eligible(
         champion_report,
@@ -544,6 +585,13 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             device=device,
             replay_rows=replay_rows,
         )
+        report["canary_cycle"] = cycle
+        report["canary"] = _grouped_validation(
+            runtime.model,
+            runtime.tokenizer,
+            rotating_canary,
+            device=device,
+        )
         eligible, reason = _research_eligible(
             champion_report,
             report,
@@ -575,6 +623,14 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         "signals": signals,
         "mathesis": mathesis,
         "curriculum_memory": curriculum_report,
+        "rotating_canary": {
+            "cycle": cycle,
+            "domains": [row.domain for row in rotating_canary],
+            "training_overlap": sorted(
+                {row.messages[0]["content"] for row in rotating_canary}
+                & {row.messages[0]["content"] for row in replay_rows}
+            ),
+        },
         "trials": trials,
         "policy": {
             "research_only": True,
@@ -591,6 +647,11 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
                 "enabled": True,
                 "full_replay": True,
                 "curriculum_max_rows": curriculum_max_rows,
+            },
+            "rotating_canary": {
+                "enabled": True,
+                "training_excluded": True,
+                "domains": 6,
             },
         },
         "updated_at": time.time(),
