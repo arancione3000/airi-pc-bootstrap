@@ -141,6 +141,28 @@ def test_foundation_qualification_is_bound_to_model_manifest_and_suite(tmp_path:
     assert status["integrity_ok"] is False
 
 
+def test_foundation_manifest_blocks_generic_transformers_qualification_downgrade(tmp_path: Path, monkeypatch):
+    from generalist_lm import qualification
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+
+    class Backend:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("generic backend must not load for a declared foundation model")
+
+    monkeypatch.setattr("generalist_lm.hf_backend.LocalTransformersBackend", Backend)
+
+    with pytest.raises(ValueError, match="use qualify_foundation_model"):
+        qualification.qualify_transformers_model(model)
+
+    generic = model / ".airi-qualification.json"
+    generic.write_text("{}", encoding="utf-8")
+    status = qualification.transformers_qualification_status(model)
+    assert status["qualified"] is False
+    assert status["reason"] == "foundation_model_requires_foundation_qualification"
+
+
 def test_transformers_digest_ignores_attestations_but_not_foundation_manifest(tmp_path: Path):
     from generalist_lm.qualification import transformers_model_digest
 

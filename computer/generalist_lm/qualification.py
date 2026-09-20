@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from .benchmarks import qualification_suite, run_benchmark
-from .foundation import foundation_manifest_digest, load_foundation_manifest
+from .foundation import (
+    FOUNDATION_MANIFEST_FILENAME,
+    foundation_manifest_digest,
+    load_foundation_manifest,
+)
 from .foundation_benchmarks import (
     FOUNDATION_SUITE_VERSION,
     foundation_suite,
@@ -176,6 +180,10 @@ def qualify_transformers_model(
     from .hf_backend import LocalTransformersBackend
 
     root = Path(model_dir).expanduser().resolve()
+    if (root / FOUNDATION_MANIFEST_FILENAME).exists():
+        raise ValueError(
+            "foundation manifest present; use qualify_foundation_model instead of generic Transformers qualification"
+        )
     backend = LocalTransformersBackend(root, local_files_only=True)
     report = run_benchmark(backend, qualification_suite())
     target = Path(attestation_path or (root / ".airi-qualification.json"))
@@ -207,6 +215,12 @@ def transformers_qualification_status(
 ) -> dict[str, Any]:
     root = Path(model_dir).expanduser().resolve()
     target = Path(attestation_path or (root / ".airi-qualification.json"))
+    if (root / FOUNDATION_MANIFEST_FILENAME).exists():
+        return {
+            "qualified": False,
+            "integrity_ok": False,
+            "reason": "foundation_model_requires_foundation_qualification",
+        }
     try:
         value = json.loads(target.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
