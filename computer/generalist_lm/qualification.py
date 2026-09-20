@@ -12,9 +12,25 @@ QUALIFICATION_VERSION = 2
 _DIGEST_CACHE: dict[tuple, str] = {}
 
 
+def _checkpoint_files(root: Path) -> list[Path]:
+    config_path = root / "config.json"
+    if not config_path.exists() or not config_path.is_file():
+        raise FileNotFoundError("missing checkpoint component: config.json")
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    if not isinstance(config, dict):
+        raise ValueError("checkpoint config must be a JSON object")
+    tokenizer_version = str(config.get("tokenizer_version", "byte-v1"))
+    files = [config_path, root / "model.pt", root / "metadata.json"]
+    if tokenizer_version == "bpe-v1":
+        files.append(root / "tokenizer.json")
+    elif tokenizer_version != "byte-v1":
+        raise ValueError(f"unsupported checkpoint tokenizer version: {tokenizer_version}")
+    return files
+
+
 def checkpoint_digest(state_dir: str | Path) -> str:
     root = Path(state_dir)
-    files = [root / "config.json", root / "model.pt", root / "metadata.json"]
+    files = _checkpoint_files(root)
     for path in files:
         if not path.exists() or not path.is_file():
             raise FileNotFoundError(f"missing checkpoint component: {path.name}")
