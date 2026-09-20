@@ -101,8 +101,9 @@ def qualification_status(state_dir: str | Path) -> dict[str, Any]:
 _TRANSFORMERS_DIGEST_CACHE: dict[tuple, str] = {}
 
 
-def transformers_model_digest(model_dir: str | Path) -> str:
+def transformers_model_digest(model_dir: str | Path, *, exclude_path: str | Path | None = None) -> str:
     root = Path(model_dir).expanduser().resolve()
+    excluded = Path(exclude_path).expanduser().resolve() if exclude_path is not None else None
     if not root.exists() or not root.is_dir():
         raise FileNotFoundError("transformers model directory does not exist")
     files = [
@@ -110,6 +111,7 @@ def transformers_model_digest(model_dir: str | Path) -> str:
         if path.is_file()
         and ".git" not in path.parts
         and path.name not in {".airi-qualification.json"}
+        and (excluded is None or path.resolve() != excluded)
     ]
     if not files:
         raise FileNotFoundError("transformers model directory is empty")
@@ -145,13 +147,13 @@ def qualify_transformers_model(
     root = Path(model_dir).expanduser().resolve()
     backend = LocalTransformersBackend(root, local_files_only=True)
     report = run_benchmark(backend)
-    digest = transformers_model_digest(root)
+    target = Path(attestation_path or (root / ".airi-qualification.json"))
+    digest = transformers_model_digest(root, exclude_path=target)
     qualified = bool(
         report.get("ok")
         and float(report.get("score", 0.0)) >= float(minimum_score)
         and not report.get("critical_failures")
     )
-    target = Path(attestation_path or (root / ".airi-qualification.json"))
     result = {
         "qualification_version": QUALIFICATION_VERSION,
         "attested_by": "airi-generalist-transformers-qualification-v1",
@@ -178,7 +180,7 @@ def transformers_qualification_status(
         value = json.loads(target.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
             raise ValueError("transformers qualification attestation must be an object")
-        current = transformers_model_digest(root)
+        current = transformers_model_digest(root, exclude_path=target)
         integrity_ok = bool(
             value.get("backend_type") == "transformers"
             and value.get("attested_by") == "airi-generalist-transformers-qualification-v1"
