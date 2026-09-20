@@ -86,3 +86,9 @@ A failed qualification is a normal research outcome and does not stop future res
 The same failed research checkpoint is not repeatedly re-qualified: its digest is cached until the research champion really changes.
 
 Research can experiment continuously, while production promotion stays conservative and cannot rewrite its own qualification rules.
+
+## Coding and data tool boundaries
+
+Qualified Generalist autocoding is opt-in and requires both an explicit file scope and an explicit test command. Proposed edits still pass the existing snapshot, rollback, diff and guardrail workflow before any commit.
+
+For data work, the Generalist Agent exposes deterministic read-only helpers for arithmetic, descriptive statistics, JSON-table profiling, and bounded aggregate/group-by operations. These helpers do not execute model-generated Python.
