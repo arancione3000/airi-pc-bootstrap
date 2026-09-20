@@ -502,3 +502,19 @@ def test_generalist_data_tools_reject_non_finite_numbers(bad_value):
             "data_stats",
             {"values": [1.0, bad_value, 3.0], "operation": "mean"},
         )
+
+    with pytest.raises(ValueError, match="finite numeric value"):
+        execute_readonly_tool(
+            "table_profile",
+            {"rows": [{"value": 1.0}, {"value": bad_value}]},
+        )
+
+    with pytest.raises(ValueError, match="finite numeric value"):
+        execute_readonly_tool(
+            "table_aggregate",
+            {
+                "rows": [{"value": 1.0}, {"value": bad_value}],
+                "operation": "mean",
+                "column": "value",
+            },
+        )
