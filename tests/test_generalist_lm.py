@@ -1465,3 +1465,112 @@ def test_generalist_research_health_rejects_oversized_persisted_checkpoint(tmp_p
     report = research_health(tmp_path)
     failed = {row["name"] for row in report["failed"]}
     assert "checkpoint:persistence_size" in failed
+
+
+def _git(cwd: Path, *args: str):
+    import subprocess
+    return subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+
+def _seed_generalist_state_repo(root: Path) -> Path:
+    source = root / "source"
+    source.mkdir()
+    _git(source, "init", "-q")
+    _git(source, "config", "user.name", "Test")
+    _git(source, "config", "user.email", "test@example.com")
+    production = source / "generalist-state" / "production"
+    production.mkdir(parents=True)
+    (production / "config.json").write_text('{"demo":true}', encoding="utf-8")
+    (production / "model.pt").write_bytes(b"new-model-bytes")
+    (production / "metadata.json").write_text('{"role":"production_champion"}', encoding="utf-8")
+    (production / "benchmark.json").write_text('{"qualified":false}', encoding="utf-8")
+    _git(source, "add", ".")
+    _git(source, "commit", "-qm", "seed generalist production")
+    _git(source, "branch", "-M", "generalist-state")
+    return source
+
+
+def _fake_live_qualify(path: Path, *, minimum_score: float = 85.0):
+    from generalist_lm.qualification import QUALIFICATION_VERSION, checkpoint_digest
+
+    root = Path(path)
+    digest = checkpoint_digest(root)
+    result = {
+        "qualification_version": QUALIFICATION_VERSION,
+        "attested_by": "airi-generalist-qualification-v2",
+        "checkpoint_digest": digest,
+        "qualified": True,
+        "minimum_score": float(minimum_score),
+        "report": {"ok": True, "score": 100.0, "critical_failures": []},
+    }
+    (root / "benchmark.json").write_text(json.dumps(result), encoding="utf-8")
+    return result
+
+
+def test_generalist_state_sync_transactionally_installs_locally_requalified_model(tmp_path: Path, monkeypatch):
+    from generalist_lm import state_sync
+    from generalist_lm.qualification import qualification_status
+
+    source = _seed_generalist_state_repo(tmp_path)
+    runtime = tmp_path / "runtime"
+    runtime.mkdir()
+    _git(runtime, "init", "-q")
+    _git(runtime, "config", "user.name", "Test")
+    _git(runtime, "config", "user.email", "test@example.com")
+    (runtime / "README.md").write_text("runtime", encoding="utf-8")
+    _git(runtime, "add", ".")
+    _git(runtime, "commit", "-qm", "runtime")
+    _git(runtime, "remote", "add", "origin", str(source))
+
+    target = runtime / ".ai" / "generalist-lm" / "champion"
+    target.mkdir(parents=True)
+    (target / "old.txt").write_text("old", encoding="utf-8")
+
+    monkeypatch.setattr(state_sync, "qualify_checkpoint", _fake_live_qualify)
+    result = state_sync.sync_production_checkpoint(runtime, target)
+    assert result["ok"] is True
+    assert result["updated"] is True
+    assert (target / "model.pt").read_bytes() == b"new-model-bytes"
+    assert not (target / "old.txt").exists()
+    assert qualification_status(target)["qualified"] is True
+
+
+def test_generalist_state_sync_keeps_previous_model_when_requalification_fails(tmp_path: Path, monkeypatch):
+    from generalist_lm import state_sync
+
+    source = _seed_generalist_state_repo(tmp_path)
+    runtime = tmp_path / "runtime"
+    runtime.mkdir()
+    _git(runtime, "init", "-q")
+    _git(runtime, "config", "user.name", "Test")
+    _git(runtime, "config", "user.email", "test@example.com")
+    (runtime / "README.md").write_text("runtime", encoding="utf-8")
+    _git(runtime, "add", ".")
+    _git(runtime, "commit", "-qm", "runtime")
+    _git(runtime, "remote", "add", "origin", str(source))
+
+    target = runtime / ".ai" / "generalist-lm" / "champion"
+    target.mkdir(parents=True)
+    (target / "old.txt").write_text("keep-me", encoding="utf-8")
+
+    monkeypatch.setattr(
+        state_sync,
+        "qualify_checkpoint",
+        lambda path, minimum_score=85.0: {"qualified": False},
+    )
+    with pytest.raises(RuntimeError, match="failed local requalification"):
+        state_sync.sync_production_checkpoint(runtime, target)
+    assert (target / "old.txt").read_text(encoding="utf-8") == "keep-me"
+    assert not (target / "model.pt").exists()
+
+
+def test_startup_generalist_sync_is_explicit_opt_in():
+    start = (ROOT / "computer" / "start.sh").read_text(encoding="utf-8")
+    assert "AIRI_GENERALIST_SYNC_FROM_GITHUB" in start
+    assert "generalist_lm.state_sync" in start
+    assert "AIRI_GENERALIST_SYNC_FAILED_KEEPING_LOCAL_CHECKPOINT" in start
