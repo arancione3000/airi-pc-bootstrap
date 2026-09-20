@@ -584,12 +584,13 @@ class AiriLatticeLM:
                     self.memory_out(memory) + expert_delta
                 )
                 final_state = state_sequence[:, -1].permute(1, 0, 2).contiguous()
+                state_summary = state_sequence.mean(dim=2)
                 return (
                     self.output_norm(out),
                     final_state,
                     surprise,
                     usage,
-                    memory,
+                    state_summary,
                 )
 
         class Reasoner(nn.Module):
@@ -683,57 +684,132 @@ class AiriLatticeLM:
                         raise ValueError("AIRI Lattice state cell count mismatch")
                     states = [item for item in lattice_state]
 
-                outputs = []
-                surprise_sum = x_tokens.new_zeros(())
-                reasoning_sum = x_tokens.new_zeros(())
-                token_count = 0
                 expert_usage = x_tokens.new_zeros(config.n_experts)
 
-                for time_index in range(sequence_length):
-                    h = x_tokens[:, time_index, :]
+                if config.parallel_memory and sequence_length > 1:
+                    h = x_tokens
                     cell_surprises = []
+                    cell_state_summaries = []
                     for cell_index, cell in enumerate(self.cells):
-                        h, new_state, surprise, usage = cell(
+                        (
+                            h,
+                            new_state,
+                            surprise,
+                            usage,
+                            state_summary,
+                        ) = cell.forward_sequence(
                             h,
                             states[cell_index],
                         )
                         states[cell_index] = new_state
                         cell_surprises.append(surprise)
+                        cell_state_summaries.append(state_summary)
                         expert_usage = expert_usage + usage
 
-                    surprise = torch.stack(cell_surprises, dim=0).mean(dim=0)
+                    surprise = torch.stack(
+                        cell_surprises,
+                        dim=0,
+                    ).mean(dim=0)
                     memory_summary = torch.stack(
-                        [state.mean(dim=0) for state in states],
+                        cell_state_summaries,
                         dim=0,
                     ).mean(dim=0)
                     budgets = self._reasoning_budget(surprise)
 
-                    # Shared recurrent reasoning weights: hard tokens spend more
-                    # compute without multiplying the parameter count.
+                    flat_h = h.reshape(
+                        batch_size * sequence_length,
+                        config.d_model,
+                    )
+                    flat_memory = memory_summary.reshape(
+                        batch_size * sequence_length,
+                        config.d_model,
+                    )
+                    flat_budget = budgets.reshape(-1)
                     reasoning_steps = torch.zeros(
-                        batch_size,
+                        batch_size * sequence_length,
                         device=h.device,
                         dtype=torch.long,
                     )
                     for step in range(config.max_reasoning_steps):
-                        active = budgets > step
+                        active = flat_budget > step
                         if not bool(active.any()):
                             break
                         rows = active.nonzero(as_tuple=True)[0]
                         refined = self.reasoner(
-                            h.index_select(0, rows),
-                            memory_summary.index_select(0, rows),
+                            flat_h.index_select(0, rows),
+                            flat_memory.index_select(0, rows),
                         )
-                        delta = refined - h.index_select(0, rows)
-                        h = h.index_add(0, rows, delta)
-                        reasoning_steps = reasoning_steps + active.to(torch.long)
+                        delta = refined - flat_h.index_select(0, rows)
+                        flat_h = flat_h.index_add(0, rows, delta)
+                        reasoning_steps = (
+                            reasoning_steps + active.to(torch.long)
+                        )
 
-                    outputs.append(h)
-                    surprise_sum = surprise_sum + surprise.mean()
-                    reasoning_sum = reasoning_sum + reasoning_steps.float().mean()
-                    token_count += 1
+                    hidden = flat_h.reshape(
+                        batch_size,
+                        sequence_length,
+                        config.d_model,
+                    )
+                    surprise_sum = surprise.mean()
+                    reasoning_sum = reasoning_steps.float().mean()
+                    token_count = 1
+                else:
+                    outputs = []
+                    surprise_sum = x_tokens.new_zeros(())
+                    reasoning_sum = x_tokens.new_zeros(())
+                    token_count = 0
 
-                hidden = torch.stack(outputs, dim=1)
+                    for time_index in range(sequence_length):
+                        h = x_tokens[:, time_index, :]
+                        cell_surprises = []
+                        for cell_index, cell in enumerate(self.cells):
+                            h, new_state, surprise, usage = cell(
+                                h,
+                                states[cell_index],
+                            )
+                            states[cell_index] = new_state
+                            cell_surprises.append(surprise)
+                            expert_usage = expert_usage + usage
+
+                        surprise = torch.stack(
+                            cell_surprises,
+                            dim=0,
+                        ).mean(dim=0)
+                        memory_summary = torch.stack(
+                            [state.mean(dim=0) for state in states],
+                            dim=0,
+                        ).mean(dim=0)
+                        budgets = self._reasoning_budget(surprise)
+
+                        reasoning_steps = torch.zeros(
+                            batch_size,
+                            device=h.device,
+                            dtype=torch.long,
+                        )
+                        for step in range(config.max_reasoning_steps):
+                            active = budgets > step
+                            if not bool(active.any()):
+                                break
+                            rows = active.nonzero(as_tuple=True)[0]
+                            refined = self.reasoner(
+                                h.index_select(0, rows),
+                                memory_summary.index_select(0, rows),
+                            )
+                            delta = refined - h.index_select(0, rows)
+                            h = h.index_add(0, rows, delta)
+                            reasoning_steps = (
+                                reasoning_steps + active.to(torch.long)
+                            )
+
+                        outputs.append(h)
+                        surprise_sum = surprise_sum + surprise.mean()
+                        reasoning_sum = (
+                            reasoning_sum
+                            + reasoning_steps.float().mean()
+                        )
+                        token_count += 1
+
+                    hidden = torch.stack(outputs, dim=1)
                 logits = self.lm_head(self.final_norm(hidden))
                 loss = None
                 if labels is not None:
