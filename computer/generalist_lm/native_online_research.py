@@ -284,7 +284,7 @@ def search_openalex(
         key = api_key or os.environ.get("OPENALEX_API_KEY")
         url = (
             "https://api.openalex.org/works?"
-            f"search={quote_plus(query)}&per_page={per_page}&sort=-publication_date"
+            f"search={quote_plus(query)}&per_page={per_page}&sort=publication_date:desc"
         )
         if key:
             url += f"&api_key={quote_plus(key)}"

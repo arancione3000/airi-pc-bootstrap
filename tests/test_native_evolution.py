@@ -218,6 +218,22 @@ def test_online_research_falls_back_to_openalex_when_arxiv_fails():
     assert report["tag_counts"]["long-context"] >= 1
 
 
+def test_openalex_uses_current_descending_publication_sort():
+    from generalist_lm.native_online_research import search_openalex
+
+    seen = []
+
+    def opener(request, timeout):
+        seen.append(request.full_url)
+        return _FakeResponse(b'{"results":[]}', request.full_url)
+
+    search_openalex(["transformer"], max_results_per_topic=1, opener=opener)
+
+    assert seen
+    assert "sort=publication_date:desc" in seen[0]
+    assert "sort=-publication_date" not in seen[0]
+
+
 def test_online_research_rejects_redirect_outside_provider_allowlist():
     from generalist_lm.native_online_research import search_arxiv
 
