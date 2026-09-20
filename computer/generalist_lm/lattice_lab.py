@@ -118,6 +118,43 @@ def _tensor_batch(torch, rows, *, device):
     return ids, labels
 
 
+def _balanced_eval_blocks(
+    blocks: Sequence[NativeTokenBlock],
+    *,
+    max_blocks: int,
+) -> list[NativeTokenBlock]:
+    """Round-robin validation domains before taking extra blocks.
+
+    The first real Lattice swarms revealed that prefix slicing could evaluate
+    only one domain when one document produced many early blocks. Architecture
+    promotion must see as many held-out domains as the budget permits.
+    """
+    limit = max(1, int(max_blocks))
+    grouped: dict[str, list[NativeTokenBlock]] = {}
+    domain_order: list[str] = []
+    for row in blocks:
+        if row.domain not in grouped:
+            grouped[row.domain] = []
+            domain_order.append(row.domain)
+        grouped[row.domain].append(row)
+
+    selected: list[NativeTokenBlock] = []
+    cursor = 0
+    while len(selected) < limit:
+        added = False
+        for domain in domain_order:
+            rows = grouped[domain]
+            if cursor < len(rows):
+                selected.append(rows[cursor])
+                added = True
+                if len(selected) >= limit:
+                    break
+        if not added:
+            break
+        cursor += 1
+    return selected
+
+
 def _evaluate(
     model,
     blocks: Sequence[NativeTokenBlock],
@@ -127,7 +164,10 @@ def _evaluate(
     batch_size: int,
     max_blocks: int,
 ) -> dict[str, Any]:
-    selected = list(blocks[: max(1, int(max_blocks))])
+    selected = _balanced_eval_blocks(
+        blocks,
+        max_blocks=max_blocks,
+    )
     if not selected:
         raise ValueError("Lattice Lab received no validation blocks")
 
