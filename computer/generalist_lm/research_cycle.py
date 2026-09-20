@@ -21,7 +21,7 @@ from .model import CausalTransformerLM, estimate_parameter_count, parameter_coun
 from .runtime import GeneralistRuntime
 from .pretraining import CorpusDocument, pretrain_causal
 from .tokenizer import ByteTokenizer
-from .training import encode_sft_example, loss_on_examples, train_sft
+from .training import encode_sft_example, loss_on_examples, nll_stats_on_examples, train_sft
 
 
 def research_seed() -> GeneralistGenome:
@@ -164,23 +164,50 @@ def _generation_probe(
     }
 
 
-def _grouped_validation(model, tokenizer: ByteTokenizer, rows: list[ResearchRow], *, device: str = "cpu") -> dict[str, Any]:
+def _grouped_validation(model, tokenizer, rows: list[ResearchRow], *, device: str = "cpu") -> dict[str, Any]:
     all_examples = [row.sft() for row in rows]
-    overall = loss_on_examples(model, tokenizer, all_examples, device=device)
+    overall_stats = nll_stats_on_examples(
+        model,
+        tokenizer,
+        all_examples,
+        device=device,
+    )
     domains: dict[str, float] = {}
+    domain_nll_per_byte: dict[str, float] = {}
+    domain_bits_per_byte: dict[str, float] = {}
     for domain in sorted({row.domain for row in rows}):
         examples = [row.sft() for row in rows if row.domain == domain]
-        domains[domain] = loss_on_examples(model, tokenizer, examples, device=device)
+        stats = nll_stats_on_examples(
+            model,
+            tokenizer,
+            examples,
+            device=device,
+        )
+        domains[domain] = float(stats["loss_per_token"])
+        domain_nll_per_byte[domain] = float(stats["nll_per_byte"])
+        domain_bits_per_byte[domain] = float(stats["bits_per_byte"])
     accuracy = _teacher_forced_accuracy(model, tokenizer, rows, device=device)
     generation = _generation_probe(model, tokenizer, rows, device=device)
+    finite_values = [
+        float(overall_stats["loss_per_token"]),
+        float(overall_stats["nll_per_byte"]),
+        float(overall_stats["bits_per_byte"]),
+        *domains.values(),
+        *domain_nll_per_byte.values(),
+    ]
     return {
-        "loss": float(overall),
+        "loss": float(overall_stats["loss_per_token"]),
+        "nll_per_byte": float(overall_stats["nll_per_byte"]),
+        "bits_per_byte": float(overall_stats["bits_per_byte"]),
+        "validation_target_tokens": int(overall_stats["target_tokens"]),
+        "validation_target_bytes": int(overall_stats["target_bytes"]),
         "domain_loss": domains,
+        "domain_nll_per_byte": domain_nll_per_byte,
+        "domain_bits_per_byte": domain_bits_per_byte,
         **accuracy,
         **generation,
-        "finite": bool(math.isfinite(overall) and all(math.isfinite(v) for v in domains.values())),
+        "finite": bool(all(math.isfinite(v) for v in finite_values)),
     }
-
 
 def _research_score(report: dict[str, Any], params: int) -> float:
     loss = float(report["loss"])
