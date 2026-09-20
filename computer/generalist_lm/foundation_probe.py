@@ -10,9 +10,10 @@ import re
 from typing import Any
 
 from .foundation import load_foundation_manifest
+from .harmony_adapter import harmony_runtime_status
 
 
-FOUNDATION_PREFLIGHT_VERSION = 1
+FOUNDATION_PREFLIGHT_VERSION = 2
 _CONTEXT_KEYS = ("max_position_embeddings", "n_positions", "n_ctx", "seq_length")
 _INDEX_FILENAMES = ("model.safetensors.index.json", "pytorch_model.bin.index.json")
 _MEMORY_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB|KIB|MIB|GIB|TIB)$", re.IGNORECASE)
@@ -399,11 +400,14 @@ def foundation_preflight(
         blockers.append("manifest_quantization_mismatch")
 
     protocol_requirements: list[str] = []
+    harmony_status: dict[str, Any] | None = None
     if model_type == "gpt_oss":
         protocol_requirements.append("harmony")
+        harmony_status = harmony_runtime_status()
         if not chat_template["available"]:
             blockers.append("gpt_oss_chat_template_missing")
-        blockers.append("gpt_oss_harmony_adapter_required")
+        if not harmony_status.get("available"):
+            blockers.append("gpt_oss_harmony_runtime_unavailable")
 
     if not chat_template["available"]:
         warnings.append("chat_template_not_declared")
@@ -431,6 +435,8 @@ def foundation_preflight(
 
     hardware = _hardware_probe() if probe_hardware else None
     special_runtime: dict[str, Any] = {}
+    if harmony_status is not None:
+        special_runtime["harmony"] = harmony_status
     if detected_quantization == "mxfp4":
         cuda_devices = (hardware or {}).get("cuda_devices") or []
         capable = any(
