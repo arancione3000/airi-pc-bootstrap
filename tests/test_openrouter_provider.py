@@ -27,7 +27,9 @@ def test_local_agent_calls_fail_closed_without_qualified_checkpoint(monkeypatch)
         local_agent.ask_local_model_changes("goal", "context")
 
 
-def test_openrouter_cannot_be_registered_operationally(monkeypatch):
+def test_openrouter_cannot_be_registered_operationally(tmp_path, monkeypatch):
+    import control_plane.store as store
+    monkeypatch.setattr(store, "CP", tmp_path / "control-plane")
     monkeypatch.setenv("AIRI_MODEL_PROVIDER", "openrouter")
     monkeypatch.setenv("OPENROUTER_API_KEY", "TEST_ONLY_NOT_A_REAL_KEY")
     monkeypatch.delenv("AIRI_GENERALIST_ENABLE", raising=False)
