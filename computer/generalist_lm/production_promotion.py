@@ -8,7 +8,7 @@ import time
 from typing import Any
 
 from .evolution import promotion_decision
-from .qualification import checkpoint_digest, qualification_status, qualify_checkpoint
+from .qualification import QUALIFICATION_VERSION, checkpoint_digest, qualification_status, qualify_checkpoint
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -65,7 +65,7 @@ def attempt_production_promotion(
             if (
                 isinstance(previous, dict)
                 and previous.get("source_checkpoint_digest") == source_digest
-                and previous.get("qualification_version") == 1
+                and previous.get("qualification_version") == QUALIFICATION_VERSION
             ):
                 return {
                     **previous,
