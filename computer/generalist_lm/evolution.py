@@ -31,6 +31,9 @@ class GeneralistGenome:
     code_adapter: bool = True
     data_adapter: bool = True
     reasoning_depth: int = 2
+    norm_type: str = "layernorm"
+    position_encoding: str = "learned"
+    ff_variant: str = "swiglu"
 
     def validate(self) -> "GeneralistGenome":
         if self.tokenizer_version not in _ALLOWED_TOKENIZERS:
@@ -53,6 +56,12 @@ class GeneralistGenome:
             raise ValueError("learning_rate out of bounded DSL")
         if not (1 <= self.reasoning_depth <= 16):
             raise ValueError("reasoning_depth out of bounded DSL")
+        if self.norm_type not in {"layernorm", "rmsnorm"}:
+            raise ValueError("unauthorized norm_type")
+        if self.position_encoding not in {"learned", "sinusoidal"}:
+            raise ValueError("unauthorized position_encoding")
+        if self.ff_variant not in {"swiglu", "gelu"}:
+            raise ValueError("unauthorized ff_variant")
         return self
 
     def to_dict(self) -> dict[str, Any]:
@@ -69,6 +78,9 @@ class GeneralistGenome:
             d_ff=self.d_ff,
             dropout=self.dropout,
             tokenizer_version=self.tokenizer_version,
+            norm_type=self.norm_type,
+            position_encoding=self.position_encoding,
+            ff_variant=self.ff_variant,
         ).validate()
 
 
@@ -83,10 +95,14 @@ def generate_challengers(
     *,
     signals: list[str] | None = None,
     count: int = 4,
+    exploration_offset: int = 0,
 ) -> list[GeneralistGenome]:
     champion.validate()
     signals = list(signals or [])
     variants = [
+        {"norm_type": "rmsnorm" if champion.norm_type == "layernorm" else "layernorm"},
+        {"position_encoding": "sinusoidal" if champion.position_encoding == "learned" else "learned"},
+        {"ff_variant": "gelu" if champion.ff_variant == "swiglu" else "swiglu"},
         {"d_model": min(4096, champion.d_model + 32), "d_ff": min(16384, champion.d_ff + 96)},
         {"n_layers": min(96, champion.n_layers + 1)},
         {"context_length": min(8192, champion.context_length * 2)},
@@ -102,6 +118,10 @@ def generate_challengers(
         variants.insert(0, {"retrieval_adapter": True})
     if "symbolic_reasoning_signal" in signals:
         variants.insert(0, {"symbolic_adapter": True, "reasoning_depth": min(16, champion.reasoning_depth + 1)})
+
+    if variants:
+        shift = int(exploration_offset) % len(variants)
+        variants = variants[shift:] + variants[:shift]
 
     out: list[GeneralistGenome] = []
     seen: set[str] = set()
