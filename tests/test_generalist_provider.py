@@ -434,3 +434,24 @@ def test_generalist_autocode_requires_explicit_test_command(monkeypatch):
             scope=["demo.py"],
             test_command="",
         )
+
+
+def test_generalist_registration_cannot_escalate_unimplemented_capabilities(tmp_path: Path, monkeypatch):
+    import control_plane.store as store
+    from control_plane.model_router import ModelRouter
+
+    make_qualified_checkpoint(tmp_path / "model")
+    monkeypatch.setattr(store, "CP", tmp_path / "control-plane")
+    monkeypatch.setenv("AIRI_GENERALIST_STATE", str(tmp_path / "model"))
+    monkeypatch.setenv("AIRI_GENERALIST_ENABLE", "1")
+
+    router = ModelRouter()
+    row = router.register_provider(
+        "airi-generalist",
+        ["coding", "vision", "research", "data"],
+        available=True,
+    )
+    assert row["available"] is True
+    assert set(row["capabilities"]) == {"coding", "data"}
+    assert "vision" not in row["capabilities"]
+    assert "research" not in row["capabilities"]
