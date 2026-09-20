@@ -372,12 +372,16 @@ budgets, and a read-only hardware snapshot. Missing shards, shard path escapes,
 manifest/config quantization drift, unsupported local config classes and other
 hard incompatibilities fail closed.
 
-The preflight also reports protocol-specific requirements. In particular,
-`model_type=gpt_oss` is currently reported as requiring a dedicated Harmony
-adapter. A chat template alone is not treated as full Harmony output support, so
-gpt-oss cannot pass Foundation qualification until that adapter is implemented
-and verified. MXFP4 candidates additionally report local Accelerate/Triton/kernel
-and CUDA-capability facts without downloading any runtime code.
+The preflight also reports protocol-specific requirements. For
+`model_type=gpt_oss`, AIRI requires the official `openai-harmony==0.0.8`
+runtime in addition to a local chat template. Harmony input is rendered through
+the model's Transformers chat template, generation stops on the canonical
+Harmony stop-token set, and generated tokens are parsed with the official
+Harmony parser. Only the assistant `final` channel is returned as normal user
+text; analysis is never surfaced as the answer, while tool-action completions
+fail closed until the dedicated Harmony tool-loop adapter is implemented.
+MXFP4 candidates additionally report local Accelerate/Triton/kernel and
+CUDA-capability facts without downloading any runtime code.
 
 A Foundation candidate is not activated merely by existing on disk. Airi-PC
 uses it only when the dedicated Foundation attestation is still exact-digest
@@ -402,8 +406,9 @@ backend never applies a global `model.to(device)` after sharding. Set
 load using `AIRI_GENERALIST_DEVICE`.
 
 This still does not make the model a production champion by declaration:
-Foundation qualification v3 additionally records a successful preflight, while
-qualification remains digest-bound to the model, manifest, protected suite and
-inference dtype. Status re-runs the metadata preflight so a model that becomes
-incompatible fails closed before provider activation. The existing router and
+Foundation qualification v4 additionally records the Harmony-aware preflight
+v2, while qualification remains digest-bound to the model, manifest, protected
+suite and inference dtype. Status re-runs the metadata preflight so a model
+whose protocol/runtime support disappears becomes unqualified before provider
+activation. The existing router and
 provider opt-ins remain in force.
