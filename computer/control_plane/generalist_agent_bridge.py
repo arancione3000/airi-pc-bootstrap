@@ -98,7 +98,7 @@ def _table_profile(arguments: dict[str, Any]) -> dict[str, Any]:
         values = [row.get(column) for row in rows]
         non_null = [value for value in values if value is not None]
         numeric = [
-            float(value)
+            _safe_number(value)
             for value in non_null
             if isinstance(value, (int, float)) and not isinstance(value, bool)
         ]
