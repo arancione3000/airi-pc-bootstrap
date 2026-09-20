@@ -1,0 +1,110 @@
+name: AIRI Generalist Research Continuum
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '7,37 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/**'
+      - '.github/workflows/generalist-continuum.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: airi-generalist-research
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: computer
+      AIRI_GENERALIST_RESEARCH_STATE: /tmp/airi-generalist-research-state
+      MATHESIS_STATE_DIR: /tmp/mathesis-signal-root/mathesis-state
+      STATE_REPO: /tmp/airi-generalist-state-repo
+      AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS: '30'
+      AIRI_GENERALIST_RESEARCH_STEPS: '20'
+      AIRI_GENERALIST_RESEARCH_CHALLENGERS: '2'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install bounded LM research runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Restore persistent generalist research state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone --quiet "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$STATE_REPO"
+          cd "$STATE_REPO"
+          git config user.name "AIRI Generalist Research"
+          git config user.email "airi-generalist@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin generalist-state >/dev/null 2>&1; then
+            git fetch --quiet origin generalist-state:generalist-state
+            git checkout --quiet generalist-state
+          else
+            git checkout --orphan generalist-state
+            git rm -rf . >/dev/null 2>&1 || true
+            mkdir -p generalist-state
+            printf '%s\n' 'Persistent bounded AIRI Generalist research state.' > generalist-state/README.txt
+            git add generalist-state/README.txt
+            git commit -m "generalist-state: initialize"
+            git push --quiet origin HEAD:generalist-state
+          fi
+
+          mkdir -p "$AIRI_GENERALIST_RESEARCH_STATE"
+          if [ -d "$STATE_REPO/generalist-state" ]; then
+            cp -a "$STATE_REPO/generalist-state/." "$AIRI_GENERALIST_RESEARCH_STATE/" || true
+          fi
+
+      - name: Restore proof-gated MATHESIS signals
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/mathesis-signal-root
+          cd "$STATE_REPO"
+          if git ls-remote --exit-code --heads origin mathesis-state >/dev/null 2>&1; then
+            git fetch --quiet origin mathesis-state:refs/remotes/origin/mathesis-state
+            git archive refs/remotes/origin/mathesis-state mathesis-state | tar -xf - -C /tmp/mathesis-signal-root
+          fi
+
+      - name: Run bounded generalist research cycle
+        run: |
+          set -euo pipefail
+          python -m generalist_lm.research_cycle | tee "$AIRI_GENERALIST_RESEARCH_STATE/last-cycle-output.json"
+          python -m generalist_lm.research_health
+          test -f "$AIRI_GENERALIST_RESEARCH_STATE/champion/model.pt"
+          test -f "$AIRI_GENERALIST_RESEARCH_STATE/champion/config.json"
+          test -f "$AIRI_GENERALIST_RESEARCH_STATE/champion-genome.json"
+          test -f "$AIRI_GENERALIST_RESEARCH_STATE/status.json"
+
+      - name: Persist only health-gated research state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$STATE_REPO"
+          rm -rf generalist-state
+          mkdir -p generalist-state
+          cp -a "$AIRI_GENERALIST_RESEARCH_STATE/." generalist-state/
+          git add -A generalist-state
+          git commit --allow-empty -m "generalist-state: sync $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push --quiet origin HEAD:generalist-state
+
+          local_sha="$(git rev-parse HEAD)"
+          remote_sha="$(git ls-remote origin refs/heads/generalist-state | awk '{print $1}')"
+          test -n "$remote_sha"
+          test "$local_sha" = "$remote_sha"
+          echo "AIRI Generalist research state persisted at $remote_sha"
