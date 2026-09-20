@@ -1,0 +1,266 @@
+name: AIRI Native Evolution
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/native_*.py'
+      - 'computer/generalist_lm/mathesis_bridge.py'
+      - 'tests/test_native_evolution.py'
+      - '.github/workflows/native-evolution.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: airi-native-evolution
+  cancel-in-progress: false
+
+jobs:
+  evolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: computer
+      AIRI_NATIVE_EVOLUTION_STATE: /tmp/airi-native-evolution
+      AIRI_NATIVE_CORPUS_ROOT: /tmp/airi-native-corpus
+      AIRI_NATIVE_CORPUS_MANIFEST: /tmp/airi-native-corpus/native-corpus.json
+      AIRI_NATIVE_SEED_CHECKPOINT: /tmp/airi-native-seed
+      MATHESIS_STATE_DIR: /tmp/mathesis-signal-root/mathesis-state
+      STATE_REPO: /tmp/airi-native-state-repo
+      AIRI_NATIVE_CHALLENGERS: '2'
+      AIRI_NATIVE_TRIAL_STEPS: '3'
+      AIRI_NATIVE_REINIT_STEPS: '4'
+      AIRI_NATIVE_DEVICE: cpu
+      AIRI_NATIVE_PRECISION: fp32
+      AIRI_NATIVE_MICRO_BATCH: '1'
+      AIRI_NATIVE_GRAD_ACCUM: '1'
+      AIRI_NATIVE_VALIDATION_FRACTION: '0.2'
+      AIRI_NATIVE_MAX_EVAL_BLOCKS: '12'
+      AIRI_NATIVE_VERIFIER_SEED: '431'
+      AIRI_NATIVE_MIN_GAIN: '0.001'
+      AIRI_NATIVE_MAX_DOMAIN_REGRESSION: '0.08'
+      AIRI_NATIVE_MAX_PARAMETER_RATIO: '1.5'
+      AIRI_NATIVE_MAX_PARAMETERS: '5000000'
+      AIRI_NATIVE_ONLINE_RESEARCH: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install bounded Native research runtime
+        run: |
+          python -m pip install --disable-pip-version-check pytest
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check -r computer/mathesis/requirements.txt
+
+      - name: Restore persistent Native evolution state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone --quiet             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"             "${STATE_REPO}"
+          cd "${STATE_REPO}"
+          git config user.name "AIRI Native Evolution"
+          git config user.email "airi-native-evolution@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin native-evolution-state >/dev/null 2>&1; then
+            git fetch --quiet origin native-evolution-state:native-evolution-state
+            git checkout --quiet native-evolution-state
+          else
+            git checkout --orphan native-evolution-state
+            git rm -rf . >/dev/null 2>&1 || true
+            mkdir -p native-evolution-state
+            printf '%s\n'               'Persistent proof-gated AIRI Native evolution state. Research-scale champion only.'               > native-evolution-state/README.txt
+            git add native-evolution-state/README.txt
+            git commit -m "native-evolution-state: initialize"
+            git push --quiet origin HEAD:native-evolution-state
+          fi
+
+          mkdir -p "${AIRI_NATIVE_EVOLUTION_STATE}"
+          if [ -d "${STATE_REPO}/native-evolution-state" ]; then
+            cp -a "${STATE_REPO}/native-evolution-state/." "${AIRI_NATIVE_EVOLUTION_STATE}/" || true
+          fi
+
+      - name: Restore proof-gated MATHESIS signals
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/mathesis-signal-root
+          cd "${STATE_REPO}"
+          if git ls-remote --exit-code --heads origin mathesis-state >/dev/null 2>&1; then
+            git fetch --quiet origin mathesis-state:refs/remotes/origin/mathesis-state
+            git archive refs/remotes/origin/mathesis-state mathesis-state               | tar -xf - -C /tmp/mathesis-signal-root
+          fi
+
+      - name: Build automatic project-owned bootstrap corpus
+        run: |
+          set -euo pipefail
+          rm -rf "${AIRI_NATIVE_CORPUS_ROOT}"
+          mkdir -p "${AIRI_NATIVE_CORPUS_ROOT}/files"
+
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          workspace = Path.cwd()
+          output = Path("/tmp/airi-native-corpus")
+          files = output / "files"
+
+          candidates = []
+          for base in (
+              workspace / "computer" / "generalist_lm",
+              workspace / "computer" / "mathesis",
+          ):
+              if not base.is_dir():
+                  continue
+              for path in sorted(base.rglob("*")):
+                  if not path.is_file() or path.suffix.lower() not in {".py", ".md", ".txt"}:
+                      continue
+                  size = path.stat().st_size
+                  if 256 <= size <= 120_000:
+                      candidates.append(path)
+
+          selected = candidates[:24]
+          if len(selected) < 4:
+              raise SystemExit("not enough project-owned text files for Native research bootstrap")
+
+          rows = []
+          seen = set()
+          for index, source in enumerate(selected):
+              blob = source.read_bytes()
+              digest = hashlib.sha256(blob).hexdigest()
+              if digest in seen:
+                  continue
+              seen.add(digest)
+
+              name = source.name.lower()
+              path_text = source.as_posix().lower()
+              if "mathesis" in path_text and index % 2:
+                  domain = "math"
+              elif "mathesis" in path_text:
+                  domain = "reasoning"
+              elif source.suffix.lower() == ".py" and index % 3 == 0:
+                  domain = "tool-use"
+              elif source.suffix.lower() == ".py" and index % 3 == 1:
+                  domain = "code"
+              elif source.suffix.lower() == ".py":
+                  domain = "data-analysis"
+              elif "readme" in name:
+                  domain = "language-en"
+              else:
+                  domain = "general"
+
+              target = files / f"{index:03d}-{source.name}"
+              target.write_bytes(blob)
+              rows.append({
+                  "path": target.relative_to(output).as_posix(),
+                  "domain": domain,
+                  "language": "en",
+                  "license": "project-owned-repository",
+                  "source_type": "owned",
+                  "approved_for_training": True,
+                  "weight": 1.0,
+                  "source_repository_path": source.relative_to(workspace).as_posix(),
+                  "source_sha256": digest,
+              })
+
+          manifest = {
+              "version": "native-corpus-v1",
+              "bootstrap_policy": "automatically derived from project-owned repository text for research-scale evolution only",
+              "documents": rows,
+          }
+          (output / "native-corpus.json").write_text(
+              json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print({"documents": len(rows), "domains": sorted({row["domain"] for row in rows})})
+          PY
+
+      - name: Build scratch research seed if state has no champion
+        run: |
+          set -euo pipefail
+          rm -rf "${AIRI_NATIVE_SEED_CHECKPOINT}"
+          python - <<'PY'
+          from generalist_lm.native_foundation import (
+              NativeFoundationConfig,
+              create_native_root_checkpoint,
+          )
+
+          cfg = NativeFoundationConfig(
+              vocab_size=264,
+              context_length=64,
+              d_model=48,
+              n_heads=4,
+              n_kv_heads=2,
+              n_layers=2,
+              d_ff=144,
+              tokenizer_version="byte-v1",
+          ).validate()
+          status = create_native_root_checkpoint(
+              "/tmp/airi-native-seed",
+              cfg,
+              root_seed=1701,
+          )
+          assert status["ok"]
+          print({"seed_parameters": status["parameters"], "external_pretrained": status["external_pretrained"]})
+          PY
+
+      - name: Run online proof-gated Native evolution cycle
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python -m generalist_lm.native_evolution_cycle             | tee "${AIRI_NATIVE_EVOLUTION_STATE}/last-cycle-output.json"
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from generalist_lm.native_foundation import native_checkpoint_status
+
+          root = Path("/tmp/airi-native-evolution")
+          status = json.loads((root / "status.json").read_text(encoding="utf-8"))
+          assert status["ok"]
+          assert status["policy"]["candidate_can_self_promote"] is False
+          assert status["policy"]["verifier_external_to_candidate"] is True
+          assert status["policy"]["remote_code_execution"] is False
+          champion = native_checkpoint_status(root / "champion")
+          assert champion["ok"]
+          assert champion["external_pretrained"] is False
+          print({
+              "cycle": status["cycle"],
+              "promoted": status["promoted"],
+              "promotion_kind": status["promotion_kind"],
+              "champion_digest": champion["checkpoint_digest"],
+          })
+          PY
+
+      - name: Persist only verifier-gated Native state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "${STATE_REPO}"
+          rm -rf native-evolution-state
+          mkdir -p native-evolution-state
+          cp -a "${AIRI_NATIVE_EVOLUTION_STATE}/." native-evolution-state/
+
+          rm -f native-evolution-state/last-cycle-output.json
+
+          git add -A native-evolution-state
+          git commit --allow-empty -m             "native-evolution-state: sync $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push --quiet origin HEAD:native-evolution-state
+
+          local_sha="$(git rev-parse HEAD)"
+          remote_sha="$(git ls-remote origin refs/heads/native-evolution-state | awk '{print $1}')"
+          test -n "${remote_sha}"
+          test "${local_sha}" = "${remote_sha}"
+          echo "AIRI Native evolution state persisted at ${remote_sha}"
