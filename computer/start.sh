@@ -96,10 +96,17 @@ fi
 AIRI_BOOTSTRAP_SHA="$("$PYTHON_BIN" -c 'import os; from startup import resolve_runtime_sha; print(resolve_runtime_sha(os.environ["ROOT_FOR_AIRI"], os.environ["RUNTIME_SHA_FILE_FOR_AIRI"], os.environ))')"
 export AIRI_BOOTSTRAP_SHA
 if [ -f "$ROOT/computer/requirements.txt" ]; then
-  if ! "$PYTHON_BIN" -c 'import fastapi,uvicorn,pyautogui,pytesseract,PIL,playwright,torch,transformers' >/dev/null 2>&1; then
+  if ! "$PYTHON_BIN" -c 'import fastapi,uvicorn,pyautogui,pytesseract,PIL,playwright' >/dev/null 2>&1; then
     command -v pip3 >/dev/null 2>&1 || { echo 'AIRI_START_NO_PIP3' >&2; exit 2; }
     SITE_PACKAGES="$($PYTHON_BIN -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
     pip3 install --disable-pip-version-check --quiet --target "$SITE_PACKAGES" -r "$ROOT/computer/requirements.txt"
+  fi
+fi
+if [ "${AIRI_GENERALIST_ENABLE:-0}" = "1" ]; then
+  if ! "$PYTHON_BIN" -c 'import torch,transformers' >/dev/null 2>&1; then
+    command -v pip3 >/dev/null 2>&1 || { echo 'AIRI_START_NO_PIP3' >&2; exit 2; }
+    SITE_PACKAGES="$($PYTHON_BIN -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+    pip3 install --disable-pip-version-check --quiet --target "$SITE_PACKAGES" -r "$ROOT/computer/generalist_lm/requirements.txt"
   fi
 fi
 if ! "$PYTHON_BIN" -c 'import tkinter' >/dev/null 2>&1; then
