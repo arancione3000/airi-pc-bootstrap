@@ -502,8 +502,13 @@ def create_native_root_checkpoint(
         source = Path(tokenizer_path).expanduser().resolve()
         if not source.is_file():
             raise FileNotFoundError("native tokenizer artifact does not exist")
+        from .bpe_tokenizer import BPETokenizer
+
+        tokenizer = BPETokenizer.load(source)
+        if int(tokenizer.vocab_size) != int(cfg.vocab_size):
+            raise ValueError("native config vocab_size must match AIRI BPE tokenizer")
         target = root / NATIVE_TOKENIZER_FILENAME
-        target.write_bytes(source.read_bytes())
+        tokenizer.save(target)
         tokenizer_digest = _sha256_file(target)
     elif tokenizer_path is not None:
         raise ValueError("byte-v1 native root does not accept tokenizer artifact")
