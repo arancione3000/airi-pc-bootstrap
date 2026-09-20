@@ -15,7 +15,7 @@ from .foundation import load_foundation_manifest
 FOUNDATION_PREFLIGHT_VERSION = 1
 _CONTEXT_KEYS = ("max_position_embeddings", "n_positions", "n_ctx", "seq_length")
 _INDEX_FILENAMES = ("model.safetensors.index.json", "pytorch_model.bin.index.json")
-_MEMORY_RE = re.compile(r"^(\\d+(?:\\.\\d+)?)\\s*(B|KB|MB|GB|TB|KIB|MIB|GIB|TIB)$", re.IGNORECASE)
+_MEMORY_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB|KIB|MIB|GIB|TIB)$", re.IGNORECASE)
 _DECIMAL_UNITS = {
     "B": 1,
     "KB": 1000,
@@ -137,7 +137,7 @@ def _weight_layout(root: Path) -> tuple[dict[str, Any], list[str], list[str]]:
         return {
             "index": None,
             "sharded": len(weight_files) > 1,
-            "weight_files": [p.name for p in weight_files],
+            "weight_files": [p.relative_to(root).as_posix() for p in weight_files],
             "weight_bytes": sum(p.stat().st_size for p in weight_files),
         }, blockers, warnings
 
@@ -149,6 +149,8 @@ def _weight_layout(root: Path) -> tuple[dict[str, Any], list[str], list[str]]:
             raise ValueError("weight index weight_map must be a non-empty object")
         if not all(isinstance(key, str) and key for key in weight_map):
             raise ValueError("weight index parameter names must be non-empty strings")
+        if not all(isinstance(value, str) and value.strip() for value in weight_map.values()):
+            raise ValueError("weight index shard paths must be non-empty strings")
 
         shard_names = sorted(set(weight_map.values()))
         shard_files: list[Path] = []
@@ -167,7 +169,7 @@ def _weight_layout(root: Path) -> tuple[dict[str, Any], list[str], list[str]]:
         return {
             "index": index_path.name,
             "sharded": True,
-            "weight_files": [p.name for p in weight_files],
+            "weight_files": [p.relative_to(root).as_posix() for p in weight_files],
             "weight_bytes": sum(p.stat().st_size for p in weight_files),
         }, blockers, warnings
 
