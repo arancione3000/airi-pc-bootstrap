@@ -225,3 +225,84 @@ def test_mathesis_bridge_accepts_only_current_proof_gated_items(tmp_path: Path):
 def test_local_transformers_backend_refuses_missing_or_remote_model_paths(tmp_path: Path):
     with pytest.raises(FileNotFoundError):
         LocalTransformersBackend(tmp_path / "not-downloaded")
+
+
+def test_generalist_agent_runs_allowlisted_tool_loop():
+    from generalist_lm.agent import GeneralistAgent
+
+    class Backend:
+        def __init__(self):
+            self.calls = 0
+
+        def chat(self, messages, *, max_new_tokens=256):
+            del messages, max_new_tokens
+            self.calls += 1
+            if self.calls == 1:
+                return '<tool_call>{"name":"calculator","arguments":{"expression":"17*19"}}</tool_call>'
+            return "323"
+
+    executed = []
+
+    def executor(name, arguments):
+        executed.append((name, arguments))
+        assert name == "calculator"
+        assert arguments == {"expression": "17*19"}
+        return {"value": 323}
+
+    agent = GeneralistAgent(
+        Backend(),
+        tools={
+            "calculator": {
+                "description": "Evaluate arithmetic",
+                "schema": {"type": "object"},
+            }
+        },
+        executor=executor,
+        max_steps=4,
+    )
+    run = agent.run([{"role": "user", "content": "What is 17*19?"}])
+    assert run.ok is True
+    assert run.answer == "323"
+    assert run.steps == 2
+    assert len(run.tool_calls) == 1
+    assert executed == [("calculator", {"expression": "17*19"})]
+
+
+def test_generalist_agent_never_executes_unknown_tool():
+    from generalist_lm.agent import GeneralistAgent
+
+    class Backend:
+        def chat(self, messages, *, max_new_tokens=256):
+            del messages, max_new_tokens
+            return '<tool_call>{"name":"shell","arguments":{"command":"danger"}}</tool_call>'
+
+    executed = []
+    agent = GeneralistAgent(
+        Backend(),
+        tools={"calculator": {"description": "math", "schema": {}}},
+        executor=lambda name, args: executed.append((name, args)),
+    )
+    with pytest.raises(PermissionError):
+        agent.run([{"role": "user", "content": "do something"}])
+    assert executed == []
+
+
+def test_generalist_agent_stops_after_bounded_steps():
+    from generalist_lm.agent import GeneralistAgent
+
+    class Backend:
+        def chat(self, messages, *, max_new_tokens=256):
+            del messages, max_new_tokens
+            return '<tool_call>{"name":"calculator","arguments":{"expression":"1+1"}}</tool_call>'
+
+    agent = GeneralistAgent(
+        Backend(),
+        tools={"calculator": {"description": "math", "schema": {}}},
+        executor=lambda name, args: {"value": 2},
+        max_steps=3,
+    )
+    run = agent.run([{"role": "user", "content": "loop"}])
+    assert run.ok is False
+    assert run.reason == "max_steps_exhausted"
+    assert run.steps == 3
+    assert len(run.tool_calls) == 3
