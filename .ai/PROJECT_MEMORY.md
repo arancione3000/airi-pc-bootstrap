@@ -317,3 +317,15 @@ Capability honesty:
 - the autonomous genome still permits only `byte-v1` for now; BPE is not
   considered an active evolutionary capability until a fair migration and
   benchmark path is implemented.
+
+
+## 2026-09-20 — Generalist domain-balanced retention
+
+- observed real persistent curriculum skew (for example reasoning/coding history
+  outnumbering language rows) after grounded repository pretraining;
+- added deterministic domain balancing to the base SFT replay so accidental
+  curriculum-frequency skew cannot silently become a forgetting pressure;
+- explicit genome focus genes are applied after the neutral balanced replay,
+  preserving intentional specialization while protecting the generalist base;
+- promotion thresholds and per-domain/canary anti-forgetting gates are
+  unchanged.

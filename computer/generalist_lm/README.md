@@ -279,3 +279,16 @@ This tranche adds tokenizer training, persistence and checkpoint support only.
 The autonomous research genome remains `byte-v1` until a later migration path
 can compare byte and BPE checkpoints fairly without silently resetting learned
 weights or changing the protected benchmark contract.
+
+
+## Domain-balanced replay
+
+Persistent curriculum expansion is intentionally weakness-directed, so its raw
+history can contain more coding/reasoning examples than language or data.
+Before supervised fine-tuning, the neutral replay base is now deterministically
+equalized across every observed generalist domain. Explicit genome focus genes
+are applied only after that balance is established.
+
+This is an anti-interference mechanism, not a relaxed promotion rule. Held-out
+per-domain loss, rotating canaries, token accuracy and autoregressive
+anti-forgetting gates remain unchanged.
