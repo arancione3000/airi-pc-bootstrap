@@ -529,6 +529,71 @@ lineage is preserved, optimizer state resumes, and tampering is rejected. A
 separate reviewed large corpus and suitable accelerator capacity.
 
 
+## AIRI Native Phase 3 — proof-gated autonomous evolution
+
+Phase 3 connects the scratch Native Foundation to a bounded autonomous research
+loop. It is intentionally separate from the legacy Generalist research genome:
+Native challengers operate on the real Native architecture/training surface.
+
+The cycle is:
+
+1. freeze and independently evaluate the current Native champion;
+2. collect re-verified MATHESIS signals when available;
+3. search bounded public research metadata from arXiv and GitHub;
+4. convert only derived research **tags** into a fixed local mutation DSL;
+5. train an equal-budget control continuation;
+6. train challengers for optimizer, curriculum, GQA/FFN/context/RoPE and
+   tokenizer experiments;
+7. reload every checkpoint and independently recompute held-out loss per domain;
+8. promote only a candidate that beats both the frozen champion and the
+   equal-budget control without forbidden provenance, integrity failures or
+   held-out regressions.
+
+Remote material is never executed and cannot provide code, shell commands, file
+paths or arbitrary hyperparameter values. The online layer emits bounded tags
+such as `optimizer`, `tokenizer`, `gqa`, `long-context`, `curriculum`
+and `efficiency`. All concrete mutations are generated locally from reviewed
+ranges. A challenger cannot edit or call its own promotion gate.
+
+Architecture and tokenizer mutations require a new random-init Native root and
+scratch retraining. A short scratch run may be recorded as a proxy experiment,
+but it cannot replace a champion with a larger cumulative training budget.
+External pretrained weights remain forbidden.
+
+Useful commands:
+
+```bash
+python -m generalist_lm.cli native-research-online \
+  --signal symbolic_reasoning_signal
+
+python -m generalist_lm.cli native-evaluate \
+  ./native-checkpoint ./corpus/native-corpus.json \
+  --allowed-root ./corpus
+
+python -m generalist_lm.cli native-evolve \
+  ./native-evolution-state \
+  ./native-seed \
+  ./corpus/native-corpus.json \
+  --allowed-root ./corpus \
+  --mathesis-state ./mathesis-state \
+  --challengers 3 \
+  --trial-steps 100
+```
+
+The repository also contains `.github/workflows/native-evolution.yml`. It runs
+an hourly research-scale cycle, persists the verifier-approved champion on the
+`native-evolution-state` branch, restores proof-gated MATHESIS signals, and
+attempts bounded online research each cycle. Its automatic bootstrap corpus is
+derived from project-owned repository text so the workflow can prove the whole
+loop without requiring a manually uploaded dataset.
+
+That workflow is a research harness, not a claim that a billion-parameter model
+has been trained. The same engine can be pointed at a larger reviewed Native
+corpus and accelerator-backed checkpoint by changing the runtime/state inputs;
+promotion rules stay external to the challenger.
+
+
+
 ## Foundation Track v1
 
 The scalable path now has a first-class foundation-model track instead of
