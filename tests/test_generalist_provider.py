@@ -302,3 +302,46 @@ def test_generalist_router_exposes_data_but_not_unimplemented_research(tmp_path:
     assert router.choose(task_type="data")["selected"] == "airi-generalist"
     assert router.choose(task_type="research")["selected"] == "chatgpt"
     assert router.choose(task_type="vision", needs_vision=True)["selected"] == "chatgpt"
+
+
+def test_code_agent_can_use_qualified_generalist_only_through_scoped_cycle(monkeypatch):
+    import code_agent
+    from control_plane import local_agent
+
+    monkeypatch.setenv("AIRI_GENERALIST_AUTOCODE", "1")
+    monkeypatch.setattr(local_agent, "provider_status", lambda: {"available": True})
+    monkeypatch.setattr(
+        local_agent,
+        "ask_local_model_changes",
+        lambda goal, context, feedback="", root=None, model=None: [
+            {"path": "demo.py", "content": "def answer():\n    return 42\n"}
+        ],
+    )
+    monkeypatch.setattr(code_agent, "load_project_context", lambda path=".": {"loaded": True, "content": "ctx"})
+    monkeypatch.setattr(code_agent, "analyze", lambda path=".": {"project": path})
+    monkeypatch.setattr(code_agent, "git_status", lambda path=".": {"available": True})
+    monkeypatch.setattr(code_agent, "checkpoint", lambda *args, **kwargs: {"ok": True})
+    seen = {}
+    def fake_cycle(changes, project_path=".", test_command="", declared_scope=None, max_attempts=5):
+        seen["changes"] = changes
+        seen["scope"] = declared_scope
+        return {"ok": True, "rolled_back": False}
+    monkeypatch.setattr(code_agent, "autonomous_change_cycle", fake_cycle)
+
+    result = code_agent.agent(
+        "implement answer",
+        project_path=".",
+        scope=["demo.py"],
+        test_command="pytest -q",
+    )
+    assert result["ok"] is True
+    assert result["generated_by_generalist"] is True
+    assert seen["scope"] == ["demo.py"]
+    assert seen["changes"][0]["path"] == "demo.py"
+
+
+def test_generalist_autocode_refuses_missing_scope(monkeypatch):
+    import code_agent
+    monkeypatch.setenv("AIRI_GENERALIST_AUTOCODE", "1")
+    with pytest.raises(PermissionError, match="explicit declared scope"):
+        code_agent.agent("edit something", project_path=".", scope=None)
