@@ -178,6 +178,48 @@ def test_native_acquisition_rejects_unapproved_redirect(tmp_path: Path):
         acquire_native_corpus(catalog, tmp_path / "corpus", opener=opener)
 
 
+def test_native_acquisition_rejects_conflicting_destination_paths(tmp_path: Path):
+    from generalist_lm.native_acquisition import acquire_native_corpus
+
+    first = b"first corpus"
+    second = b"second corpus"
+    catalog = _write_catalog(tmp_path, [
+        {
+            "name": "first",
+            "url": "https://data.example/first.txt",
+            "sha256": _sha(first),
+            "filename": "same.txt",
+            "domain": "general",
+            "language": "en",
+            "license": "CC0-1.0",
+            "source_type": "public-domain",
+            "approved_for_training": True,
+        },
+        {
+            "name": "second",
+            "url": "https://data.example/second.txt",
+            "sha256": _sha(second),
+            "filename": "same.txt",
+            "domain": "general",
+            "language": "en",
+            "license": "CC0-1.0",
+            "source_type": "public-domain",
+            "approved_for_training": True,
+        },
+    ])
+
+    blobs = {
+        "https://data.example/first.txt": first,
+        "https://data.example/second.txt": second,
+    }
+
+    def opener(request, timeout):
+        return _FakeResponse(blobs[request.full_url], request.full_url)
+
+    with pytest.raises(ValueError, match="same filename"):
+        acquire_native_corpus(catalog, tmp_path / "corpus", opener=opener)
+
+
 def test_native_acquisition_catalog_is_fail_closed(tmp_path: Path):
     from generalist_lm.native_acquisition import acquire_native_corpus
 
