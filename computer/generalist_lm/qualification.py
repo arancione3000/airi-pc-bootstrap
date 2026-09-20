@@ -259,6 +259,13 @@ def qualify_foundation_model(
     max_memory: dict[Any, Any] | None = None,
     offload_folder: str | Path | None = None,
 ) -> dict[str, Any]:
+    """Qualify a first-class open-weight foundation candidate.
+
+    Foundation candidates are stricter than the generic Transformers adapter:
+    they require a reviewed local manifest and the dedicated harder protected
+    suite. The attestation is bound to the exact model tree, manifest, suite and
+    inference precision profile.
+    """
     threshold = float(minimum_score)
     if not math.isfinite(threshold) or threshold < FOUNDATION_MINIMUM_SCORE or threshold > 100.0:
         raise ValueError(
@@ -267,13 +274,6 @@ def qualify_foundation_model(
     canonical_dtype = str(torch_dtype or "auto").strip().lower()
     if canonical_dtype not in {"auto", "float16", "bfloat16", "float32"}:
         raise ValueError("unsupported Foundation inference dtype")
-
-    """Qualify a first-class open-weight foundation candidate.
-
-    Foundation candidates are stricter than the generic Transformers adapter:
-    they require a reviewed local manifest and the dedicated harder protected
-    suite. The attestation is bound to the exact model tree, manifest and suite.
-    """
     from .hf_backend import LocalTransformersBackend
 
     root = Path(model_dir).expanduser().resolve()
@@ -294,20 +294,20 @@ def qualify_foundation_model(
     digest = transformers_model_digest(root, exclude_path=target)
     qualified = bool(
         report.get("ok")
-        and float(report.get("score", 0.0)) >= float(minimum_score)
+        and float(report.get("score", 0.0)) >= threshold
         and not report.get("critical_failures")
     )
     result = {
         "foundation_qualification_version": FOUNDATION_QUALIFICATION_VERSION,
         "qualification_version": QUALIFICATION_VERSION,
-        "attested_by": "airi-generalist-foundation-qualification-v1",
+        "attested_by": "airi-generalist-foundation-qualification-v2",
         "backend_type": "transformers-foundation",
         "model_digest": digest,
         "manifest_digest": manifest_digest,
         "suite_version": FOUNDATION_SUITE_VERSION,
         "suite_digest": suite_digest,
         "qualified": qualified,
-        "minimum_score": float(minimum_score),
+        "minimum_score": threshold,
         "manifest": manifest.to_dict(),
         "report": report,
         "inference_profile": {
@@ -326,7 +326,7 @@ def qualify_foundation_model(
         },
         "policy": (
             "reviewed local manifest + dedicated protected foundation suite; "
-            "local-files-only; trust_remote_code disabled; exact digests bound"
+            "local-files-only; trust_remote_code disabled; exact digests + inference dtype bound"
         ),
     }
     target.write_text(
@@ -352,7 +352,7 @@ def foundation_qualification_status(
         current_suite = foundation_suite_digest()
         integrity_ok = bool(
             value.get("backend_type") == "transformers-foundation"
-            and value.get("attested_by") == "airi-generalist-foundation-qualification-v1"
+            and value.get("attested_by") == "airi-generalist-foundation-qualification-v2"
             and int(value.get("qualification_version", 0)) == QUALIFICATION_VERSION
             and int(value.get("foundation_qualification_version", 0)) == FOUNDATION_QUALIFICATION_VERSION
             and int(value.get("suite_version", 0)) == FOUNDATION_SUITE_VERSION
