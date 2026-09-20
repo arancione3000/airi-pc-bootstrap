@@ -1,11 +1,42 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 from .benchmarks import run_benchmark
 from .runtime import GeneralistRuntime
+
+QUALIFICATION_VERSION = 1
+_DIGEST_CACHE: dict[tuple, str] = {}
+
+
+def checkpoint_digest(state_dir: str | Path) -> str:
+    root = Path(state_dir)
+    files = [root / "config.json", root / "model.pt", root / "metadata.json"]
+    for path in files:
+        if not path.exists() or not path.is_file():
+            raise FileNotFoundError(f"missing checkpoint component: {path.name}")
+    key = tuple((str(p), p.stat().st_size, p.stat().st_mtime_ns) for p in files)
+    cached = _DIGEST_CACHE.get(key)
+    if cached:
+        return cached
+    digest = hashlib.sha256()
+    for path in files:
+        digest.update(path.name.encode("utf-8"))
+        digest.update(b"\0")
+        with path.open("rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        digest.update(b"\0")
+    value = digest.hexdigest()
+    _DIGEST_CACHE.clear()
+    _DIGEST_CACHE[key] = value
+    return value
 
 
 def qualify_checkpoint(
@@ -16,16 +47,20 @@ def qualify_checkpoint(
     root = Path(state_dir)
     runtime = GeneralistRuntime.from_checkpoint(root)
     report = run_benchmark(runtime)
+    digest = checkpoint_digest(root)
     qualified = bool(
         report.get("ok")
         and float(report.get("score", 0.0)) >= float(minimum_score)
         and not report.get("critical_failures")
     )
     result = {
+        "qualification_version": QUALIFICATION_VERSION,
+        "attested_by": "airi-generalist-qualification-v1",
+        "checkpoint_digest": digest,
         "qualified": qualified,
         "minimum_score": float(minimum_score),
         "report": report,
-        "policy": "generalist checkpoints become operational only after critical-domain benchmark qualification",
+        "policy": "qualification is bound to the exact checkpoint digest and critical-domain benchmark result",
     }
     (root / "benchmark.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
@@ -35,11 +70,29 @@ def qualify_checkpoint(
 
 
 def qualification_status(state_dir: str | Path) -> dict[str, Any]:
-    path = Path(state_dir) / "benchmark.json"
+    root = Path(state_dir)
+    path = root / "benchmark.json"
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(value, dict):
-            return value
-    except Exception:
-        pass
-    return {"qualified": False, "reason": "missing_or_invalid_benchmark"}
+        if not isinstance(value, dict):
+            raise ValueError("benchmark attestation must be an object")
+        expected = str(value.get("checkpoint_digest", ""))
+        current = checkpoint_digest(root)
+        integrity_ok = bool(
+            expected
+            and expected == current
+            and int(value.get("qualification_version", 0)) == QUALIFICATION_VERSION
+            and value.get("attested_by") == "airi-generalist-qualification-v1"
+        )
+        return {
+            **value,
+            "integrity_ok": integrity_ok,
+            "qualified": bool(value.get("qualified") and integrity_ok),
+            "current_checkpoint_digest": current,
+        }
+    except Exception as exc:
+        return {
+            "qualified": False,
+            "integrity_ok": False,
+            "reason": f"missing_or_invalid_benchmark:{type(exc).__name__}",
+        }
