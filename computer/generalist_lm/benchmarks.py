@@ -49,12 +49,19 @@ def python_function(name: str, required_tokens: tuple[str, ...]):
     return check
 
 
+def expected_tool(name: str, expected_arguments: dict):
+    def check(text: str):
+        try:
+            call = parse_tool_call(text, allowed_tools={name})
+        except Exception as exc:
+            return False, str(exc)
+        ok = call.name == name and call.arguments == expected_arguments
+        return ok, f"expected {name} with arguments {expected_arguments!r}"
+    return check
+
+
 def tool_checker(text: str):
-    try:
-        call = parse_tool_call(text, allowed_tools={"calculator"})
-    except Exception as exc:
-        return False, str(exc)
-    return (call.arguments.get("expression") == "17*19", "expected calculator expression 17*19")
+    return expected_tool("calculator", {"expression": "17*19"})(text)
 
 
 def default_suite() -> list[BenchmarkTask]:
@@ -102,6 +109,40 @@ def default_suite() -> list[BenchmarkTask]:
             exact("{\"ok\":true,\"items\":3}"),
         ),
     ]
+
+
+def qualification_suite() -> list[BenchmarkTask]:
+    """Broader protected qualification surface, distinct from research curriculum."""
+    core = default_suite()
+    extras = [
+        BenchmarkTask("language:italian-2", "language", "Rispondi esclusivamente con VERDE.", exact("VERDE"), critical=False),
+        BenchmarkTask("language:extract", "language", "Text: alpha beta gamma. Reply only with the middle word.", exact("beta"), critical=False),
+        BenchmarkTask("language:unknown", "language", "The secret code is not provided. Reply exactly UNKNOWN.", exact("UNKNOWN"), critical=False),
+        BenchmarkTask("code:is-even", "coding", "Return only Python code defining is_even(n) using modulo 2.", python_function("is_even", ("%", "2")), critical=False),
+        BenchmarkTask("code:negative", "coding", "Return only Python code defining negate(x) that returns -x.", python_function("negate", ("return", "-")), critical=False),
+        BenchmarkTask("data:median", "data", "Median of 1, 2, 100? Reply with the number only.", exact("2"), critical=False),
+        BenchmarkTask("data:sum", "data", "Sum 11, 13, 17. Reply with the number only.", exact("41"), critical=False),
+        BenchmarkTask("reasoning:sequence", "reasoning", "Sequence 2,4,8,16. Next term only.", exact("32"), critical=False),
+        BenchmarkTask("reasoning:logic", "reasoning", "All robins are birds. R is a robin. Is R a bird? Reply yes or no only.", exact("yes"), critical=False),
+        BenchmarkTask("reasoning:subtract", "reasoning", "Compute 1000-375. Reply with the integer only.", exact("625"), critical=False),
+        BenchmarkTask(
+            "tools:data-stats",
+            "tools",
+            'Use data_stats to compute mean of 3,6,9. Output exactly <tool_call>{"name":"data_stats","arguments":{"values":[3,6,9],"operation":"mean"}}</tool_call>',
+            expected_tool("data_stats", {"values": [3, 6, 9], "operation": "mean"}),
+            critical=False,
+        ),
+        BenchmarkTask(
+            "tools:calculator-2",
+            "tools",
+            'Use calculator for 23+19. Output exactly <tool_call>{"name":"calculator","arguments":{"expression":"23+19"}}</tool_call>',
+            expected_tool("calculator", {"expression": "23+19"}),
+            critical=False,
+        ),
+        BenchmarkTask("structured:array", "structured", 'Return exactly this JSON array: [1,2,3]', exact("[1,2,3]"), critical=False),
+        BenchmarkTask("structured:boolean", "structured", 'Return exactly {"ready":false}', exact('{"ready":false}'), critical=False),
+    ]
+    return core + extras
 
 
 def run_benchmark(backend: Backend, tasks: list[BenchmarkTask] | None = None) -> dict:
