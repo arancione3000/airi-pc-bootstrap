@@ -64,9 +64,8 @@ def test_local_corpus_loader_rejects_symlink_escape(tmp_path: Path):
             link.symlink_to(outside)
         except (OSError, NotImplementedError):
             pytest.skip("symlinks unavailable")
-        report = load_local_corpus([link], allowed_roots=[tmp_path])
-        assert report.documents == []
-        assert any(row["reason"] == "symlink_escape" for row in report.skipped)
+        with pytest.raises(PermissionError, match="escapes allowed roots"):
+            load_local_corpus([link], allowed_roots=[tmp_path])
     finally:
         outside.unlink(missing_ok=True)
 
