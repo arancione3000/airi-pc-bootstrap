@@ -73,6 +73,10 @@ class GeneralistRuntime:
         generated = self._generate_ids(ids, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k)
         return self.tokenizer.decode(generated).split("\x00", 1)[0]
 
+    def generate(self, prompt: str, *, max_new_tokens: int = 128) -> str:
+        """Benchmark/backend-compatible deterministic text generation."""
+        return self.complete(prompt, max_new_tokens=max_new_tokens, temperature=0.0)
+
     def chat(self, messages: list[dict[str, str]], *, max_new_tokens: int = 192, temperature: float = 0.0) -> str:
         ids = self.tokenizer.serialize_messages(messages, add_generation_prompt=True)
         generated = self._generate_ids(ids, max_new_tokens=max_new_tokens, temperature=temperature)
