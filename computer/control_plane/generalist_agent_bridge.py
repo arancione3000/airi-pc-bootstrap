@@ -22,6 +22,137 @@ _ALLOWED_BINOPS = {
 _ALLOWED_UNARY = {ast.UAdd: operator.pos, ast.USub: operator.neg}
 
 
+_GENERALIST_SENSITIVE_PARTS = {
+    ".git", ".ssh", "auth", "secrets", "credentials", "private", "keys",
+}
+_GENERALIST_SENSITIVE_NAMES = {
+    ".env", ".env.local", ".env.production", ".env.development",
+    "id_rsa", "id_ed25519", "credentials.json", "secrets.json",
+}
+_GENERALIST_TEXT_EXTS = {
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".toml", ".yaml", ".yml",
+    ".md", ".txt", ".html", ".css", ".scss", ".sh", ".java", ".c", ".cpp",
+    ".h", ".hpp", ".rs", ".go", ".sql", ".xml", ".ini", ".cfg",
+}
+
+
+def _sensitive_workspace_path(path) -> bool:
+    from pathlib import Path
+
+    p = Path(path)
+    parts = [str(part).lower() for part in p.parts]
+    name = p.name.lower()
+    stem = p.stem.lower()
+    if any(part in _GENERALIST_SENSITIVE_PARTS for part in parts):
+        return True
+    if name in _GENERALIST_SENSITIVE_NAMES:
+        return True
+    if any(marker in stem for marker in ("secret", "credential", "private_key", "access_key")):
+        return True
+    return False
+
+
+def _generalist_safe_path(raw: str, *, directory_ok: bool = False):
+    from coding import safe_path
+
+    path = safe_path(str(raw))
+    if _sensitive_workspace_path(path):
+        raise PermissionError("Generalist read tool cannot access sensitive workspace paths")
+    if path.is_dir() and not directory_ok:
+        raise ValueError("expected a file path")
+    return path
+
+
+def _generalist_file_read(arguments: dict[str, Any]) -> dict[str, Any]:
+    from coding import ROOT, MAX_READ
+
+    path = _generalist_safe_path(str(arguments.get("path", "")))
+    if path.suffix.lower() not in _GENERALIST_TEXT_EXTS and path.name not in {"README", "LICENSE"}:
+        raise PermissionError("Generalist file_read is limited to allowlisted text formats")
+    content = path.read_text(errors="replace")
+    return {
+        "path": str(path.relative_to(ROOT)),
+        "size_bytes": path.stat().st_size,
+        "content": content[:MAX_READ],
+        "truncated": len(content) > MAX_READ,
+    }
+
+
+def _generalist_file_search(arguments: dict[str, Any]) -> dict[str, Any]:
+    from coding import ROOT, safe_path
+
+    query = str(arguments.get("query", ""))
+    if not query or len(query) > 1000:
+        raise ValueError("search query must be 1..1000 characters")
+    root = safe_path(str(arguments.get("path", ".")))
+    if _sensitive_workspace_path(root):
+        raise PermissionError("Generalist search cannot target sensitive workspace paths")
+    if not root.is_dir():
+        root = root.parent
+    needle = query.casefold()
+    matches = []
+    for path in root.rglob("*"):
+        if len(matches) >= 100:
+            break
+        if not path.is_file() or _sensitive_workspace_path(path):
+            continue
+        if path.suffix.lower() not in _GENERALIST_TEXT_EXTS:
+            continue
+        try:
+            lines = path.read_text(errors="replace").splitlines()
+        except Exception:
+            continue
+        for line_no, line in enumerate(lines, 1):
+            if needle in line.casefold():
+                matches.append({
+                    "path": str(path.relative_to(ROOT)),
+                    "line": line_no,
+                    "text": line[:500],
+                })
+                if len(matches) >= 100:
+                    break
+    return {
+        "query": query,
+        "matches": matches,
+        "count": len(matches),
+        "truncated": len(matches) >= 100,
+    }
+
+
+def _generalist_project_analyze(arguments: dict[str, Any]) -> dict[str, Any]:
+    from coding import ROOT, safe_path
+
+    root = safe_path(str(arguments.get("path", ".")))
+    if _sensitive_workspace_path(root):
+        raise PermissionError("Generalist project analysis cannot target sensitive workspace paths")
+    if not root.is_dir():
+        root = root.parent
+    files = []
+    extensions: dict[str, int] = {}
+    tests = []
+    for path in root.rglob("*"):
+        if len(files) >= 4000:
+            break
+        if not path.is_file() or _sensitive_workspace_path(path):
+            continue
+        suffix = path.suffix.lower()
+        if suffix not in _GENERALIST_TEXT_EXTS:
+            continue
+        rel = str(path.relative_to(ROOT))
+        files.append(rel)
+        extensions[suffix] = extensions.get(suffix, 0) + 1
+        if "test" in path.name.lower() or path.parent.name.lower() in {"test", "tests"}:
+            tests.append(rel)
+    return {
+        "project": str(root.relative_to(ROOT)),
+        "files": sorted(files),
+        "file_count": len(files),
+        "languages": extensions,
+        "tests": tests[:200],
+        "truncated": len(files) >= 4000,
+    }
+
+
 def _safe_number(value: Any) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError("numeric value required")
@@ -282,18 +413,12 @@ def execute_readonly_tool(name: str, arguments: dict[str, Any]) -> Any:
     if name == "table_aggregate":
         return _table_aggregate(arguments)
 
-    from coding import analyze, read, search
-
     if name == "file_read":
-        return read(str(arguments.get("path", "")))
+        return _generalist_file_read(arguments)
     if name == "file_search":
-        return search(
-            str(arguments.get("query", "")),
-            str(arguments.get("path", ".")),
-            limit=100,
-        )
+        return _generalist_file_search(arguments)
     if name == "project_analyze":
-        return analyze(str(arguments.get("path", ".")))
+        return _generalist_project_analyze(arguments)
     raise PermissionError(f"tool is not allowlisted: {name}")
 
 
