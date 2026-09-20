@@ -105,6 +105,8 @@ def test_foundation_suite_has_critical_gate_for_every_domain():
 def test_foundation_qualification_is_bound_to_model_manifest_and_suite(tmp_path: Path, monkeypatch):
     from generalist_lm import qualification
 
+    _stub_transformers_preflight(monkeypatch)
+
     model = _fake_model(tmp_path / "model")
     write_foundation_manifest(model, _manifest())
 
@@ -221,6 +223,8 @@ def test_cli_exposes_foundation_track_commands(tmp_path: Path):
 def test_foundation_qualification_forwards_hardware_policy(tmp_path: Path, monkeypatch):
     from generalist_lm import qualification
 
+    _stub_transformers_preflight(monkeypatch)
+
     model = _fake_model(tmp_path / "model")
     write_foundation_manifest(model, _manifest())
     seen = {}
@@ -294,6 +298,8 @@ def test_foundation_minimum_score_cannot_be_weakened(tmp_path: Path):
 def test_foundation_attestation_v3_requires_inference_profile(tmp_path: Path, monkeypatch):
     from generalist_lm import qualification
 
+    _stub_transformers_preflight(monkeypatch)
+
     model = _fake_model(tmp_path / "model")
     write_foundation_manifest(model, _manifest())
 
@@ -332,6 +338,8 @@ def test_foundation_attestation_v3_requires_inference_profile(tmp_path: Path, mo
 def test_foundation_status_rejects_tampered_qualified_boolean(tmp_path: Path, monkeypatch):
     from generalist_lm import qualification
 
+    _stub_transformers_preflight(monkeypatch)
+
     model = _fake_model(tmp_path / "model")
     write_foundation_manifest(model, _manifest())
 
@@ -369,6 +377,8 @@ def test_foundation_status_rejects_tampered_qualified_boolean(tmp_path: Path, mo
 
 def test_foundation_status_requires_all_protected_domain_scores(tmp_path: Path, monkeypatch):
     from generalist_lm import qualification
+
+    _stub_transformers_preflight(monkeypatch)
 
     model = _fake_model(tmp_path / "model")
     write_foundation_manifest(model, _manifest())
