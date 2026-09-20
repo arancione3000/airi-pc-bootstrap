@@ -110,3 +110,23 @@ Each autonomous research cycle now:
 The curriculum memory is stored inside the same persistent Generalist state directory, so the cloud continuum carries it from one cycle to the next. It is bounded by `AIRI_GENERALIST_RESEARCH_CURRICULUM_MAX_ROWS` (default 1200) to keep compute/storage finite.
 
 Research validation now includes a real generation probe: one held-out item per protected domain is decoded autoregressively. A model cannot be promoted merely because teacher-forced loss improves while previously generated capabilities disappear.
+
+
+## Architecture inheritance and RoPE exploration
+
+Architecture challengers no longer discard all accumulated knowledge by default.
+Before fine-tuning, the research loop copies every champion state tensor whose
+name and shape exactly match the challenger. The transfer report records target
+coverage and source tensors that could not be reused. This keeps the rule
+conservative: there is no shape coercion or unsafe partial slicing.
+
+The bounded architecture DSL can now explore learned absolute positions,
+sinusoidal positions, and RoPE (rotary positional embeddings). RoPE is applied
+inside causal attention and is permitted only when the attention head dimension
+is even. It remains a challenger option, not a hard-coded claim that RoPE is
+always superior.
+
+Persistent curriculum state is fail-closed. Every replay row carries a digest;
+invalid domains, malformed SFT messages, duplicate rows, replay-cap violations,
+digest mismatches, or protected-validation overlap stop research health and
+prevent state persistence.
