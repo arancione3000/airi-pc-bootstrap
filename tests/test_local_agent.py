@@ -1,10 +1,10 @@
 from pathlib import Path
-import importlib.util
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("local_agent", ROOT / "computer" / "control_plane" / "local_agent.py")
-local_agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(local_agent)
+sys.path.insert(0, str(ROOT / "computer"))
+
+from control_plane import local_agent
 
 
 def test_safe_patch_accepts_repo_file(monkeypatch):
