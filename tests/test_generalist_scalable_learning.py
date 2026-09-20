@@ -157,3 +157,33 @@ def test_lora_never_overwrites_base_model_even_before_optional_imports(tmp_path:
     ]
     with pytest.raises(ValueError, match="must not overwrite"):
         train_local_lora(base, examples, base / "adapter")
+
+
+def test_cli_exposes_scalable_learning_commands(tmp_path: Path):
+    from generalist_lm.cli import parser
+
+    p = parser()
+    args = p.parse_args([
+        "pretrain-native",
+        str(tmp_path / "checkpoint"),
+        str(tmp_path / "corpus"),
+        "--allowed-root", str(tmp_path),
+        "--output", str(tmp_path / "out"),
+    ])
+    assert args.cmd == "pretrain-native"
+
+    args = p.parse_args([
+        "distill-transformers",
+        str(tmp_path / "teacher"),
+        str(tmp_path / "prompts.jsonl"),
+        str(tmp_path / "distilled.jsonl"),
+    ])
+    assert args.cmd == "distill-transformers"
+
+    args = p.parse_args([
+        "lora-transformers",
+        str(tmp_path / "base"),
+        str(tmp_path / "sft.jsonl"),
+        str(tmp_path / "adapter"),
+    ])
+    assert args.cmd == "lora-transformers"
