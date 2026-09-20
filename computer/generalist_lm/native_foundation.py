@@ -464,7 +464,7 @@ def native_scale_profile(name: str, *, vocab_size: int = 32768) -> NativeFoundat
         "micro": dict(context_length=2048, d_model=256, n_heads=8, n_kv_heads=2, n_layers=8, d_ff=768),
         "1b": dict(context_length=8192, d_model=2048, n_heads=16, n_kv_heads=4, n_layers=24, d_ff=5504),
         "3b": dict(context_length=16384, d_model=3072, n_heads=24, n_kv_heads=8, n_layers=32, d_ff=8192),
-        "7b": dict(context_length=32768, d_model=4096, n_heads=32, n_kv_heads=8, n_layers=32, d_ff=11008),
+        "7b": dict(context_length=32768, d_model=4096, n_heads=32, n_kv_heads=8, n_layers=32, d_ff=14336),
     }
     key = str(name).strip().lower()
     if key not in profiles:
