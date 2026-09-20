@@ -9,6 +9,7 @@ benchmark. Model output never bypasses the existing patch/tool safety layers.
 
 import json
 import os
+import shlex
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -190,8 +191,11 @@ def apply_patch(patch: str) -> None:
 
 
 def run_tests() -> dict[str, Any]:
+    command = shlex.split(TEST_COMMAND)
+    if not command:
+        raise RuntimeError("AIRI_AUTONOMOUS_TEST must contain a command")
     p = subprocess.run(
-        TEST_COMMAND, cwd=ROOT, shell=True, text=True,
+        command, cwd=ROOT, text=True,
         capture_output=True, timeout=180, check=False,
     )
     return {"returncode": p.returncode, "stdout": p.stdout[-12000:], "stderr": p.stderr[-12000:]}
