@@ -152,3 +152,31 @@ The Generalist agent tool loop remains read-only: calculator, bounded data
 statistics/table aggregation, workspace file reads/search and project
 inspection. Tool requests are parsed against an explicit allowlist and numeric
 analysis rejects non-finite inputs.
+
+
+## Hardened MATHESIS bridge and local deployment
+
+MATHESIS state is treated as untrusted at the Generalist boundary. Persisted
+`verified=true`, proof-gate labels and certificate metadata are not sufficient:
+the bridge re-runs the current MATHESIS CompositeVerifier before emitting a
+symbolic/deep-mathematics architecture signal. If the verifier stack is not
+available, the bridge fails closed and emits no MATHESIS-derived signals.
+
+The read-only Generalist tool bridge also excludes sensitive workspace paths
+(such as environment/credential/secret/key material), limits readable file
+formats and sizes, and applies bounded file/byte traversal budgets to search
+and project analysis.
+
+A qualified research champion can reach an enabled local Airi-PC runtime through
+an explicit transactional sync:
+
+- set `AIRI_GENERALIST_ENABLE=1`;
+- optionally set `AIRI_GENERALIST_SYNC_FROM_GITHUB=1`;
+- the bootstrap fetches only the `generalist-state` branch;
+- the copied production weights are re-qualified locally against the protected
+  qualification suite rather than trusting the remote attestation;
+- installation uses staged swap + backup rollback;
+- fetch/requalification failure leaves the existing local checkpoint untouched.
+
+The sync is intentionally opt-in. A research promotion on GitHub never silently
+changes the user's active reasoning provider.
