@@ -227,3 +227,29 @@ Capability honesty:
 - no architecture or continual-learning path can edit verifier, qualification,
   Control Plane permissions, host boundaries, workflow permissions, or secret
   handling.
+
+
+## 2026-09-20 — AIRI Generalist LM foundation
+
+- Added a real decoder-only causal Transformer with autoregressive generation,
+  SFT, checkpointing and versioned byte tokenizer.
+- Added independent generalist capability gates for language, coding, data,
+  reasoning, tools and structured output; production qualification v2 uses a
+  protected 21-task suite disjoint from autonomous training/replay curricula.
+- Added persistent continual-learning research with rotating canaries,
+  autoregressive validation, anti-forgetting, bounded architecture evolution,
+  compatible weight inheritance, self-handoff and watchdog recovery.
+- Added optional exact-digest local Transformers/Open-Weight backend with
+  `local_files_only=True` and `trust_remote_code=False`.
+- Added bounded model/tool agent loop, safe data profiling/aggregation and
+  scoped coding proposals that require explicit scope, tests, rollback and
+  guardrails; the model cannot modify the Generalist kernel/governance paths.
+- The MATHESIS -> Generalist bridge now re-proves persisted mathematical rows
+  with the current verifier before emitting architecture signals and fails
+  closed if that verifier is unavailable.
+- Generalist read-only workspace tools exclude sensitive files/paths and enforce
+  file/search traversal budgets.
+- Added opt-in `AIRI_GENERALIST_SYNC_FROM_GITHUB=1` deployment sync. It fetches
+  the dedicated state branch, locally re-runs protected production
+  qualification, and transactionally swaps the local checkpoint with rollback.
+  Research promotion never silently enables or prefers the local provider.
