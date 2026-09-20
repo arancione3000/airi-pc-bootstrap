@@ -518,3 +518,35 @@ def test_generalist_data_tools_reject_non_finite_numbers(bad_value):
                 "column": "value",
             },
         )
+
+
+def test_generalist_read_tools_exclude_sensitive_workspace_files(tmp_path: Path, monkeypatch):
+    import coding
+    from control_plane.generalist_agent_bridge import execute_readonly_tool
+
+    monkeypatch.setattr(coding, "ROOT", tmp_path)
+    (tmp_path / "normal.txt").write_text("public marker alpha", encoding="utf-8")
+    (tmp_path / ".env").write_text("API_KEY=super-secret-alpha", encoding="utf-8")
+    (tmp_path / "credentials.json").write_text('{"token":"super-secret-alpha"}', encoding="utf-8")
+    secret_dir = tmp_path / "secrets"
+    secret_dir.mkdir()
+    (secret_dir / "notes.txt").write_text("super-secret-alpha", encoding="utf-8")
+
+    normal = execute_readonly_tool("file_read", {"path": "normal.txt"})
+    assert "public marker alpha" in normal["content"]
+
+    for path in (".env", "credentials.json", "secrets/notes.txt"):
+        with pytest.raises(PermissionError, match="sensitive"):
+            execute_readonly_tool("file_read", {"path": path})
+
+    result = execute_readonly_tool(
+        "file_search",
+        {"query": "super-secret-alpha", "path": "."},
+    )
+    assert result["matches"] == []
+
+    analysis = execute_readonly_tool("project_analyze", {"path": "."})
+    assert "normal.txt" in analysis["files"]
+    assert ".env" not in analysis["files"]
+    assert "credentials.json" not in analysis["files"]
+    assert all(not path.startswith("secrets/") for path in analysis["files"])
