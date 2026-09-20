@@ -150,21 +150,51 @@ class AiriLatticeLM:
                 )
                 return (x * scale.to(dtype=x.dtype)) * self.weight
 
-        class Expert(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.up = nn.Linear(config.d_model, config.d_expert, bias=False)
-                self.gate = nn.Linear(config.d_model, config.d_expert, bias=False)
-                self.down = nn.Linear(config.d_expert, config.d_model, bias=False)
-
-            def forward(self, x):
-                return self.down(F.silu(self.gate(x)) * self.up(x))
-
         class SparseExperts(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.router = nn.Linear(config.d_model * 2, config.n_experts, bias=False)
-                self.experts = nn.ModuleList([Expert() for _ in range(config.n_experts)])
+                self.router = nn.Linear(
+                    config.d_model * 2,
+                    config.n_experts,
+                    bias=False,
+                )
+                # Expert weights live in contiguous banks. Top-k routing then
+                # gathers only selected banks and evaluates them in one set of
+                # batched tensor operations, avoiding a Python loop over every
+                # expert for every token.
+                self.expert_up = nn.Parameter(torch.empty(
+                    config.n_experts,
+                    config.d_expert,
+                    config.d_model,
+                ))
+                self.expert_gate = nn.Parameter(torch.empty(
+                    config.n_experts,
+                    config.d_expert,
+                    config.d_model,
+                ))
+                self.expert_down = nn.Parameter(torch.empty(
+                    config.n_experts,
+                    config.d_model,
+                    config.d_expert,
+                ))
+                self.reset_parameters()
+
+            def reset_parameters(self):
+                nn.init.normal_(
+                    self.expert_up,
+                    mean=0.0,
+                    std=config.init_std,
+                )
+                nn.init.normal_(
+                    self.expert_gate,
+                    mean=0.0,
+                    std=config.init_std,
+                )
+                nn.init.normal_(
+                    self.expert_down,
+                    mean=0.0,
+                    std=config.init_std,
+                )
 
             def forward(self, x, memory):
                 router_input = torch.cat([x, memory], dim=-1)
@@ -175,26 +205,40 @@ class AiriLatticeLM:
                     dim=-1,
                 )
                 weights = torch.softmax(values, dim=-1)
-                flat_x = x
-                output = torch.zeros_like(flat_x)
-                usage = torch.zeros(
-                    config.n_experts,
-                    device=x.device,
-                    dtype=x.dtype,
+
+                batch_size = x.shape[0]
+                flat_indices = indices.reshape(-1)
+                up = self.expert_up.index_select(0, flat_indices).view(
+                    batch_size,
+                    config.active_experts,
+                    config.d_expert,
+                    config.d_model,
+                )
+                gate = self.expert_gate.index_select(0, flat_indices).view(
+                    batch_size,
+                    config.active_experts,
+                    config.d_expert,
+                    config.d_model,
+                )
+                down = self.expert_down.index_select(0, flat_indices).view(
+                    batch_size,
+                    config.active_experts,
+                    config.d_model,
+                    config.d_expert,
                 )
 
-                # True sparse execution: each expert only sees rows routed to it.
-                for expert_index, expert in enumerate(self.experts):
-                    selected = indices == expert_index
-                    if not bool(selected.any()):
-                        continue
-                    row_ids, slots = selected.nonzero(as_tuple=True)
-                    expert_input = flat_x.index_select(0, row_ids)
-                    expert_output = expert(expert_input)
-                    expert_weight = weights[row_ids, slots].unsqueeze(-1)
-                    output.index_add_(0, row_ids, expert_output * expert_weight)
-                    usage[expert_index] = selected.sum().to(dtype=x.dtype)
+                up_value = torch.einsum("bd,bkhd->bkh", x, up)
+                gate_value = torch.einsum("bd,bkhd->bkh", x, gate)
+                hidden = F.silu(gate_value) * up_value
+                selected = torch.einsum("bkh,bkdh->bkd", hidden, down)
+                output = (
+                    selected * weights.unsqueeze(-1)
+                ).sum(dim=1)
 
+                usage = torch.bincount(
+                    flat_indices,
+                    minlength=config.n_experts,
+                ).to(device=x.device, dtype=x.dtype)
                 return output, usage
 
         class LatticeCell(nn.Module):
@@ -568,10 +612,10 @@ def lattice_active_parameter_estimate(config: AiriLatticeConfig) -> int:
 
     expert_total = 0
     for cell in model.cells:
-        expert_total += sum(
-            p.numel()
-            for expert in cell.experts.experts
-            for p in expert.parameters()
+        expert_total += (
+            cell.experts.expert_up.numel()
+            + cell.experts.expert_gate.numel()
+            + cell.experts.expert_down.numel()
         )
     active_fraction = config.active_experts / config.n_experts
     return int(round(total - expert_total + expert_total * active_fraction))
