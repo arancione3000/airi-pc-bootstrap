@@ -414,3 +414,33 @@ def test_local_transformers_backend_loads_real_local_causal_model(tmp_path: Path
     backend = LocalTransformersBackend(tmp_path, device="cpu", local_files_only=True)
     output = backend.generate("hello", max_new_tokens=2)
     assert isinstance(output, str)
+
+
+def test_parameter_estimator_matches_real_native_model():
+    pytest.importorskip("torch")
+    from generalist_lm.model import estimate_parameter_count
+
+    cfg = tiny_config()
+    model = CausalTransformerLM(cfg)
+    assert estimate_parameter_count(cfg) == parameter_count(model)
+
+
+def test_research_budget_blocks_runaway_architecture_before_training():
+    from generalist_lm.research_cycle import _research_budget_reason
+
+    huge = GeneralistGenome(
+        context_length=8192,
+        d_model=4096,
+        n_heads=64,
+        n_layers=96,
+        d_ff=16384,
+    ).validate()
+    reason = _research_budget_reason(
+        huge,
+        max_params=5_000_000,
+        max_context=512,
+        max_width=256,
+        max_layers=6,
+    )
+    assert reason is not None
+    assert "exceeds research max" in reason
