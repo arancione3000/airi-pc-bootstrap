@@ -89,11 +89,22 @@ jobs:
         run: |
           set -euo pipefail
           python -m generalist_lm.research_cycle | tee "$AIRI_GENERALIST_RESEARCH_STATE/last-cycle-output.json"
-          python -m generalist_lm.research_health
           test -f "$AIRI_GENERALIST_RESEARCH_STATE/champion/model.pt"
           test -f "$AIRI_GENERALIST_RESEARCH_STATE/champion/config.json"
           test -f "$AIRI_GENERALIST_RESEARCH_STATE/champion-genome.json"
           test -f "$AIRI_GENERALIST_RESEARCH_STATE/status.json"
+
+      - name: Attempt digest-cached production qualification and promotion
+        env:
+          AIRI_GENERALIST_RESEARCH_CHECKPOINT: ${{ env.AIRI_GENERALIST_RESEARCH_STATE }}/champion
+          AIRI_GENERALIST_PRODUCTION_STATE: ${{ env.AIRI_GENERALIST_RESEARCH_STATE }}/production
+          AIRI_GENERALIST_PRODUCTION_MIN_SCORE: '85'
+          AIRI_GENERALIST_PRODUCTION_MIN_GAIN: '2'
+          AIRI_GENERALIST_PRODUCTION_MAX_DOMAIN_REGRESSION: '0'
+        run: |
+          set -euo pipefail
+          python -m generalist_lm.production_promotion | tee "$AIRI_GENERALIST_RESEARCH_STATE/last-production-attempt.json"
+          python -m generalist_lm.research_health
 
       - name: Persist only health-gated research state
         env:
