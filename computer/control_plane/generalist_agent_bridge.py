@@ -34,6 +34,10 @@ _GENERALIST_TEXT_EXTS = {
     ".md", ".txt", ".html", ".css", ".scss", ".sh", ".java", ".c", ".cpp",
     ".h", ".hpp", ".rs", ".go", ".sql", ".xml", ".ini", ".cfg",
 }
+_GENERALIST_MAX_READ_BYTES = 2_000_000
+_GENERALIST_MAX_SEARCH_BYTES = 20_000_000
+_GENERALIST_MAX_SEARCH_FILES = 2_000
+_GENERALIST_MAX_ANALYZE_VISITS = 10_000
 
 
 def _sensitive_workspace_path(path) -> bool:
@@ -69,6 +73,8 @@ def _generalist_file_read(arguments: dict[str, Any]) -> dict[str, Any]:
     path = _generalist_safe_path(str(arguments.get("path", "")))
     if path.suffix.lower() not in _GENERALIST_TEXT_EXTS and path.name not in {"README", "LICENSE"}:
         raise PermissionError("Generalist file_read is limited to allowlisted text formats")
+    if path.stat().st_size > _GENERALIST_MAX_READ_BYTES:
+        raise ValueError("Generalist file_read file exceeds the read budget")
     content = path.read_text(errors="replace")
     return {
         "path": str(path.relative_to(ROOT)),
@@ -91,6 +97,9 @@ def _generalist_file_search(arguments: dict[str, Any]) -> dict[str, Any]:
         root = root.parent
     needle = query.casefold()
     matches = []
+    visited_files = 0
+    scanned_bytes = 0
+    budget_exhausted = False
     for path in root.rglob("*"):
         if len(matches) >= 100:
             break
@@ -98,6 +107,20 @@ def _generalist_file_search(arguments: dict[str, Any]) -> dict[str, Any]:
             continue
         if path.suffix.lower() not in _GENERALIST_TEXT_EXTS:
             continue
+        visited_files += 1
+        if visited_files > _GENERALIST_MAX_SEARCH_FILES:
+            budget_exhausted = True
+            break
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        if size > _GENERALIST_MAX_READ_BYTES:
+            continue
+        if scanned_bytes + size > _GENERALIST_MAX_SEARCH_BYTES:
+            budget_exhausted = True
+            break
+        scanned_bytes += size
         try:
             lines = path.read_text(errors="replace").splitlines()
         except Exception:
@@ -115,7 +138,9 @@ def _generalist_file_search(arguments: dict[str, Any]) -> dict[str, Any]:
         "query": query,
         "matches": matches,
         "count": len(matches),
-        "truncated": len(matches) >= 100,
+        "truncated": len(matches) >= 100 or budget_exhausted,
+        "visited_files": visited_files,
+        "scanned_bytes": scanned_bytes,
     }
 
 
@@ -130,8 +155,15 @@ def _generalist_project_analyze(arguments: dict[str, Any]) -> dict[str, Any]:
     files = []
     extensions: dict[str, int] = {}
     tests = []
+    visited = 0
+    budget_exhausted = False
     for path in root.rglob("*"):
+        visited += 1
+        if visited > _GENERALIST_MAX_ANALYZE_VISITS:
+            budget_exhausted = True
+            break
         if len(files) >= 4000:
+            budget_exhausted = True
             break
         if not path.is_file() or _sensitive_workspace_path(path):
             continue
@@ -149,7 +181,8 @@ def _generalist_project_analyze(arguments: dict[str, Any]) -> dict[str, Any]:
         "file_count": len(files),
         "languages": extensions,
         "tests": tests[:200],
-        "truncated": len(files) >= 4000,
+        "truncated": len(files) >= 4000 or budget_exhausted,
+        "visited_entries": visited,
     }
 
 
