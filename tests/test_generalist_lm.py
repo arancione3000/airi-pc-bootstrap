@@ -643,3 +643,150 @@ def test_benchmark_prefers_chat_interface_for_instruction_models():
     assert report["ok"] is True
     assert backend.chat_calls == 1
     assert backend.generate_calls == 0
+
+
+def _fake_qualified_attestation(path: Path, *, score: float, domain_scores: dict[str, float] | None = None):
+    from generalist_lm.qualification import QUALIFICATION_VERSION, checkpoint_digest
+
+    domains = domain_scores or {
+        "language": 1.0,
+        "coding": 1.0,
+        "data": 1.0,
+        "reasoning": 1.0,
+        "tools": 1.0,
+        "structured": 1.0,
+    }
+    payload = {
+        "qualification_version": QUALIFICATION_VERSION,
+        "attested_by": "airi-generalist-qualification-v1",
+        "checkpoint_digest": checkpoint_digest(path),
+        "qualified": True,
+        "minimum_score": 85.0,
+        "report": {
+            "ok": True,
+            "score": float(score),
+            "critical_failures": [],
+            "domain_scores": domains,
+            "tasks": [],
+        },
+    }
+    (path / "benchmark.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return payload
+
+
+def test_production_promotion_is_digest_cached_and_transactional(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    import generalist_lm.production_promotion as promotion
+    from generalist_lm.qualification import qualification_status
+
+    research = tmp_path / "research"
+    production = tmp_path / "production"
+    runtime = GeneralistRuntime.fresh(tiny_config())
+    runtime.save_checkpoint(research, metadata={"revision": 1})
+
+    calls = {"count": 0}
+
+    def fake_qualify(path, minimum_score=85.0):
+        calls["count"] += 1
+        return _fake_qualified_attestation(Path(path), score=90.0)
+
+    monkeypatch.setattr(promotion, "qualify_checkpoint", fake_qualify)
+
+    first = promotion.attempt_production_promotion(
+        research,
+        production,
+        minimum_score=85.0,
+        minimum_gain=2.0,
+    )
+    assert first["promoted"] is True
+    assert first["qualified"] is True
+    assert qualification_status(production)["qualified"] is True
+    production_digest = qualification_status(production)["current_checkpoint_digest"]
+
+    second = promotion.attempt_production_promotion(
+        research,
+        production,
+        minimum_score=85.0,
+        minimum_gain=2.0,
+    )
+    assert second["cached"] is True
+    assert calls["count"] == 1
+    assert qualification_status(production)["current_checkpoint_digest"] == production_digest
+
+
+def test_production_promotion_rejects_domain_regression_and_preserves_old_champion(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    import generalist_lm.production_promotion as promotion
+    from generalist_lm.qualification import qualification_status
+
+    research = tmp_path / "research"
+    production = tmp_path / "production"
+    runtime = GeneralistRuntime.fresh(tiny_config())
+    runtime.save_checkpoint(research, metadata={"revision": 1})
+
+    scores = [
+        (90.0, {
+            "language": 1.0, "coding": 1.0, "data": 1.0,
+            "reasoning": 1.0, "tools": 1.0, "structured": 1.0,
+        }),
+        (95.0, {
+            "language": 0.5, "coding": 1.0, "data": 1.0,
+            "reasoning": 1.0, "tools": 1.0, "structured": 1.0,
+        }),
+    ]
+
+    def fake_qualify(path, minimum_score=85.0):
+        score, domains = scores.pop(0)
+        return _fake_qualified_attestation(Path(path), score=score, domain_scores=domains)
+
+    monkeypatch.setattr(promotion, "qualify_checkpoint", fake_qualify)
+
+    first = promotion.attempt_production_promotion(research, production)
+    assert first["promoted"] is True
+    old_digest = qualification_status(production)["current_checkpoint_digest"]
+
+    # Change exact research checkpoint identity so the qualification cache cannot hide the second attempt.
+    runtime.save_checkpoint(research, metadata={"revision": 2})
+    second = promotion.attempt_production_promotion(
+        research,
+        production,
+        minimum_gain=2.0,
+        max_domain_regression=0.0,
+    )
+    assert second["qualified"] is True
+    assert second["promoted"] is False
+    assert second["eligible"] is False
+    assert "regressed" in second["reason"]
+    assert qualification_status(production)["current_checkpoint_digest"] == old_digest
+
+
+def test_production_promotion_requires_meaningful_gain_over_existing_champion(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    import generalist_lm.production_promotion as promotion
+    from generalist_lm.qualification import qualification_status
+
+    research = tmp_path / "research"
+    production = tmp_path / "production"
+    runtime = GeneralistRuntime.fresh(tiny_config())
+    runtime.save_checkpoint(research, metadata={"revision": 1})
+
+    next_score = {"value": 90.0}
+
+    def fake_qualify(path, minimum_score=85.0):
+        return _fake_qualified_attestation(Path(path), score=next_score["value"])
+
+    monkeypatch.setattr(promotion, "qualify_checkpoint", fake_qualify)
+    assert promotion.attempt_production_promotion(research, production)["promoted"] is True
+    old_digest = qualification_status(production)["current_checkpoint_digest"]
+
+    runtime.save_checkpoint(research, metadata={"revision": 2})
+    next_score["value"] = 91.0
+    result = promotion.attempt_production_promotion(
+        research,
+        production,
+        minimum_gain=2.0,
+    )
+    assert result["qualified"] is True
+    assert result["promoted"] is False
+    assert "promotion margin" in result["reason"]
+    assert qualification_status(production)["current_checkpoint_digest"] == old_digest
