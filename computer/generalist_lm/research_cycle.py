@@ -15,7 +15,7 @@ from .mathesis_bridge import mathesis_signals
 from .model import CausalTransformerLM, estimate_parameter_count, parameter_count
 from .runtime import GeneralistRuntime
 from .tokenizer import ByteTokenizer
-from .training import loss_on_examples, train_sft
+from .training import encode_sft_example, loss_on_examples, train_sft
 
 
 def research_seed() -> GeneralistGenome:
@@ -45,6 +45,49 @@ def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def _teacher_forced_accuracy(model, tokenizer: ByteTokenizer, rows: list[ResearchRow], *, device: str) -> dict[str, Any]:
+    import hashlib
+    import torch
+
+    encoded = [encode_sft_example(row.sft(), tokenizer, model.config.context_length) for row in rows]
+    ids = torch.stack([item[0] for item in encoded]).to(device)
+    labels = torch.stack([item[1] for item in encoded]).to(device)
+    model.eval()
+    with torch.no_grad():
+        logits = model(ids)["logits"]
+    predicted = logits[:, :-1, :].argmax(dim=-1)
+    targets = labels[:, 1:]
+    mask = targets != -100
+    correct = (predicted == targets) & mask
+
+    total = int(mask.sum().item())
+    token_accuracy = float(correct.sum().item() / total) if total else 0.0
+    solved: list[str] = []
+    domain_correct: dict[str, int] = {}
+    domain_total: dict[str, int] = {}
+    for index, row in enumerate(rows):
+        row_mask = mask[index]
+        row_correct = correct[index]
+        count = int(row_mask.sum().item())
+        good = int(row_correct.sum().item())
+        domain_correct[row.domain] = domain_correct.get(row.domain, 0) + good
+        domain_total[row.domain] = domain_total.get(row.domain, 0) + count
+        if count and bool(torch.all(row_correct[row_mask]).item()):
+            prompt = row.messages[0]["content"]
+            digest = hashlib.sha256(f"{row.domain}\0{prompt}".encode("utf-8")).hexdigest()[:16]
+            solved.append(f"{row.domain}:{digest}")
+
+    return {
+        "target_token_accuracy": token_accuracy,
+        "domain_token_accuracy": {
+            domain: (domain_correct[domain] / domain_total[domain] if domain_total[domain] else 0.0)
+            for domain in sorted(domain_total)
+        },
+        "solved_items": sorted(solved),
+        "target_tokens": total,
+    }
+
+
 def _grouped_validation(model, tokenizer: ByteTokenizer, rows: list[ResearchRow], *, device: str = "cpu") -> dict[str, Any]:
     all_examples = [row.sft() for row in rows]
     overall = loss_on_examples(model, tokenizer, all_examples, device=device)
@@ -52,9 +95,11 @@ def _grouped_validation(model, tokenizer: ByteTokenizer, rows: list[ResearchRow]
     for domain in sorted({row.domain for row in rows}):
         examples = [row.sft() for row in rows if row.domain == domain]
         domains[domain] = loss_on_examples(model, tokenizer, examples, device=device)
+    accuracy = _teacher_forced_accuracy(model, tokenizer, rows, device=device)
     return {
         "loss": float(overall),
         "domain_loss": domains,
+        **accuracy,
         "finite": bool(math.isfinite(overall) and all(math.isfinite(v) for v in domains.values())),
     }
 
@@ -83,7 +128,27 @@ def _research_eligible(
             return False, f"candidate lost validation domain: {domain}"
         if float(candidate["domain_loss"][domain]) > float(old_value) + float(max_domain_regression):
             return False, f"candidate regressed in validation domain: {domain}"
-    return True, "held-out multi-domain loss improvement passed"
+
+    old_accuracy = float(champion.get("target_token_accuracy", 0.0))
+    new_accuracy = float(candidate.get("target_token_accuracy", 0.0))
+    if new_accuracy + 0.01 < old_accuracy:
+        return False, "candidate regressed in held-out target-token accuracy"
+
+    old_domains = champion.get("domain_token_accuracy") or {}
+    new_domains = candidate.get("domain_token_accuracy") or {}
+    for domain, old_value in old_domains.items():
+        if domain not in new_domains:
+            return False, f"candidate lost token-accuracy domain: {domain}"
+        if float(new_domains[domain]) + 0.02 < float(old_value):
+            return False, f"candidate regressed in target-token domain: {domain}"
+
+    remembered = set(champion.get("solved_items") or [])
+    retained = set(candidate.get("solved_items") or [])
+    forgotten = sorted(remembered - retained)
+    if forgotten:
+        return False, f"candidate forgot {len(forgotten)} previously solved held-out items"
+
+    return True, "held-out multi-domain loss and anti-forgetting gates passed"
 
 
 def _weaknesses(report: dict[str, Any]) -> list[str]:
