@@ -16,7 +16,7 @@
       "memory_decay_max": 0.995,
       "memory_decay_min": 0.25,
       "n_cells": 1,
-      "n_experts": 4,
+      "n_experts": 2,
       "rms_eps": 1e-06,
       "surprise_power": 1.5,
       "surprise_threshold": 0.25,
@@ -24,14 +24,14 @@
       "tokenizer_version": "byte-v1",
       "vocab_size": 264
     },
-    "generation": 1,
-    "genome_id": "lattice-1-cb4336cefa6e",
+    "generation": 2,
+    "genome_id": "lattice-2-a7a6c5eb9227",
     "learning_rate": 0.002,
     "min_learning_rate": 0.0002,
-    "parent_id": "lattice-0-0363d63fd379",
+    "parent_id": "lattice-1-cb4336cefa6e",
     "weight_decay": 0.05
   },
-  "cycle": 5,
+  "cycle": 6,
   "empirical_candidates": 1,
   "generated_candidates": 8,
   "ok": true,
@@ -64,7 +64,7 @@
           "memory_decay_max": 0.995,
           "memory_decay_min": 0.25,
           "n_cells": 1,
-          "n_experts": 4,
+          "n_experts": 2,
           "rms_eps": 1e-06,
           "surprise_power": 1.5,
           "surprise_threshold": 0.25,
@@ -72,30 +72,29 @@
           "tokenizer_version": "byte-v1",
           "vocab_size": 264
         },
-        "generation": 1,
-        "genome_id": "lattice-1-cb4336cefa6e",
+        "generation": 2,
+        "genome_id": "lattice-2-a7a6c5eb9227",
         "learning_rate": 0.002,
         "min_learning_rate": 0.0002,
-        "parent_id": "lattice-0-0363d63fd379",
+        "parent_id": "lattice-1-cb4336cefa6e",
         "weight_decay": 0.05
       },
-      "mean_candidate_loss": 5.525927901268005,
+      "mean_candidate_loss": 5.529582381248474,
       "mutation": {
         "changes": {
-          "d_expert": 32
+          "n_experts": 2
         },
         "family": "experts",
         "mathesis_tags": [
-          "reasoning",
           "efficiency"
         ],
-        "name": "experts-shrink-width",
-        "rationale": "evolve specialist and recurrent-reasoner capacity per active token"
+        "name": "experts-fewer-specialists",
+        "rationale": "reduce dormant capacity if specialization is not useful"
       },
       "reports": [
         {
           "baseline": {
-            "active_parameters": 20320,
+            "active_parameters": 20064,
             "config": {
               "architecture_version": "native-foundation-v1",
               "bias": false,
@@ -104,7 +103,7 @@
               "d_model": 32,
               "dropout": 0.0,
               "init_std": 0.02,
-              "n_heads": 4,
+              "n_heads": 8,
               "n_kv_heads": 1,
               "n_layers": 1,
               "rms_eps": 1e-06,
@@ -114,32 +113,32 @@
               "vocab_size": 264
             },
             "family": "airi-native-foundation",
-            "parameters": 20320,
-            "state_bytes_at_context": 4096,
+            "parameters": 20064,
+            "state_bytes_at_context": 2048,
             "training": {
-              "best_train_loss": 5.531151294708252,
+              "best_train_loss": 5.393593788146973,
               "final": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.537187993526459
+                  "code": 5.549910008907318
                 },
-                "loss": 5.537187993526459
+                "loss": 5.549910008907318
               },
               "initial": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.538681209087372
+                  "code": 5.551678657531738
                 },
-                "loss": 5.538681209087372
+                "loss": 5.551678657531738
               },
               "steps": 1,
-              "tokens_per_second": 27875.390037737954,
+              "tokens_per_second": 19713.525511309286,
               "tokens_processed": 64,
-              "train_seconds": 0.0022959319999955596
+              "train_seconds": 0.0032465020000245204
             }
           },
           "candidate": {
-            "active_parameters": 20239,
+            "active_parameters": 20111,
             "config": {
               "active_experts": 1,
               "architecture_version": "airi-lattice-v0",
@@ -155,7 +154,7 @@
               "memory_decay_max": 0.995,
               "memory_decay_min": 0.25,
               "n_cells": 1,
-              "n_experts": 4,
+              "n_experts": 2,
               "rms_eps": 1e-06,
               "surprise_power": 1.5,
               "surprise_threshold": 0.25,
@@ -164,40 +163,40 @@
               "vocab_size": 264
             },
             "family": "airi-native-lattice",
-            "parameters": 29455,
+            "parameters": 23183,
             "state_bytes_at_context": 384,
             "training": {
-              "best_train_loss": 5.516308784484863,
+              "best_train_loss": 5.316851615905762,
               "final": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.525927901268005
+                  "code": 5.529582381248474
                 },
-                "loss": 5.525927901268005,
+                "loss": 5.529582381248474,
                 "model_stats": {
                   "mean_reasoning_steps": 1.0,
-                  "mean_surprise": 0.5123069100081921
+                  "mean_surprise": 0.4999614544212818
                 }
               },
               "initial": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.527495324611664
+                  "code": 5.531628131866455
                 },
-                "loss": 5.527495324611664,
+                "loss": 5.531628131866455,
                 "model_stats": {
                   "mean_reasoning_steps": 1.0,
-                  "mean_surprise": 0.5121404267847538
+                  "mean_surprise": 0.5001952834427357
                 }
               },
               "steps": 1,
-              "tokens_per_second": 590.6152401120521,
+              "tokens_per_second": 380.7544453007222,
               "tokens_processed": 64,
-              "train_seconds": 0.10836157899998966
+              "train_seconds": 0.16808733499999562
             }
           },
           "candidate_wins": true,
-          "corpus_digest": "0a32ad5cca480dd26211a2b3fc27d40e5d5875b125c1cb3214b0ff7a3ae97191",
+          "corpus_digest": "8f10fb0cb187598caa1d3a10ced5635e3a3804592eab6a8cf49cc5b851991d75",
           "decision": "Lattice beat matched Transformer under the research gate",
           "external_pretrained": false,
           "lab": {
@@ -210,17 +209,17 @@
             "max_eval_blocks": 8,
             "min_learning_rate": 0.0002,
             "minimum_loss_gain": 0.001,
-            "seed": 700506,
+            "seed": 700607,
             "steps": 1,
             "validation_fraction": 0.2,
             "weight_decay": 0.05
           },
           "ok": true,
           "research_only": true,
-          "train_blocks": 3862,
-          "train_documents": 20,
-          "validation_blocks": 431,
-          "validation_documents": 4,
+          "train_blocks": 3815,
+          "train_documents": 19,
+          "validation_blocks": 538,
+          "validation_documents": 5,
           "version": "airi-lattice-lab-v0"
         }
       ]
@@ -244,7 +243,7 @@
         "memory_decay_max": 0.995,
         "memory_decay_min": 0.25,
         "n_cells": 1,
-        "n_experts": 4,
+        "n_experts": 2,
         "rms_eps": 1e-06,
         "surprise_power": 1.5,
         "surprise_threshold": 0.25,
@@ -252,25 +251,24 @@
         "tokenizer_version": "byte-v1",
         "vocab_size": 264
       },
-      "generation": 1,
-      "genome_id": "lattice-1-cb4336cefa6e",
+      "generation": 2,
+      "genome_id": "lattice-2-a7a6c5eb9227",
       "learning_rate": 0.002,
       "min_learning_rate": 0.0002,
-      "parent_id": "lattice-0-0363d63fd379",
+      "parent_id": "lattice-1-cb4336cefa6e",
       "weight_decay": 0.05
     },
-    "mean_candidate_loss": 5.525927901268005,
+    "mean_candidate_loss": 5.529582381248474,
     "mutation": {
       "changes": {
-        "d_expert": 32
+        "n_experts": 2
       },
       "family": "experts",
       "mathesis_tags": [
-        "reasoning",
         "efficiency"
       ],
-      "name": "experts-shrink-width",
-      "rationale": "evolve specialist and recurrent-reasoner capacity per active token"
+      "name": "experts-fewer-specialists",
+      "rationale": "reduce dormant capacity if specialization is not useful"
     }
   }
 }
