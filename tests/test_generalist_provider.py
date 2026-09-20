@@ -30,7 +30,7 @@ def make_qualified_checkpoint(path: Path) -> Path:
     digest = checkpoint_digest(path)
     (path / "benchmark.json").write_text(json.dumps({
         "qualification_version": QUALIFICATION_VERSION,
-        "attested_by": "airi-generalist-qualification-v1",
+        "attested_by": "airi-generalist-qualification-v2",
         "checkpoint_digest": digest,
         "qualified": True,
         "minimum_score": 85.0,
@@ -189,7 +189,7 @@ def test_transformers_attestation_is_bound_to_exact_local_files(tmp_path: Path):
     digest = transformers_model_digest(model_dir, exclude_path=attestation)
     attestation.write_text(json.dumps({
         "qualification_version": QUALIFICATION_VERSION,
-        "attested_by": "airi-generalist-transformers-qualification-v1",
+        "attested_by": "airi-generalist-transformers-qualification-v2",
         "backend_type": "transformers",
         "model_digest": digest,
         "qualified": True,
