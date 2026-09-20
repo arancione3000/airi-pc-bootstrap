@@ -551,9 +551,12 @@ The cycle is:
 
 Remote material is never executed and cannot provide code, shell commands, file
 paths or arbitrary hyperparameter values. The online layer emits bounded tags
-such as `optimizer`, `tokenizer`, `gqa`, `long-context`, `curriculum`
-and `efficiency`. All concrete mutations are generated locally from reviewed
-ranges. A challenger cannot edit or call its own promotion gate.
+such as `optimizer`, `tokenizer`, `gqa`, `long-context`, `curriculum`,
+`dataset` and `efficiency`. All concrete mutations are generated locally
+from reviewed ranges. GitHub results that look like permissively licensed
+datasets are stored as source proposals only; automatic admission still
+requires an immutable revision/content URL, a pinned SHA-256 and the Phase-2
+corpus audit. A challenger cannot edit or call its own promotion gate.
 
 Architecture and tokenizer mutations require a new random-init Native root and
 scratch retraining. A short scratch run may be recorded as a proxy experiment,
