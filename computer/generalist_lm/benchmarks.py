@@ -219,6 +219,48 @@ def qualification_suite() -> list[BenchmarkTask]:
             exact("UNKNOWN"),
             critical=False,
         ),
+        BenchmarkTask(
+            "qualification:language:translation",
+            "language",
+            "Translate the single English word window to Italian. Reply with one word only.",
+            exact("finestra"),
+            critical=False,
+        ),
+        BenchmarkTask(
+            "qualification:coding:positive",
+            "coding",
+            "Return only Python code defining is_positive(n) that returns whether n is greater than zero.",
+            python_function("is_positive", ("return", ">", "0")),
+            critical=False,
+        ),
+        BenchmarkTask(
+            "qualification:data:sum",
+            "data",
+            "Sum 14, 21, 35. Reply with the number only.",
+            exact("70"),
+            critical=False,
+        ),
+        BenchmarkTask(
+            "qualification:reasoning:division",
+            "reasoning",
+            "Compute 144/12. Reply with the integer only.",
+            exact("12"),
+            critical=False,
+        ),
+        BenchmarkTask(
+            "qualification:tools:calculator-2",
+            "tools",
+            'Use calculator for 81-26. Output exactly <tool_call>{"name":"calculator","arguments":{"expression":"81-26"}}</tool_call>',
+            expected_tool("calculator", {"expression": "81-26"}),
+            critical=False,
+        ),
+        BenchmarkTask(
+            "qualification:structured:mode",
+            "structured",
+            'Return exactly this JSON object: {"mode":"safe","enabled":true}',
+            exact('{"mode":"safe","enabled":true}'),
+            critical=False,
+        ),
     ]
 
 
