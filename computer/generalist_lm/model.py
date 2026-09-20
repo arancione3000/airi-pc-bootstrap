@@ -183,3 +183,15 @@ def estimate_flops_per_token(config: GeneralistLMConfig) -> int:
     cfg = config.validate()
     # Coarse dense-transformer estimate used only as an evolution cost signal.
     return int(cfg.n_layers * (4 * cfg.d_model * cfg.d_model + 3 * cfg.d_model * cfg.d_ff))
+
+
+def estimate_parameter_count(config: GeneralistLMConfig) -> int:
+    cfg = config.validate()
+    d = cfg.d_model
+    ff = cfg.d_ff
+    embeddings = cfg.vocab_size * d + cfg.context_length * d
+    per_layer = 4 * d * d + 3 * d * ff + 4 * d
+    if cfg.bias:
+        per_layer += 5 * d + 2 * ff
+    final_norm = 2 * d
+    return int(embeddings + cfg.n_layers * per_layer + final_norm)
