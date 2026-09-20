@@ -47,13 +47,14 @@ def _safe_model_file(root: Path, raw: str) -> Path:
     candidate = Path(raw)
     if candidate.is_absolute():
         raise ValueError("weight index contains an absolute shard path")
-    resolved = (root / candidate).resolve()
+    supplied = root / candidate
+    if supplied.is_symlink():
+        raise ValueError("weight index shard must not be a symlink")
+    resolved = supplied.resolve()
     try:
         resolved.relative_to(root)
     except ValueError as exc:
         raise ValueError("weight index shard escapes model directory") from exc
-    if resolved.is_symlink():
-        raise ValueError("weight index shard must not be a symlink")
     return resolved
 
 
@@ -103,8 +104,9 @@ def _weight_layout(root: Path) -> tuple[dict[str, Any], list[str], list[str]]:
     blockers: list[str] = []
     warnings: list[str] = []
     weight_files = sorted(
-        path for path in root.iterdir()
+        path for path in root.rglob("*")
         if path.is_file()
+        and ".git" not in path.parts
         and (
             path.suffix == ".safetensors"
             or (path.name.startswith("pytorch_model") and path.suffix == ".bin")
@@ -116,7 +118,7 @@ def _weight_layout(root: Path) -> tuple[dict[str, Any], list[str], list[str]]:
         return {
             "index": None,
             "sharded": True,
-            "weight_files": [p.name for p in weight_files],
+            "weight_files": [p.relative_to(root).as_posix() for p in weight_files],
             "weight_bytes": sum(p.stat().st_size for p in weight_files),
         }, blockers, warnings
 
@@ -169,8 +171,8 @@ def _weight_layout(root: Path) -> tuple[dict[str, Any], list[str], list[str]]:
             "weight_bytes": sum(p.stat().st_size for p in weight_files),
         }, blockers, warnings
 
-    indexed_names = {p.name for p in shard_files}
-    unreferenced = sorted(p.name for p in weight_files if p.name not in indexed_names)
+    indexed_names = {p.relative_to(root).as_posix() for p in shard_files}
+    unreferenced = sorted(p.relative_to(root).as_posix() for p in weight_files if p.relative_to(root).as_posix() not in indexed_names)
     if unreferenced:
         warnings.append("unreferenced_weight_files")
 
@@ -178,7 +180,7 @@ def _weight_layout(root: Path) -> tuple[dict[str, Any], list[str], list[str]]:
     return {
         "index": index_path.name,
         "sharded": len(shard_files) > 1,
-        "weight_files": [p.name for p in shard_files],
+        "weight_files": [p.relative_to(root).as_posix() for p in shard_files],
         "weight_bytes": sum(p.stat().st_size for p in shard_files),
         "parameter_entries": len(weight_map),
         "index_total_size": metadata.get("total_size"),
@@ -320,9 +322,19 @@ def foundation_preflight(
 ) -> dict[str, Any]:
     """Inspect a local Foundation candidate without loading model tensors."""
 
-    root = Path(model_dir).expanduser().resolve()
+    supplied = Path(model_dir).expanduser()
+    root = supplied.resolve()
     blockers: list[str] = []
     warnings: list[str] = []
+    if supplied.is_symlink():
+        return {
+            "preflight_version": FOUNDATION_PREFLIGHT_VERSION,
+            "ok": False,
+            "model_dir": str(root),
+            "blockers": ["foundation_model_directory_is_symlink"],
+            "warnings": [],
+            "policy": "metadata-only; no tensor load; local files only",
+        }
 
     try:
         manifest = load_foundation_manifest(root)
@@ -408,7 +420,7 @@ def foundation_preflight(
         }
 
     if memory_budget.get("covers_weight_files") is False:
-        blockers.append("declared_memory_budget_below_weight_file_bytes")
+        warnings.append("declared_memory_budget_below_weight_file_bytes")
 
     hardware = _hardware_probe() if probe_hardware else None
     special_runtime: dict[str, Any] = {}
