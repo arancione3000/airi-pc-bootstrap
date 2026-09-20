@@ -427,10 +427,11 @@ def native_training_status(state_dir: str | Path) -> dict[str, Any]:
             raise ValueError("native training manifest permits external pretrained weights")
         if training.get("weights_origin") != "airi-native-descendant":
             raise ValueError("invalid native training weights origin")
-        if training.get("parent_checkpoint_digest") != checkpoint.get(
-            "config", {}
-        ).get("_never_matches"):
-            pass
+        provenance = NativeFoundationProvenance.from_dict(
+            json.loads((root / NATIVE_MANIFEST_FILENAME).read_text(encoding="utf-8"))
+        )
+        if training.get("parent_checkpoint_digest") != provenance.parent_checkpoint_digest:
+            raise ValueError("native training parent checkpoint digest mismatch")
         trainer_digest = training.get("trainer_state_digest")
         if trainer_digest is not None:
             trainer = root / NATIVE_TRAINER_STATE_FILENAME
