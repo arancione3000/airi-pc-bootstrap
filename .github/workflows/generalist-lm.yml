@@ -59,6 +59,53 @@ jobs:
         run: |
           .venv/bin/python -m pytest -q tests/test_generalist_lm.py tests/test_generalist_provider.py tests/test_model_gateway.py tests/test_local_agent.py tests/test_openrouter_provider.py
 
+      - name: Qualified local gateway end-to-end smoke
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+          AIRI_GENERALIST_STATE: ${{ runner.temp }}/generalist-gateway
+          AIRI_GENERALIST_ENABLE: '1'
+          AIRI_MODEL_GATEWAY_TOKEN: 'ci-generalist-token'
+          AIRI_MODEL_GATEWAY_PORT: '17894'
+        run: |
+          set -euo pipefail
+          .venv/bin/python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from generalist_lm.model import GeneralistLMConfig
+          from generalist_lm.runtime import GeneralistRuntime
+          from generalist_lm.qualification import checkpoint_digest, QUALIFICATION_VERSION
+
+          root=Path(os.environ["AIRI_GENERALIST_STATE"])
+          cfg=GeneralistLMConfig(vocab_size=264,context_length=64,d_model=32,n_heads=4,n_layers=1,d_ff=64,dropout=0.0).validate()
+          GeneralistRuntime.fresh(cfg).save_checkpoint(root,metadata={"ci":True})
+          digest=checkpoint_digest(root)
+          (root/"benchmark.json").write_text(json.dumps({
+              "qualification_version":QUALIFICATION_VERSION,
+              "attested_by":"airi-generalist-qualification-v1",
+              "checkpoint_digest":digest,
+              "qualified":True,
+              "minimum_score":85.0,
+              "report":{"ok":True,"score":100.0,"critical_failures":[]},
+          }),encoding="utf-8")
+          PY
+
+          .venv/bin/python -m control_plane.model_gateway >"$RUNNER_TEMP/generalist-gateway.log" 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 30); do
+            curl -fsS "http://127.0.0.1:17894/health" >/dev/null && break
+            sleep 0.2
+          done
+          curl -fsS "http://127.0.0.1:17894/health" | jq -e '.configured == true and .qualified == true'
+          curl -fsS -X POST "http://127.0.0.1:17894/v1/chat/completions" \
+            -H 'Authorization: Bearer ci-generalist-token' \
+            -H 'Content-Type: application/json' \
+            -d '{"messages":[{"role":"user","content":"hello"}],"max_tokens":4}' \
+            | jq -e '.object == "chat.completion" and (.choices[0].message.content | type == "string")'
+          kill "$PID"
+          wait "$PID" 2>/dev/null || true
+          trap - EXIT
+
       - name: Standalone causal generation smoke
         env:
           PYTHONPATH: ${{ github.workspace }}/computer
