@@ -23,7 +23,7 @@ from .lattice_math import (
 from .native_lattice import AiriLatticeConfig
 
 
-LATTICE_RESEARCH_STATE_VERSION = "airi-lattice-research-state-v0"
+LATTICE_RESEARCH_STATE_VERSION = "airi-lattice-research-state-v1"
 
 
 def _digest(value: Any) -> str:
@@ -78,12 +78,21 @@ def _research_root_config() -> AiriLatticeConfig:
 
 
 def _load_champion(root: Path) -> LatticeGenome:
-    raw = _load_json(root / "lattice-champion.json")
-    if raw:
-        try:
-            return LatticeGenome(**raw).validate()
-        except Exception:
-            pass
+    # Architecture champions are versioned by the gate that selected them.
+    # A champion from an older research-state version is deliberately reset:
+    # old gates may have ignored a dimension (for example throughput) that is
+    # now required for a legitimate win.
+    status = _load_json(root / "lattice-status.json")
+    if (
+        isinstance(status, dict)
+        and status.get("version") == LATTICE_RESEARCH_STATE_VERSION
+    ):
+        raw = _load_json(root / "lattice-champion.json")
+        if raw:
+            try:
+                return LatticeGenome(**raw).validate()
+            except Exception:
+                pass
     return root_lattice_genome(_research_root_config())
 
 
@@ -181,6 +190,7 @@ def _benchmark_candidate(
             minimum_loss_gain=0.001,
             max_domain_regression=0.08,
             max_active_parameter_ratio=1.20,
+            min_throughput_ratio=0.50,
         ),
     )
 
@@ -208,6 +218,10 @@ def run_lattice_research_cycle(
     root = Path(state_dir).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     champion = _load_champion(root)
+    # Persist the validated/migrated champion immediately. In particular this
+    # permanently removes champions selected under obsolete gates even when
+    # no v1 challenger wins the current cycle.
+    _atomic_json(root / "lattice-champion.json", champion.to_dict())
 
     population = generate_lattice_population(
         champion,

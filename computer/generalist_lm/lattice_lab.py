@@ -27,7 +27,7 @@ from .native_lattice import (
 from .tokenizer import ByteTokenizer, PAD
 
 
-LATTICE_LAB_VERSION = "airi-lattice-lab-v0"
+LATTICE_LAB_VERSION = "airi-lattice-lab-v1"
 
 
 @dataclass
@@ -45,6 +45,7 @@ class LatticeLabConfig:
     minimum_loss_gain: float = 0.002
     max_domain_regression: float = 0.05
     max_active_parameter_ratio: float = 1.15
+    min_throughput_ratio: float = 0.50
 
     def validate(self) -> "LatticeLabConfig":
         self.steps = max(1, int(self.steps))
@@ -62,6 +63,10 @@ class LatticeLabConfig:
         self.max_active_parameter_ratio = max(
             0.25,
             float(self.max_active_parameter_ratio),
+        )
+        self.min_throughput_ratio = max(
+            0.01,
+            min(4.0, float(self.min_throughput_ratio)),
         )
         if not (0.0 < self.learning_rate <= 0.1):
             raise ValueError("invalid Lattice Lab learning_rate")
@@ -374,7 +379,23 @@ def lattice_promotion_gate(
     if active_ratio > lab.max_active_parameter_ratio:
         return False, "Lattice exceeds active-parameter compute budget"
 
-    return True, "Lattice beat matched Transformer under the research gate"
+    baseline_tps = max(
+        1e-9,
+        float(baseline["training"]["tokens_per_second"]),
+    )
+    candidate_tps = max(
+        0.0,
+        float(candidate["training"]["tokens_per_second"]),
+    )
+    throughput_ratio = candidate_tps / baseline_tps
+    if throughput_ratio < lab.min_throughput_ratio:
+        return (
+            False,
+            "Lattice quality gain is rejected because throughput is below "
+            f"{lab.min_throughput_ratio:.2f}x of the matched Transformer",
+        )
+
+    return True, "Lattice beat matched Transformer under quality and throughput gates"
 
 
 def benchmark_lattice_against_transformer(
@@ -479,6 +500,14 @@ def benchmark_lattice_against_transformer(
         candidate,
         lab=lab,
     )
+    throughput_ratio = (
+        float(candidate["training"]["tokens_per_second"])
+        / max(1e-9, float(baseline["training"]["tokens_per_second"]))
+    )
+    state_memory_ratio = (
+        float(candidate["state_bytes_at_context"])
+        / max(1.0, float(baseline["state_bytes_at_context"]))
+    )
 
     return {
         "ok": True,
@@ -493,6 +522,8 @@ def benchmark_lattice_against_transformer(
         "candidate": candidate,
         "candidate_wins": promoted,
         "decision": reason,
+        "throughput_ratio": throughput_ratio,
+        "state_memory_ratio": state_memory_ratio,
         "research_only": True,
         "external_pretrained": False,
     }

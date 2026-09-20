@@ -647,3 +647,197 @@ def test_lattice_research_cycle_persists_architecture_champion_without_touching_
     assert (tmp_path / "state" / "lattice-champion.json").is_file()
     assert (tmp_path / "state" / "lattice-status.json").is_file()
     assert (tmp_path / "state" / "lattice-history.jsonl").is_file()
+
+
+
+def test_lattice_v1_gate_rejects_quality_win_that_is_too_slow():
+    from generalist_lm.lattice_lab import LatticeLabConfig, lattice_promotion_gate
+
+    baseline = {
+        "parameters": 20_000,
+        "training": {
+            "final": {
+                "loss": 5.50,
+                "domain_loss": {"code": 5.50},
+            },
+            "tokens_per_second": 10_000.0,
+        },
+    }
+    candidate = {
+        "active_parameters": 19_500,
+        "training": {
+            "final": {
+                "loss": 5.40,
+                "domain_loss": {"code": 5.40},
+            },
+            "tokens_per_second": 400.0,
+        },
+    }
+    ok, reason = lattice_promotion_gate(
+        baseline,
+        candidate,
+        lab=LatticeLabConfig(
+            minimum_loss_gain=0.001,
+            max_domain_regression=0.0,
+            max_active_parameter_ratio=1.2,
+            min_throughput_ratio=0.5,
+        ),
+    )
+    assert ok is False
+    assert "throughput" in reason.lower()
+
+
+def test_lattice_v1_gate_accepts_balanced_quality_and_speed_win():
+    from generalist_lm.lattice_lab import LatticeLabConfig, lattice_promotion_gate
+
+    baseline = {
+        "parameters": 20_000,
+        "training": {
+            "final": {
+                "loss": 5.50,
+                "domain_loss": {"code": 5.50},
+            },
+            "tokens_per_second": 10_000.0,
+        },
+    }
+    candidate = {
+        "active_parameters": 19_500,
+        "training": {
+            "final": {
+                "loss": 5.40,
+                "domain_loss": {"code": 5.40},
+            },
+            "tokens_per_second": 7_000.0,
+        },
+    }
+    ok, reason = lattice_promotion_gate(
+        baseline,
+        candidate,
+        lab=LatticeLabConfig(
+            minimum_loss_gain=0.001,
+            max_domain_regression=0.0,
+            max_active_parameter_ratio=1.2,
+            min_throughput_ratio=0.5,
+        ),
+    )
+    assert ok is True
+    assert "throughput" in reason.lower()
+
+
+def test_lattice_v1_research_resets_v0_speed_blind_champion(tmp_path: Path):
+    from generalist_lm.lattice_evolution import root_lattice_genome
+    from generalist_lm.lattice_research_cycle import (
+        LATTICE_RESEARCH_STATE_VERSION,
+        _load_champion,
+        _research_root_config,
+    )
+
+    root = tmp_path / "lattice-state"
+    root.mkdir()
+    stale = root_lattice_genome(_research_root_config())
+    stale.generation = 9
+    stale.genome_id = "stale-speed-blind"
+    (root / "lattice-champion.json").write_text(
+        json.dumps(stale.to_dict()),
+        encoding="utf-8",
+    )
+    (root / "lattice-status.json").write_text(
+        json.dumps({"version": "airi-lattice-research-state-v0"}),
+        encoding="utf-8",
+    )
+
+    loaded = _load_champion(root)
+    assert LATTICE_RESEARCH_STATE_VERSION == "airi-lattice-research-state-v1"
+    assert loaded.generation == 0
+    assert loaded.genome_id != "stale-speed-blind"
+
+
+
+def test_vectorized_lattice_sparse_expert_banks_receive_gradients():
+    torch = pytest.importorskip("torch")
+    from generalist_lm.native_lattice import AiriLatticeLM
+
+    cfg = _tiny_lattice_config(
+        n_experts=4,
+        active_experts=2,
+        d_expert=48,
+    )
+    torch.manual_seed(77)
+    model = AiriLatticeLM(cfg)
+    ids = torch.tensor([[1, 30, 31, 32, 33, 34, 35, 36]], dtype=torch.long)
+    labels = ids.clone()
+    output = model(ids, labels=labels)
+    output["loss"].backward()
+
+    bank = model.cells[0].experts
+    for parameter in (
+        bank.expert_up,
+        bank.expert_gate,
+        bank.expert_down,
+    ):
+        assert parameter.grad is not None
+        assert torch.isfinite(parameter.grad).all()
+        assert float(parameter.grad.abs().sum()) > 0.0
+
+
+
+def test_lattice_v1_cycle_persists_reset_even_without_a_winner(tmp_path: Path, monkeypatch):
+    import generalist_lm.lattice_research_cycle as module
+    from generalist_lm.lattice_evolution import root_lattice_genome
+
+    root = tmp_path / "lattice-state"
+    root.mkdir()
+    stale = root_lattice_genome(module._research_root_config())
+    stale.generation = 7
+    stale.genome_id = "stale-v0-winner"
+    (root / "lattice-champion.json").write_text(
+        json.dumps(stale.to_dict()),
+        encoding="utf-8",
+    )
+    (root / "lattice-status.json").write_text(
+        json.dumps({"version": "airi-lattice-research-state-v0"}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        module,
+        "benchmark_lattice_against_transformer",
+        lambda *args, **kwargs: {
+            "ok": True,
+            "candidate_wins": False,
+            "decision": "deliberate test rejection",
+            "candidate": {
+                "training": {
+                    "final": {
+                        "loss": 9.0,
+                        "domain_loss": {"reasoning": 9.0},
+                    }
+                }
+            },
+            "baseline": {
+                "training": {
+                    "final": {
+                        "loss": 8.0,
+                        "domain_loss": {"reasoning": 8.0},
+                    }
+                }
+            },
+        },
+    )
+
+    result = module.run_lattice_research_cycle(
+        root,
+        tmp_path / "unused.json",
+        allowed_roots=[tmp_path],
+        cycle=10,
+        population_size=2,
+        empirical_candidates=1,
+        benchmark_steps=1,
+        repeat_seeds=1,
+    )
+    assert result["promoted"] is False
+    persisted = json.loads(
+        (root / "lattice-champion.json").read_text(encoding="utf-8")
+    )
+    assert persisted["generation"] == 0
+    assert persisted["genome_id"] != "stale-v0-winner"
