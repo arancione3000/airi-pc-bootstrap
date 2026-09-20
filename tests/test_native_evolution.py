@@ -333,3 +333,31 @@ def test_native_evolution_cycle_is_end_to_end_and_candidate_cannot_self_promote(
     assert (state / "status.json").is_file()
     assert (state / "history.jsonl").is_file()
     assert not (state / "trials" / "cycle-000001").exists()
+
+
+def test_cli_exposes_native_phase3_commands(tmp_path: Path):
+    from generalist_lm.cli import parser
+
+    p = parser()
+    research = p.parse_args(["native-research-online", "--signal", "reasoning_gap"])
+    assert research.cmd == "native-research-online"
+
+    evaluate = p.parse_args([
+        "native-evaluate",
+        str(tmp_path / "checkpoint"),
+        str(tmp_path / "manifest.json"),
+        "--allowed-root",
+        str(tmp_path),
+    ])
+    assert evaluate.cmd == "native-evaluate"
+
+    evolve = p.parse_args([
+        "native-evolve",
+        str(tmp_path / "evolution"),
+        str(tmp_path / "seed"),
+        str(tmp_path / "manifest.json"),
+        "--allowed-root",
+        str(tmp_path),
+        "--offline",
+    ])
+    assert evolve.cmd == "native-evolve"
