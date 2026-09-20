@@ -45,7 +45,7 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
 
     model_path = root / "champion" / "model.pt"
     max_persisted_bytes = max(
-        1_048_576,
+        65_536,
         int(os.environ.get("AIRI_GENERALIST_MAX_PERSISTED_CHECKPOINT_BYTES", str(32 * 1024 * 1024))),
     )
     model_bytes = model_path.stat().st_size if model_path.exists() else 0
