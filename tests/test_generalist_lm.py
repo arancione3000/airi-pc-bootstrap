@@ -377,3 +377,40 @@ def test_research_health_rejects_genome_checkpoint_mismatch(tmp_path: Path, monk
     report = research_health(tmp_path)
     assert report["ok"] is False
     assert any(row["name"] == "checkpoint:context_match" for row in report["failed"])
+
+
+def test_local_transformers_backend_loads_real_local_causal_model(tmp_path: Path):
+    transformers = pytest.importorskip("transformers")
+    tokenizers = pytest.importorskip("tokenizers")
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import Whitespace
+    from transformers import GPT2Config, GPT2LMHeadModel, PreTrainedTokenizerFast
+    from generalist_lm.hf_backend import LocalTransformersBackend
+
+    vocab = {"<unk>": 0, "<eos>": 1, "hello": 2, "world": 3}
+    raw = Tokenizer(WordLevel(vocab, unk_token="<unk>"))
+    raw.pre_tokenizer = Whitespace()
+    tokenizer = PreTrainedTokenizerFast(
+        tokenizer_object=raw,
+        unk_token="<unk>",
+        eos_token="<eos>",
+        pad_token="<eos>",
+    )
+    tokenizer.save_pretrained(tmp_path)
+
+    config = GPT2Config(
+        vocab_size=len(tokenizer),
+        n_positions=32,
+        n_ctx=32,
+        n_embd=16,
+        n_layer=1,
+        n_head=1,
+        bos_token_id=1,
+        eos_token_id=1,
+    )
+    GPT2LMHeadModel(config).save_pretrained(tmp_path)
+
+    backend = LocalTransformersBackend(tmp_path, device="cpu", local_files_only=True)
+    output = backend.generate("hello", max_new_tokens=2)
+    assert isinstance(output, str)
