@@ -15,12 +15,13 @@ from typing import Any
 from .curriculum import ResearchRow, train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
 from .corpus import repository_corpus
+from .bpe_tokenizer import BPETokenizer, train_bpe
 from .evolution import GeneralistGenome, generate_challengers
 from .mathesis_bridge import mathesis_signals
 from .model import CausalTransformerLM, estimate_parameter_count, parameter_count
 from .runtime import GeneralistRuntime
 from .pretraining import CorpusDocument, pretrain_causal
-from .tokenizer import ByteTokenizer
+from .tokenizer import BYTE_OFFSET, VOCAB_SIZE as BYTE_VOCAB_SIZE, ByteTokenizer
 from .training import encode_sft_example, loss_on_examples, nll_stats_on_examples, train_sft
 
 
@@ -420,6 +421,47 @@ def _training_rows_for_genome(
     return base + extra
 
 
+def _tokenizer_training_texts(
+    replay_rows: list[ResearchRow] | None,
+    pretrain_documents: list[CorpusDocument] | None,
+) -> list[str]:
+    """Build BPE text only from allowed training/repository sources.
+
+    Protected validation, qualification and rotating canary rows are never
+    passed here.
+    """
+    texts: list[str] = []
+    for row in list(train_rows()) + list(replay_rows or []):
+        for message in row.messages:
+            texts.append(str(message.get("content", "")))
+    for document in list(pretrain_documents or []):
+        texts.append(str(document.text))
+    return [text for text in texts if text]
+
+
+def _tokenizer_for_genome(
+    genome: GeneralistGenome,
+    *,
+    source_runtime: GeneralistRuntime | None = None,
+    replay_rows: list[ResearchRow] | None = None,
+    pretrain_documents: list[CorpusDocument] | None = None,
+    bpe_vocab_size: int = 384,
+    bpe_max_bytes: int = 256_000,
+):
+    if source_runtime is not None and source_runtime.tokenizer.version == genome.tokenizer_version:
+        return source_runtime.tokenizer
+    if genome.tokenizer_version == "byte-v1":
+        return ByteTokenizer()
+    if genome.tokenizer_version == "bpe-v1":
+        return train_bpe(
+            _tokenizer_training_texts(replay_rows, pretrain_documents),
+            vocab_size=max(BYTE_VOCAB_SIZE, int(bpe_vocab_size)),
+            min_frequency=2,
+            max_bytes=max(8_192, int(bpe_max_bytes)),
+        )
+    raise ValueError(f"unsupported research tokenizer: {genome.tokenizer_version}")
+
+
 def _research_budget_reason(
     genome: GeneralistGenome,
     *,
@@ -427,6 +469,7 @@ def _research_budget_reason(
     max_context: int,
     max_width: int,
     max_layers: int,
+    vocab_size: int = BYTE_VOCAB_SIZE,
 ) -> str | None:
     if genome.context_length > max_context:
         return f"context_length {genome.context_length} exceeds research max {max_context}"
@@ -434,7 +477,7 @@ def _research_budget_reason(
         return f"d_model {genome.d_model} exceeds research max {max_width}"
     if genome.n_layers > max_layers:
         return f"n_layers {genome.n_layers} exceeds research max {max_layers}"
-    estimated = estimate_parameter_count(genome.model_config())
+    estimated = estimate_parameter_count(genome.model_config(vocab_size))
     if estimated > max_params:
         return f"estimated parameters {estimated} exceed research max {max_params}"
     return None
