@@ -329,3 +329,20 @@ Capability honesty:
   preserving intentional specialization while protecting the generalist base;
 - promotion thresholds and per-domain/canary anti-forgetting gates are
   unchanged.
+
+
+## 2026-09-20 — Generalist tokenizer evolution fairness
+
+- promoted `bpe-v1` from checkpoint-only support into the bounded Generalist
+  architecture-search surface;
+- BPE training uses only allowed training/replay and protected repository-corpus
+  material, never validation/canary/production-qualification rows;
+- byte -> BPE challengers inherit stable byte/special embeddings exactly and
+  initialize new merged-token embeddings deterministically from their source
+  byte embeddings;
+- research resource checks count the actual tokenizer vocabulary size;
+- cross-tokenizer promotion uses NLL/bits per supervised UTF-8 target byte,
+  because per-token cross-entropy and token accuracy are not comparable across
+  different segmentations;
+- held-out generation, per-domain byte-normalized quality, rotating canaries
+  and solved-item anti-forgetting remain mandatory.
