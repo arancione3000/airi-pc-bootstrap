@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .benchmarks import run_benchmark
+from .benchmarks import qualification_suite, run_benchmark
 from .runtime import GeneralistRuntime
 
 QUALIFICATION_VERSION = 1
@@ -46,7 +46,7 @@ def qualify_checkpoint(
 ) -> dict[str, Any]:
     root = Path(state_dir)
     runtime = GeneralistRuntime.from_checkpoint(root)
-    report = run_benchmark(runtime)
+    report = run_benchmark(runtime, qualification_suite())
     digest = checkpoint_digest(root)
     qualified = bool(
         report.get("ok")
@@ -146,7 +146,7 @@ def qualify_transformers_model(
 
     root = Path(model_dir).expanduser().resolve()
     backend = LocalTransformersBackend(root, local_files_only=True)
-    report = run_benchmark(backend)
+    report = run_benchmark(backend, qualification_suite())
     target = Path(attestation_path or (root / ".airi-qualification.json"))
     digest = transformers_model_digest(root, exclude_path=target)
     qualified = bool(
