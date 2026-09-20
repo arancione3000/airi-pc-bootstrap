@@ -133,6 +133,7 @@ def test_online_research_rejects_redirect_outside_provider_allowlist():
 
 
 def test_native_mutations_are_bounded_and_online_evidence_only_selects_families(tmp_path: Path):
+    pytest.importorskip("torch")
     from generalist_lm.native_evolution import (
         generate_native_challengers,
         genome_from_checkpoint,
