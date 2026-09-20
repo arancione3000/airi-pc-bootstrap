@@ -42,6 +42,8 @@ class AiriLatticeConfig:
     active_experts: int = 2
     max_reasoning_steps: int = 4
     surprise_threshold: float = 0.20
+    predictive_error_memory: bool = False
+    local_recurrence: bool = False
     surprise_power: float = 1.5
     deep_write_power: float = 1.6
     lattice_mix: float = 0.20
@@ -65,6 +67,8 @@ class AiriLatticeConfig:
         self.active_experts = int(self.active_experts)
         self.max_reasoning_steps = int(self.max_reasoning_steps)
         self.surprise_threshold = float(self.surprise_threshold)
+        self.predictive_error_memory = bool(self.predictive_error_memory)
+        self.local_recurrence = bool(self.local_recurrence)
         self.surprise_power = float(self.surprise_power)
         self.deep_write_power = float(self.deep_write_power)
         self.lattice_mix = float(self.lattice_mix)
@@ -150,21 +154,34 @@ class AiriLatticeLM:
                 )
                 return (x * scale.to(dtype=x.dtype)) * self.weight
 
-        class Expert(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.up = nn.Linear(config.d_model, config.d_expert, bias=False)
-                self.gate = nn.Linear(config.d_model, config.d_expert, bias=False)
-                self.down = nn.Linear(config.d_expert, config.d_model, bias=False)
-
-            def forward(self, x):
-                return self.down(F.silu(self.gate(x)) * self.up(x))
-
         class SparseExperts(nn.Module):
+            """Vectorized top-k experts.
+
+            Expert tensors are gathered only for selected routes. This keeps
+            sparse semantics while avoiding a Python loop over every expert,
+            which was the dominant CPU overhead in the first real swarm.
+            """
             def __init__(self):
                 super().__init__()
                 self.router = nn.Linear(config.d_model * 2, config.n_experts, bias=False)
-                self.experts = nn.ModuleList([Expert() for _ in range(config.n_experts)])
+                self.up_weight = nn.Parameter(torch.empty(
+                    config.n_experts,
+                    config.d_model,
+                    config.d_expert,
+                ))
+                self.gate_weight = nn.Parameter(torch.empty(
+                    config.n_experts,
+                    config.d_model,
+                    config.d_expert,
+                ))
+                self.down_weight = nn.Parameter(torch.empty(
+                    config.n_experts,
+                    config.d_expert,
+                    config.d_model,
+                ))
+                nn.init.normal_(self.up_weight, mean=0.0, std=config.init_std)
+                nn.init.normal_(self.gate_weight, mean=0.0, std=config.init_std)
+                nn.init.normal_(self.down_weight, mean=0.0, std=config.init_std)
 
             def forward(self, x, memory):
                 router_input = torch.cat([x, memory], dim=-1)
@@ -175,27 +192,34 @@ class AiriLatticeLM:
                     dim=-1,
                 )
                 weights = torch.softmax(values, dim=-1)
-                flat_x = x
-                output = torch.zeros_like(flat_x)
-                usage = torch.zeros(
-                    config.n_experts,
-                    device=x.device,
-                    dtype=x.dtype,
+
+                # [batch, top_k, d_model, d_expert]
+                selected_up = self.up_weight[indices]
+                selected_gate = self.gate_weight[indices]
+                up = torch.einsum("bd,bkdh->bkh", x, selected_up)
+                gate = torch.einsum("bd,bkdh->bkh", x, selected_gate)
+                hidden = F.silu(gate) * up
+
+                # [batch, top_k, d_expert, d_model]
+                selected_down = self.down_weight[indices]
+                expert_output = torch.einsum(
+                    "bkh,bkhd->bkd",
+                    hidden,
+                    selected_down,
                 )
-
-                # True sparse execution: each expert only sees rows routed to it.
-                for expert_index, expert in enumerate(self.experts):
-                    selected = indices == expert_index
-                    if not bool(selected.any()):
-                        continue
-                    row_ids, slots = selected.nonzero(as_tuple=True)
-                    expert_input = flat_x.index_select(0, row_ids)
-                    expert_output = expert(expert_input)
-                    expert_weight = weights[row_ids, slots].unsqueeze(-1)
-                    output.index_add_(0, row_ids, expert_output * expert_weight)
-                    usage[expert_index] = selected.sum().to(dtype=x.dtype)
-
+                output = (expert_output * weights.unsqueeze(-1)).sum(dim=1)
+                usage = torch.bincount(
+                    indices.reshape(-1),
+                    minlength=config.n_experts,
+                ).to(device=x.device, dtype=x.dtype)
                 return output, usage
+
+            def expert_parameter_count(self):
+                return (
+                    self.up_weight.numel()
+                    + self.gate_weight.numel()
+                    + self.down_weight.numel()
+                )
 
         class LatticeCell(nn.Module):
             def __init__(self, cell_index: int):
@@ -203,6 +227,18 @@ class AiriLatticeLM:
                 self.cell_index = int(cell_index)
                 self.input_norm = RMSNorm(config.d_model)
                 self.memory_norm = RMSNorm(config.d_model)
+                self.local_gate = (
+                    nn.Linear(config.d_model * 2, config.d_model, bias=False)
+                    if config.local_recurrence else None
+                )
+                self.local_candidate = (
+                    nn.Linear(config.d_model * 2, config.d_model, bias=False)
+                    if config.local_recurrence else None
+                )
+                self.predict_proj = (
+                    nn.Linear(config.d_model, config.d_model, bias=False)
+                    if config.predictive_error_memory else None
+                )
                 self.write_proj = nn.Linear(
                     config.d_model * 2,
                     config.d_model,
@@ -260,26 +296,39 @@ class AiriLatticeLM:
                 if state.shape[1] != x.shape[0] or state.shape[2] != config.d_model:
                     raise ValueError("invalid AIRI Lattice state shape")
 
-                x_norm = self.input_norm(x)
                 fast = self.memory_norm(state[0])
+                base = x
+                if self.local_gate is not None and self.local_candidate is not None:
+                    local_input = torch.cat([self.input_norm(x), fast], dim=-1)
+                    local_gate = torch.sigmoid(self.local_gate(local_input))
+                    local_candidate = torch.tanh(self.local_candidate(local_input))
+                    base = x + local_gate * local_candidate
+                x_norm = self.input_norm(base)
 
-                # Novelty is a bounded geometric mismatch with fast memory.
-                # This gives a direct mathematical signal for write depth:
-                # ordinary tokens mostly touch fast state; novel tokens can
-                # propagate into slow/deep bands.
+                route = torch.softmax(self.band_routes, dim=-1)
+                routed = torch.einsum("ij,jbd->ibd", route, state)
+                previous_summary = state.mean(dim=0)
+
+                if self.predict_proj is not None:
+                    prediction = self.predict_proj(previous_summary)
+                    reference = prediction
+                    write_source = x_norm - prediction
+                else:
+                    reference = fast
+                    write_source = x_norm
+
+                # Surprise can either measure mismatch with fast memory or,
+                # in predictive-error mode, a learned latent prediction error.
                 cosine = F.cosine_similarity(
                     x_norm.float(),
-                    fast.float(),
+                    reference.float(),
                     dim=-1,
                     eps=1e-6,
                 ).clamp(-1.0, 1.0)
                 surprise = ((1.0 - cosine) * 0.5).to(dtype=x.dtype)
 
-                route = torch.softmax(self.band_routes, dim=-1)
-                routed = torch.einsum("ij,jbd->ibd", route, state)
-                previous_summary = state.mean(dim=0)
                 candidate = torch.tanh(
-                    self.write_proj(torch.cat([x_norm, previous_summary], dim=-1))
+                    self.write_proj(torch.cat([write_source, previous_summary], dim=-1))
                 )
                 raw_gate = torch.sigmoid(self.write_gate(x_norm))
 
@@ -319,7 +368,7 @@ class AiriLatticeLM:
                 memory = torch.einsum("bi,ibd->bd", band_weights, new_state)
 
                 expert_delta, usage = self.experts(x_norm, memory)
-                out = x + self.dropout(self.memory_out(memory) + expert_delta)
+                out = base + self.dropout(self.memory_out(memory) + expert_delta)
                 return self.output_norm(out), new_state, surprise, usage
 
         class Reasoner(nn.Module):
@@ -566,13 +615,10 @@ def lattice_active_parameter_estimate(config: AiriLatticeConfig) -> int:
     model = AiriLatticeLM(config)
     total = sum(p.numel() for p in model.parameters())
 
-    expert_total = 0
-    for cell in model.cells:
-        expert_total += sum(
-            p.numel()
-            for expert in cell.experts.experts
-            for p in expert.parameters()
-        )
+    expert_total = sum(
+        int(cell.experts.expert_parameter_count())
+        for cell in model.cells
+    )
     active_fraction = config.active_experts / config.n_experts
     return int(round(total - expert_total + expert_total * active_fraction))
 

@@ -249,6 +249,43 @@ def mutation_library(
         ),
     ])
 
+    # Predictive-coding and local recurrent genes. These are off by default
+    # so the original Lattice remains a valid genome; MATHESIS can explicitly
+    # test whether the extra structure earns its active-parameter cost.
+    if not cfg.predictive_error_memory:
+        mutations.append(LatticeMutation(
+            "prediction-enable-error-memory",
+            "prediction",
+            {"predictive_error_memory": True},
+            "store learned latent prediction errors instead of only raw novelty",
+            ("reasoning", "efficiency"),
+        ))
+    else:
+        mutations.append(LatticeMutation(
+            "prediction-disable-error-memory",
+            "prediction",
+            {"predictive_error_memory": False},
+            "remove predictive coding if its extra parameters do not pay for themselves",
+            ("efficiency",),
+        ))
+
+    if not cfg.local_recurrence:
+        mutations.append(LatticeMutation(
+            "local-enable-gated-recurrence",
+            "local",
+            {"local_recurrence": True},
+            "add a learned short-horizon recurrent path before multiscale memory",
+            ("reasoning", "code"),
+        ))
+    else:
+        mutations.append(LatticeMutation(
+            "local-disable-gated-recurrence",
+            "local",
+            {"local_recurrence": False},
+            "remove the local recurrent path if multiscale memory already captures it",
+            ("efficiency",),
+        ))
+
     # Adaptive reasoning depth.
     if cfg.max_reasoning_steps < 12:
         mutations.append(LatticeMutation(
@@ -394,6 +431,8 @@ def mutation_library(
         "reasoning": 3 if reasoning_focus else 1,
         "routing": 2 if reasoning_focus else 1,
         "experts": 2 if reasoning_focus or curriculum_focus else 1,
+        "prediction": 4 if reasoning_focus else 2,
+        "local": 4 if reasoning_focus else 2,
         "optimizer": 1,
         "depth": 1,
     }
@@ -448,8 +487,41 @@ def generate_lattice_population(
         research=research,
     )
     if library:
-        shift = max(0, int(exploration_offset)) % len(library)
-        library = library[shift:] + library[:shift]
+        # Round-robin mutation families instead of slicing one sorted list.
+        # The first real swarm showed that a naive top-N population could be
+        # dominated by near-identical memory mutations and never test routing,
+        # reasoning or predictive/local structure. Keep one lane per family
+        # before returning to a second mutation from the same family.
+        buckets: dict[str, list[LatticeMutation]] = {}
+        family_order: list[str] = []
+        for mutation in library:
+            if mutation.family not in buckets:
+                buckets[mutation.family] = []
+                family_order.append(mutation.family)
+            buckets[mutation.family].append(mutation)
+
+        family_shift = max(0, int(exploration_offset)) % len(family_order)
+        family_order = family_order[family_shift:] + family_order[:family_shift]
+        inner_shift = max(0, int(exploration_offset)) // max(1, len(family_order))
+        for family in family_order:
+            rows = buckets[family]
+            if rows:
+                shift = inner_shift % len(rows)
+                buckets[family] = rows[shift:] + rows[:shift]
+
+        interleaved: list[LatticeMutation] = []
+        cursor = 0
+        while True:
+            added = False
+            for family in family_order:
+                rows = buckets[family]
+                if cursor < len(rows):
+                    interleaved.append(rows[cursor])
+                    added = True
+            if not added:
+                break
+            cursor += 1
+        library = interleaved
 
     out: list[tuple[LatticeMutation, LatticeGenome]] = []
     seen: set[str] = set()

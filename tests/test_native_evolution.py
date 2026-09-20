@@ -778,3 +778,63 @@ def test_lattice_swarm_finalizer_refuses_unverified_candidate(tmp_path: Path):
     assert final["promoted"] is False
     assert final["winner"] is None
     assert final["policy"]["candidate_can_self_promote"] is False
+
+
+
+def test_lattice_population_round_robins_structural_families_and_new_genes():
+    pytest.importorskip("torch")
+    from generalist_lm.lattice_evolution import (
+        generate_lattice_population,
+        root_lattice_genome,
+    )
+
+    champion = root_lattice_genome(_tiny_lattice_config())
+    population = generate_lattice_population(
+        champion,
+        count=8,
+        exploration_offset=0,
+        mathesis_signals=["symbolic_reasoning_signal"],
+        research={"tag_counts": {"reasoning": 3, "efficiency": 2}},
+        max_total_parameters=3_000_000,
+        max_active_parameter_ratio=2.0,
+    )
+    families = [mutation.family for mutation, _ in population]
+    assert len(population) == 8
+    assert len(set(families[:6])) >= 5
+    assert "prediction" in families
+    assert "local" in families
+
+
+def test_lattice_predictive_and_local_genes_run_causally_with_vectorized_sparse_experts():
+    torch = pytest.importorskip("torch")
+    from generalist_lm.native_lattice import (
+        AiriLatticeLM,
+        lattice_active_parameter_estimate,
+        lattice_parameter_count,
+    )
+
+    cfg = _tiny_lattice_config(
+        predictive_error_memory=True,
+        local_recurrence=True,
+        active_experts=2,
+    )
+    torch.manual_seed(77)
+    model = AiriLatticeLM(cfg).eval()
+    ids = torch.tensor([[1, 15, 16, 17, 18, 19]], dtype=torch.long)
+    altered = ids.clone()
+    altered[0, -1] = 99
+
+    left = model(ids, return_state=True)
+    right = model(altered, return_state=True)
+
+    assert left["logits"].shape == (1, ids.shape[1], cfg.vocab_size)
+    assert torch.allclose(
+        left["logits"][:, :-1],
+        right["logits"][:, :-1],
+        atol=1e-6,
+        rtol=1e-6,
+    )
+    assert left["stats"]["mean_surprise"] >= 0.0
+    assert len(left["stats"]["expert_usage"]) == cfg.n_experts
+    assert sum(left["stats"]["expert_usage"]) == pytest.approx(1.0, abs=1e-5)
+    assert lattice_active_parameter_estimate(cfg) < lattice_parameter_count(cfg)
