@@ -418,6 +418,8 @@ def _train_genome(
     device: str,
     replay_rows: list[ResearchRow] | None = None,
     source_model=None,
+    gradient_accumulation_steps: int = 1,
+    precision: str = "fp32",
 ) -> tuple[GeneralistRuntime, dict[str, Any]]:
     tokenizer = ByteTokenizer()
     model = CausalTransformerLM(genome.model_config(tokenizer.vocab_size))
@@ -445,6 +447,8 @@ def _train_genome(
         weight_decay=0.0,
         seed=seed,
         device=device,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        precision=precision,
     )
     runtime = GeneralistRuntime(model, genome.model_config(tokenizer.vocab_size), tokenizer, device=device)
     validation = _grouped_validation(runtime.model, tokenizer, validation_rows(), device=device)
@@ -476,6 +480,8 @@ def _continue_champion(
     seed: int,
     device: str,
     cycle: int,
+    gradient_accumulation_steps: int = 1,
+    precision: str = "fp32",
 ) -> tuple[GeneralistGenome, GeneralistRuntime, dict[str, Any]]:
     """Fine-tune a copy of the current champion with full replay.
 
@@ -496,6 +502,8 @@ def _continue_champion(
         weight_decay=0.0,
         seed=seed,
         device=device,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        precision=precision,
     )
     runtime = GeneralistRuntime(model, genome.model_config(tokenizer.vocab_size), tokenizer, device=device)
     validation = _grouped_validation(runtime.model, tokenizer, validation_rows(), device=device)
@@ -510,6 +518,16 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
     root = Path(state_dir or os.environ.get("AIRI_GENERALIST_RESEARCH_STATE", ".ai/generalist-research")).resolve()
     root.mkdir(parents=True, exist_ok=True)
     device = os.environ.get("AIRI_GENERALIST_RESEARCH_DEVICE", "cpu")
+    precision = os.environ.get("AIRI_GENERALIST_RESEARCH_PRECISION", "fp32").strip().lower()
+    if precision not in {"fp32", "bf16", "fp16"}:
+        raise ValueError("AIRI_GENERALIST_RESEARCH_PRECISION must be fp32, bf16, or fp16")
+    gradient_accumulation_steps = max(
+        1,
+        min(
+            int(os.environ.get("AIRI_GENERALIST_RESEARCH_GRADIENT_ACCUMULATION", "1")),
+            64,
+        ),
+    )
     steps = max(2, min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_STEPS", "20")), 500))
     bootstrap_steps = max(2, min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS", "30")), 500))
     challenger_count = max(1, min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "2")), 6))
@@ -539,6 +557,8 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             steps=max(steps, bootstrap_steps),
             seed=_genome_training_seed(champion_genome, namespace="bootstrap"),
             device=device,
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            precision=precision,
         )
         _save_champion(root, champion_genome, champion_runtime, champion_report)
         bootstrapped = True
@@ -589,6 +609,8 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         seed=_genome_training_seed(champion_genome, namespace=f"continual-{cycle}"),
         device=device,
         cycle=cycle,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        precision=precision,
     )
     continual_report["canary_cycle"] = cycle
     continual_report["canary"] = _grouped_validation(
@@ -637,6 +659,8 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             device=device,
             replay_rows=replay_rows,
             source_model=champion_runtime.model,
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            precision=precision,
         )
         report["canary_cycle"] = cycle
         report["canary"] = _grouped_validation(
@@ -700,6 +724,8 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
                 "enabled": True,
                 "full_replay": True,
                 "curriculum_max_rows": curriculum_max_rows,
+                "gradient_accumulation_steps": gradient_accumulation_steps,
+                "precision": precision,
             },
             "rotating_canary": {
                 "enabled": True,

@@ -1574,3 +1574,177 @@ def test_startup_generalist_sync_is_explicit_opt_in():
     assert "AIRI_GENERALIST_SYNC_FROM_GITHUB" in start
     assert "generalist_lm.state_sync" in start
     assert "AIRI_GENERALIST_SYNC_FAILED_KEEPING_LOCAL_CHECKPOINT" in start
+
+
+@pytest.mark.parametrize("position_encoding", ["learned", "sinusoidal", "rope"])
+def test_kv_cache_greedy_generation_matches_full_recompute(position_encoding):
+    torch = pytest.importorskip("torch")
+    torch.manual_seed(1234)
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=32,
+        d_model=32,
+        n_heads=4,
+        n_layers=2,
+        d_ff=64,
+        dropout=0.0,
+        position_encoding=position_encoding,
+    ).validate()
+    model = CausalTransformerLM(cfg)
+    model.eval()
+    ids = torch.randint(8, cfg.vocab_size, (2, 9))
+
+    uncached = model.generate(
+        ids,
+        max_new_tokens=7,
+        eos_token_id=None,
+        temperature=0.0,
+        use_cache=False,
+    )
+    cached = model.generate(
+        ids,
+        max_new_tokens=7,
+        eos_token_id=None,
+        temperature=0.0,
+        use_cache=True,
+    )
+    assert torch.equal(cached, uncached)
+
+
+@pytest.mark.parametrize("position_encoding", ["learned", "sinusoidal", "rope"])
+def test_incremental_kv_logits_match_full_forward(position_encoding):
+    torch = pytest.importorskip("torch")
+    torch.manual_seed(77)
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=32,
+        d_model=32,
+        n_heads=4,
+        n_layers=2,
+        d_ff=64,
+        dropout=0.0,
+        position_encoding=position_encoding,
+    ).validate()
+    model = CausalTransformerLM(cfg)
+    model.eval()
+    ids = torch.randint(8, cfg.vocab_size, (1, 11))
+
+    with torch.no_grad():
+        full = model(ids)["logits"][:, -1, :]
+        prefix = model(ids[:, :-1], use_cache=True)
+        incremental = model(
+            ids[:, -1:],
+            past_key_values=prefix["past_key_values"],
+            use_cache=True,
+        )["logits"][:, -1, :]
+
+    assert torch.allclose(full, incremental, atol=1e-5, rtol=1e-5)
+
+
+def test_kv_cache_falls_back_safely_at_context_boundary():
+    torch = pytest.importorskip("torch")
+    torch.manual_seed(9)
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=16,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        dropout=0.0,
+        position_encoding="learned",
+    ).validate()
+    model = CausalTransformerLM(cfg)
+    model.eval()
+    ids = torch.randint(8, cfg.vocab_size, (1, 15))
+    cached = model.generate(
+        ids,
+        max_new_tokens=5,
+        eos_token_id=None,
+        temperature=0.0,
+        use_cache=True,
+    )
+    uncached = model.generate(
+        ids,
+        max_new_tokens=5,
+        eos_token_id=None,
+        temperature=0.0,
+        use_cache=False,
+    )
+    assert torch.equal(cached, uncached)
+
+
+def test_training_gradient_accumulation_reports_effective_batch_and_learns():
+    pytest.importorskip("torch")
+    cfg = tiny_config()
+    model = CausalTransformerLM(cfg)
+    tok = ByteTokenizer()
+    examples = [
+        SFTExample([
+            {"role": "user", "content": "Say A"},
+            {"role": "assistant", "content": "A"},
+        ]),
+        SFTExample([
+            {"role": "user", "content": "Say B"},
+            {"role": "assistant", "content": "B"},
+        ]),
+    ]
+    report = train_sft(
+        model,
+        tok,
+        examples,
+        steps=20,
+        batch_size=1,
+        gradient_accumulation_steps=2,
+        learning_rate=8e-3,
+        weight_decay=0.0,
+        seed=5,
+        precision="fp32",
+    )
+    assert report["ok"] is True
+    assert report["effective_batch_size"] == 2
+    assert report["gradient_accumulation_steps"] == 2
+    assert report["final_loss"] < report["initial_loss"]
+
+
+def test_training_rejects_fp16_on_cpu():
+    pytest.importorskip("torch")
+    model = CausalTransformerLM(tiny_config())
+    with pytest.raises(ValueError, match="fp16 training requires CUDA"):
+        train_sft(
+            model,
+            ByteTokenizer(),
+            [SFTExample([
+                {"role": "user", "content": "x"},
+                {"role": "assistant", "content": "y"},
+            ])],
+            steps=1,
+            precision="fp16",
+            device="cpu",
+        )
+
+
+def test_research_cycle_uses_configured_gradient_accumulation(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    from generalist_lm.research_cycle import run_research_cycle
+
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_GRADIENT_ACCUMULATION", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_PRECISION", "fp32")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_MIN_LOSS_GAIN", "999")
+
+    result = run_research_cycle(tmp_path)
+    training = result["champion_report"]["training"]
+    assert training["gradient_accumulation_steps"] == 2
+    assert training["effective_batch_size"] == 8
+    assert training["precision"] == "fp32"
+
+
+def test_research_cycle_rejects_unknown_precision_before_training(tmp_path: Path, monkeypatch):
+    from generalist_lm.research_cycle import run_research_cycle
+
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_PRECISION", "int4-magic")
+    with pytest.raises(ValueError, match="must be fp32, bf16, or fp16"):
+        run_research_cycle(tmp_path)

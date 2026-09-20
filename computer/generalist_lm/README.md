@@ -227,3 +227,10 @@ This separation is important: MATHESIS and the small Continuum can discover
 architectural/curriculum ideas continuously, while expensive model training can
 run on suitable hardware. Nothing trained by either path becomes the active
 reasoning provider until protected qualification succeeds.
+
+
+## KV-cache and scalable SFT execution
+
+Autoregressive decoding supports a bounded per-layer KV cache. Cached greedy decoding is regression-tested against the original full-prefix path across the supported positional-encoding variants, and the cache is discarded/recomputed when the configured context window is reached so stale absolute positions are not reused.
+
+Supervised fine-tuning supports gradient accumulation and explicit fp32/bf16/fp16 precision policies. Unsafe precision/device combinations fail closed. These execution optimizations do not alter qualification, protected-domain regression gates, tool permissions or the MATHESIS verifier boundary.
