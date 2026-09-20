@@ -423,6 +423,50 @@ Example manifest:
 }
 ```
 
+The corpus can also be materialized automatically from a reviewed
+`native-sources-v1` catalog. This removes the need to copy training files by
+hand while keeping source admission fail-closed. AIRI downloads only pinned
+HTTPS objects, verifies the exact SHA-256 before accepting bytes, enforces host
+and size budgets, refuses unsafe paths/redirects, records source URL/license in
+the generated manifest, and then hands the result to the same local corpus
+audit used above. Source discovery is intentionally **not** part of Phase 2;
+later autonomous research may propose catalog changes, but it does not bypass
+these acquisition checks.
+
+Example source catalog:
+
+```json
+{
+  "version": "native-sources-v1",
+  "allowed_hosts": ["datasets.example.org"],
+  "sources": [
+    {
+      "name": "approved-general-shard-0001",
+      "url": "https://datasets.example.org/general-0001.jsonl",
+      "sha256": "REPLACE_WITH_64_HEX_SHA256",
+      "filename": "general/general-0001.jsonl",
+      "domain": "general",
+      "language": "en",
+      "license": "REVIEWED_LICENSE_ID",
+      "source_type": "permissive",
+      "approved_for_training": true,
+      "weight": 1.0
+    }
+  ]
+}
+```
+
+Materialize the corpus without manually supplying document files:
+
+```bash
+python -m generalist_lm.cli native-corpus-acquire \
+  ./sources/native-sources.json ./corpus \
+  --allowed-host datasets.example.org
+
+python -m generalist_lm.cli native-corpus-audit \
+  ./corpus/native-corpus.json --allowed-root ./corpus
+```
+
 Audit and train the tokenizer before allocating a BPE Native model:
 
 ```bash
