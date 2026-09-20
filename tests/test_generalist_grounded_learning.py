@@ -48,6 +48,10 @@ def test_repository_corpus_excludes_exams_governance_and_sensitive_files(tmp_pat
         "PROTECTED_BENCHMARK_MARKER = 'hidden exam'\n" * 8,
         encoding="utf-8",
     )
+    (protected / "foundation_probe.py").write_text(
+        "FOUNDATION_PREFLIGHT_MARKER = 'hidden promotion gate'\n" * 8,
+        encoding="utf-8",
+    )
 
     (tmp_path / ".env").write_text("TOKEN=should-not-appear\n" * 8, encoding="utf-8")
     (tmp_path / ".ai").mkdir()
@@ -61,9 +65,10 @@ def test_repository_corpus_excludes_exams_governance_and_sensitive_files(tmp_pat
     assert "[REDACTED]" in joined
     assert "EXAM_ANSWER_MARKER" not in joined
     assert "PROTECTED_BENCHMARK_MARKER" not in joined
+    assert "FOUNDATION_PREFLIGHT_MARKER" not in joined
     assert "should-not-appear" not in joined
     assert "PRIVATE_STATE_MARKER" not in joined
-    assert manifest.excluded_protected >= 2
+    assert manifest.excluded_protected >= 3
     assert manifest.files >= 1
     assert manifest.documents >= 1
 

@@ -105,6 +105,8 @@ def test_foundation_suite_has_critical_gate_for_every_domain():
 def test_foundation_qualification_is_bound_to_model_manifest_and_suite(tmp_path: Path, monkeypatch):
     from generalist_lm import qualification
 
+    _stub_transformers_preflight(monkeypatch)
+
     model = _fake_model(tmp_path / "model")
     write_foundation_manifest(model, _manifest())
 
@@ -130,7 +132,7 @@ def test_foundation_qualification_is_bound_to_model_manifest_and_suite(tmp_path:
 
     result = qualification.qualify_foundation_model(model, minimum_score=90.0)
     assert result["qualified"] is True
-    assert result["foundation_qualification_version"] == 2
+    assert result["foundation_qualification_version"] == 3
     assert result["manifest_digest"] == foundation_manifest_digest(model)
     assert result["suite_digest"] == foundation_suite_digest()
     assert qualification.foundation_qualification_status(model)["qualified"] is True
@@ -221,6 +223,8 @@ def test_cli_exposes_foundation_track_commands(tmp_path: Path):
 def test_foundation_qualification_forwards_hardware_policy(tmp_path: Path, monkeypatch):
     from generalist_lm import qualification
 
+    _stub_transformers_preflight(monkeypatch)
+
     model = _fake_model(tmp_path / "model")
     write_foundation_manifest(model, _manifest())
     seen = {}
@@ -291,8 +295,10 @@ def test_foundation_minimum_score_cannot_be_weakened(tmp_path: Path):
         )
 
 
-def test_foundation_attestation_v2_requires_inference_profile(tmp_path: Path, monkeypatch):
+def test_foundation_attestation_v3_requires_inference_profile(tmp_path: Path, monkeypatch):
     from generalist_lm import qualification
+
+    _stub_transformers_preflight(monkeypatch)
 
     model = _fake_model(tmp_path / "model")
     write_foundation_manifest(model, _manifest())
@@ -317,7 +323,7 @@ def test_foundation_attestation_v2_requires_inference_profile(tmp_path: Path, mo
         },
     )
     result = qualification.qualify_foundation_model(model)
-    assert result["foundation_qualification_version"] == 2
+    assert result["foundation_qualification_version"] == 3
     assert result["inference_profile"] == {"torch_dtype": "auto"}
     assert qualification.foundation_qualification_status(model)["qualified"] is True
 
@@ -331,6 +337,8 @@ def test_foundation_attestation_v2_requires_inference_profile(tmp_path: Path, mo
 
 def test_foundation_status_rejects_tampered_qualified_boolean(tmp_path: Path, monkeypatch):
     from generalist_lm import qualification
+
+    _stub_transformers_preflight(monkeypatch)
 
     model = _fake_model(tmp_path / "model")
     write_foundation_manifest(model, _manifest())
@@ -370,6 +378,8 @@ def test_foundation_status_rejects_tampered_qualified_boolean(tmp_path: Path, mo
 def test_foundation_status_requires_all_protected_domain_scores(tmp_path: Path, monkeypatch):
     from generalist_lm import qualification
 
+    _stub_transformers_preflight(monkeypatch)
+
     model = _fake_model(tmp_path / "model")
     write_foundation_manifest(model, _manifest())
 
@@ -400,4 +410,334 @@ def test_foundation_status_requires_all_protected_domain_scores(tmp_path: Path, 
     status = qualification.foundation_qualification_status(model)
     assert status["qualified"] is False
     assert status["qualification_semantics_ok"] is False
+
+def _stub_transformers_preflight(monkeypatch):
+    from generalist_lm import foundation_probe
+
+    monkeypatch.setattr(
+        foundation_probe,
+        "_transformers_config_probe",
+        lambda root: {
+            "installed": True,
+            "version": "test",
+            "config_loadable_without_remote_code": True,
+            "resolved_config_class": "GPT2Config",
+        },
+    )
+
+
+
+
+def test_foundation_preflight_and_qualification_reject_root_symlink(tmp_path: Path, monkeypatch):
+    from generalist_lm import qualification
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+    link = tmp_path / "model-link"
+    try:
+        link.symlink_to(model, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable")
+
+    _stub_transformers_preflight(monkeypatch)
+    preflight = foundation_preflight(link, probe_hardware=False)
+    assert preflight["ok"] is False
+    assert preflight["blockers"] == ["foundation_model_directory_is_symlink"]
+
+    with pytest.raises(ValueError, match="foundation_model_directory_is_symlink"):
+        qualification.qualify_foundation_model(link)
+
+    status = qualification.foundation_qualification_status(link)
+    assert status["qualified"] is False
+    assert status["preflight_ok"] is False
+    assert status["reason"] == "foundation_model_directory_is_symlink"
+
+
+def test_foundation_preflight_accepts_metadata_only_candidate(tmp_path: Path, monkeypatch):
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+    _stub_transformers_preflight(monkeypatch)
+
+    result = foundation_preflight(model, probe_hardware=False)
+    assert result["ok"] is True
+    assert result["preflight_version"] == 1
+    assert result["config"]["model_type"] == "gpt2"
+    assert result["config"]["context_limit"] == 4096
+    assert result["weights"]["weight_files"] == ["model.safetensors"]
+    assert result["weights"]["weight_bytes"] == len(b"foundation-weights")
+    assert result["hardware"] is None
+    assert "chat_template_not_declared" in result["warnings"]
+
+
+
+
+def test_foundation_preflight_rejects_malformed_tokenizer_config(tmp_path: Path, monkeypatch):
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "model")
+    (model / "tokenizer_config.json").write_text("{not-json", encoding="utf-8")
+    write_foundation_manifest(model, _manifest())
+    _stub_transformers_preflight(monkeypatch)
+
+    result = foundation_preflight(model, probe_hardware=False)
+    assert result["ok"] is False
+    assert "invalid_tokenizer_config" in result["blockers"]
+    assert result["chat_template"]["errors"]
+
+
+def test_foundation_preflight_validates_sharded_weight_index(tmp_path: Path, monkeypatch):
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "model")
+    (model / "model.safetensors").unlink()
+    (model / "model-00001-of-00002.safetensors").write_bytes(b"shard-one")
+    (model / "model-00002-of-00002.safetensors").write_bytes(b"shard-two")
+    (model / "model.safetensors.index.json").write_text(json.dumps({
+        "metadata": {"total_size": 18},
+        "weight_map": {
+            "model.embed.weight": "model-00001-of-00002.safetensors",
+            "lm_head.weight": "model-00002-of-00002.safetensors",
+        },
+    }), encoding="utf-8")
+    write_foundation_manifest(model, _manifest())
+    _stub_transformers_preflight(monkeypatch)
+
+    result = foundation_preflight(model, probe_hardware=False)
+    assert result["ok"] is True
+    assert result["weights"]["sharded"] is True
+    assert result["weights"]["index"] == "model.safetensors.index.json"
+    assert result["weights"]["weight_files"] == [
+        "model-00001-of-00002.safetensors",
+        "model-00002-of-00002.safetensors",
+    ]
+
+
+def test_foundation_preflight_rejects_missing_indexed_shard(tmp_path: Path, monkeypatch):
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "model")
+    (model / "model-00001-of-00002.safetensors").write_bytes(b"shard-one")
+    (model / "model.safetensors.index.json").write_text(json.dumps({
+        "weight_map": {
+            "a": "model-00001-of-00002.safetensors",
+            "b": "model-00002-of-00002.safetensors",
+        },
+    }), encoding="utf-8")
+    write_foundation_manifest(model, _manifest())
+    _stub_transformers_preflight(monkeypatch)
+
+    result = foundation_preflight(model, probe_hardware=False)
+    assert result["ok"] is False
+    assert any("missing shard" in row for row in result["blockers"])
+
+
+
+
+def test_foundation_preflight_rejects_non_string_index_shard_path(tmp_path: Path, monkeypatch):
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "model")
+    (model / "model.safetensors.index.json").write_text(json.dumps({
+        "weight_map": {
+            "a": "model.safetensors",
+            "b": 123,
+        },
+    }), encoding="utf-8")
+    write_foundation_manifest(model, _manifest())
+    _stub_transformers_preflight(monkeypatch)
+
+    result = foundation_preflight(model, probe_hardware=False)
+    assert result["ok"] is False
+    assert any("shard paths must be non-empty strings" in row for row in result["blockers"])
+
+
+def test_foundation_preflight_rejects_weight_index_escape(tmp_path: Path, monkeypatch):
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    outside = tmp_path / "outside.safetensors"
+    outside.write_bytes(b"outside")
+    model = _fake_model(tmp_path / "model")
+    (model / "model.safetensors.index.json").write_text(json.dumps({
+        "weight_map": {
+            "safe": "model.safetensors",
+            "escape": "../outside.safetensors",
+        },
+    }), encoding="utf-8")
+    write_foundation_manifest(model, _manifest())
+    _stub_transformers_preflight(monkeypatch)
+
+    result = foundation_preflight(model, probe_hardware=False)
+    assert result["ok"] is False
+    assert any("escapes model directory" in row for row in result["blockers"])
+
+
+def test_foundation_preflight_rejects_manifest_quantization_drift(tmp_path: Path, monkeypatch):
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "model")
+    config = json.loads((model / "config.json").read_text(encoding="utf-8"))
+    config["quantization_config"] = {"quant_method": "mxfp4"}
+    (model / "config.json").write_text(json.dumps(config), encoding="utf-8")
+    write_foundation_manifest(model, _manifest(quantization="none"))
+    _stub_transformers_preflight(monkeypatch)
+
+    result = foundation_preflight(model, probe_hardware=False)
+    assert result["ok"] is False
+    assert "manifest_quantization_mismatch" in result["blockers"]
+
+
+def test_foundation_preflight_flags_gpt_oss_harmony_requirement(tmp_path: Path, monkeypatch):
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "gpt-oss")
+    config = {
+        "model_type": "gpt_oss",
+        "architectures": ["GptOssForCausalLM"],
+        "max_position_embeddings": 131072,
+        "quantization_config": {"quant_method": "mxfp4"},
+    }
+    (model / "config.json").write_text(json.dumps(config), encoding="utf-8")
+    (model / "chat_template.jinja").write_text(
+        "<|start|>{{ messages[0]['content'] }}<|end|>",
+        encoding="utf-8",
+    )
+    write_foundation_manifest(
+        model,
+        _manifest(
+            model_id="openai/gpt-oss-20b",
+            architecture="decoder-only-moe",
+            context_length=131072,
+            parameter_count=21_000_000_000,
+            dtype="bfloat16",
+            quantization="mxfp4",
+        ),
+    )
+    _stub_transformers_preflight(monkeypatch)
+
+    result = foundation_preflight(model, probe_hardware=False)
+    assert result["ok"] is False
+    assert result["protocol_requirements"] == ["harmony"]
+    assert result["chat_template"]["available"] is True
+    assert "gpt_oss_harmony_adapter_required" in result["blockers"]
+    assert result["quantization"]["detected"] == "mxfp4"
+    assert "mxfp4" in result["special_runtime"]
+
+
+def test_foundation_preflight_parses_gpu_cpu_memory_budget(tmp_path: Path, monkeypatch):
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+    _stub_transformers_preflight(monkeypatch)
+
+    result = foundation_preflight(
+        model,
+        max_memory={0: "14GiB", "cpu": "32GiB"},
+        probe_hardware=False,
+    )
+    assert result["ok"] is True
+    assert result["memory_budget"]["declared"] is True
+    assert result["memory_budget"]["devices"]["0"] == 14 * 1024**3
+    assert result["memory_budget"]["devices"]["cpu"] == 32 * 1024**3
+
+
+def test_foundation_preflight_never_loads_model_tensors(tmp_path: Path, monkeypatch):
+    transformers = pytest.importorskip("transformers")
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("preflight must never load model tensors")
+
+    monkeypatch.setattr(transformers.AutoModelForCausalLM, "from_pretrained", forbidden)
+    result = foundation_preflight(model, probe_hardware=False)
+    assert result["ok"] is True
+
+
+def test_foundation_qualification_refuses_preflight_blocker_before_backend(tmp_path: Path, monkeypatch):
+    from generalist_lm import qualification
+
+    model = _fake_model(tmp_path / "gpt-oss")
+    (model / "config.json").write_text(json.dumps({
+        "model_type": "gpt_oss",
+        "architectures": ["GptOssForCausalLM"],
+        "max_position_embeddings": 4096,
+        "quantization_config": {"quant_method": "mxfp4"},
+    }), encoding="utf-8")
+    (model / "chat_template.jinja").write_text("template", encoding="utf-8")
+    write_foundation_manifest(
+        model,
+        _manifest(
+            model_id="openai/gpt-oss-test",
+            quantization="mxfp4",
+        ),
+    )
+    _stub_transformers_preflight(monkeypatch)
+
+    class Backend:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("blocked preflight must prevent backend construction")
+
+    monkeypatch.setattr("generalist_lm.hf_backend.LocalTransformersBackend", Backend)
+    with pytest.raises(ValueError, match="gpt_oss_harmony_adapter_required"):
+        qualification.qualify_foundation_model(model)
+
+
+def test_foundation_attestation_v3_requires_preflight_record(tmp_path: Path, monkeypatch):
+    from generalist_lm import qualification
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+    _stub_transformers_preflight(monkeypatch)
+
+    class Backend:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def generate(self, prompt: str, *, max_new_tokens: int = 192) -> str:
+            return ""
+
+    monkeypatch.setattr("generalist_lm.hf_backend.LocalTransformersBackend", Backend)
+    monkeypatch.setattr(
+        qualification,
+        "run_benchmark",
+        lambda backend, tasks: {
+            "ok": True,
+            "score": 100.0,
+            "domain_scores": {domain: 1.0 for domain in FOUNDATION_DOMAINS},
+            "critical_failures": [],
+            "tasks": [],
+        },
+    )
+    result = qualification.qualify_foundation_model(model)
+    assert result["foundation_qualification_version"] == 3
+    assert result["preflight"]["ok"] is True
+    assert qualification.foundation_qualification_status(model)["qualified"] is True
+
+    path = model / ".airi-foundation-qualification.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw.pop("preflight")
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    status = qualification.foundation_qualification_status(model)
+    assert status["qualified"] is False
+    assert status["preflight_ok"] is False
+
+
+def test_cli_exposes_foundation_preflight_command(tmp_path: Path):
+    from generalist_lm.cli import parser
+
+    args = parser().parse_args([
+        "foundation-preflight",
+        str(tmp_path / "model"),
+        "--max-memory-json", '{"0":"12GiB","cpu":"24GiB"}',
+        "--no-hardware",
+    ])
+    assert args.cmd == "foundation-preflight"
+    assert args.no_hardware is True
+    assert args.max_memory_json == '{"0":"12GiB","cpu":"24GiB"}'
 

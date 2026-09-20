@@ -18,10 +18,11 @@ from .foundation_benchmarks import (
     foundation_suite,
     foundation_suite_digest,
 )
+from .foundation_probe import FOUNDATION_PREFLIGHT_VERSION, foundation_preflight
 from .runtime import GeneralistRuntime
 
 QUALIFICATION_VERSION = 2
-FOUNDATION_QUALIFICATION_VERSION = 2
+FOUNDATION_QUALIFICATION_VERSION = 3
 FOUNDATION_MINIMUM_SCORE = 90.0
 _DIGEST_CACHE: dict[tuple, str] = {}
 
@@ -277,7 +278,16 @@ def qualify_foundation_model(
         raise ValueError("unsupported Foundation inference dtype")
     from .hf_backend import LocalTransformersBackend
 
-    root = Path(model_dir).expanduser().resolve()
+    supplied = Path(model_dir).expanduser()
+    preflight = foundation_preflight(
+        supplied,
+        max_memory=max_memory,
+        probe_hardware=False,
+    )
+    root = supplied.resolve()
+    if not preflight.get("ok"):
+        blockers = preflight.get("blockers") or ["unknown_preflight_failure"]
+        raise ValueError("foundation preflight failed: " + "; ".join(str(x) for x in blockers))
     manifest = load_foundation_manifest(root)
     manifest_digest = foundation_manifest_digest(root)
     suite_digest = foundation_suite_digest()
@@ -301,7 +311,7 @@ def qualify_foundation_model(
     result = {
         "foundation_qualification_version": FOUNDATION_QUALIFICATION_VERSION,
         "qualification_version": QUALIFICATION_VERSION,
-        "attested_by": "airi-generalist-foundation-qualification-v2",
+        "attested_by": "airi-generalist-foundation-qualification-v3",
         "backend_type": "transformers-foundation",
         "model_digest": digest,
         "manifest_digest": manifest_digest,
@@ -310,6 +320,7 @@ def qualify_foundation_model(
         "qualified": qualified,
         "minimum_score": threshold,
         "manifest": manifest.to_dict(),
+        "preflight": preflight,
         "report": report,
         "inference_profile": {
             "torch_dtype": canonical_dtype,
@@ -326,7 +337,7 @@ def qualify_foundation_model(
             "offload_folder": str(Path(offload_folder).expanduser().resolve()) if offload_folder else None,
         },
         "policy": (
-            "reviewed local manifest + dedicated protected foundation suite; "
+            "reviewed local manifest + metadata-only Foundation preflight + dedicated protected suite; "
             "local-files-only; trust_remote_code disabled; exact digests + inference dtype bound"
         ),
     }
@@ -342,7 +353,16 @@ def foundation_qualification_status(
     *,
     attestation_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    root = Path(model_dir).expanduser().resolve()
+    supplied = Path(model_dir).expanduser()
+    if supplied.is_symlink():
+        return {
+            "qualified": False,
+            "integrity_ok": False,
+            "qualification_semantics_ok": False,
+            "preflight_ok": False,
+            "reason": "foundation_model_directory_is_symlink",
+        }
+    root = supplied.resolve()
     target = Path(attestation_path or (root / ".airi-foundation-qualification.json"))
     try:
         value = json.loads(target.read_text(encoding="utf-8"))
@@ -351,6 +371,12 @@ def foundation_qualification_status(
         current_model = transformers_model_digest(root, exclude_path=target)
         current_manifest = foundation_manifest_digest(root)
         current_suite = foundation_suite_digest()
+        stored_load_policy = value.get("load_policy") if isinstance(value.get("load_policy"), dict) else {}
+        current_preflight = foundation_preflight(
+            root,
+            max_memory=stored_load_policy.get("max_memory"),
+            probe_hardware=False,
+        )
 
         report = value.get("report")
         minimum_score = value.get("minimum_score")
@@ -381,9 +407,19 @@ def foundation_qualification_status(
         except (TypeError, ValueError, OverflowError):
             semantics_ok = False
 
+        stored_preflight = value.get("preflight")
+        preflight_ok = bool(
+            isinstance(stored_preflight, dict)
+            and int(stored_preflight.get("preflight_version", 0)) == FOUNDATION_PREFLIGHT_VERSION
+            and stored_preflight.get("ok") is True
+            and not stored_preflight.get("blockers")
+            and current_preflight.get("ok") is True
+            and not current_preflight.get("blockers")
+        )
+
         integrity_ok = bool(
             value.get("backend_type") == "transformers-foundation"
-            and value.get("attested_by") == "airi-generalist-foundation-qualification-v2"
+            and value.get("attested_by") == "airi-generalist-foundation-qualification-v3"
             and int(value.get("qualification_version", 0)) == QUALIFICATION_VERSION
             and int(value.get("foundation_qualification_version", 0)) == FOUNDATION_QUALIFICATION_VERSION
             and int(value.get("suite_version", 0)) == FOUNDATION_SUITE_VERSION
@@ -393,11 +429,14 @@ def foundation_qualification_status(
             and value.get("manifest_digest") == current_manifest
             and value.get("suite_digest") == current_suite
             and semantics_ok
+            and preflight_ok
         )
         return {
             **value,
             "integrity_ok": integrity_ok,
             "qualification_semantics_ok": semantics_ok,
+            "preflight_ok": preflight_ok,
+            "current_preflight": current_preflight,
             "qualified": bool(value.get("qualified") and integrity_ok),
             "current_model_digest": current_model,
             "current_manifest_digest": current_manifest,
@@ -408,5 +447,6 @@ def foundation_qualification_status(
             "qualified": False,
             "integrity_ok": False,
             "qualification_semantics_ok": False,
+            "preflight_ok": False,
             "reason": f"missing_or_invalid_foundation_attestation:{type(exc).__name__}",
         }

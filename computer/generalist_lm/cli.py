@@ -8,6 +8,7 @@ from pathlib import Path
 from .distillation import DistillationPrompt, distill_prompts, save_distilled_jsonl
 from .hf_backend import LocalTransformersBackend
 from .foundation import FoundationManifest, foundation_identity, write_foundation_manifest
+from .foundation_probe import foundation_preflight
 from .pretraining import load_local_corpus, pretrain_causal
 from .qualification import (
     qualify_checkpoint,
@@ -76,6 +77,14 @@ def parser() -> argparse.ArgumentParser:
     fs = sub.add_parser("foundation-status")
     fs.add_argument("model_dir")
     fs.add_argument("--attestation")
+
+    fp = sub.add_parser(
+        "foundation-preflight",
+        help="inspect a local Foundation candidate without loading model tensors",
+    )
+    fp.add_argument("model_dir")
+    fp.add_argument("--max-memory-json")
+    fp.add_argument("--no-hardware", action="store_true")
 
     rc = sub.add_parser("research-cycle")
     rc.add_argument("--state", default=os.environ.get("AIRI_GENERALIST_RESEARCH_STATE", ".ai/generalist-research"))
@@ -196,6 +205,18 @@ def main(argv=None) -> int:
             **status,
             "identity": foundation_identity(args.model_dir),
         }
+
+    elif args.cmd == "foundation-preflight":
+        max_memory = None
+        if args.max_memory_json:
+            max_memory = json.loads(args.max_memory_json)
+            if not isinstance(max_memory, dict) or not max_memory:
+                raise ValueError("--max-memory-json must be a non-empty JSON object")
+        result = foundation_preflight(
+            args.model_dir,
+            max_memory=max_memory,
+            probe_hardware=not args.no_hardware,
+        )
 
     elif args.cmd == "research-cycle":
         result = run_research_cycle(args.state)
