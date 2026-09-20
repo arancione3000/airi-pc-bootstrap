@@ -426,6 +426,34 @@ def _stub_transformers_preflight(monkeypatch):
     )
 
 
+
+
+def test_foundation_preflight_and_qualification_reject_root_symlink(tmp_path: Path, monkeypatch):
+    from generalist_lm import qualification
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+    link = tmp_path / "model-link"
+    try:
+        link.symlink_to(model, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable")
+
+    _stub_transformers_preflight(monkeypatch)
+    preflight = foundation_preflight(link, probe_hardware=False)
+    assert preflight["ok"] is False
+    assert preflight["blockers"] == ["foundation_model_directory_is_symlink"]
+
+    with pytest.raises(ValueError, match="foundation_model_directory_is_symlink"):
+        qualification.qualify_foundation_model(link)
+
+    status = qualification.foundation_qualification_status(link)
+    assert status["qualified"] is False
+    assert status["preflight_ok"] is False
+    assert status["reason"] == "foundation_model_directory_is_symlink"
+
+
 def test_foundation_preflight_accepts_metadata_only_candidate(tmp_path: Path, monkeypatch):
     from generalist_lm.foundation_probe import foundation_preflight
 
