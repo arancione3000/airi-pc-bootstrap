@@ -17,6 +17,9 @@ from .native_foundation import (
     native_scale_profile,
 )
 from .native_acquisition import acquire_native_corpus
+from .native_evaluation import evaluate_native_checkpoint
+from .native_evolution_cycle import run_native_evolution_cycle
+from .native_online_research import discover_native_research
 from .native_data import (
     NATIVE_CORPUS_DOMAINS,
     audit_native_corpus,
@@ -175,6 +178,9 @@ def parser() -> argparse.ArgumentParser:
     nt.add_argument("--min-learning-rate", type=float, default=3e-5)
     nt.add_argument("--warmup-steps", type=int, default=100)
     nt.add_argument("--weight-decay", type=float, default=0.1)
+    nt.add_argument("--adam-beta1", type=float, default=0.9)
+    nt.add_argument("--adam-beta2", type=float, default=0.95)
+    nt.add_argument("--adam-eps", type=float, default=1e-8)
     nt.add_argument("--grad-clip", type=float, default=1.0)
     nt.add_argument("--validation-fraction", type=float, default=0.05)
     nt.add_argument("--max-eval-blocks", type=int, default=128)
@@ -191,6 +197,48 @@ def parser() -> argparse.ArgumentParser:
 
     nts = sub.add_parser("native-training-status")
     nts.add_argument("state")
+
+    nro = sub.add_parser(
+        "native-research-online",
+        help="search bounded public research metadata for Native evolution signals",
+    )
+    nro.add_argument("--signal", action="append")
+    nro.add_argument("--max-evidence", type=int, default=24)
+
+    nev = sub.add_parser(
+        "native-evaluate",
+        help="independently evaluate a Native checkpoint on deterministic held-out corpus data",
+    )
+    nev.add_argument("state")
+    nev.add_argument("manifest")
+    nev.add_argument("--allowed-root", action="append", required=True)
+    nev.add_argument("--validation-fraction", type=float, default=0.2)
+    nev.add_argument("--seed", type=int, default=431)
+    nev.add_argument("--max-eval-blocks", type=int, default=64)
+    nev.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
+
+    nevo = sub.add_parser(
+        "native-evolve",
+        help="run one proof-gated AIRI Native evolution cycle",
+    )
+    nevo.add_argument("evolution_state")
+    nevo.add_argument("seed_checkpoint")
+    nevo.add_argument("manifest")
+    nevo.add_argument("--allowed-root", action="append", required=True)
+    nevo.add_argument("--mathesis-state")
+    nevo.add_argument("--offline", action="store_true")
+    nevo.add_argument("--challengers", type=int, default=3)
+    nevo.add_argument("--trial-steps", type=int, default=4)
+    nevo.add_argument("--reinit-steps", type=int, default=0)
+    nevo.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
+    nevo.add_argument(
+        "--precision",
+        choices=("fp32", "fp16", "bf16"),
+        default="fp32",
+    )
+    nevo.add_argument("--minimum-gain", type=float, default=0.002)
+    nevo.add_argument("--max-domain-regression", type=float, default=0.05)
+    nevo.add_argument("--max-parameter-ratio", type=float, default=1.5)
 
     rc = sub.add_parser("research-cycle")
     rc.add_argument("--state", default=os.environ.get("AIRI_GENERALIST_RESEARCH_STATE", ".ai/generalist-research"))
@@ -408,6 +456,9 @@ def main(argv=None) -> int:
             min_learning_rate=args.min_learning_rate,
             warmup_steps=args.warmup_steps,
             weight_decay=args.weight_decay,
+            adam_beta1=args.adam_beta1,
+            adam_beta2=args.adam_beta2,
+            adam_eps=args.adam_eps,
             grad_clip=args.grad_clip,
             validation_fraction=args.validation_fraction,
             max_eval_blocks=args.max_eval_blocks,
@@ -428,6 +479,41 @@ def main(argv=None) -> int:
 
     elif args.cmd == "native-training-status":
         result = native_training_status(args.state)
+
+    elif args.cmd == "native-research-online":
+        result = discover_native_research(
+            signals=args.signal,
+            max_evidence=max(1, int(args.max_evidence)),
+        )
+
+    elif args.cmd == "native-evaluate":
+        result = evaluate_native_checkpoint(
+            args.state,
+            args.manifest,
+            allowed_roots=args.allowed_root,
+            validation_fraction=args.validation_fraction,
+            seed=args.seed,
+            max_eval_blocks=args.max_eval_blocks,
+            device=args.device,
+        )
+
+    elif args.cmd == "native-evolve":
+        result = run_native_evolution_cycle(
+            args.evolution_state,
+            args.seed_checkpoint,
+            args.manifest,
+            allowed_roots=args.allowed_root,
+            mathesis_state_dir=args.mathesis_state,
+            online_research=not args.offline,
+            challenger_count=max(1, int(args.challengers)),
+            steps_per_trial=max(1, int(args.trial_steps)),
+            reinit_training_steps=max(0, int(args.reinit_steps)),
+            device=args.device,
+            precision=args.precision,
+            minimum_gain=max(0.0, float(args.minimum_gain)),
+            max_domain_regression=max(0.0, float(args.max_domain_regression)),
+            max_parameter_ratio=max(1.0, float(args.max_parameter_ratio)),
+        )
 
     elif args.cmd == "research-cycle":
         result = run_research_cycle(args.state)
