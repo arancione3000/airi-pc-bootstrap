@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import json
 from pathlib import Path
 import random
@@ -85,6 +86,49 @@ def loss_on_examples(model, tokenizer: ByteTokenizer, examples: list[SFTExample]
     with torch.no_grad():
         loss = model(ids, labels=labels)["loss"]
     return float(loss.detach().cpu())
+
+
+def nll_stats_on_examples(model, tokenizer, examples: list[SFTExample], *, device: str = "cpu") -> dict[str, float | int]:
+    """Return tokenizer-comparable held-out negative log-likelihood metrics.
+
+    Cross-entropy per token is not comparable across tokenizer families because
+    changing tokenization changes the number and entropy of target tokens. NLL
+    per UTF-8 target byte keeps the promotion signal on a common denominator.
+    """
+    import torch
+    from torch.nn import functional as F
+
+    if not examples:
+        raise ValueError("no SFT examples")
+    model.eval()
+    ids, labels = _batch(examples, tokenizer, model.config.context_length, range(len(examples)))
+    ids, labels = ids.to(device), labels.to(device)
+    with torch.no_grad():
+        logits = model(ids)["logits"][:, :-1, :].contiguous()
+        targets = labels[:, 1:].contiguous()
+        total_nll = F.cross_entropy(
+            logits.view(-1, logits.shape[-1]),
+            targets.view(-1),
+            ignore_index=-100,
+            reduction="sum",
+        )
+
+    target_tokens = int((targets != -100).sum().item())
+    target_bytes = sum(
+        len(str(example.messages[-1]["content"]).encode("utf-8", errors="replace"))
+        for example in examples
+    )
+    nll = float(total_nll.detach().cpu())
+    per_token = nll / max(1, target_tokens)
+    per_byte = nll / max(1, target_bytes)
+    return {
+        "total_nll": nll,
+        "target_tokens": target_tokens,
+        "target_bytes": int(target_bytes),
+        "loss_per_token": per_token,
+        "nll_per_byte": per_byte,
+        "bits_per_byte": per_byte / math.log(2.0),
+    }
 
 
 def train_sft(
