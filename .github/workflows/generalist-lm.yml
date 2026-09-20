@@ -34,6 +34,7 @@ jobs:
           python3 -m venv .venv
           .venv/bin/pip install --disable-pip-version-check pytest
           .venv/bin/pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+          .venv/bin/pip install --disable-pip-version-check 'transformers>=4.57,<5'
 
       - name: Validate Generalist workflow syntax
         run: |
