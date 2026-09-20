@@ -1,5 +1,5 @@
 {
-  "cycle": 36,
+  "cycle": 38,
   "discarded": {
     "348ea96fb93f0b38287f": {
       "certificate": {
@@ -174,7 +174,7 @@
   "strategy_counts": {
     "binomial_expansion": 7,
     "difference_of_powers": 9,
-    "faulhaber_interpolation": 6,
+    "faulhaber_interpolation": 7,
     "finite_geometric_identity": 9
   },
   "theorems": {
@@ -1118,6 +1118,62 @@
       "strategy": "binomial_expansion",
       "verified": true
     },
+    "dc6abba587cf2cb33aac": {
+      "certificate": {
+        "base_case": true,
+        "methods": [
+          "exact_integer_samples",
+          "sympy_interpolation",
+          "base_case",
+          "finite_difference_induction_step",
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "polynomial": "n**2*(n + 1)**2/4",
+        "recurrence": {
+          "counterexample": null,
+          "details": {
+            "lean": {
+              "ok": false,
+              "reason": "requires closed equality",
+              "status": "not_applicable"
+            },
+            "smt": {
+              "method": "z3_unsat_negation",
+              "ok": true,
+              "status": "verified"
+            },
+            "symbolic": {
+              "method": "sympy_normal_form",
+              "normal_form": "0",
+              "ok": true,
+              "status": "verified"
+            }
+          },
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "((n + 1)**2*(n + 2)**2/4)-(n**2*(n + 1)**2/4) = (n+1)^3",
+          "status": "verified"
+        },
+        "recurrence_nontrivial": true,
+        "sample_count": 7,
+        "status": "verified"
+      },
+      "complexity": 3,
+      "discovered_at": 1789862664.9596334,
+      "human_novelty": "unassessed",
+      "id": "dc6abba587cf2cb33aac",
+      "internal_novelty": true,
+      "nontrivial": true,
+      "quality_gate": "structurally_nontrivial_and_proof_gated",
+      "statement": "sum(k^3, k=1..n) = n**2*(n + 1)**2/4 for integer n>=0",
+      "strategy": "faulhaber_interpolation",
+      "verified": true
+    },
     "e11bc23db5c90ef972ce": {
       "certificate": {
         "counterexample": null,
@@ -1351,6 +1407,6 @@
       "verified": true
     }
   },
-  "updated_at": 1789862348.5298293,
+  "updated_at": 1789862664.9596334,
   "version": 3
 }

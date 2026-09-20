@@ -989,6 +989,59 @@
       "status": "verified",
       "updated_at": 1789850355.892493
     },
+    "dc6abba587cf2cb33aac": {
+      "certificate": {
+        "base_case": true,
+        "methods": [
+          "exact_integer_samples",
+          "sympy_interpolation",
+          "base_case",
+          "finite_difference_induction_step",
+          "sympy_normal_form",
+          "z3_unsat_negation"
+        ],
+        "ok": true,
+        "polynomial": "n**2*(n + 1)**2/4",
+        "recurrence": {
+          "counterexample": null,
+          "details": {
+            "lean": {
+              "ok": false,
+              "reason": "requires closed equality",
+              "status": "not_applicable"
+            },
+            "smt": {
+              "method": "z3_unsat_negation",
+              "ok": true,
+              "status": "verified"
+            },
+            "symbolic": {
+              "method": "sympy_normal_form",
+              "normal_form": "0",
+              "ok": true,
+              "status": "verified"
+            }
+          },
+          "methods": [
+            "sympy_normal_form",
+            "z3_unsat_negation"
+          ],
+          "ok": true,
+          "statement": "((n + 1)**2*(n + 2)**2/4)-(n**2*(n + 1)**2/4) = (n+1)^3",
+          "status": "verified"
+        },
+        "recurrence_nontrivial": true,
+        "sample_count": 7,
+        "status": "verified"
+      },
+      "dependencies": [],
+      "first_seen_at": 1789862664.961478,
+      "id": "dc6abba587cf2cb33aac",
+      "sources": [],
+      "statement": "sum(k^3, k=1..n) = n**2*(n + 1)**2/4 for integer n>=0",
+      "status": "verified",
+      "updated_at": 1789862664.961478
+    },
     "e11bc23db5c90ef972ce": {
       "certificate": {
         "counterexample": null,
@@ -1242,6 +1295,6 @@
       "updated_at": 1789857372.0146756
     }
   },
-  "updated_at": 1789862348.5320973,
+  "updated_at": 1789862664.961478,
   "version": 1
 }
