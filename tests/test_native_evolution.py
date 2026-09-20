@@ -750,3 +750,31 @@ def test_lattice_v1_research_resets_v0_speed_blind_champion(tmp_path: Path):
     assert LATTICE_RESEARCH_STATE_VERSION == "airi-lattice-research-state-v1"
     assert loaded.generation == 0
     assert loaded.genome_id != "stale-speed-blind"
+
+
+
+def test_vectorized_lattice_sparse_expert_banks_receive_gradients():
+    torch = pytest.importorskip("torch")
+    from generalist_lm.native_lattice import AiriLatticeLM
+
+    cfg = _tiny_lattice_config(
+        n_experts=4,
+        active_experts=2,
+        d_expert=48,
+    )
+    torch.manual_seed(77)
+    model = AiriLatticeLM(cfg)
+    ids = torch.tensor([[1, 30, 31, 32, 33, 34, 35, 36]], dtype=torch.long)
+    labels = ids.clone()
+    output = model(ids, labels=labels)
+    output["loss"].backward()
+
+    bank = model.cells[0].experts
+    for parameter in (
+        bank.expert_up,
+        bank.expert_gate,
+        bank.expert_down,
+    ):
+        assert parameter.grad is not None
+        assert torch.isfinite(parameter.grad).all()
+        assert float(parameter.grad.abs().sum()) > 0.0
