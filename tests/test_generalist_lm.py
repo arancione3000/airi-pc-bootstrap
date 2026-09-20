@@ -1366,7 +1366,7 @@ def test_qualification_suite_has_critical_gate_for_every_generalist_domain():
 
 def test_legacy_v1_qualification_attestation_is_rejected(tmp_path: Path):
     import json
-    import torch
+    pytest.importorskip("torch")
     from generalist_lm.qualification import checkpoint_digest, qualification_status
     from generalist_lm.runtime import GeneralistRuntime
 
@@ -1388,6 +1388,7 @@ def test_legacy_v1_qualification_attestation_is_rejected(tmp_path: Path):
 
 
 def test_untrained_causal_checkpoint_fails_real_production_qualification(tmp_path: Path):
+    pytest.importorskip("torch")
     from generalist_lm.qualification import qualify_checkpoint
     from generalist_lm.runtime import GeneralistRuntime
 
@@ -1402,6 +1403,7 @@ def test_untrained_causal_checkpoint_fails_real_production_qualification(tmp_pat
 
 def test_generalist_research_health_rejects_oversized_persisted_checkpoint(tmp_path: Path, monkeypatch):
     import json
+    pytest.importorskip("torch")
     from generalist_lm.research_cycle import research_seed
     from generalist_lm.research_health import research_health
     from generalist_lm.runtime import GeneralistRuntime
