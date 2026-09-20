@@ -701,6 +701,10 @@ def test_production_promotion_is_digest_cached_and_transactional(tmp_path: Path,
     assert first["promoted"] is True
     assert first["qualified"] is True
     assert qualification_status(production)["qualified"] is True
+    production_metadata = json.loads((production / "metadata.json").read_text(encoding="utf-8"))
+    from generalist_lm.qualification import checkpoint_digest
+    assert production_metadata["role"] == "production_champion"
+    assert production_metadata["source_research_checkpoint_digest"] == checkpoint_digest(research)
     production_digest = qualification_status(production)["current_checkpoint_digest"]
 
     second = promotion.attempt_production_promotion(
