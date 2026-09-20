@@ -962,3 +962,91 @@ def test_research_cycle_records_persistent_curriculum_and_continual_trial(tmp_pa
     assert second["curriculum_memory"]["validation_overlap"] == []
     assert any(row.get("kind") == "continual_learning" for row in second["trials"])
     assert second["policy"]["continual_learning"]["full_replay"] is True
+
+
+def test_research_promotion_rejects_autoregressive_generation_regression():
+    from generalist_lm.research_cycle import _research_eligible
+
+    champion = {
+        "loss": 1.0,
+        "domain_loss": {"language": 1.0},
+        "finite": True,
+        "target_token_accuracy": 0.40,
+        "domain_token_accuracy": {"language": 0.40},
+        "solved_items": [],
+        "generation_exact_accuracy": 1.0,
+        "domain_generation_accuracy": {"language": 1.0},
+        "generated_solved_items": ["language:kept"],
+    }
+    candidate = {
+        "loss": 0.7,
+        "domain_loss": {"language": 0.7},
+        "finite": True,
+        "target_token_accuracy": 0.60,
+        "domain_token_accuracy": {"language": 0.60},
+        "solved_items": [],
+        "generation_exact_accuracy": 0.0,
+        "domain_generation_accuracy": {"language": 0.0},
+        "generated_solved_items": [],
+    }
+    ok, reason = _research_eligible(
+        champion,
+        candidate,
+        minimum_loss_gain=0.02,
+        max_domain_regression=0.10,
+    )
+    assert ok is False
+    assert "autoregressive generation" in reason or "generated held-out" in reason
+
+
+def test_research_promotion_retains_generated_solutions_when_loss_improves():
+    from generalist_lm.research_cycle import _research_eligible
+
+    champion = {
+        "loss": 1.0,
+        "domain_loss": {"language": 1.0},
+        "finite": True,
+        "target_token_accuracy": 0.40,
+        "domain_token_accuracy": {"language": 0.40},
+        "solved_items": ["language:teacher"],
+        "generation_exact_accuracy": 1.0,
+        "domain_generation_accuracy": {"language": 1.0},
+        "generated_solved_items": ["language:generated"],
+    }
+    candidate = {
+        "loss": 0.6,
+        "domain_loss": {"language": 0.6},
+        "finite": True,
+        "target_token_accuracy": 0.60,
+        "domain_token_accuracy": {"language": 0.60},
+        "solved_items": ["language:teacher"],
+        "generation_exact_accuracy": 1.0,
+        "domain_generation_accuracy": {"language": 1.0},
+        "generated_solved_items": ["language:generated"],
+    }
+    ok, reason = _research_eligible(
+        champion,
+        candidate,
+        minimum_loss_gain=0.02,
+        max_domain_regression=0.10,
+    )
+    assert ok is True
+    assert "generation" in reason
+
+
+def test_research_cycle_reports_real_generation_probe(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    from generalist_lm.curriculum import DOMAINS
+    from generalist_lm.research_cycle import run_research_cycle
+
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_MIN_LOSS_GAIN", "999")
+
+    result = run_research_cycle(tmp_path)
+    report = result["champion_report"]
+    assert 0.0 <= report["generation_exact_accuracy"] <= 1.0
+    assert set(report["domain_generation_accuracy"]) == set(DOMAINS)
+    assert len(report["generation_probe"]) == len(DOMAINS)
+    assert isinstance(report["generated_solved_items"], list)
