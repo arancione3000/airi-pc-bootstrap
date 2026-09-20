@@ -329,3 +329,75 @@ def test_foundation_attestation_v2_requires_inference_profile(tmp_path: Path, mo
     assert status["qualified"] is False
     assert status["integrity_ok"] is False
 
+def test_foundation_status_rejects_tampered_qualified_boolean(tmp_path: Path, monkeypatch):
+    from generalist_lm import qualification
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+
+    class Backend:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def generate(self, prompt: str, *, max_new_tokens: int = 192) -> str:
+            return ""
+
+    monkeypatch.setattr("generalist_lm.hf_backend.LocalTransformersBackend", Backend)
+    monkeypatch.setattr(
+        qualification,
+        "run_benchmark",
+        lambda backend, tasks: {
+            "ok": True,
+            "score": 100.0,
+            "domain_scores": {domain: 1.0 for domain in FOUNDATION_DOMAINS},
+            "critical_failures": [],
+            "tasks": [],
+        },
+    )
+    qualification.qualify_foundation_model(model)
+    path = model / ".airi-foundation-qualification.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+
+    raw["qualified"] = True
+    raw["report"]["score"] = 10.0
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    status = qualification.foundation_qualification_status(model)
+    assert status["qualified"] is False
+    assert status["integrity_ok"] is False
+    assert status["qualification_semantics_ok"] is False
+
+
+def test_foundation_status_requires_all_protected_domain_scores(tmp_path: Path, monkeypatch):
+    from generalist_lm import qualification
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+
+    class Backend:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def generate(self, prompt: str, *, max_new_tokens: int = 192) -> str:
+            return ""
+
+    monkeypatch.setattr("generalist_lm.hf_backend.LocalTransformersBackend", Backend)
+    monkeypatch.setattr(
+        qualification,
+        "run_benchmark",
+        lambda backend, tasks: {
+            "ok": True,
+            "score": 100.0,
+            "domain_scores": {domain: 1.0 for domain in FOUNDATION_DOMAINS},
+            "critical_failures": [],
+            "tasks": [],
+        },
+    )
+    qualification.qualify_foundation_model(model)
+    path = model / ".airi-foundation-qualification.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["report"]["domain_scores"].pop("robustness")
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    status = qualification.foundation_qualification_status(model)
+    assert status["qualified"] is False
+    assert status["qualification_semantics_ok"] is False
+
