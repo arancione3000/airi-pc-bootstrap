@@ -253,7 +253,7 @@ def estimate_parameter_count(config: GeneralistLMConfig) -> int:
     per_layer = 4 * d * d + ff_multiplier * d * ff + norm_params
     if cfg.bias:
         qkv_out_bias = 4 * d
-        ff_bias = (3 * ff + d) if cfg.ff_variant == "swiglu" else (ff + d)
+        ff_bias = (2 * ff + d) if cfg.ff_variant == "swiglu" else (ff + d)
         per_layer += qkv_out_bias + ff_bias
     final_norm = 2 * d if cfg.norm_type == "layernorm" else d
     return int(embeddings + cfg.n_layers * per_layer + final_norm)
