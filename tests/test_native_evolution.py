@@ -593,3 +593,57 @@ def test_airi_lattice_lab_runs_real_scratch_comparison(tmp_path: Path):
     assert result["baseline"]["family"] == "airi-native-foundation"
     assert result["candidate"]["family"] == "airi-native-lattice"
     assert result["candidate"]["state_bytes_at_context"] < result["baseline"]["state_bytes_at_context"]
+
+
+
+def test_lattice_research_cycle_persists_architecture_champion_without_touching_native(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    import generalist_lm.lattice_research_cycle as module
+
+    champion_loss = 1.8
+
+    def fake_benchmark(*args, **kwargs):
+        return {
+            "ok": True,
+            "candidate_wins": True,
+            "decision": "test win",
+            "candidate": {
+                "training": {
+                    "final": {
+                        "loss": champion_loss,
+                        "domain_loss": {"reasoning": champion_loss},
+                    }
+                }
+            },
+            "baseline": {
+                "training": {
+                    "final": {
+                        "loss": 2.0,
+                        "domain_loss": {"reasoning": 2.0},
+                    }
+                }
+            },
+        }
+
+    monkeypatch.setattr(module, "benchmark_lattice_against_transformer", fake_benchmark)
+
+    result = module.run_lattice_research_cycle(
+        tmp_path / "state",
+        tmp_path / "unused-manifest.json",
+        allowed_roots=[tmp_path],
+        cycle=1,
+        mathesis_signals=["symbolic_reasoning_signal"],
+        research={"tag_counts": {"reasoning": 1}},
+        population_size=4,
+        empirical_candidates=1,
+        benchmark_steps=1,
+        max_eval_blocks=2,
+        repeat_seeds=1,
+    )
+
+    assert result["ok"] is True
+    assert result["promoted"] is True
+    assert result["policy"]["canonical_native_transformer_unchanged"] is True
+    assert (tmp_path / "state" / "lattice-champion.json").is_file()
+    assert (tmp_path / "state" / "lattice-status.json").is_file()
+    assert (tmp_path / "state" / "lattice-history.jsonl").is_file()
