@@ -182,3 +182,16 @@ Capability honesty:
 - no claim is made that the tiny CI model is GPT/Claude-class;
 - useful general capability requires high-quality pretrained weights or
   substantial pretraining/fine-tuning plus a much broader held-out benchmark.
+
+## 2026-09-20 — AIRI Generalist LM foundation
+
+- added a real decoder-only causal Transformer layer for general-purpose language generation rather than reusing the factual classifier as a chatbot;
+- added reversible versioned tokenization, chat serialization, autoregressive generation, supervised fine-tuning, checkpointing and local open-weight Transformers support with local-files-only loading and remote-code trust disabled;
+- generalist capability is benchmarked separately across language, coding, data, reasoning, tool protocol and structured output;
+- added a bounded GeneralistGenome with real architectural variants and research signals; MATHESIS can influence research directions only through proof-gated signals and cannot directly create trusted LM outputs or weights;
+- added a persistent H24 generalist research continuum with serialized state writers, watchdog recovery, held-out validation and anti-forgetting;
+- added a bounded Generalist Agent whose model can request only explicitly allowlisted tools; current integrated tools are read-only or computational;
+- added an exact-digest qualification gate for native and local Transformers checkpoints, plus an authenticated local OpenAI-style model gateway;
+- Airi-PC keeps ChatGPT as the default reasoning authority. A local Generalist provider appears only with an explicitly enabled, exact-digest qualified checkpoint; preference for it is a separate opt-in;
+- added research-to-production promotion: a changed research champion is qualified once per digest, compared to the previous production champion with protected-domain anti-regression, atomically swapped, post-swap reverified and rolled back on integrity failure;
+- research and production promotion logic remain outside the evolvable genome.
