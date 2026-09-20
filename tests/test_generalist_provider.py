@@ -345,3 +345,17 @@ def test_generalist_autocode_refuses_missing_scope(monkeypatch):
     monkeypatch.setenv("AIRI_GENERALIST_AUTOCODE", "1")
     with pytest.raises(PermissionError, match="explicit declared scope"):
         code_agent.agent("edit something", project_path=".", scope=None)
+
+
+def test_model_change_parser_accepts_focused_patch_and_rejects_ambiguous_edit():
+    from control_plane import local_agent
+
+    rows = local_agent._extract_json_array(
+        '[{"path":"demo.py","old":"return 1","new":"return 2"}]'
+    )
+    assert rows == [{"path": "demo.py", "old": "return 1", "new": "return 2"}]
+
+    with pytest.raises(RuntimeError):
+        local_agent._extract_json_array(
+            '[{"path":"demo.py","content":"x","old":"a","new":"b"}]'
+        )
