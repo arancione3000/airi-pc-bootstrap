@@ -172,3 +172,69 @@ def test_provider_reports_missing_torch_as_unavailable(tmp_path: Path, monkeypat
     row = generalist_provider.status()
     assert row["available"] is False
     assert row["runtime_dependency"] is False
+
+
+def test_transformers_attestation_is_bound_to_exact_local_files(tmp_path: Path):
+    from generalist_lm.qualification import (
+        QUALIFICATION_VERSION,
+        transformers_model_digest,
+        transformers_qualification_status,
+    )
+
+    model_dir = tmp_path / "hf-model"
+    model_dir.mkdir()
+    (model_dir / "config.json").write_text('{"model_type":"test"}', encoding="utf-8")
+    (model_dir / "weights.bin").write_bytes(b"weights-v1")
+    attestation = model_dir / "custom-attestation.json"
+    digest = transformers_model_digest(model_dir, exclude_path=attestation)
+    attestation.write_text(json.dumps({
+        "qualification_version": QUALIFICATION_VERSION,
+        "attested_by": "airi-generalist-transformers-qualification-v1",
+        "backend_type": "transformers",
+        "model_digest": digest,
+        "qualified": True,
+        "report": {"ok": True, "score": 100.0, "critical_failures": []},
+    }), encoding="utf-8")
+
+    before = transformers_qualification_status(model_dir, attestation_path=attestation)
+    assert before["qualified"] is True
+    assert before["integrity_ok"] is True
+
+    (model_dir / "weights.bin").write_bytes(b"weights-v2")
+    after = transformers_qualification_status(model_dir, attestation_path=attestation)
+    assert after["qualified"] is False
+    assert after["integrity_ok"] is False
+
+
+def test_transformers_provider_requires_exact_qualification_and_dependencies(tmp_path: Path, monkeypatch):
+    from control_plane import generalist_provider
+
+    model_dir = tmp_path / "hf"
+    model_dir.mkdir()
+    attestation = tmp_path / "attestation.json"
+    monkeypatch.setenv("AIRI_GENERALIST_ENABLE", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_TRANSFORMERS_MODEL", str(model_dir))
+    monkeypatch.setenv("AIRI_GENERALIST_TRANSFORMERS_ATTESTATION", str(attestation))
+    monkeypatch.setattr(
+        generalist_provider,
+        "transformers_qualification_status",
+        lambda model_dir, attestation_path=None: {"qualified": True, "integrity_ok": True},
+    )
+    real_find = generalist_provider.importlib.util.find_spec
+    monkeypatch.setattr(
+        generalist_provider.importlib.util,
+        "find_spec",
+        lambda name: object() if name in {"torch", "transformers"} else real_find(name),
+    )
+
+    row = generalist_provider.status()
+    assert row["available"] is True
+    assert row["backend"] == "transformers"
+    assert row["runtime_dependency"] is True
+
+
+def test_bootstrap_dependency_probe_includes_generalist_runtime():
+    start = (ROOT / "computer" / "start.sh").read_text(encoding="utf-8")
+    assert "import fastapi,uvicorn,pyautogui,pytesseract,PIL,playwright,torch,transformers" in start
+    assert "control_plane.model_gateway" in start
+    assert 'AIRI_GENERALIST_ENABLE' in start
