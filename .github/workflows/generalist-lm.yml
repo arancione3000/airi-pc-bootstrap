@@ -1,0 +1,58 @@
+name: AIRI Generalist LM verification
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/**'
+      - 'tests/test_generalist_lm.py'
+      - '.github/workflows/generalist-lm.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generalist-lm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build isolated generalist LM environment
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --disable-pip-version-check pytest
+          .venv/bin/pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Compile generalist LM
+        run: |
+          .venv/bin/python -m compileall -q computer/generalist_lm tests/test_generalist_lm.py
+
+      - name: Run generalist LM regressions and learning smoke
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+        run: |
+          .venv/bin/python -m pytest -q tests/test_generalist_lm.py
+
+      - name: Standalone causal generation smoke
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+        run: |
+          .venv/bin/python - <<'PY'
+          import torch
+          from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig, parameter_count
+          from generalist_lm.tokenizer import ByteTokenizer
+
+          cfg=GeneralistLMConfig(
+              vocab_size=264, context_length=64, d_model=32,
+              n_heads=4, n_layers=1, d_ff=64, dropout=0.0,
+          ).validate()
+          model=CausalTransformerLM(cfg)
+          tok=ByteTokenizer()
+          prompt=torch.tensor([tok.encode("Hello", bos=True)],dtype=torch.long)
+          out=model.generate(prompt,max_new_tokens=4,eos_token_id=None)
+          assert out.shape[1] == prompt.shape[1] + 4
+          assert parameter_count(model) > 0
+          print({"ok":True,"parameters":parameter_count(model),"generated_tokens":4})
+          PY
