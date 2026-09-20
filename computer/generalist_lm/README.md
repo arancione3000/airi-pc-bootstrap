@@ -600,6 +600,89 @@ promotion rules stay external to the challenger.
 
 
 
+## AIRI Native Phase 4 — Lattice architecture research
+
+Phase 4 explores whether AIRI can obtain more useful intelligence per unit of
+compute by changing the model family itself instead of only tuning a
+Transformer. The experimental family is **AIRI Lattice v0**.
+
+Lattice is causal but does not use global self-attention. Each token updates a
+constant-size hierarchy of recurrent memory bands with mathematically different
+time scales. A geometric novelty/surprise signal controls how deeply new
+information is written: ordinary predictable tokens mostly update fast memory,
+while surprising inputs can reach slower bands. Learned row-normalized routing
+lets memory bands exchange information without making the recurrent state grow
+with context length.
+
+Each Lattice cell also contains sparse top-k experts. The router sees both the
+current token representation and the current memory summary, and only selected
+experts execute for each token. A shared recurrent reasoner spends extra passes
+only when the surprise-derived compute budget says the token is difficult.
+This lets AIRI change reasoning depth without duplicating parameter blocks.
+
+The architecture is deliberately not declared superior or novel by fiat.
+Modern state-space/recurrent-memory/MoE systems already demonstrate many useful
+ingredients. AIRI Lattice is treated as a project-specific experimental
+composition whose value must be established empirically.
+
+MATHESIS can evolve the structural genome itself:
+
+- number and mathematical half-life of memory bands;
+- how selectively surprise reaches deep memory;
+- cross-band routing strength;
+- adaptive reasoning threshold, power and maximum recurrent passes;
+- number, width and top-k sparsity of experts;
+- number of physical recurrent cells;
+- optimizer learning rate and regularization.
+
+Every generated configuration must stay inside a conservative bounded-state
+region before it receives any SGD budget. Because routing rows are convex
+softmax mixtures, candidate writes are tanh-bounded, memory decays remain in
+(0,1), and lattice mixing is capped at 1, the memory recurrence has a
+conservative infinity-norm stability certificate independent of sequence
+length.
+
+Architecture search is deliberately compute-frugal:
+
+1. MATHESIS/research signals generate a diverse mutation population;
+2. mathematical stability/cost filters reject bad regions essentially for free;
+3. only a tiny shortlist receives scratch training;
+4. AIRI Lattice and a parameter-matched Native Transformer see the same corpus,
+   tokens, optimizer budget and held-out split;
+5. the empirical gate compares held-out loss, domain regressions, active
+   parameters and state memory;
+6. a Lattice win promotes only the **research architecture champion**;
+7. the canonical Native Transformer remains unchanged until repeated,
+   larger-budget evidence justifies a migration.
+
+The existing Native Evolution workflow invokes this Lattice research loop
+automatically and persists its state under
+`native-evolution-state/native-evolution-state/lattice-research/`. A failure
+inside Lattice research is isolated and cannot damage or replace the canonical
+Native champion.
+
+Useful commands:
+
+```bash
+python -m generalist_lm.cli lattice-plan
+
+python -m generalist_lm.cli lattice-population \
+  --signal symbolic_reasoning_signal \
+  --signal deep_symbolic_signal \
+  --count 8
+
+python -m generalist_lm.cli lattice-benchmark \
+  ./corpus/native-corpus.json \
+  --allowed-root ./corpus \
+  --steps 8
+```
+
+This remains architecture research on small scratch models. A tiny Lattice
+winning a tiny benchmark is evidence about architecture efficiency, not evidence
+that AIRI has suddenly become a frontier-scale model.
+
+
+
 ## Foundation Track v1
 
 The scalable path now has a first-class foundation-model track instead of
