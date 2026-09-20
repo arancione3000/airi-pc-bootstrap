@@ -180,3 +180,20 @@ an explicit transactional sync:
 
 The sync is intentionally opt-in. A research promotion on GitHub never silently
 changes the user's active reasoning provider.
+
+
+## KV-cached inference and scalable training
+
+Autoregressive generation now supports a bounded per-layer KV cache. Greedy
+decoding with the cache is regression-tested against full-context recomputation
+for learned positional embeddings, sinusoidal positions and RoPE. When decoding
+crosses the configured context window, generation deliberately falls back to a
+fresh bounded-window recomputation so sliding-window position semantics remain
+identical to the pre-cache path.
+
+SFT now supports gradient accumulation and optional fp32/bf16/fp16 autocast.
+Unsupported precision/device combinations fail closed. The autonomous research
+loop exposes these controls through
+`AIRI_GENERALIST_RESEARCH_GRADIENT_ACCUMULATION` and
+`AIRI_GENERALIST_RESEARCH_PRECISION`, so larger experiments can increase the
+effective batch size without changing the promotion gates.
