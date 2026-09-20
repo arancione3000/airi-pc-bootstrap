@@ -98,35 +98,100 @@ def train_sft(
     weight_decay: float = 0.01,
     seed: int = 7,
     device: str = "cpu",
+    gradient_accumulation_steps: int = 1,
+    precision: str = "fp32",
 ) -> dict[str, Any]:
     import torch
     if not examples:
         raise ValueError("no SFT examples")
+
+    steps = max(1, int(steps))
+    batch_size = max(1, int(batch_size))
+    accumulation = max(1, min(64, int(gradient_accumulation_steps)))
+    precision = str(precision).strip().lower()
+    if precision not in {"fp32", "bf16", "fp16"}:
+        raise ValueError("precision must be one of: fp32, bf16, fp16")
+
+    device_obj = torch.device(device)
+    if precision == "fp16" and device_obj.type != "cuda":
+        raise ValueError("fp16 training requires CUDA")
+    if precision == "bf16":
+        if device_obj.type == "cuda" and not torch.cuda.is_bf16_supported():
+            raise ValueError("bf16 is not supported by this CUDA device")
+        if device_obj.type not in {"cpu", "cuda"}:
+            raise ValueError("bf16 training requires CPU or CUDA")
+
+    if precision == "bf16":
+        autocast_dtype = torch.bfloat16
+    elif precision == "fp16":
+        autocast_dtype = torch.float16
+    else:
+        autocast_dtype = None
+
     rng = random.Random(seed)
     torch.manual_seed(seed)
-    model.to(device)
-    initial_loss = loss_on_examples(model, tokenizer, examples, device=device)
+    model.to(device_obj)
+    initial_loss = loss_on_examples(model, tokenizer, examples, device=str(device_obj))
     model.train()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=float(learning_rate), weight_decay=float(weight_decay))
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=float(learning_rate),
+        weight_decay=float(weight_decay),
+    )
+    scaler = torch.amp.GradScaler(
+        "cuda",
+        enabled=(precision == "fp16" and device_obj.type == "cuda"),
+    )
     losses: list[float] = []
 
-    for _ in range(max(1, int(steps))):
-        indices = [rng.randrange(len(examples)) for _ in range(max(1, int(batch_size)))]
-        ids, labels = _batch(examples, tokenizer, model.config.context_length, indices)
-        ids, labels = ids.to(device), labels.to(device)
+    for _ in range(steps):
         optimizer.zero_grad(set_to_none=True)
-        loss = model(ids, labels=labels)["loss"]
-        if not torch.isfinite(loss):
-            raise RuntimeError("non-finite language-model loss")
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
-        losses.append(float(loss.detach().cpu()))
+        micro_losses: list[float] = []
 
-    final_loss = loss_on_examples(model, tokenizer, examples, device=device)
+        for _micro in range(accumulation):
+            indices = [rng.randrange(len(examples)) for _ in range(batch_size)]
+            ids, labels = _batch(
+                examples,
+                tokenizer,
+                model.config.context_length,
+                indices,
+            )
+            ids, labels = ids.to(device_obj), labels.to(device_obj)
+
+            with torch.autocast(
+                device_type=device_obj.type,
+                dtype=autocast_dtype,
+                enabled=(autocast_dtype is not None),
+            ):
+                raw_loss = model(ids, labels=labels)["loss"]
+                loss = raw_loss / accumulation
+
+            if not torch.isfinite(raw_loss):
+                raise RuntimeError("non-finite language-model loss")
+
+            scaler.scale(loss).backward()
+            micro_losses.append(float(raw_loss.detach().cpu()))
+
+        if scaler.is_enabled():
+            scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        scaler.step(optimizer)
+        scaler.update()
+        losses.append(sum(micro_losses) / len(micro_losses))
+
+    final_loss = loss_on_examples(
+        model,
+        tokenizer,
+        examples,
+        device=str(device_obj),
+    )
     return {
         "ok": bool(final_loss < initial_loss),
-        "steps": max(1, int(steps)),
+        "steps": steps,
+        "micro_batch_size": batch_size,
+        "gradient_accumulation_steps": accumulation,
+        "effective_batch_size": batch_size * accumulation,
+        "precision": precision,
         "initial_loss": initial_loss,
         "final_loss": final_loss,
         "best_step_loss": min(losses),
