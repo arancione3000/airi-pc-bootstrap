@@ -1214,7 +1214,7 @@ def test_compatible_weight_transfer_preserves_identical_model_state():
 
 
 def test_architecture_weight_transfer_copies_only_shape_compatible_tensors():
-    pytest.importorskip("torch")
+    torch = pytest.importorskip("torch")
     from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
     from generalist_lm.research_cycle import _transfer_compatible_weights
 
