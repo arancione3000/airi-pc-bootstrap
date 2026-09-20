@@ -44,6 +44,7 @@ class AiriLatticeConfig:
     surprise_threshold: float = 0.20
     predictive_error_memory: bool = False
     local_recurrence: bool = False
+    parallel_memory: bool = False
     surprise_power: float = 1.5
     deep_write_power: float = 1.6
     lattice_mix: float = 0.20
@@ -69,6 +70,7 @@ class AiriLatticeConfig:
         self.surprise_threshold = float(self.surprise_threshold)
         self.predictive_error_memory = bool(self.predictive_error_memory)
         self.local_recurrence = bool(self.local_recurrence)
+        self.parallel_memory = bool(self.parallel_memory)
         self.surprise_power = float(self.surprise_power)
         self.deep_write_power = float(self.deep_write_power)
         self.lattice_mix = float(self.lattice_mix)
@@ -100,6 +102,12 @@ class AiriLatticeConfig:
             raise ValueError("active_experts out of AIRI Lattice bounds")
         if not (1 <= self.max_reasoning_steps <= 32):
             raise ValueError("max_reasoning_steps out of AIRI Lattice bounds")
+        if self.parallel_memory and (
+            self.predictive_error_memory or self.local_recurrence
+        ):
+            raise ValueError(
+                "parallel_memory v0 is incompatible with predictive/local recurrence"
+            )
         if not (0.0 <= self.surprise_threshold < 0.95):
             raise ValueError("surprise_threshold out of AIRI Lattice bounds")
         if not (0.25 <= self.surprise_power <= 8.0):
@@ -239,8 +247,12 @@ class AiriLatticeLM:
                     nn.Linear(config.d_model, config.d_model, bias=False)
                     if config.predictive_error_memory else None
                 )
+                self.surprise_proj = (
+                    nn.Linear(config.d_model, 1, bias=True)
+                    if config.parallel_memory else None
+                )
                 self.write_proj = nn.Linear(
-                    config.d_model * 2,
+                    config.d_model if config.parallel_memory else config.d_model * 2,
                     config.d_model,
                     bias=False,
                 )
