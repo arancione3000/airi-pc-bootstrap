@@ -306,3 +306,74 @@ def test_generalist_agent_stops_after_bounded_steps():
     assert run.reason == "max_steps_exhausted"
     assert run.steps == 3
     assert len(run.tool_calls) == 3
+
+
+def test_research_promotion_rejects_hidden_domain_regression():
+    from generalist_lm.research_cycle import _research_eligible
+
+    champion = {
+        "loss": 1.00,
+        "domain_loss": {"language": 0.9, "coding": 1.1, "data": 1.0},
+        "finite": True,
+    }
+    candidate = {
+        "loss": 0.80,
+        "domain_loss": {"language": 1.3, "coding": 0.6, "data": 0.5},
+        "finite": True,
+    }
+    ok, reason = _research_eligible(
+        champion,
+        candidate,
+        minimum_loss_gain=0.02,
+        max_domain_regression=0.10,
+    )
+    assert ok is False
+    assert "regressed" in reason
+
+
+def test_research_cycle_persists_loadable_research_champion(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    from generalist_lm.research_cycle import run_research_cycle
+    from generalist_lm.research_health import research_health
+
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_STATE", str(tmp_path))
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS", "3")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_MIN_LOSS_GAIN", "999")
+
+    first = run_research_cycle(tmp_path)
+    assert first["ok"] is True
+    assert first["cycle"] == 1
+    assert first["bootstrapped"] is True
+    assert first["policy"]["research_only"] is True
+    assert (tmp_path / "champion" / "model.pt").exists()
+    assert (tmp_path / "champion-genome.json").exists()
+    assert research_health(tmp_path)["ok"] is True
+
+    second = run_research_cycle(tmp_path)
+    assert second["ok"] is True
+    assert second["cycle"] == 2
+    assert second["bootstrapped"] is False
+    assert second["promoted"] is False
+    assert research_health(tmp_path)["ok"] is True
+
+
+def test_research_health_rejects_genome_checkpoint_mismatch(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    from generalist_lm.research_cycle import run_research_cycle
+    from generalist_lm.research_health import research_health
+
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "1")
+    run_research_cycle(tmp_path)
+
+    genome_path = tmp_path / "champion-genome.json"
+    genome = json.loads(genome_path.read_text(encoding="utf-8"))
+    genome["context_length"] *= 2
+    genome_path.write_text(json.dumps(genome), encoding="utf-8")
+
+    report = research_health(tmp_path)
+    assert report["ok"] is False
+    assert any(row["name"] == "checkpoint:context_match" for row in report["failed"])
