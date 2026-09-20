@@ -194,20 +194,36 @@ def test_weakness_signals_are_semantic():
     assert weakness_signals(report) == ["coding_gap", "tool_gap", "reasoning_gap"]
 
 
-def test_mathesis_bridge_accepts_only_current_proof_gated_items(tmp_path: Path):
+def test_mathesis_bridge_reproves_persisted_math_instead_of_trusting_metadata(tmp_path: Path):
     (tmp_path / "discoveries.json").write_text(json.dumps({
         "theorems": {
             "valid": {
+                "id": "valid",
+                "statement": "x^2-y^2 = (x-y)*(x+y)",
                 "verified": True,
+                "strategy": "difference_of_powers",
                 "quality_gate": "structurally_nontrivial_and_proof_gated",
-                "certificate": {"ok": True},
+                "certificate": {"ok": True, "status": "verified"},
+            },
+            "forged_verified": {
+                "id": "forged_verified",
+                "statement": "x+1=x+2",
+                "verified": True,
+                "strategy": "difference_of_powers",
+                "quality_gate": "structurally_nontrivial_and_proof_gated",
+                "certificate": {"ok": True, "status": "verified"},
             },
             "metadata_only": {
+                "id": "metadata_only",
+                "statement": "x^2=x*x",
                 "verified": True,
                 "certificate": {"ok": True},
             },
             "false_cert": {
+                "id": "false_cert",
+                "statement": "x^3=x*x*x",
                 "verified": True,
+                "strategy": "difference_of_powers",
                 "quality_gate": "structurally_nontrivial_and_proof_gated",
                 "certificate": {"ok": False},
             },
@@ -216,9 +232,13 @@ def test_mathesis_bridge_accepts_only_current_proof_gated_items(tmp_path: Path):
     (tmp_path / "curriculum.json").write_text('{"cursor":12}', encoding="utf-8")
     (tmp_path / "champion.json").write_text('{"generation":15,"symbolic_depth":12}', encoding="utf-8")
     result = mathesis_signals(tmp_path)
+    assert result["ok"] is True
+    assert result["verifier_available"] is True
     assert result["verified_math_items"] == 1
+    assert result["rejected_math_items"]["forged_verified"]
     assert result["mathesis_generation"] == 15
     assert "symbolic_reasoning_signal" in result["signals"]
+    assert "deep_symbolic_signal" in result["signals"]
     assert "research_curriculum_signal" in result["signals"]
 
 
