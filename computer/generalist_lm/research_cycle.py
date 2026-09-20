@@ -472,8 +472,6 @@ def _train_genome(
         device=device,
         gradient_accumulation_steps=gradient_accumulation_steps,
         precision=precision,
-        pretrain_documents=corpus_documents,
-        pretrain_steps=pretrain_steps,
     )
     runtime = GeneralistRuntime(model, genome.model_config(tokenizer.vocab_size), tokenizer, device=device)
     validation = _grouped_validation(runtime.model, tokenizer, validation_rows(), device=device)
@@ -687,6 +685,8 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         cycle=cycle,
         gradient_accumulation_steps=gradient_accumulation_steps,
         precision=precision,
+        pretrain_documents=corpus_documents,
+        pretrain_steps=pretrain_steps,
     )
     continual_report["canary_cycle"] = cycle
     continual_report["canary"] = _grouped_validation(
