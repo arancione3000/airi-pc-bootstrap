@@ -866,3 +866,99 @@ def test_cached_promoted_digest_retries_when_production_integrity_is_lost(tmp_pa
     assert recovered["cached"] is False
     assert calls["count"] == 2
     assert qualification_status(production)["qualified"] is True
+
+
+def test_curriculum_memory_grows_idempotently_and_never_overlaps_validation(tmp_path: Path):
+    from generalist_lm.curriculum_memory import CurriculumMemory
+
+    memory = CurriculumMemory(tmp_path, max_rows=120)
+    first = memory.expand(1, signals=["coding_gap", "symbolic_reasoning_signal"])
+    assert first["ok"] is True
+    assert first["added"] >= 6
+    assert first["stored"] == first["added"]
+    assert first["validation_overlap"] == []
+
+    again = memory.expand(1, signals=["coding_gap", "symbolic_reasoning_signal"])
+    assert again["added"] == 0
+    assert again["stored"] == first["stored"]
+    assert again["validation_overlap"] == []
+
+    second = memory.expand(2, signals=["data_gap", "tool_gap"])
+    assert second["stored"] > first["stored"]
+    assert second["validation_overlap"] == []
+    manifest = memory.manifest()
+    assert manifest["stored"] == second["stored"]
+    assert set(manifest["domains"]) == {"language", "coding", "data", "reasoning", "tools", "structured"}
+
+
+def test_curriculum_memory_is_bounded_and_deduplicated(tmp_path: Path):
+    from generalist_lm.curriculum_memory import CurriculumMemory
+
+    memory = CurriculumMemory(tmp_path, max_rows=60)
+    for cycle in range(1, 25):
+        memory.expand(cycle, signals=["coding_gap", "data_gap", "tool_gap", "reasoning_gap"])
+    rows = memory.rows()
+    assert len(rows) <= 60
+    fingerprints = {
+        json.dumps({"domain": row.domain, "messages": row.messages}, sort_keys=True)
+        for row in rows
+    }
+    assert len(fingerprints) == len(rows)
+    assert memory.manifest()["validation_overlap"] == []
+
+
+def test_training_curriculum_includes_persistent_replay_rows():
+    from generalist_lm.curriculum import ResearchRow
+    from generalist_lm.research_cycle import _training_rows_for_genome, research_seed
+
+    replay = [
+        ResearchRow(
+            "language",
+            [
+                {"role": "user", "content": "Reply exactly PERSISTENT_REPLAY"},
+                {"role": "assistant", "content": "PERSISTENT_REPLAY"},
+            ],
+        )
+    ]
+    rows = _training_rows_for_genome(research_seed(), replay)
+    assert any(
+        row.messages[0]["content"] == "Reply exactly PERSISTENT_REPLAY"
+        for row in rows
+    )
+
+
+def test_continual_candidate_preserves_architecture_and_advances_lineage():
+    from generalist_lm.research_cycle import _continual_candidate_genome, research_seed
+
+    champion = research_seed()
+    candidate = _continual_candidate_genome(champion, 7)
+    assert candidate.generation == champion.generation + 1
+    assert candidate.parent_id == champion.genome_id
+    assert "continual" in candidate.genome_id
+    for field in (
+        "context_length", "d_model", "n_heads", "n_layers", "d_ff",
+        "norm_type", "position_encoding", "ff_variant",
+    ):
+        assert getattr(candidate, field) == getattr(champion, field)
+
+
+def test_research_cycle_records_persistent_curriculum_and_continual_trial(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    from generalist_lm.research_cycle import run_research_cycle
+
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_MIN_LOSS_GAIN", "999")
+
+    first = run_research_cycle(tmp_path)
+    assert first["curriculum_memory"]["stored"] >= 6
+    assert first["curriculum_memory"]["validation_overlap"] == []
+    assert any(row.get("kind") == "continual_learning" for row in first["trials"])
+    stored_first = first["curriculum_memory"]["stored"]
+
+    second = run_research_cycle(tmp_path)
+    assert second["curriculum_memory"]["stored"] > stored_first
+    assert second["curriculum_memory"]["validation_overlap"] == []
+    assert any(row.get("kind") == "continual_learning" for row in second["trials"])
+    assert second["policy"]["continual_learning"]["full_replay"] is True
