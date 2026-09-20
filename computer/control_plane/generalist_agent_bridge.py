@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import math
 import operator
 import statistics
 from typing import Any
@@ -24,7 +25,10 @@ _ALLOWED_UNARY = {ast.UAdd: operator.pos, ast.USub: operator.neg}
 def _safe_number(value: Any) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError("numeric value required")
-    return float(value)
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("finite numeric value required")
+    return number
 
 
 def _eval_arithmetic(expression: str) -> int | float:
