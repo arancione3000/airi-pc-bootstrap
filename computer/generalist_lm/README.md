@@ -539,7 +539,7 @@ The cycle is:
 
 1. freeze and independently evaluate the current Native champion;
 2. collect re-verified MATHESIS signals when available;
-3. search bounded public research metadata from arXiv and GitHub;
+3. search bounded public research metadata from arXiv, fall back to OpenAlex when arXiv is unavailable, and search GitHub for code/dataset evidence;
 4. convert only derived research **tags** into a fixed local mutation DSL;
 5. train an equal-budget control continuation;
 6. train challengers for optimizer, curriculum, GQA/FFN/context/RoPE and
@@ -550,7 +550,10 @@ The cycle is:
    held-out regressions.
 
 Remote material is never executed and cannot provide code, shell commands, file
-paths or arbitrary hyperparameter values. The online layer emits bounded tags
+paths or arbitrary hyperparameter values. arXiv is not a single point of failure:
+when its public API is unavailable or returns a transient service error, AIRI uses
+OpenAlex academic metadata instead while preserving the same untrusted-evidence
+boundary. The online layer emits bounded tags
 such as `optimizer`, `tokenizer`, `gqa`, `long-context`, `curriculum`,
 `dataset` and `efficiency`. All concrete mutations are generated locally
 from reviewed ranges. GitHub results that look like permissively licensed

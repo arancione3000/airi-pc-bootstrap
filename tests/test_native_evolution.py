@@ -123,7 +123,11 @@ def test_online_research_treats_remote_text_as_untrusted_metadata():
 
 
 def test_online_research_uses_provider_specific_accept_headers():
-    from generalist_lm.native_online_research import search_arxiv, search_github_repositories
+    from generalist_lm.native_online_research import (
+        search_arxiv,
+        search_github_repositories,
+        search_openalex,
+    )
 
     seen = {}
 
@@ -134,23 +138,84 @@ def test_online_research_uses_provider_specific_accept_headers():
                 b'<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>',
                 request.full_url,
             )
+        if request.full_url.startswith("https://api.openalex.org/"):
+            return _FakeResponse(b'{"results":[]}', request.full_url)
         if request.full_url.startswith("https://api.github.com/"):
             return _FakeResponse(b'{"items":[]}', request.full_url)
         raise AssertionError(request.full_url)
 
     search_arxiv(["optimizer"], max_results_per_topic=1, opener=opener)
+    search_openalex(["optimizer"], max_results_per_topic=1, opener=opener)
     search_github_repositories(["optimizer"], max_results_per_topic=1, opener=opener)
 
     arxiv_accept = next(
         value for url, value in seen.items()
         if url.startswith("https://export.arxiv.org/")
     )
+    openalex_accept = next(
+        value for url, value in seen.items()
+        if url.startswith("https://api.openalex.org/")
+    )
     github_accept = next(
         value for url, value in seen.items()
         if url.startswith("https://api.github.com/")
     )
     assert arxiv_accept == "application/atom+xml"
+    assert openalex_accept == "application/json"
     assert github_accept == "application/vnd.github+json"
+
+
+def test_online_research_falls_back_to_openalex_when_arxiv_fails():
+    from urllib.error import HTTPError
+
+    from generalist_lm.native_online_research import discover_native_research
+
+    openalex = json.dumps({
+        "results": [{
+            "id": "https://openalex.org/W123",
+            "display_name": "Efficient Grouped Query Attention for Long Context Models",
+            "publication_date": "2026-09-18",
+            "primary_location": {
+                "landing_page_url": "https://openalex.org/W123"
+            },
+            "abstract_inverted_index": {
+                "grouped": [0],
+                "query": [1],
+                "attention": [2],
+                "optimizer": [3],
+                "long": [4],
+                "context": [5],
+            },
+            "topics": [{"display_name": "Large Language Models"}],
+            "open_access": {"is_oa": True, "oa_status": "green"},
+        }]
+    }).encode("utf-8")
+    github = b'{"items":[]}'
+
+    def opener(request, timeout):
+        if request.full_url.startswith("https://export.arxiv.org/"):
+            raise HTTPError(request.full_url, 406, "Not Acceptable", {}, None)
+        if request.full_url.startswith("https://api.openalex.org/"):
+            assert request.get_header("Accept") == "application/json"
+            return _FakeResponse(openalex, request.full_url)
+        if request.full_url.startswith("https://api.github.com/"):
+            return _FakeResponse(github, request.full_url)
+        raise AssertionError(request.full_url)
+
+    report = discover_native_research(
+        signals=["reasoning_gap"],
+        max_results_per_topic=1,
+        max_evidence=6,
+        opener=opener,
+    )
+
+    assert report["ok"] is True
+    assert report["academic_fallback"] == "openalex"
+    assert any(row["provider"] == "openalex" for row in report["evidence"])
+    assert any(row["provider"] == "arxiv" for row in report["errors"])
+    assert report["tag_counts"]["gqa"] >= 1
+    assert report["tag_counts"]["optimizer"] >= 1
+    assert report["tag_counts"]["long-context"] >= 1
 
 
 def test_online_research_rejects_redirect_outside_provider_allowlist():

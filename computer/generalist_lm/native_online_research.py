@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 
 
 NATIVE_ONLINE_RESEARCH_VERSION = "native-online-research-v1"
-_ALLOWED_HOSTS = {"export.arxiv.org", "api.github.com"}
+_ALLOWED_HOSTS = {"export.arxiv.org", "api.github.com", "api.openalex.org"}
 _MAX_RESPONSE_BYTES = 2_000_000
 _MAX_TEXT = 4_000
 
@@ -145,6 +145,10 @@ def _fetch(
         if token:
             headers["Authorization"] = f"Bearer {token}"
         headers["X-GitHub-Api-Version"] = "2022-11-28"
+    elif host == "api.openalex.org":
+        headers["Accept"] = "application/json"
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
     request = Request(url, headers=headers, method="GET")
     response = (opener or urlopen)(request, timeout=float(timeout_seconds))
     try:
@@ -243,6 +247,102 @@ def search_arxiv(
     return results
 
 
+def _openalex_abstract(inverted_index: Any) -> str:
+    if not isinstance(inverted_index, dict):
+        return ""
+    positions: list[tuple[int, str]] = []
+    for token, raw_positions in inverted_index.items():
+        if not isinstance(token, str) or not isinstance(raw_positions, list):
+            continue
+        for raw_position in raw_positions:
+            try:
+                position = int(raw_position)
+            except Exception:
+                continue
+            positions.append((position, token))
+    if not positions:
+        return ""
+    positions.sort(key=lambda item: item[0])
+    return " ".join(token for _, token in positions)
+
+
+def search_openalex(
+    topics: Iterable[str],
+    *,
+    api_key: str | None = None,
+    max_results_per_topic: int = 3,
+    timeout_seconds: float = 20.0,
+    opener: Callable[..., Any] | None = None,
+) -> list[NativeOnlineEvidence]:
+    """Search OpenAlex as an academic fallback when arXiv is unavailable."""
+    results: list[NativeOnlineEvidence] = []
+    for topic in topics:
+        query = _compact_text(topic, 160)
+        if not query:
+            continue
+        per_page = max(1, min(int(max_results_per_topic), 10))
+        key = api_key or os.environ.get("OPENALEX_API_KEY")
+        url = (
+            "https://api.openalex.org/works?"
+            f"search={quote_plus(query)}&per_page={per_page}&sort=-publication_date"
+        )
+        if key:
+            url += f"&api_key={quote_plus(key)}"
+        blob = _fetch(
+            url,
+            token=key,
+            timeout_seconds=timeout_seconds,
+            opener=opener,
+        )
+        payload = json.loads(blob.decode("utf-8"))
+        for item in payload.get("results", [])[:per_page]:
+            if not isinstance(item, dict):
+                continue
+            title = _compact_text(
+                item.get("display_name") or item.get("title"),
+                500,
+            )
+            source_id = _compact_text(item.get("id"), 500)
+            primary_location = (
+                item.get("primary_location")
+                if isinstance(item.get("primary_location"), dict)
+                else {}
+            )
+            landing_url = _compact_text(
+                primary_location.get("landing_page_url") or source_id,
+                1_500,
+            )
+            abstract = _compact_text(
+                _openalex_abstract(item.get("abstract_inverted_index")),
+                2_500,
+            )
+            topic_names = " ".join(
+                _compact_text(row.get("display_name"), 120)
+                for row in item.get("topics", [])
+                if isinstance(row, dict) and row.get("display_name")
+            )
+            open_access = (
+                item.get("open_access")
+                if isinstance(item.get("open_access"), dict)
+                else {}
+            )
+            summary = _compact_text(
+                f"{abstract} topics={topic_names} "
+                f"oa={open_access.get('is_oa')} "
+                f"oa_status={open_access.get('oa_status')}",
+                _MAX_TEXT,
+            )
+            results.append(_evidence(
+                provider="openalex",
+                title=title,
+                summary=summary,
+                url=landing_url or source_id,
+                published=_compact_text(item.get("publication_date"), 100) or None,
+                source_id=source_id or landing_url,
+            ))
+    return results
+
+
 def search_github_repositories(
     topics: Iterable[str],
     *,
@@ -334,29 +434,53 @@ def discover_native_research(
     evidence: list[NativeOnlineEvidence] = []
     errors: list[dict[str, str]] = []
 
-    providers = (
-        ("arxiv", lambda: search_arxiv(
+    arxiv_ok = False
+    try:
+        arxiv_rows = search_arxiv(
             topics,
             max_results_per_topic=max_results_per_topic,
             timeout_seconds=timeout_seconds,
             opener=opener,
-        )),
-        ("github", lambda: search_github_repositories(
+        )
+        evidence.extend(arxiv_rows)
+        arxiv_ok = bool(arxiv_rows)
+    except Exception as exc:
+        errors.append({
+            "provider": "arxiv",
+            "error": f"{type(exc).__name__}:{exc}",
+        })
+
+    # arXiv is useful but occasionally returns service-side 406/429/503
+    # responses. OpenAlex is the independent academic metadata fallback so
+    # research discovery remains available without trusting GitHub alone.
+    if not arxiv_ok:
+        try:
+            evidence.extend(search_openalex(
+                topics,
+                api_key=os.environ.get("OPENALEX_API_KEY"),
+                max_results_per_topic=max_results_per_topic,
+                timeout_seconds=timeout_seconds,
+                opener=opener,
+            ))
+        except Exception as exc:
+            errors.append({
+                "provider": "openalex",
+                "error": f"{type(exc).__name__}:{exc}",
+            })
+
+    try:
+        evidence.extend(search_github_repositories(
             topics,
             token=github_token or os.environ.get("GITHUB_TOKEN"),
             max_results_per_topic=max_results_per_topic,
             timeout_seconds=timeout_seconds,
             opener=opener,
-        )),
-    )
-    for provider, loader in providers:
-        try:
-            evidence.extend(loader())
-        except Exception as exc:
-            errors.append({
-                "provider": provider,
-                "error": f"{type(exc).__name__}:{exc}",
-            })
+        ))
+    except Exception as exc:
+        errors.append({
+            "provider": "github",
+            "error": f"{type(exc).__name__}:{exc}",
+        })
 
     deduped: list[NativeOnlineEvidence] = []
     seen: set[str] = set()
@@ -414,8 +538,12 @@ def discover_native_research(
         "errors": errors,
         "remote_code_execution": False,
         "remote_content_trusted": False,
+        "academic_fallback": "openalex" if any(
+            row.provider == "openalex" for row in deduped
+        ) else None,
         "policy": (
             "online material is untrusted evidence; only bounded local mutation "
-            "families may consume derived tags"
+            "families may consume derived tags; OpenAlex is used when arXiv "
+            "research metadata is unavailable"
         ),
     }
