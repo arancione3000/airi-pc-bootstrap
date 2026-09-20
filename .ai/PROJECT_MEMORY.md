@@ -253,3 +253,25 @@ Capability honesty:
   the dedicated state branch, locally re-runs protected production
   qualification, and transactionally swaps the local checkpoint with rollback.
   Research promotion never silently enables or prefers the local provider.
+
+
+## 2026-09-20 — Generalist scalable-learning tranche
+
+- the autonomous Generalist Research Continuum remains a bounded small-model
+  architecture/curriculum laboratory; it is not represented as a substitute
+  for large-scale foundation-model training;
+- added reviewed-local-corpus causal pretraining with explicit allowed roots,
+  symlink/path confinement, suffix/file/total-byte budgets, SHA-256
+  deduplication and checkpoint provenance;
+- added response distillation from an already-local teacher backend; teacher
+  generations are SFT proposals only and cannot bypass held-out qualification;
+- added optional local-only Transformers + PEFT LoRA training for already
+  downloaded open-weight causal LMs, with `local_files_only=True`,
+  `trust_remote_code=False`, bounded hyperparameters and no base-model
+  overwrite;
+- exposed explicit CLI commands for native pretraining, local-teacher
+  distillation and local LoRA;
+- every scalable-learning output remains unqualified until it passes the
+  independent Generalist protected benchmark and production promotion gates;
+- CI regressions verify corpus confinement/deduplication, actual causal-loss
+  reduction, distillation provenance semantics and LoRA path/config boundaries.
