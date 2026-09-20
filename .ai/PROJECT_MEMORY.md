@@ -302,3 +302,18 @@ Capability honesty:
   the same optional grounded-pretraining stage;
 - the Generalist H24 continuum uses a bounded repository corpus and a small
   number of pretraining steps; production qualification remains independent.
+
+
+## 2026-09-20 — Generalist BPE tokenizer foundation
+
+- added deterministic bounded `bpe-v1` training over the reversible byte
+  vocabulary, preserving all existing chat-role special tokens;
+- BPE merge files include a stable digest and reject invalid forward references,
+  special-token merges, duplicate pairs and tampered metadata;
+- Generalist runtime can persist/load BPE tokenizer artifacts while remaining
+  backward-compatible with existing `byte-v1` checkpoints;
+- BPE checkpoint qualification includes `tokenizer.json` in the exact artifact
+  digest, so tokenizer changes invalidate prior qualification;
+- the autonomous genome still permits only `byte-v1` for now; BPE is not
+  considered an active evolutionary capability until a fair migration and
+  benchmark path is implemented.
