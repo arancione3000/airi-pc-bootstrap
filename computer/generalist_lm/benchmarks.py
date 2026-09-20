@@ -145,13 +145,20 @@ def qualification_suite() -> list[BenchmarkTask]:
     return core + extras
 
 
+def _run_backend(backend: Backend, prompt: str, *, max_new_tokens: int) -> str:
+    chat = getattr(backend, "chat", None)
+    if callable(chat):
+        return chat([{"role": "user", "content": prompt}], max_new_tokens=max_new_tokens)
+    return backend.generate(prompt, max_new_tokens=max_new_tokens)
+
+
 def run_benchmark(backend: Backend, tasks: list[BenchmarkTask] | None = None) -> dict:
     tasks = list(tasks or default_suite())
     rows = []
     domains: dict[str, list[bool]] = {}
     for task in tasks:
         try:
-            output = backend.generate(task.prompt, max_new_tokens=192)
+            output = _run_backend(backend, task.prompt, max_new_tokens=192)
             ok, detail = task.checker(output)
         except Exception as exc:
             output = ""
