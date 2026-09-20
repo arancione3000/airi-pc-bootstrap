@@ -472,3 +472,72 @@ def test_strategy_genes_change_actual_training_curriculum():
     symbolic = replace(seed, symbolic_adapter=True, reasoning_depth=3)
     symbolic_rows = _training_rows_for_genome(symbolic)
     assert sum(row.domain == "reasoning" for row in symbolic_rows) > sum(row.domain == "reasoning" for row in base)
+
+
+def test_curriculum_train_and_validation_are_disjoint_and_multi_domain():
+    from generalist_lm.curriculum import curriculum_manifest
+    manifest = curriculum_manifest()
+    assert manifest["train_rows"] >= 40
+    assert manifest["validation_rows"] >= 30
+    assert manifest["prompt_overlap"] == []
+    assert manifest["mechanically_labeled"] is True
+    assert all(count >= 5 for count in manifest["train_domains"].values())
+    assert all(count >= 5 for count in manifest["validation_domains"].values())
+
+
+def test_research_promotion_rejects_generalist_forgetting():
+    from generalist_lm.research_cycle import _research_eligible
+
+    champion = {
+        "loss": 1.0,
+        "domain_loss": {"language": 1.0, "coding": 1.0},
+        "finite": True,
+        "target_token_accuracy": 0.40,
+        "domain_token_accuracy": {"language": 0.4, "coding": 0.4},
+        "solved_items": ["language:aaa", "coding:bbb"],
+    }
+    candidate = {
+        "loss": 0.7,
+        "domain_loss": {"language": 0.8, "coding": 0.8},
+        "finite": True,
+        "target_token_accuracy": 0.45,
+        "domain_token_accuracy": {"language": 0.45, "coding": 0.45},
+        "solved_items": ["language:aaa"],
+    }
+    ok, reason = _research_eligible(
+        champion,
+        candidate,
+        minimum_loss_gain=0.02,
+        max_domain_regression=0.10,
+    )
+    assert ok is False
+    assert "forgot" in reason
+
+
+def test_research_promotion_accepts_loss_gain_with_retained_solutions():
+    from generalist_lm.research_cycle import _research_eligible
+
+    champion = {
+        "loss": 1.0,
+        "domain_loss": {"language": 1.0, "coding": 1.0},
+        "finite": True,
+        "target_token_accuracy": 0.40,
+        "domain_token_accuracy": {"language": 0.4, "coding": 0.4},
+        "solved_items": ["language:aaa"],
+    }
+    candidate = {
+        "loss": 0.7,
+        "domain_loss": {"language": 0.8, "coding": 0.8},
+        "finite": True,
+        "target_token_accuracy": 0.50,
+        "domain_token_accuracy": {"language": 0.5, "coding": 0.5},
+        "solved_items": ["language:aaa", "coding:bbb"],
+    }
+    ok, reason = _research_eligible(
+        champion,
+        candidate,
+        minimum_loss_gain=0.02,
+        max_domain_regression=0.10,
+    )
+    assert ok is True
+    assert "anti-forgetting" in reason
