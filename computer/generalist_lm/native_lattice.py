@@ -44,6 +44,7 @@ class AiriLatticeConfig:
     surprise_threshold: float = 0.20
     predictive_error_memory: bool = False
     local_recurrence: bool = False
+    parallel_memory: bool = False
     surprise_power: float = 1.5
     deep_write_power: float = 1.6
     lattice_mix: float = 0.20
@@ -69,6 +70,7 @@ class AiriLatticeConfig:
         self.surprise_threshold = float(self.surprise_threshold)
         self.predictive_error_memory = bool(self.predictive_error_memory)
         self.local_recurrence = bool(self.local_recurrence)
+        self.parallel_memory = bool(self.parallel_memory)
         self.surprise_power = float(self.surprise_power)
         self.deep_write_power = float(self.deep_write_power)
         self.lattice_mix = float(self.lattice_mix)
@@ -100,6 +102,12 @@ class AiriLatticeConfig:
             raise ValueError("active_experts out of AIRI Lattice bounds")
         if not (1 <= self.max_reasoning_steps <= 32):
             raise ValueError("max_reasoning_steps out of AIRI Lattice bounds")
+        if self.parallel_memory and (
+            self.predictive_error_memory or self.local_recurrence
+        ):
+            raise ValueError(
+                "parallel_memory v0 is incompatible with predictive/local recurrence"
+            )
         if not (0.0 <= self.surprise_threshold < 0.95):
             raise ValueError("surprise_threshold out of AIRI Lattice bounds")
         if not (0.25 <= self.surprise_power <= 8.0):
@@ -239,8 +247,12 @@ class AiriLatticeLM:
                     nn.Linear(config.d_model, config.d_model, bias=False)
                     if config.predictive_error_memory else None
                 )
+                self.surprise_proj = (
+                    nn.Linear(config.d_model, 1, bias=True)
+                    if config.parallel_memory else None
+                )
                 self.write_proj = nn.Linear(
-                    config.d_model * 2,
+                    config.d_model if config.parallel_memory else config.d_model * 2,
                     config.d_model,
                     bias=False,
                 )
@@ -287,6 +299,22 @@ class AiriLatticeLM:
                     dtype=dtype,
                 )
 
+            def _parallel_read(self, x_norm, state):
+                route = torch.softmax(self.band_routes, dim=-1)
+                routed = torch.einsum("ij,jbd->ibd", route, state)
+                readable = (
+                    (1.0 - config.lattice_mix) * state
+                    + config.lattice_mix * routed
+                )
+                query = self.query_proj(x_norm)
+                scores = torch.einsum(
+                    "bd,ibd->bi",
+                    query,
+                    self.memory_norm(readable),
+                ) / math.sqrt(config.d_model)
+                band_weights = torch.softmax(scores, dim=-1)
+                return torch.einsum("bi,ibd->bd", band_weights, readable)
+
             def forward(self, x, state):
                 # x: [batch, d_model], state: [bands, batch, d_model]
                 if state.ndim != 3:
@@ -295,6 +323,51 @@ class AiriLatticeLM:
                     raise ValueError("invalid AIRI Lattice memory band count")
                 if state.shape[1] != x.shape[0] or state.shape[2] != config.d_model:
                     raise ValueError("invalid AIRI Lattice state shape")
+
+                if config.parallel_memory:
+                    x_norm = self.input_norm(x)
+                    surprise = torch.sigmoid(
+                        self.surprise_proj(x_norm)
+                    ).squeeze(-1).to(dtype=x.dtype)
+                    candidate = torch.tanh(self.write_proj(x_norm))
+                    raw_gate = torch.sigmoid(self.write_gate(x_norm))
+                    band_depth = torch.linspace(
+                        0.0,
+                        1.0,
+                        config.memory_bands,
+                        device=x.device,
+                        dtype=x.dtype,
+                    )
+                    depth_exponent = (
+                        1.0 + band_depth * config.deep_write_power
+                    ).unsqueeze(0)
+                    depth_gate = surprise.clamp_min(1e-4).unsqueeze(-1).pow(
+                        depth_exponent
+                    )
+                    write_strength = (
+                        raw_gate * depth_gate
+                    ).transpose(0, 1).unsqueeze(-1)
+                    decay = torch.sigmoid(self.decay_logits).to(
+                        device=x.device,
+                        dtype=x.dtype,
+                    ).view(config.memory_bands, 1, 1)
+                    new_state = (
+                        decay * state
+                        + (1.0 - decay)
+                        * write_strength
+                        * candidate.unsqueeze(0)
+                    )
+                    memory = self._parallel_read(x_norm, new_state)
+                    expert_delta, usage = self.experts(x_norm, memory)
+                    out = x + self.dropout(
+                        self.memory_out(memory) + expert_delta
+                    )
+                    return (
+                        self.output_norm(out),
+                        new_state,
+                        surprise,
+                        usage,
+                    )
 
                 fast = self.memory_norm(state[0])
                 base = x
@@ -370,6 +443,155 @@ class AiriLatticeLM:
                 expert_delta, usage = self.experts(x_norm, memory)
                 out = base + self.dropout(self.memory_out(memory) + expert_delta)
                 return self.output_norm(out), new_state, surprise, usage
+
+            def forward_sequence(self, x, state):
+                """Exact parallel exponential-memory scan for training.
+
+                For every band, the recurrence
+                    s_t = d*s_(t-1) + (1-d)*w_t
+                is a causal exponential convolution. PyTorch evaluates all
+                timesteps together, eliminating the Python token loop while
+                preserving the exact streaming state used during generation.
+                """
+                if not config.parallel_memory:
+                    raise ValueError("forward_sequence requires parallel_memory")
+                if x.ndim != 3:
+                    raise ValueError("parallel Lattice input must be [batch,time,width]")
+                batch_size, sequence_length, width = x.shape
+                if width != config.d_model:
+                    raise ValueError("parallel Lattice width mismatch")
+                if state.shape != (
+                    config.memory_bands,
+                    batch_size,
+                    config.d_model,
+                ):
+                    raise ValueError("invalid parallel Lattice initial state")
+
+                x_norm = self.input_norm(x)
+                surprise = torch.sigmoid(
+                    self.surprise_proj(x_norm)
+                ).squeeze(-1).to(dtype=x.dtype)
+                candidate = torch.tanh(self.write_proj(x_norm))
+                raw_gate = torch.sigmoid(self.write_gate(x_norm))
+
+                band_depth = torch.linspace(
+                    0.0,
+                    1.0,
+                    config.memory_bands,
+                    device=x.device,
+                    dtype=x.dtype,
+                )
+                depth_exponent = (
+                    1.0 + band_depth * config.deep_write_power
+                ).view(1, 1, config.memory_bands)
+                depth_gate = surprise.clamp_min(1e-4).unsqueeze(-1).pow(
+                    depth_exponent
+                )
+                write_strength = raw_gate * depth_gate
+
+                decay = torch.sigmoid(self.decay_logits).to(
+                    device=x.device,
+                    dtype=x.dtype,
+                )
+                innovation = (
+                    (1.0 - decay).view(1, 1, config.memory_bands, 1)
+                    * write_strength.unsqueeze(-1)
+                    * candidate.unsqueeze(2)
+                )
+
+                channels = config.memory_bands * config.d_model
+                flattened = innovation.permute(0, 2, 3, 1).reshape(
+                    batch_size,
+                    channels,
+                    sequence_length,
+                )
+                channel_decay = decay.repeat_interleave(config.d_model)
+                exponents = torch.arange(
+                    sequence_length - 1,
+                    -1,
+                    -1,
+                    device=x.device,
+                    dtype=x.dtype,
+                )
+                kernel = channel_decay.unsqueeze(-1).pow(
+                    exponents.unsqueeze(0)
+                ).unsqueeze(1)
+                memory_flat = F.conv1d(
+                    F.pad(flattened, (sequence_length - 1, 0)),
+                    kernel,
+                    groups=channels,
+                )
+
+                initial = state.permute(1, 0, 2).reshape(
+                    batch_size,
+                    channels,
+                )
+                future_exponents = torch.arange(
+                    1,
+                    sequence_length + 1,
+                    device=x.device,
+                    dtype=x.dtype,
+                )
+                initial_decay = channel_decay.unsqueeze(-1).pow(
+                    future_exponents.unsqueeze(0)
+                )
+                memory_flat = (
+                    memory_flat
+                    + initial.unsqueeze(-1) * initial_decay.unsqueeze(0)
+                )
+                state_sequence = memory_flat.reshape(
+                    batch_size,
+                    config.memory_bands,
+                    config.d_model,
+                    sequence_length,
+                ).permute(0, 3, 1, 2)
+
+                route = torch.softmax(self.band_routes, dim=-1)
+                routed = torch.einsum(
+                    "ij,btjd->btid",
+                    route,
+                    state_sequence,
+                )
+                readable = (
+                    (1.0 - config.lattice_mix) * state_sequence
+                    + config.lattice_mix * routed
+                )
+                query = self.query_proj(x_norm)
+                scores = torch.einsum(
+                    "btd,btid->bti",
+                    query,
+                    self.memory_norm(readable),
+                ) / math.sqrt(config.d_model)
+                band_weights = torch.softmax(scores, dim=-1)
+                memory = torch.einsum(
+                    "bti,btid->btd",
+                    band_weights,
+                    readable,
+                )
+
+                flat_x = x_norm.reshape(batch_size * sequence_length, config.d_model)
+                flat_memory = memory.reshape(
+                    batch_size * sequence_length,
+                    config.d_model,
+                )
+                expert_delta, usage = self.experts(flat_x, flat_memory)
+                expert_delta = expert_delta.reshape(
+                    batch_size,
+                    sequence_length,
+                    config.d_model,
+                )
+                out = x + self.dropout(
+                    self.memory_out(memory) + expert_delta
+                )
+                final_state = state_sequence[:, -1].permute(1, 0, 2).contiguous()
+                state_summary = state_sequence.mean(dim=2)
+                return (
+                    self.output_norm(out),
+                    final_state,
+                    surprise,
+                    usage,
+                    state_summary,
+                )
 
         class Reasoner(nn.Module):
             def __init__(self):
@@ -462,57 +684,132 @@ class AiriLatticeLM:
                         raise ValueError("AIRI Lattice state cell count mismatch")
                     states = [item for item in lattice_state]
 
-                outputs = []
-                surprise_sum = x_tokens.new_zeros(())
-                reasoning_sum = x_tokens.new_zeros(())
-                token_count = 0
                 expert_usage = x_tokens.new_zeros(config.n_experts)
 
-                for time_index in range(sequence_length):
-                    h = x_tokens[:, time_index, :]
+                if config.parallel_memory and sequence_length > 1:
+                    h = x_tokens
                     cell_surprises = []
+                    cell_state_summaries = []
                     for cell_index, cell in enumerate(self.cells):
-                        h, new_state, surprise, usage = cell(
+                        (
+                            h,
+                            new_state,
+                            surprise,
+                            usage,
+                            state_summary,
+                        ) = cell.forward_sequence(
                             h,
                             states[cell_index],
                         )
                         states[cell_index] = new_state
                         cell_surprises.append(surprise)
+                        cell_state_summaries.append(state_summary)
                         expert_usage = expert_usage + usage
 
-                    surprise = torch.stack(cell_surprises, dim=0).mean(dim=0)
+                    surprise = torch.stack(
+                        cell_surprises,
+                        dim=0,
+                    ).mean(dim=0)
                     memory_summary = torch.stack(
-                        [state.mean(dim=0) for state in states],
+                        cell_state_summaries,
                         dim=0,
                     ).mean(dim=0)
                     budgets = self._reasoning_budget(surprise)
 
-                    # Shared recurrent reasoning weights: hard tokens spend more
-                    # compute without multiplying the parameter count.
+                    flat_h = h.reshape(
+                        batch_size * sequence_length,
+                        config.d_model,
+                    )
+                    flat_memory = memory_summary.reshape(
+                        batch_size * sequence_length,
+                        config.d_model,
+                    )
+                    flat_budget = budgets.reshape(-1)
                     reasoning_steps = torch.zeros(
-                        batch_size,
+                        batch_size * sequence_length,
                         device=h.device,
                         dtype=torch.long,
                     )
                     for step in range(config.max_reasoning_steps):
-                        active = budgets > step
+                        active = flat_budget > step
                         if not bool(active.any()):
                             break
                         rows = active.nonzero(as_tuple=True)[0]
                         refined = self.reasoner(
-                            h.index_select(0, rows),
-                            memory_summary.index_select(0, rows),
+                            flat_h.index_select(0, rows),
+                            flat_memory.index_select(0, rows),
                         )
-                        delta = refined - h.index_select(0, rows)
-                        h = h.index_add(0, rows, delta)
-                        reasoning_steps = reasoning_steps + active.to(torch.long)
+                        delta = refined - flat_h.index_select(0, rows)
+                        flat_h = flat_h.index_add(0, rows, delta)
+                        reasoning_steps = (
+                            reasoning_steps + active.to(torch.long)
+                        )
 
-                    outputs.append(h)
-                    surprise_sum = surprise_sum + surprise.mean()
-                    reasoning_sum = reasoning_sum + reasoning_steps.float().mean()
-                    token_count += 1
+                    hidden = flat_h.reshape(
+                        batch_size,
+                        sequence_length,
+                        config.d_model,
+                    )
+                    surprise_sum = surprise.mean()
+                    reasoning_sum = reasoning_steps.float().mean()
+                    token_count = 1
+                else:
+                    outputs = []
+                    surprise_sum = x_tokens.new_zeros(())
+                    reasoning_sum = x_tokens.new_zeros(())
+                    token_count = 0
 
-                hidden = torch.stack(outputs, dim=1)
+                    for time_index in range(sequence_length):
+                        h = x_tokens[:, time_index, :]
+                        cell_surprises = []
+                        for cell_index, cell in enumerate(self.cells):
+                            h, new_state, surprise, usage = cell(
+                                h,
+                                states[cell_index],
+                            )
+                            states[cell_index] = new_state
+                            cell_surprises.append(surprise)
+                            expert_usage = expert_usage + usage
+
+                        surprise = torch.stack(
+                            cell_surprises,
+                            dim=0,
+                        ).mean(dim=0)
+                        memory_summary = torch.stack(
+                            [state.mean(dim=0) for state in states],
+                            dim=0,
+                        ).mean(dim=0)
+                        budgets = self._reasoning_budget(surprise)
+
+                        reasoning_steps = torch.zeros(
+                            batch_size,
+                            device=h.device,
+                            dtype=torch.long,
+                        )
+                        for step in range(config.max_reasoning_steps):
+                            active = budgets > step
+                            if not bool(active.any()):
+                                break
+                            rows = active.nonzero(as_tuple=True)[0]
+                            refined = self.reasoner(
+                                h.index_select(0, rows),
+                                memory_summary.index_select(0, rows),
+                            )
+                            delta = refined - h.index_select(0, rows)
+                            h = h.index_add(0, rows, delta)
+                            reasoning_steps = (
+                                reasoning_steps + active.to(torch.long)
+                            )
+
+                        outputs.append(h)
+                        surprise_sum = surprise_sum + surprise.mean()
+                        reasoning_sum = (
+                            reasoning_sum
+                            + reasoning_steps.float().mean()
+                        )
+                        token_count += 1
+
+                    hidden = torch.stack(outputs, dim=1)
                 logits = self.lm_head(self.final_norm(hidden))
                 loss = None
                 if labels is not None:

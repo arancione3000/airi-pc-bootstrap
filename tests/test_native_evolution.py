@@ -838,3 +838,139 @@ def test_lattice_predictive_and_local_genes_run_causally_with_vectorized_sparse_
     assert len(left["stats"]["expert_usage"]) == cfg.n_experts
     assert sum(left["stats"]["expert_usage"]) == pytest.approx(1.0, abs=1e-5)
     assert lattice_active_parameter_estimate(cfg) < lattice_parameter_count(cfg)
+
+
+
+def test_parallel_lattice_scan_matches_token_streaming_exactly():
+    torch = pytest.importorskip("torch")
+    from generalist_lm.native_lattice import AiriLatticeLM
+
+    cfg = _tiny_lattice_config(
+        parallel_memory=True,
+        predictive_error_memory=False,
+        local_recurrence=False,
+        max_reasoning_steps=2,
+        active_experts=1,
+    )
+    torch.manual_seed(2026)
+    model = AiriLatticeLM(cfg).eval()
+    ids = torch.tensor(
+        [[1, 20, 21, 22, 23, 24, 25, 26]],
+        dtype=torch.long,
+    )
+
+    parallel = model(ids, return_state=True)
+
+    state = None
+    pieces = []
+    for index in range(ids.shape[1]):
+        step = model(
+            ids[:, index:index + 1],
+            lattice_state=state,
+            return_state=True,
+        )
+        state = step["lattice_state"]
+        pieces.append(step["logits"])
+    streamed_logits = torch.cat(pieces, dim=1)
+
+    assert torch.allclose(
+        parallel["logits"],
+        streamed_logits,
+        atol=2e-5,
+        rtol=2e-5,
+    )
+    assert len(state) == len(parallel["lattice_state"])
+    for full_state, streamed_state in zip(parallel["lattice_state"], state):
+        assert torch.allclose(
+            full_state,
+            streamed_state,
+            atol=2e-5,
+            rtol=2e-5,
+        )
+
+
+def test_parallel_lattice_gene_is_fail_closed_with_state_dependent_genes():
+    pytest.importorskip("torch")
+    from generalist_lm.native_lattice import AiriLatticeConfig
+
+    with pytest.raises(ValueError, match="parallel_memory"):
+        AiriLatticeConfig(
+            parallel_memory=True,
+            predictive_error_memory=True,
+        ).validate()
+    with pytest.raises(ValueError, match="parallel_memory"):
+        AiriLatticeConfig(
+            parallel_memory=True,
+            local_recurrence=True,
+        ).validate()
+
+
+def test_lattice_population_exposes_parallel_scan_gene():
+    pytest.importorskip("torch")
+    from generalist_lm.lattice_evolution import (
+        generate_lattice_population,
+        root_lattice_genome,
+    )
+
+    champion = root_lattice_genome(_tiny_lattice_config())
+    population = generate_lattice_population(
+        champion,
+        count=9,
+        exploration_offset=0,
+        mathesis_signals=["deep_symbolic_signal"],
+        research={"tag_counts": {"efficiency": 4, "long-context": 2}},
+        max_total_parameters=3_000_000,
+        max_active_parameter_ratio=2.0,
+    )
+    families = {mutation.family for mutation, _ in population}
+    assert "parallel" in families
+    parallel = [
+        genome for mutation, genome in population
+        if mutation.family == "parallel"
+    ][0]
+    cfg = parallel.lattice_config()
+    assert cfg.parallel_memory is True
+    assert cfg.predictive_error_memory is False
+    assert cfg.local_recurrence is False
+
+
+def test_lattice_lab_balances_held_out_domains(tmp_path: Path):
+    pytest.importorskip("torch")
+    from generalist_lm.lattice_lab import (
+        LatticeLabConfig,
+        benchmark_lattice_against_transformer,
+    )
+
+    corpus_root = tmp_path / "balanced-lattice-corpus"
+    corpus_root.mkdir()
+    manifest = _write_corpus(corpus_root)
+    result = benchmark_lattice_against_transformer(
+        str(manifest),
+        allowed_roots=[str(corpus_root)],
+        lattice_config=_tiny_lattice_config(
+            parallel_memory=True,
+            predictive_error_memory=False,
+            local_recurrence=False,
+            max_reasoning_steps=1,
+        ),
+        lab_config=LatticeLabConfig(
+            steps=1,
+            batch_size=1,
+            learning_rate=2e-3,
+            min_learning_rate=2e-4,
+            validation_fraction=0.25,
+            max_eval_blocks=4,
+            seed=919,
+            device="cpu",
+            minimum_loss_gain=0.0,
+            max_domain_regression=10.0,
+            max_active_parameter_ratio=2.0,
+        ),
+    )
+    expected = {"general", "reasoning", "code", "math"}
+    assert set(
+        result["candidate"]["training"]["final"]["domain_loss"]
+    ) == expected
+    assert set(
+        result["baseline"]["training"]["final"]["domain_loss"]
+    ) == expected

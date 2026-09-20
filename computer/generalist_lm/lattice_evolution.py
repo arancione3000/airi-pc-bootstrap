@@ -249,6 +249,30 @@ def mutation_library(
         ),
     ])
 
+    # Parallel exponential scan. Enabling this gene intentionally disables
+    # state-dependent predictive/local writes so the exact recurrent update can
+    # be evaluated across all training timesteps in one causal convolution.
+    if not cfg.parallel_memory:
+        mutations.append(LatticeMutation(
+            "parallel-enable-exponential-scan",
+            "parallel",
+            {
+                "parallel_memory": True,
+                "predictive_error_memory": False,
+                "local_recurrence": False,
+            },
+            "replace the Python token loop with an exact parallel exponential-memory scan",
+            ("efficiency", "long-context"),
+        ))
+    else:
+        mutations.append(LatticeMutation(
+            "parallel-disable-exponential-scan",
+            "parallel",
+            {"parallel_memory": False},
+            "return to fully state-dependent recurrent memory if scan restrictions hurt quality",
+            ("reasoning",),
+        ))
+
     # Predictive-coding and local recurrent genes. These are off by default
     # so the original Lattice remains a valid genome; MATHESIS can explicitly
     # test whether the extra structure earns its active-parameter cost.
@@ -433,6 +457,7 @@ def mutation_library(
         "experts": 2 if reasoning_focus or curriculum_focus else 1,
         "prediction": 4 if reasoning_focus else 2,
         "local": 4 if reasoning_focus else 2,
+        "parallel": 5 if efficiency_focus else 3,
         "optimizer": 1,
         "depth": 1,
     }
@@ -440,6 +465,7 @@ def mutation_library(
         priority["memory"] += 1
         priority["routing"] += 1
         priority["experts"] += 1
+        priority["parallel"] += 2
     if tokenizer_focus:
         # Lattice v0 intentionally keeps tokenization outside the architecture
         # genome; Phase-2 BPE evolution handles it. Reward memory/efficiency
