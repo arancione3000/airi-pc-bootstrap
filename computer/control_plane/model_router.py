@@ -9,17 +9,18 @@ FILE = "model-routing.json"
 DEFAULTS = {
     "simple": "chatgpt",
     "coding": "chatgpt",
+    "data": "chatgpt",
     "research": "chatgpt",
     "vision": "chatgpt",
     "review": "chatgpt",
 }
 CHATGPT_PROVIDER = {
     "name": "chatgpt",
-    "capabilities": ["simple", "coding", "research", "vision", "review"],
+    "capabilities": ["simple", "coding", "data", "research", "vision", "review"],
     "available": True,
     "cost_class": "reasoning-authority",
 }
-GENERALIST_CAPABILITIES = ["simple", "coding", "research", "review"]
+GENERALIST_CAPABILITIES = ["simple", "coding", "data", "review"]
 
 
 def _prefer_generalist() -> bool:
