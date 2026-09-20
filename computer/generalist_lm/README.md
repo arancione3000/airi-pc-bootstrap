@@ -655,11 +655,20 @@ Architecture search is deliberately compute-frugal:
 7. the canonical Native Transformer remains unchanged until repeated,
    larger-budget evidence justifies a migration.
 
-The existing Native Evolution workflow invokes this Lattice research loop
-automatically and persists its state under
-`native-evolution-state/native-evolution-state/lattice-research/`. A failure
-inside Lattice research is isolated and cannot damage or replace the canonical
-Native champion.
+The existing Native Evolution workflow keeps a small sequential Lattice probe
+as a safety net. The dedicated `.github/workflows/lattice-research.yml`
+workflow is the high-throughput free-compute path: every 15 minutes it plans
+eight mathematically stable challengers, evaluates all eight concurrently,
+Pareto-reduces them 8 -> 4 -> 2 with increasing scratch-training budgets, and
+requires two independent final seeds before the external reducer may update the
+research architecture champion. The state is persisted separately on
+`lattice-research-state`.
+
+No matrix worker can promote itself. Every empirical comparison still trains a
+matched Native Transformer from scratch on the same tokens, split and step
+budget, and the final reducer revalidates the winning genome's stability before
+persistence. The canonical Native Transformer is not replaced by a Lattice
+research win; migration requires a later, stronger scale-transfer gate.
 
 Useful commands:
 
