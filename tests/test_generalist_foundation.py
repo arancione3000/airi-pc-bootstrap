@@ -217,3 +217,66 @@ def test_cli_exposes_foundation_track_commands(tmp_path: Path):
 
     args = p.parse_args(["foundation-status", str(tmp_path / "model")])
     assert args.cmd == "foundation-status"
+
+def test_foundation_qualification_forwards_hardware_policy(tmp_path: Path, monkeypatch):
+    from generalist_lm import qualification
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+    seen = {}
+
+    class Backend:
+        def __init__(self, *args, **kwargs):
+            seen.update(kwargs)
+
+        def generate(self, prompt: str, *, max_new_tokens: int = 192) -> str:
+            return ""
+
+    monkeypatch.setattr("generalist_lm.hf_backend.LocalTransformersBackend", Backend)
+    monkeypatch.setattr(
+        qualification,
+        "run_benchmark",
+        lambda backend, tasks: {
+            "ok": True,
+            "score": 100.0,
+            "domain_scores": {domain: 1.0 for domain in FOUNDATION_DOMAINS},
+            "critical_failures": [],
+            "tasks": [],
+        },
+    )
+
+    result = qualification.qualify_foundation_model(
+        model,
+        device="cpu",
+        device_map="auto",
+        torch_dtype="bfloat16",
+        max_memory={"cpu": "8GiB"},
+        offload_folder=tmp_path / "offload",
+    )
+    assert result["qualified"] is True
+    assert seen["device"] == "cpu"
+    assert seen["device_map"] == "auto"
+    assert seen["torch_dtype"] == "bfloat16"
+    assert seen["max_memory"] == {"cpu": "8GiB"}
+    assert seen["offload_folder"] == tmp_path / "offload"
+    assert result["load_policy"]["device_map"] == "auto"
+    assert result["load_policy"]["torch_dtype"] == "bfloat16"
+
+
+def test_cli_foundation_qualification_exposes_hardware_options(tmp_path: Path):
+    from generalist_lm.cli import parser
+
+    args = parser().parse_args([
+        "qualify-foundation",
+        str(tmp_path / "model"),
+        "--device", "cuda:0",
+        "--device-map", "balanced",
+        "--torch-dtype", "bfloat16",
+        "--max-memory-json", '{"0":"12GiB","cpu":"24GiB"}',
+        "--offload-folder", str(tmp_path / "offload"),
+    ])
+    assert args.device == "cuda:0"
+    assert args.device_map == "balanced"
+    assert args.torch_dtype == "bfloat16"
+    assert args.max_memory_json == '{"0":"12GiB","cpu":"24GiB"}'
+
