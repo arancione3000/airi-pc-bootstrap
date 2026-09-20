@@ -541,3 +541,15 @@ def test_research_promotion_accepts_loss_gain_with_retained_solutions():
     )
     assert ok is True
     assert "anti-forgetting" in reason
+
+
+def test_generalist_continuum_has_serialized_self_handoff_and_nonforce_state_push():
+    workflow = (ROOT / ".github" / "workflows" / "generalist-continuum.yml").read_text(encoding="utf-8")
+    assert "group: airi-generalist-research" in workflow
+    assert "cancel-in-progress: false" in workflow
+    assert "AIRI_GENERALIST_MIN_CHAIN_SECONDS: '900'" in workflow
+    assert "Next autonomous AIRI Generalist research cycle dispatched." in workflow
+    assert "active_other" in workflow
+    assert "git push --quiet origin HEAD:generalist-state" in workflow
+    assert "git push --force" not in workflow
+    assert "git push -f" not in workflow
