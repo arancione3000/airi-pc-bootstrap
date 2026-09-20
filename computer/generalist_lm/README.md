@@ -354,11 +354,30 @@ python -m generalist_lm.cli foundation-init /models/foundation \
   --parameter-count 7000000000 \
   --dtype bfloat16
 
+python -m generalist_lm.cli foundation-preflight /models/foundation \
+  --max-memory-json '{"0":"14GiB","cpu":"32GiB"}'
+
 python -m generalist_lm.cli qualify-foundation /models/foundation \
   --device-map auto \
-  --torch-dtype auto
+  --torch-dtype auto \
+  --max-memory-json '{"0":"14GiB","cpu":"32GiB"}'
 python -m generalist_lm.cli foundation-status /models/foundation
 ```
+
+The metadata-only preflight runs before Foundation qualification and never
+loads model tensors. It validates the local config, declared context window,
+quantization metadata, chat-template presence, sharded weight index integrity,
+Transformers config support with `trust_remote_code=False`, optional memory
+budgets, and a read-only hardware snapshot. Missing shards, shard path escapes,
+manifest/config quantization drift, unsupported local config classes and other
+hard incompatibilities fail closed.
+
+The preflight also reports protocol-specific requirements. In particular,
+`model_type=gpt_oss` is currently reported as requiring a dedicated Harmony
+adapter. A chat template alone is not treated as full Harmony output support, so
+gpt-oss cannot pass Foundation qualification until that adapter is implemented
+and verified. MXFP4 candidates additionally report local Accelerate/Triton/kernel
+and CUDA-capability facts without downloading any runtime code.
 
 A Foundation candidate is not activated merely by existing on disk. Airi-PC
 uses it only when the dedicated Foundation attestation is still exact-digest
@@ -383,5 +402,8 @@ backend never applies a global `model.to(device)` after sharding. Set
 load using `AIRI_GENERALIST_DEVICE`.
 
 This still does not make the model a production champion by declaration:
-qualification remains digest-bound to the model, manifest and protected suite,
-and the existing router/provider opt-ins remain in force.
+Foundation qualification v3 additionally records a successful preflight, while
+qualification remains digest-bound to the model, manifest, protected suite and
+inference dtype. Status re-runs the metadata preflight so a model that becomes
+incompatible fails closed before provider activation. The existing router and
+provider opt-ins remain in force.
