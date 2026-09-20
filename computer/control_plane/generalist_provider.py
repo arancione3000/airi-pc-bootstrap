@@ -68,7 +68,11 @@ def _foundation_runtime_options() -> tuple[dict[str, Any], str | None]:
             return {}, "AIRI_GENERALIST_FOUNDATION_MAX_MEMORY must be valid JSON"
         if not isinstance(parsed, dict) or not parsed:
             return {}, "AIRI_GENERALIST_FOUNDATION_MAX_MEMORY must be a non-empty JSON object"
-        max_memory = parsed
+        try:
+            from generalist_lm.hf_backend import _normalized_max_memory
+            max_memory = _normalized_max_memory(parsed)
+        except ValueError as exc:
+            return {}, f"invalid AIRI_GENERALIST_FOUNDATION_MAX_MEMORY: {exc}"
         if device_map is None:
             return {}, "Foundation max-memory policy requires a device map"
 
@@ -113,6 +117,7 @@ def status() -> dict[str, Any]:
         transformers_ready = importlib.util.find_spec("transformers") is not None
         accelerate_ready = importlib.util.find_spec("accelerate") is not None
         load_policy, policy_error = _foundation_runtime_options()
+        accelerate_required = bool(load_policy.get("device_map")) if policy_error is None else True
         attestation = foundation_qualification_status(
             foundation_dir,
             attestation_path=foundation_attestation_path(foundation_dir),
@@ -124,7 +129,11 @@ def status() -> dict[str, Any]:
             and foundation_dir.is_dir()
             and manifest_path.is_file()
         )
-        dependencies_ok = bool(torch_ready and transformers_ready and accelerate_ready)
+        dependencies_ok = bool(
+            torch_ready
+            and transformers_ready
+            and (accelerate_ready or not accelerate_required)
+        )
         available = bool(
             enabled()
             and checkpoint_complete
@@ -146,6 +155,7 @@ def status() -> dict[str, Any]:
                 "torch": torch_ready,
                 "transformers": transformers_ready,
                 "accelerate": accelerate_ready,
+                "accelerate_required": accelerate_required,
             },
             "files": {
                 "model_dir": bool(foundation_dir.exists() and foundation_dir.is_dir()),
@@ -159,7 +169,7 @@ def status() -> dict[str, Any]:
                 "qualified Foundation model is enabled with a valid hardware load policy"
                 if available
                 else policy_error
-                or "provider requires AIRI_GENERALIST_ENABLE=1, torch+transformers+accelerate, a Foundation manifest, and an exact-digest Foundation qualification"
+                or "provider requires AIRI_GENERALIST_ENABLE=1, torch+transformers, Accelerate when device_map is active, a Foundation manifest, and an exact-digest Foundation qualification"
             ),
         }
 
