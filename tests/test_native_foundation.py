@@ -89,6 +89,16 @@ def test_native_generate_uses_own_model_without_transformers_dependency():
     assert out.shape == (1, 6)
 
 
+def test_native_module_has_no_pretrained_loader_dependency():
+    import inspect
+    import generalist_lm.native_foundation as native
+
+    source = inspect.getsource(native).lower()
+    assert "from_pretrained" not in source
+    assert "huggingface" not in source
+    assert "transformers" not in source
+
+
 def test_native_root_api_has_no_pretrained_or_source_model_input():
     from generalist_lm.native_foundation import create_native_root_checkpoint
 
