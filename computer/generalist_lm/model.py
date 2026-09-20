@@ -108,10 +108,11 @@ class CausalTransformerLM:
                 odd = x[..., 1::2]
                 return torch.stack((-odd, even), dim=-1).flatten(-2)
 
-            def _apply_rope(self, q, k):
+            def _apply_rope(self, q, k, *, position_offset: int = 0):
                 seqlen = q.shape[-2]
                 positions = torch.arange(
-                    seqlen,
+                    int(position_offset),
+                    int(position_offset) + seqlen,
                     device=q.device,
                     dtype=self.rope_inv_freq.dtype,
                 )
@@ -123,22 +124,55 @@ class CausalTransformerLM:
                 k_rot = k * cos + self._rotate_half(k) * sin
                 return q_rot, k_rot
 
-            def forward(self, x):
+            def forward(self, x, *, past_key_value=None, use_cache: bool = False):
                 bsz, seqlen, width = x.shape
                 qkv = self.qkv(x).view(bsz, seqlen, 3, self.n_heads, self.head_dim)
                 q, k, v = qkv.unbind(dim=2)
                 q = q.transpose(1, 2)
                 k = k.transpose(1, 2)
                 v = v.transpose(1, 2)
+
+                past_len = 0
+                if past_key_value is not None:
+                    past_k, past_v = past_key_value
+                    if past_k.shape[:2] != (bsz, self.n_heads) or past_v.shape != past_k.shape:
+                        raise ValueError("invalid attention KV cache shape")
+                    if past_k.shape[-1] != self.head_dim:
+                        raise ValueError("invalid attention KV cache head dimension")
+                    past_len = int(past_k.shape[-2])
+                else:
+                    past_k = past_v = None
+
                 if config.position_encoding == "rope":
-                    q, k = self._apply_rope(q, k)
+                    q, k = self._apply_rope(q, k, position_offset=past_len)
+
+                if past_k is not None:
+                    k = torch.cat([past_k, k], dim=-2)
+                    v = torch.cat([past_v, v], dim=-2)
+
+                total_len = int(k.shape[-2])
+                if past_len == 0:
+                    attn_mask = None
+                    is_causal = True
+                else:
+                    query_positions = torch.arange(
+                        past_len,
+                        past_len + seqlen,
+                        device=x.device,
+                    )[:, None]
+                    key_positions = torch.arange(total_len, device=x.device)[None, :]
+                    attn_mask = key_positions <= query_positions
+                    is_causal = False
+
                 y = F.scaled_dot_product_attention(
                     q, k, v,
+                    attn_mask=attn_mask,
                     dropout_p=self.dropout if self.training else 0.0,
-                    is_causal=True,
+                    is_causal=is_causal,
                 )
                 y = y.transpose(1, 2).contiguous().view(bsz, seqlen, width)
-                return self.out(y)
+                present = (k, v) if use_cache else None
+                return self.out(y), present
 
         class SwiGLU(nn.Module):
             def __init__(self):
@@ -168,10 +202,15 @@ class CausalTransformerLM:
                 self.ff = SwiGLU() if config.ff_variant == "swiglu" else GeluFF()
                 self.drop = nn.Dropout(config.dropout)
 
-            def forward(self, x):
-                x = x + self.drop(self.attn(self.attn_norm(x)))
+            def forward(self, x, *, past_key_value=None, use_cache: bool = False):
+                attn_out, present = self.attn(
+                    self.attn_norm(x),
+                    past_key_value=past_key_value,
+                    use_cache=use_cache,
+                )
+                x = x + self.drop(attn_out)
                 x = x + self.drop(self.ff(self.ff_norm(x)))
-                return x
+                return x, present
 
         class DecoderOnlyLM(nn.Module):
             def __init__(self):
@@ -220,16 +259,38 @@ class CausalTransformerLM:
                     return self.position_embedding(positions)
                 return self.fixed_position_encoding.index_select(0, positions)
 
-            def forward(self, input_ids, labels=None):
+            def forward(self, input_ids, labels=None, *, past_key_values=None, use_cache: bool = False):
                 if input_ids.ndim != 2:
                     raise ValueError("input_ids must have shape [batch, time]")
                 _bsz, seqlen = input_ids.shape
-                if seqlen > config.context_length:
-                    raise ValueError("sequence exceeds model context_length")
-                positions = torch.arange(seqlen, device=input_ids.device)
+
+                if past_key_values is not None:
+                    if labels is not None:
+                        raise ValueError("labels are not supported with past_key_values")
+                    if len(past_key_values) != len(self.blocks):
+                        raise ValueError("past_key_values length must match transformer layers")
+                    past_len = int(past_key_values[0][0].shape[-2]) if past_key_values else 0
+                    if any(int(item[0].shape[-2]) != past_len for item in past_key_values):
+                        raise ValueError("all KV cache layers must have the same sequence length")
+                else:
+                    past_len = 0
+                    past_key_values = [None] * len(self.blocks)
+
+                total_len = past_len + seqlen
+                if total_len > config.context_length:
+                    raise ValueError("sequence plus KV cache exceeds model context_length")
+
+                positions = torch.arange(
+                    past_len,
+                    total_len,
+                    device=input_ids.device,
+                )
                 x = self.token_embedding(input_ids) + self._position_values(positions)[None, :, :]
-                for block in self.blocks:
-                    x = block(x)
+                presents = []
+                for block, past in zip(self.blocks, past_key_values):
+                    x, present = block(x, past_key_value=past, use_cache=use_cache)
+                    if use_cache:
+                        presents.append(present)
                 logits = self.lm_head(self.final_norm(x))
                 loss = None
                 if labels is not None:
@@ -240,7 +301,11 @@ class CausalTransformerLM:
                         labels[:, 1:].contiguous().view(-1),
                         ignore_index=-100,
                     )
-                return {"logits": logits, "loss": loss}
+                return {
+                    "logits": logits,
+                    "loss": loss,
+                    "past_key_values": tuple(presents) if use_cache else None,
+                }
 
             @torch.no_grad()
             def generate(
@@ -251,12 +316,26 @@ class CausalTransformerLM:
                 eos_token_id: int | None = 2,
                 temperature: float = 0.0,
                 top_k: int | None = None,
+                use_cache: bool = True,
             ):
                 self.eval()
                 out = input_ids
+                past_key_values = None
+                next_input = out[:, -config.context_length:]
+
                 for _ in range(max(0, int(max_new_tokens))):
-                    window = out[:, -config.context_length:]
-                    logits = self(window)["logits"][:, -1, :]
+                    if use_cache and past_key_values is not None:
+                        result = self(
+                            next_input,
+                            past_key_values=past_key_values,
+                            use_cache=True,
+                        )
+                    else:
+                        window = out[:, -config.context_length:]
+                        result = self(window, use_cache=bool(use_cache))
+                    logits = result["logits"][:, -1, :]
+                    past_key_values = result["past_key_values"] if use_cache else None
+
                     if temperature is None or float(temperature) <= 0.0:
                         next_token = logits.argmax(dim=-1, keepdim=True)
                     else:
@@ -267,9 +346,23 @@ class CausalTransformerLM:
                             scaled = scaled.masked_fill(scaled < cutoff, float("-inf"))
                         probs = torch.softmax(scaled, dim=-1)
                         next_token = torch.multinomial(probs, num_samples=1)
+
                     out = torch.cat([out, next_token], dim=1)
                     if eos_token_id is not None and bool(torch.all(next_token == int(eos_token_id))):
                         break
+
+                    if use_cache and past_key_values is not None:
+                        cache_len = int(past_key_values[0][0].shape[-2]) if past_key_values else 0
+                        if cache_len >= config.context_length:
+                            # Sliding-window semantics reset position indices,
+                            # so recompute the bounded window rather than using
+                            # stale absolute positions beyond the context limit.
+                            past_key_values = None
+                            next_input = out[:, -config.context_length:]
+                        else:
+                            next_input = next_token
+                    else:
+                        next_input = out[:, -config.context_length:]
                 return out
 
         return DecoderOnlyLM()
