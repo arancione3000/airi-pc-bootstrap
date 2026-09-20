@@ -134,11 +134,16 @@ def _fetch(
         raise PermissionError(f"online research host is not allowed: {host!r}")
 
     headers = {
-        "User-Agent": "AIRI-Native-Research/1.0",
-        "Accept": "application/json,application/atom+xml,text/xml;q=0.9,*/*;q=0.1",
+        "User-Agent": "AIRI-Native-Research/1.0 (+https://github.com/arancione3000/airi-pc-bootstrap)",
     }
-    if token and host == "api.github.com":
-        headers["Authorization"] = f"Bearer {token}"
+    if host == "export.arxiv.org":
+        # arXiv's Atom endpoint can reject broad/mixed Accept headers with
+        # HTTP 406. Request the media type it actually serves.
+        headers["Accept"] = "application/atom+xml"
+    elif host == "api.github.com":
+        headers["Accept"] = "application/vnd.github+json"
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         headers["X-GitHub-Api-Version"] = "2022-11-28"
     request = Request(url, headers=headers, method="GET")
     response = (opener or urlopen)(request, timeout=float(timeout_seconds))
