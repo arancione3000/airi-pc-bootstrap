@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -108,6 +109,15 @@ def _research_score(report: dict[str, Any], params: int) -> float:
     loss = float(report["loss"])
     efficiency_penalty = min(1.0, params / 10_000_000.0) * 0.01
     return float(100.0 / (1.0 + loss) - efficiency_penalty)
+
+
+def _genome_training_seed(genome: GeneralistGenome, *, namespace: str = "candidate") -> int:
+    payload = genome.to_dict()
+    for key in ("genome_id", "parent_id", "generation"):
+        payload.pop(key, None)
+    raw = (namespace + "\0" + json.dumps(payload, sort_keys=True, separators=(",", ":"))).encode("utf-8")
+    value = int(hashlib.sha256(raw).hexdigest()[:8], 16)
+    return 1 + (value % 2_000_000_000)
 
 
 def _research_eligible(
@@ -295,7 +305,10 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
     if loaded is None:
         champion_genome = research_seed()
         champion_runtime, champion_report = _train_genome(
-            champion_genome, steps=max(steps, bootstrap_steps), seed=1000, device=device
+            champion_genome,
+            steps=max(steps, bootstrap_steps),
+            seed=_genome_training_seed(champion_genome, namespace="bootstrap"),
+            device=device,
         )
         _save_champion(root, champion_genome, champion_runtime, champion_report)
         bootstrapped = True
@@ -316,7 +329,12 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         signals.extend(mathesis.get("signals") or [])
     signals = list(dict.fromkeys(signals))
 
-    challengers = generate_challengers(champion_genome, signals=signals, count=challenger_count)
+    challengers = generate_challengers(
+        champion_genome,
+        signals=signals,
+        count=challenger_count,
+        exploration_offset=max(0, cycle - 1),
+    )
     trials: list[dict[str, Any]] = []
     winner: tuple[GeneralistGenome, GeneralistRuntime, dict[str, Any]] | None = None
 
@@ -339,7 +357,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         runtime, report = _train_genome(
             genome,
             steps=steps,
-            seed=2000 + cycle * 17 + index,
+            seed=_genome_training_seed(genome),
             device=device,
         )
         eligible, reason = _research_eligible(
