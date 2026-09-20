@@ -421,3 +421,16 @@ def test_readonly_generalist_table_tools_reject_non_numeric_and_excessive_groups
                 "group_by": "group",
             },
         )
+
+
+def test_generalist_autocode_requires_explicit_test_command(monkeypatch):
+    import code_agent
+
+    monkeypatch.setenv("AIRI_GENERALIST_AUTOCODE", "1")
+    with pytest.raises(PermissionError, match="explicit test command"):
+        code_agent.agent(
+            "edit safely",
+            project_path=".",
+            scope=["demo.py"],
+            test_command="",
+        )
