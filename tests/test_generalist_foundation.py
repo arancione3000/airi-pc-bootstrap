@@ -317,7 +317,7 @@ def test_foundation_attestation_v3_requires_inference_profile(tmp_path: Path, mo
         },
     )
     result = qualification.qualify_foundation_model(model)
-    assert result["foundation_qualification_version"] == 2
+    assert result["foundation_qualification_version"] == 3
     assert result["inference_profile"] == {"torch_dtype": "auto"}
     assert qualification.foundation_qualification_status(model)["qualified"] is True
 
