@@ -211,3 +211,19 @@ Capability honesty:
 - research health fails closed if persistent curriculum replay overlaps protected validation prompts or if generation metrics are malformed;
 - persistent curriculum size is bounded by `AIRI_GENERALIST_RESEARCH_CURRICULUM_MAX_ROWS` (default 1200);
 - MATHESIS signals still only influence research direction; they do not directly write Generalist weights or bypass independent promotion gates.
+
+
+## 2026-09-20 — Generalist architecture inheritance and replay integrity
+
+- architecture challengers inherit only exact-name/exact-shape champion state
+  tensors before fine-tuning; transfer coverage is persisted in research
+  metrics;
+- the Generalist DSL now permits learned, sinusoidal, and RoPE positional
+  encoding, with RoPE constrained to even attention-head dimensions;
+- rotating canary examples stay outside training and gate promotion against
+  validation memorization;
+- persistent curriculum rows are digest-bound and fail closed on malformed
+  rows, invalid domains, duplicates, cap violations, or validation overlap;
+- no architecture or continual-learning path can edit verifier, qualification,
+  Control Plane permissions, host boundaries, workflow permissions, or secret
+  handling.
