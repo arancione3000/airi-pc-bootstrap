@@ -61,9 +61,11 @@ class ModelRouter:
         if name == "airi-generalist":
             local = generalist_provider.status()
             if local.get("available"):
+                requested = list(capabilities or GENERALIST_CAPABILITIES)
+                allowed = [cap for cap in requested if cap in GENERALIST_CAPABILITIES]
                 row = {
                     "name": "airi-generalist",
-                    "capabilities": list(capabilities or GENERALIST_CAPABILITIES),
+                    "capabilities": allowed,
                     "available": True,
                     "cost_class": "local-qualified",
                     "qualification": local.get("qualification"),
