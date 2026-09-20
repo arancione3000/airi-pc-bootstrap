@@ -106,7 +106,9 @@ GENERALIST_PROTECTED_PREFIXES = (
 
 
 def _assert_generalist_editable_path(relative_path: str) -> None:
-    rel = str(relative_path).replace("\\", "/").lstrip("./")
+    rel = str(relative_path).replace("\\", "/")
+    while rel.startswith("./"):
+        rel = rel[2:]
     if rel in GENERALIST_PROTECTED_PATHS:
         raise RuntimeError(f"Generalist model cannot modify protected self-governance path: {rel}")
     if any(rel.startswith(prefix) for prefix in GENERALIST_PROTECTED_PREFIXES):
