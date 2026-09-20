@@ -253,3 +253,17 @@ Capability honesty:
   the dedicated state branch, locally re-runs protected production
   qualification, and transactionally swaps the local checkpoint with rollback.
   Research promotion never silently enables or prefers the local provider.
+
+
+## 2026-09-20 — Generalist LM inference/training scalability
+
+- AIRI Generalist LM causal generation gained a bounded per-layer KV cache;
+- cached greedy generation is required to match full recomputation for learned,
+  sinusoidal and RoPE positional encodings;
+- crossing the context limit resets to bounded sliding-window recomputation
+  rather than extending stale absolute positions;
+- supervised fine-tuning gained gradient accumulation plus explicit
+  fp32/bf16/fp16 precision selection with fail-closed device validation;
+- the autonomous Generalist research loop consumes the same accumulation and
+  precision controls, while qualification and promotion thresholds remain
+  outside the mutable architecture/training search surface.
