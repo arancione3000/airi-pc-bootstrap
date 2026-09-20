@@ -590,7 +590,9 @@ def _transfer_compatible_weights(
         "derived_bpe_rows": derived_bpe_rows,
         "vocabulary_migrated": bool(shared_token_rows or derived_bpe_rows),
         "policy": (
-            "exact name/shape tensors plus deterministic byte-compatible vocabulary migration"
+            "exact name and exact shape only"
+            if tokenizer_identical
+            else "exact name/shape tensors plus deterministic byte-compatible vocabulary migration"
         ),
     }
 
