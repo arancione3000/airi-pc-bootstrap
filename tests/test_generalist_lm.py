@@ -829,3 +829,36 @@ def test_generalist_continuum_attempts_production_qualification_before_persist()
     assert "AIRI_GENERALIST_PRODUCTION_MIN_SCORE: '85'" in workflow
     assert "AIRI_GENERALIST_PRODUCTION_MIN_GAIN: '2'" in workflow
     assert workflow.index("python -m generalist_lm.production_promotion") < workflow.index("Persist only health-gated research state")
+
+
+def test_cached_promoted_digest_retries_when_production_integrity_is_lost(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    import generalist_lm.production_promotion as promotion
+    from generalist_lm.qualification import qualification_status
+
+    research = tmp_path / "research"
+    production = tmp_path / "production"
+    runtime = GeneralistRuntime.fresh(tiny_config())
+    runtime.save_checkpoint(research, metadata={"revision": 1})
+
+    calls = {"count": 0}
+
+    def fake_qualify(path, minimum_score=85.0):
+        calls["count"] += 1
+        return _fake_qualified_attestation(Path(path), score=100.0)
+
+    monkeypatch.setattr(promotion, "qualify_checkpoint", fake_qualify)
+    first = promotion.attempt_production_promotion(research, production)
+    assert first["promoted"] is True
+    assert calls["count"] == 1
+
+    metadata = json.loads((production / "metadata.json").read_text(encoding="utf-8"))
+    metadata["corrupt"] = True
+    (production / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+    assert qualification_status(production)["qualified"] is False
+
+    recovered = promotion.attempt_production_promotion(research, production)
+    assert recovered["promoted"] is True
+    assert recovered["cached"] is False
+    assert calls["count"] == 2
+    assert qualification_status(production)["qualified"] is True
