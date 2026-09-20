@@ -4,17 +4,24 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .bpe_tokenizer import BPETokenizer
 from .model import CausalTransformerLM, GeneralistLMConfig, parameter_count
 from .tokenizer import ASSISTANT, EOS, ByteTokenizer
 from .tool_protocol import ToolCall, parse_tool_call, tool_prompt
 
 
 class GeneralistRuntime:
-    def __init__(self, model, config: GeneralistLMConfig, tokenizer: ByteTokenizer | None = None, *, device: str = "cpu"):
+    def __init__(self, model, config: GeneralistLMConfig, tokenizer=None, *, device: str = "cpu"):
         import torch
         self.torch = torch
         self.config = config.validate()
-        self.tokenizer = tokenizer or ByteTokenizer()
+        if tokenizer is None:
+            if self.config.tokenizer_version != "byte-v1":
+                raise ValueError("non-byte checkpoints require an explicit tokenizer artifact")
+            tokenizer = ByteTokenizer()
+        self.tokenizer = tokenizer
+        if self.tokenizer.version != self.config.tokenizer_version:
+            raise ValueError("tokenizer version does not match model config")
         if self.tokenizer.vocab_size != self.config.vocab_size:
             raise ValueError("tokenizer vocabulary does not match model config")
         self.device = torch.device(device)
@@ -22,9 +29,11 @@ class GeneralistRuntime:
         self.model.eval()
 
     @classmethod
-    def fresh(cls, config: GeneralistLMConfig | None = None, *, device: str = "cpu") -> "GeneralistRuntime":
+    def fresh(cls, config: GeneralistLMConfig | None = None, *, tokenizer=None, device: str = "cpu") -> "GeneralistRuntime":
         config = (config or GeneralistLMConfig()).validate()
-        return cls(CausalTransformerLM(config), config, device=device)
+        if tokenizer is None and config.tokenizer_version != "byte-v1":
+            raise ValueError("fresh non-byte models require an explicit tokenizer")
+        return cls(CausalTransformerLM(config), config, tokenizer=tokenizer, device=device)
 
     @classmethod
     def from_checkpoint(cls, state_dir: str | Path, *, device: str = "cpu") -> "GeneralistRuntime":
@@ -35,9 +44,18 @@ class GeneralistRuntime:
         if not cfg_path.exists() or not model_path.exists():
             raise FileNotFoundError("generalist checkpoint requires config.json and model.pt")
         config = GeneralistLMConfig.from_dict(json.loads(cfg_path.read_text(encoding="utf-8")))
+        if config.tokenizer_version == "byte-v1":
+            tokenizer = ByteTokenizer()
+        elif config.tokenizer_version == "bpe-v1":
+            tokenizer_path = root / "tokenizer.json"
+            if not tokenizer_path.exists():
+                raise FileNotFoundError("bpe-v1 checkpoint requires tokenizer.json")
+            tokenizer = BPETokenizer.load(tokenizer_path)
+        else:  # validate() should already make this unreachable.
+            raise ValueError(f"unsupported tokenizer version: {config.tokenizer_version}")
         model = CausalTransformerLM(config)
         model.load_state_dict(torch.load(model_path, map_location="cpu", weights_only=True))
-        return cls(model, config, device=device)
+        return cls(model, config, tokenizer=tokenizer, device=device)
 
     def save_checkpoint(self, state_dir: str | Path, *, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         root = Path(state_dir)
@@ -46,9 +64,19 @@ class GeneralistRuntime:
         self.torch.save(self.model.to("cpu").state_dict(), tmp_model)
         tmp_model.replace(root / "model.pt")
         (root / "config.json").write_text(json.dumps(self.config.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
+        tokenizer_path = root / "tokenizer.json"
+        if self.tokenizer.version == "bpe-v1":
+            if not isinstance(self.tokenizer, BPETokenizer):
+                raise TypeError("bpe-v1 runtime requires BPETokenizer")
+            self.tokenizer.save(tokenizer_path)
+            tokenizer_digest = self.tokenizer.digest
+        else:
+            tokenizer_path.unlink(missing_ok=True)
+            tokenizer_digest = None
         info = {
             "format": "airi-generalist-lm-v1",
             "tokenizer_version": self.tokenizer.version,
+            "tokenizer_digest": tokenizer_digest,
             "parameters": parameter_count(self.model),
             **dict(metadata or {}),
         }
