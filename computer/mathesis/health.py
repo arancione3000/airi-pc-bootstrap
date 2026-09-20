@@ -130,14 +130,14 @@ def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
         discovery_version_raw,
     )
 
-    active_raw = discoveries.get("theorems") or {}
-    discarded_raw = discoveries.get("discarded") or {}
-    active_is_map = isinstance(active_raw, dict)
-    discarded_is_map = isinstance(discarded_raw, dict)
+    active_raw = discoveries.get("theorems")
+    discarded_raw = discoveries.get("discarded")
+    active_is_map = active_raw is None or isinstance(active_raw, dict)
+    discarded_is_map = discarded_raw is None or isinstance(discarded_raw, dict)
     check("discovery:active_map", active_is_map, type(active_raw).__name__)
     check("discovery:discarded_map", discarded_is_map, type(discarded_raw).__name__)
-    active = active_raw if active_is_map else {}
-    discarded = discarded_raw if discarded_is_map else {}
+    active = {} if active_raw is None else (active_raw if isinstance(active_raw, dict) else {})
+    discarded = {} if discarded_raw is None else (discarded_raw if isinstance(discarded_raw, dict) else {})
 
     overlap = sorted(set(active) & set(discarded))
     check("discovery:active_discarded_disjoint", not overlap, overlap)
