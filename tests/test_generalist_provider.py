@@ -238,3 +238,67 @@ def test_bootstrap_dependency_probe_includes_generalist_runtime():
     assert "import fastapi,uvicorn,pyautogui,pytesseract,PIL,playwright,torch,transformers" in start
     assert "control_plane.model_gateway" in start
     assert 'AIRI_GENERALIST_ENABLE' in start
+
+
+def test_readonly_generalist_tools_compute_without_code_execution():
+    from control_plane.generalist_agent_bridge import execute_readonly_tool
+
+    calc = execute_readonly_tool("calculator", {"expression": "17*19"})
+    assert calc["value"] == 323
+
+    stats = execute_readonly_tool(
+        "data_stats",
+        {"values": [2, 4, 6, 8], "operation": "mean"},
+    )
+    assert stats == {"operation": "mean", "result": 5.0, "count": 4}
+
+    with pytest.raises(ValueError):
+        execute_readonly_tool(
+            "calculator",
+            {"expression": "__import__('os').system('echo bad')"},
+        )
+    with pytest.raises(PermissionError):
+        execute_readonly_tool("shell", {"command": "echo bad"})
+
+
+def test_generalist_agent_bridge_executes_only_readonly_allowlist(monkeypatch):
+    from control_plane import generalist_agent_bridge, generalist_provider
+
+    class Backend:
+        def __init__(self):
+            self.calls = 0
+        def chat(self, messages, *, max_new_tokens=256):
+            self.calls += 1
+            if self.calls == 1:
+                return '<tool_call>{"name":"data_stats","arguments":{"values":[1,2,3],"operation":"sum"}}</tool_call>'
+            assert any(m.get("role") == "tool" for m in messages)
+            return "6"
+
+    monkeypatch.setattr(generalist_provider, "status", lambda: {"available": True})
+    monkeypatch.setattr(generalist_provider, "_backend", lambda: Backend())
+    run = generalist_agent_bridge.run_generalist_agent(
+        [{"role": "user", "content": "Sum 1,2,3"}],
+        max_steps=3,
+    )
+    assert run.ok is True
+    assert run.answer == "6"
+    assert run.tool_calls == [{
+        "name": "data_stats",
+        "arguments": {"values": [1, 2, 3], "operation": "sum"},
+    }]
+
+
+def test_generalist_router_exposes_data_but_not_unimplemented_research(tmp_path: Path, monkeypatch):
+    import control_plane.store as store
+    from control_plane.model_router import ModelRouter
+
+    make_qualified_checkpoint(tmp_path / "model")
+    monkeypatch.setattr(store, "CP", tmp_path / "control-plane")
+    monkeypatch.setenv("AIRI_GENERALIST_STATE", str(tmp_path / "model"))
+    monkeypatch.setenv("AIRI_GENERALIST_ENABLE", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_PREFER", "1")
+
+    router = ModelRouter()
+    assert router.choose(task_type="data")["selected"] == "airi-generalist"
+    assert router.choose(task_type="research")["selected"] == "chatgpt"
+    assert router.choose(task_type="vision", needs_vision=True)["selected"] == "chatgpt"
