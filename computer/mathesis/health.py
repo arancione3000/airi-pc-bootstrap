@@ -32,6 +32,23 @@ def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
         champion_raw = json.loads(champion_path.read_text(encoding="utf-8"))
         if not isinstance(champion_raw, dict):
             raise ValueError("champion state must be a JSON object")
+        required_genome_fields = {
+            "generation",
+            "experts",
+            "proof_order",
+            "counterexample_radius",
+            "max_proof_cells",
+            "neural_hidden",
+            "symbolic_depth",
+            "discovery_beam",
+            "research_budget",
+            "strategy_portfolio",
+            "topology",
+            "genome_id",
+        }
+        missing_fields = sorted(required_genome_fields - set(champion_raw))
+        if missing_fields:
+            raise ValueError(f"missing required genome fields: {missing_fields}")
         champion = ArchitectureGenome.from_dict(champion_raw)
     except Exception as exc:
         champion = default_genome()
@@ -180,6 +197,7 @@ def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
         verifiers = status.get("verifiers") or {}
         check("status:z3_available", verifiers.get("z3_available") is True, verifiers)
         check("status:sympy_present", bool(verifiers.get("sympy")), verifiers)
+        check("status:lean_available", verifiers.get("lean_available") is True, verifiers)
 
     last = _read_json(root / "last-cycle.json", None)
     if isinstance(last, dict):

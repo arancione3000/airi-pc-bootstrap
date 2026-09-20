@@ -387,3 +387,11 @@ The continuum serializes all state writers through the
 failed state cannot replace the last known-good remote checkpoint. The health
 gate also fails closed on malformed champion/discovery/curriculum state instead
 of silently accepting fallback defaults or crashing on corrupted field types.
+
+### Strict persisted-state health checks
+
+Before a MATHESIS checkpoint is considered healthy, the persisted `champion.json`
+must contain the complete required architecture genome schema. Partial JSON is
+rejected rather than silently completed with constructor defaults. When runtime
+status is present, the health gate also requires SymPy, Z3, and Lean availability.
+A failed health audit still stops before persistent state replacement.

@@ -1474,3 +1474,34 @@ def test_health_rejects_non_object_discovery_state_without_crashing(tmp_path: Pa
     failed = {row["name"] for row in report["failed"]}
     assert "discovery:state_object" in failed
     assert "discovery:schema" in failed
+
+def test_health_gate_rejects_incomplete_but_valid_champion_json(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+    (tmp_path / "champion.json").write_text(json.dumps({"generation": 99}), encoding="utf-8")
+
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    row = next(item for item in report["failed"] if item["name"] == "state:champion_loadable")
+    assert "missing required genome fields" in str(row["detail"])
+
+
+def test_health_gate_requires_lean_when_runtime_status_is_present(tmp_path: Path):
+    evolution = SelfEvolutionEngine(tmp_path)
+    evolution.evolve_once()
+    status = {
+        "ok": True,
+        "evolution": {"benchmark": {"critical_failures": []}},
+        "verifiers": {
+            "sympy": "1.14.0",
+            "z3_available": True,
+            "lean_available": False,
+        },
+    }
+    (tmp_path / "status.json").write_text(json.dumps(status), encoding="utf-8")
+
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    failed = {row["name"] for row in report["failed"]}
+    assert "status:lean_available" in failed
+
