@@ -202,9 +202,18 @@ def write_foundation_manifest(
     model_dir: str | Path,
     manifest: FoundationManifest,
 ) -> dict[str, Any]:
-    root = Path(model_dir).expanduser().resolve()
-    _model_inventory(root)
-    value = manifest.validate().to_dict()
+    supplied = Path(model_dir).expanduser()
+    if supplied.is_symlink():
+        raise ValueError("foundation model directory must not be a symlink")
+    root = supplied.resolve()
+    inventory = _model_inventory(root)
+    checked = manifest.validate()
+    config_limit = inventory.get("config_context_limit")
+    if config_limit is not None and checked.context_length > int(config_limit):
+        raise ValueError(
+            "foundation manifest context_length exceeds the local config.json limit"
+        )
+    value = checked.to_dict()
     path = root / FOUNDATION_MANIFEST_FILENAME
     path.write_text(
         json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",

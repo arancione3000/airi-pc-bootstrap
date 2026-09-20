@@ -75,6 +75,7 @@ def test_foundation_manifest_cannot_overstate_local_config_context(tmp_path: Pat
     model = _fake_model(tmp_path / "model")
     with pytest.raises(ValueError, match="exceeds the local config.json limit"):
         write_foundation_manifest(model, _manifest(context_length=8192))
+    assert not (model / "airi-foundation-manifest.json").exists()
 
 
 def test_foundation_manifest_rejects_symlinked_model_tree(tmp_path: Path):
