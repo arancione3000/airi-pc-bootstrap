@@ -196,6 +196,7 @@ def _grouped_validation(model, tokenizer, rows: list[ResearchRow], *, device: st
         *domain_nll_per_byte.values(),
     ]
     return {
+        "tokenizer_version": str(getattr(tokenizer, "version", "unknown")),
         "loss": float(overall_stats["loss_per_token"]),
         "nll_per_byte": float(overall_stats["nll_per_byte"]),
         "bits_per_byte": float(overall_stats["bits_per_byte"]),
@@ -210,9 +211,9 @@ def _grouped_validation(model, tokenizer, rows: list[ResearchRow], *, device: st
     }
 
 def _research_score(report: dict[str, Any], params: int) -> float:
-    loss = float(report["loss"])
+    quality = float(report.get("nll_per_byte", report["loss"]))
     efficiency_penalty = min(1.0, params / 10_000_000.0) * 0.01
-    return float(100.0 / (1.0 + loss) - efficiency_penalty)
+    return float(100.0 / (1.0 + quality) - efficiency_penalty)
 
 
 def _genome_training_seed(genome: GeneralistGenome, *, namespace: str = "candidate") -> int:
@@ -233,28 +234,39 @@ def _research_eligible(
 ) -> tuple[bool, str]:
     if not candidate.get("finite"):
         return False, "candidate validation is non-finite"
-    old_loss = float(champion["loss"])
-    new_loss = float(candidate["loss"])
-    if old_loss - new_loss < float(minimum_loss_gain):
-        return False, "candidate did not reduce held-out loss by the research margin"
-    for domain, old_value in (champion.get("domain_loss") or {}).items():
-        if domain not in (candidate.get("domain_loss") or {}):
+
+    old_quality = float(champion.get("nll_per_byte", champion["loss"]))
+    new_quality = float(candidate.get("nll_per_byte", candidate["loss"]))
+    if old_quality - new_quality < float(minimum_loss_gain):
+        return False, "candidate did not reduce held-out NLL per byte by the research margin"
+
+    old_domain_quality = champion.get("domain_nll_per_byte") or champion.get("domain_loss") or {}
+    new_domain_quality = candidate.get("domain_nll_per_byte") or candidate.get("domain_loss") or {}
+    for domain, old_value in old_domain_quality.items():
+        if domain not in new_domain_quality:
             return False, f"candidate lost validation domain: {domain}"
-        if float(candidate["domain_loss"][domain]) > float(old_value) + float(max_domain_regression):
-            return False, f"candidate regressed in validation domain: {domain}"
+        if float(new_domain_quality[domain]) > float(old_value) + float(max_domain_regression):
+            return False, f"candidate regressed in byte-normalized validation domain: {domain}"
 
-    old_accuracy = float(champion.get("target_token_accuracy", 0.0))
-    new_accuracy = float(candidate.get("target_token_accuracy", 0.0))
-    if new_accuracy + 0.01 < old_accuracy:
-        return False, "candidate regressed in held-out target-token accuracy"
+    same_tokenizer = (
+        str(champion.get("tokenizer_version", "byte-v1"))
+        == str(candidate.get("tokenizer_version", "byte-v1"))
+    )
+    # Token accuracy is meaningful within one tokenizer family, but is not a
+    # fair cross-tokenizer comparison because segmentation changes.
+    if same_tokenizer:
+        old_accuracy = float(champion.get("target_token_accuracy", 0.0))
+        new_accuracy = float(candidate.get("target_token_accuracy", 0.0))
+        if new_accuracy + 0.01 < old_accuracy:
+            return False, "candidate regressed in held-out target-token accuracy"
 
-    old_domains = champion.get("domain_token_accuracy") or {}
-    new_domains = candidate.get("domain_token_accuracy") or {}
-    for domain, old_value in old_domains.items():
-        if domain not in new_domains:
-            return False, f"candidate lost token-accuracy domain: {domain}"
-        if float(new_domains[domain]) + 0.02 < float(old_value):
-            return False, f"candidate regressed in target-token domain: {domain}"
+        old_domains = champion.get("domain_token_accuracy") or {}
+        new_domains = candidate.get("domain_token_accuracy") or {}
+        for domain, old_value in old_domains.items():
+            if domain not in new_domains:
+                return False, f"candidate lost token-accuracy domain: {domain}"
+            if float(new_domains[domain]) + 0.02 < float(old_value):
+                return False, f"candidate regressed in target-token domain: {domain}"
 
     remembered = set(champion.get("solved_items") or [])
     retained = set(candidate.get("solved_items") or [])
@@ -288,15 +300,20 @@ def _research_eligible(
             return False, "candidate is missing the rotating held-out canary"
         if not new_canary.get("finite"):
             return False, "candidate rotating canary validation is non-finite"
-        if float(new_canary.get("loss", float("inf"))) > float(old_canary.get("loss", 0.0)) + float(max_domain_regression):
-            return False, "candidate regressed on rotating canary loss"
-        old_canary_domains = old_canary.get("domain_loss") or {}
-        new_canary_domains = new_canary.get("domain_loss") or {}
+
+        old_canary_quality = float(old_canary.get("nll_per_byte", old_canary.get("loss", 0.0)))
+        new_canary_quality = float(new_canary.get("nll_per_byte", new_canary.get("loss", float("inf"))))
+        if new_canary_quality > old_canary_quality + float(max_domain_regression):
+            return False, "candidate regressed on rotating canary NLL per byte"
+
+        old_canary_domains = old_canary.get("domain_nll_per_byte") or old_canary.get("domain_loss") or {}
+        new_canary_domains = new_canary.get("domain_nll_per_byte") or new_canary.get("domain_loss") or {}
         for domain, old_value in old_canary_domains.items():
             if domain not in new_canary_domains:
                 return False, f"candidate lost rotating canary domain: {domain}"
             if float(new_canary_domains[domain]) > float(old_value) + float(max_domain_regression):
                 return False, f"candidate regressed on rotating canary domain: {domain}"
+
         old_canary_generation = float(old_canary.get("generation_exact_accuracy", 0.0))
         new_canary_generation = float(new_canary.get("generation_exact_accuracy", 0.0))
         if new_canary_generation + 1e-12 < old_canary_generation:
@@ -306,11 +323,10 @@ def _research_eligible(
         if old_canary_solved - new_canary_solved:
             return False, "candidate forgot a solved rotating canary item"
 
-    return True, "held-out loss, rotating canary, generation, and anti-forgetting gates passed"
-
+    return True, "held-out NLL/byte, rotating canary, generation, and anti-forgetting gates passed"
 
 def _weaknesses(report: dict[str, Any]) -> list[str]:
-    domains = report.get("domain_loss") or {}
+    domains = report.get("domain_nll_per_byte") or report.get("domain_loss") or {}
     if not domains:
         return []
     ordered = sorted(domains.items(), key=lambda item: float(item[1]), reverse=True)
@@ -808,7 +824,11 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             "eligible": eligible,
             "reason": reason,
         })
-        if eligible and (winner is None or report["loss"] < winner[2]["loss"]):
+        if eligible and (
+            winner is None
+            or float(report.get("nll_per_byte", report["loss"]))
+            < float(winner[2].get("nll_per_byte", winner[2]["loss"]))
+        ):
             winner = (genome, runtime, report)
 
     promoted = winner is not None
