@@ -483,21 +483,89 @@ def _research_budget_reason(
     return None
 
 
-def _transfer_compatible_weights(source_model, target_model) -> dict[str, Any]:
-    """Copy only exact-name/exact-shape tensors from champion to challenger."""
+def _transfer_compatible_weights(
+    source_model,
+    target_model,
+    *,
+    source_tokenizer=None,
+    target_tokenizer=None,
+) -> dict[str, Any]:
+    """Transfer compatible tensors and migrate vocabulary embeddings safely."""
     source = source_model.state_dict()
     target = target_model.state_dict()
     copied: dict[str, Any] = {}
     copied_params = 0
-    total_params = 0
+    total_params = sum(int(tensor.numel()) for tensor in target.values())
+
+    source_version = str(getattr(source_tokenizer, "version", "unknown"))
+    target_version = str(getattr(target_tokenizer, "version", "unknown"))
+    source_digest = getattr(source_tokenizer, "digest", None)
+    target_digest = getattr(target_tokenizer, "digest", None)
+    tokenizer_identical = (
+        source_version == target_version
+        and (source_version != "bpe-v1" or source_digest == target_digest)
+    )
+    vocab_names = {"token_embedding.weight", "lm_head.weight"}
 
     for name, tensor in target.items():
-        total_params += int(tensor.numel())
         old = source.get(name)
         if old is None or tuple(old.shape) != tuple(tensor.shape):
             continue
+        if name in vocab_names and not tokenizer_identical:
+            continue
         copied[name] = old.detach().to(device=tensor.device, dtype=tensor.dtype).clone()
         copied_params += int(tensor.numel())
+
+    shared_token_rows = 0
+    derived_bpe_rows = 0
+    source_embed = source.get("token_embedding.weight")
+    target_embed = target.get("token_embedding.weight")
+    if (
+        source_embed is not None
+        and target_embed is not None
+        and source_embed.ndim == 2
+        and target_embed.ndim == 2
+        and source_embed.shape[1] == target_embed.shape[1]
+        and not tokenizer_identical
+    ):
+        migrated = target_embed.detach().clone()
+        shared_token_rows = min(
+            BYTE_VOCAB_SIZE,
+            int(source_embed.shape[0]),
+            int(target_embed.shape[0]),
+        )
+        if shared_token_rows:
+            migrated[:shared_token_rows] = source_embed[:shared_token_rows].to(
+                device=migrated.device,
+                dtype=migrated.dtype,
+            )
+
+        if isinstance(target_tokenizer, BPETokenizer):
+            for token_id in range(BYTE_VOCAB_SIZE, int(target_embed.shape[0])):
+                raw = target_tokenizer.token_bytes(token_id)
+                byte_rows = [
+                    BYTE_OFFSET + value
+                    for value in raw
+                    if BYTE_OFFSET + value < int(source_embed.shape[0])
+                ]
+                if not byte_rows:
+                    continue
+                migrated[token_id] = source_embed[byte_rows].to(
+                    device=migrated.device,
+                    dtype=migrated.dtype,
+                ).mean(dim=0)
+                derived_bpe_rows += 1
+
+        copied["token_embedding.weight"] = migrated
+        # The model ties lm_head to token_embedding. Supplying the same migrated
+        # values for both state-dict keys keeps loading deterministic.
+        if "lm_head.weight" in target and tuple(target["lm_head.weight"].shape) == tuple(migrated.shape):
+            copied["lm_head.weight"] = migrated.clone()
+
+        migrated_params = int(migrated.numel())
+        copied_params += migrated_params
+        if "lm_head.weight" in copied:
+            copied_params += migrated_params
 
     target_model.load_state_dict(copied, strict=False)
     source_unmatched = sorted(
@@ -513,11 +581,18 @@ def _transfer_compatible_weights(source_model, target_model) -> dict[str, Any]:
         "copied_parameters": copied_params,
         "target_parameters": total_params,
         "parameter_fraction": (
-            float(copied_params / total_params) if total_params else 0.0
+            float(min(copied_params, total_params) / total_params) if total_params else 0.0
         ),
-        "policy": "exact name and exact shape only",
+        "source_tokenizer": source_version,
+        "target_tokenizer": target_version,
+        "tokenizer_identical": tokenizer_identical,
+        "shared_token_rows": shared_token_rows,
+        "derived_bpe_rows": derived_bpe_rows,
+        "vocabulary_migrated": bool(shared_token_rows or derived_bpe_rows),
+        "policy": (
+            "exact name/shape tensors plus deterministic byte-compatible vocabulary migration"
+        ),
     }
-
 
 def _train_genome(
     genome: GeneralistGenome,
@@ -527,15 +602,22 @@ def _train_genome(
     device: str,
     replay_rows: list[ResearchRow] | None = None,
     source_model=None,
+    source_tokenizer=None,
+    tokenizer=None,
     gradient_accumulation_steps: int = 1,
     precision: str = "fp32",
     pretrain_documents: list[CorpusDocument] | None = None,
     pretrain_steps: int = 0,
 ) -> tuple[GeneralistRuntime, dict[str, Any]]:
-    tokenizer = ByteTokenizer()
+    tokenizer = tokenizer or ByteTokenizer()
     model = CausalTransformerLM(genome.model_config(tokenizer.vocab_size))
     transfer = (
-        _transfer_compatible_weights(source_model, model)
+        _transfer_compatible_weights(
+            source_model,
+            model,
+            source_tokenizer=source_tokenizer,
+            target_tokenizer=tokenizer,
+        )
         if source_model is not None
         else {
             "copied_tensors": 0,
