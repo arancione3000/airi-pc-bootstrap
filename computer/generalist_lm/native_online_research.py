@@ -47,6 +47,9 @@ _TAG_KEYWORDS: dict[str, tuple[str, ...]] = {
         "efficient transformer", "efficiency", "memory efficient",
         "kv cache", "throughput", "compute optimal",
     ),
+    "dataset": (
+        "dataset", "corpus", "training data", "text data", "code data",
+    ),
 }
 
 _DEFAULT_TOPICS = (
@@ -55,6 +58,9 @@ _DEFAULT_TOPICS = (
     "grouped query attention transformer",
     "long context rotary embedding",
     "curriculum data mixture language model",
+    "open permissive text dataset corpus language model",
+    "open Italian text corpus dataset",
+    "open code dataset permissive license",
 )
 
 
@@ -363,6 +369,34 @@ def discover_native_research(
             tag_counts[tag] = tag_counts.get(tag, 0) + 1
 
     payload = [row.to_dict() for row in deduped]
+    permissive_markers = (
+        "license=apache-2.0",
+        "license=mit",
+        "license=bsd-2-clause",
+        "license=bsd-3-clause",
+        "license=cc0-1.0",
+        "license=cc-by-4.0",
+    )
+    source_candidates = [
+        {
+            "provider": row.provider,
+            "source_id": row.source_id,
+            "url": row.url,
+            "title": row.title,
+            "digest": row.digest,
+            "status": "proposal_only",
+            "admission_requirements": [
+                "explicit permissive/public-domain license",
+                "immutable content URL or revision",
+                "pinned SHA-256",
+                "Phase-2 corpus audit",
+            ],
+        }
+        for row in deduped
+        if row.provider == "github"
+        and "dataset" in row.tags
+        and any(marker in row.summary.lower() for marker in permissive_markers)
+    ]
     return {
         "ok": bool(deduped),
         "version": NATIVE_ONLINE_RESEARCH_VERSION,
@@ -371,6 +405,7 @@ def discover_native_research(
         "evidence": payload,
         "evidence_digest": _sha256_json(payload),
         "tag_counts": dict(sorted(tag_counts.items())),
+        "source_candidates": source_candidates,
         "errors": errors,
         "remote_code_execution": False,
         "remote_content_trusted": False,
