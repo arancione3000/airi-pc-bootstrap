@@ -201,6 +201,7 @@ def acquire_native_corpus(
     reused = 0
     total_bytes = 0
     seen_digests: set[str] = set()
+    seen_destinations: dict[str, str] = {}
 
     for index, row in enumerate(sources):
         if row["sha256"] in seen_digests:
@@ -208,6 +209,13 @@ def acquire_native_corpus(
         destination = (files_root / row["filename"]).resolve()
         if not _inside(destination, files_root):
             raise PermissionError(f"native source row {index} escapes output root")
+        destination_key = str(destination)
+        previous_digest = seen_destinations.get(destination_key)
+        if previous_digest is not None and previous_digest != row["sha256"]:
+            raise ValueError(
+                f"native sources map different content to the same filename: {row['filename']}"
+            )
+        seen_destinations[destination_key] = row["sha256"]
         destination.parent.mkdir(parents=True, exist_ok=True)
 
         blob: bytes | None = None
