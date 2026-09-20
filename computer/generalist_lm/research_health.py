@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,18 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
         check("checkpoint:loadable", True, parameter_count(runtime.model))
     except Exception as exc:
         check("checkpoint:loadable", False, repr(exc))
+
+    model_path = root / "champion" / "model.pt"
+    max_persisted_bytes = max(
+        1_048_576,
+        int(os.environ.get("AIRI_GENERALIST_MAX_PERSISTED_CHECKPOINT_BYTES", str(32 * 1024 * 1024))),
+    )
+    model_bytes = model_path.stat().st_size if model_path.exists() else 0
+    check(
+        "checkpoint:persistence_size",
+        bool(model_bytes and model_bytes <= max_persisted_bytes),
+        {"bytes": model_bytes, "max_bytes": max_persisted_bytes},
+    )
 
     if genome is not None and runtime is not None:
         cfg = runtime.config
