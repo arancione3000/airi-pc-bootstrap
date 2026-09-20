@@ -169,6 +169,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
     root.mkdir(parents=True, exist_ok=True)
     device = os.environ.get("AIRI_GENERALIST_RESEARCH_DEVICE", "cpu")
     steps = max(2, min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_STEPS", "20")), 500))
+    bootstrap_steps = max(2, min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS", "30")), 500))
     challenger_count = max(1, min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "2")), 6))
     minimum_loss_gain = max(0.0, float(os.environ.get("AIRI_GENERALIST_RESEARCH_MIN_LOSS_GAIN", "0.02")))
     max_domain_regression = max(0.0, float(os.environ.get("AIRI_GENERALIST_RESEARCH_MAX_DOMAIN_REGRESSION", "0.10")))
@@ -184,7 +185,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
     if loaded is None:
         champion_genome = research_seed()
         champion_runtime, champion_report = _train_genome(
-            champion_genome, steps=max(steps, 30), seed=1000, device=device
+            champion_genome, steps=max(steps, bootstrap_steps), seed=1000, device=device
         )
         _save_champion(root, champion_genome, champion_runtime, champion_report)
         bootstrapped = True
