@@ -79,7 +79,7 @@ class NativeEvolutionGenome:
         self.tie_embeddings = cfg.tie_embeddings
         self.learning_rate = train.learning_rate
         self.min_learning_rate = train.min_learning_rate
-        self.warmup_steps = int(self.warmup_steps)
+        self.warmup_steps = int(train.warmup_steps)
         self.weight_decay = train.weight_decay
         self.adam_beta1 = train.adam_beta1
         self.adam_beta2 = train.adam_beta2
@@ -491,6 +491,11 @@ def generate_native_challengers(
 
     out: list[tuple[NativeMutation, NativeEvolutionGenome]] = []
     seen_genomes: set[str] = set()
+    champion_signature = _digest({
+        key: value
+        for key, value in champion.to_dict().items()
+        if key not in {"generation", "genome_id", "parent_id"}
+    })
     for mutation in variants:
         try:
             candidate = apply_mutation(champion, mutation)
@@ -503,7 +508,7 @@ def generate_native_challengers(
             for key, value in candidate.to_dict().items()
             if key not in {"generation", "genome_id", "parent_id"}
         })
-        if signature in seen_genomes:
+        if signature == champion_signature or signature in seen_genomes:
             continue
         seen_genomes.add(signature)
         out.append((mutation, candidate))
