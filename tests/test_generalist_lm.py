@@ -1190,3 +1190,70 @@ def test_evolution_can_propose_rope_without_forcing_it():
 
     rope = replace(champion, position_encoding="rope").validate()
     assert rope.position_encoding == "rope"
+
+
+def test_compatible_weight_transfer_preserves_identical_model_state():
+    torch = pytest.importorskip("torch")
+    from generalist_lm.model import CausalTransformerLM
+    from generalist_lm.research_cycle import _transfer_compatible_weights
+
+    cfg = tiny_config()
+    source = CausalTransformerLM(cfg)
+    target = CausalTransformerLM(cfg)
+    report = _transfer_compatible_weights(source, target)
+    assert report["copied_tensors"] == report["target_tensors"]
+    assert report["parameter_fraction"] == pytest.approx(1.0)
+
+    ids = torch.randint(8, cfg.vocab_size, (1, 12))
+    source.eval()
+    target.eval()
+    with torch.no_grad():
+        source_logits = source(ids)["logits"]
+        target_logits = target(ids)["logits"]
+    assert torch.equal(source_logits, target_logits)
+
+
+def test_architecture_weight_transfer_copies_only_shape_compatible_tensors():
+    pytest.importorskip("torch")
+    from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
+    from generalist_lm.research_cycle import _transfer_compatible_weights
+
+    learned = GeneralistLMConfig(
+        vocab_size=264, context_length=64, d_model=32, n_heads=4,
+        n_layers=1, d_ff=64, dropout=0.0, position_encoding="learned",
+    ).validate()
+    rope = GeneralistLMConfig(
+        vocab_size=264, context_length=64, d_model=32, n_heads=4,
+        n_layers=1, d_ff=64, dropout=0.0, position_encoding="rope",
+    ).validate()
+    source = CausalTransformerLM(learned)
+    target = CausalTransformerLM(rope)
+    report = _transfer_compatible_weights(source, target)
+
+    assert 0.0 < report["parameter_fraction"] < 1.0
+    assert report["copied_tensors"] < report["target_tensors"]
+    assert torch.equal(
+        source.token_embedding.weight.detach(),
+        target.token_embedding.weight.detach(),
+    )
+
+
+def test_research_cycle_architecture_trial_records_weight_transfer(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    from generalist_lm.research_cycle import run_research_cycle
+
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_MIN_LOSS_GAIN", "999")
+
+    result = run_research_cycle(tmp_path)
+    architecture_trials = [
+        row for row in result["trials"]
+        if row.get("kind") == "architecture" and row.get("report")
+    ]
+    assert architecture_trials
+    transfer = architecture_trials[0]["report"]["weight_transfer"]
+    assert transfer["copied_tensors"] > 0
+    assert 0.0 < transfer["parameter_fraction"] <= 1.0
+    assert transfer["policy"] == "exact name and exact shape only"
