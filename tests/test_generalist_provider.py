@@ -238,7 +238,7 @@ def test_bootstrap_dependency_probe_keeps_generalist_runtime_optional():
     requirements = (ROOT / "computer" / "requirements.txt").read_text(encoding="utf-8")
     assert "import fastapi,uvicorn,pyautogui,pytesseract,PIL,playwright" in start
     assert 'if [ "${AIRI_GENERALIST_ENABLE:-0}" = "1" ]; then' in start
-    assert "import torch,transformers" in start
+    assert "import torch,transformers,accelerate" in start
     assert "generalist_lm/requirements.txt" in start
     assert "generalist_lm/requirements.txt" not in requirements
     assert "control_plane.model_gateway" in start
