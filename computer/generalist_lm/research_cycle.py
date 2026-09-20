@@ -14,11 +14,13 @@ from typing import Any
 
 from .curriculum import ResearchRow, train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
+from .corpus import CorpusChunk, repository_corpus
 from .evolution import GeneralistGenome, generate_challengers
 from .mathesis_bridge import mathesis_signals
 from .model import CausalTransformerLM, estimate_parameter_count, parameter_count
 from .runtime import GeneralistRuntime
 from .tokenizer import ByteTokenizer
+from .pretraining import train_causal_pretraining
 from .training import encode_sft_example, loss_on_examples, train_sft
 
 
@@ -418,6 +420,8 @@ def _train_genome(
     device: str,
     replay_rows: list[ResearchRow] | None = None,
     source_model=None,
+    pretrain_chunks: list[CorpusChunk] | None = None,
+    pretrain_steps: int = 0,
 ) -> tuple[GeneralistRuntime, dict[str, Any]]:
     tokenizer = ByteTokenizer()
     model = CausalTransformerLM(genome.model_config(tokenizer.vocab_size))
@@ -435,6 +439,22 @@ def _train_genome(
             "policy": "fresh initialization",
         }
     )
+    pretraining = train_causal_pretraining(
+        model,
+        tokenizer,
+        list(pretrain_chunks or []),
+        steps=max(1, int(pretrain_steps)) if pretrain_steps else 1,
+        batch_size=4,
+        learning_rate=min(1e-3, max(1e-5, genome.learning_rate * 0.5)),
+        weight_decay=0.01,
+        seed=seed + 101,
+        device=device,
+    ) if pretrain_chunks and pretrain_steps > 0 else {
+        "ok": True,
+        "skipped": True,
+        "reason": "grounded pretraining disabled or corpus empty",
+        "steps": 0,
+    }
     report = train_sft(
         model,
         tokenizer,
@@ -451,6 +471,7 @@ def _train_genome(
     validation["parameters"] = parameter_count(runtime.model)
     validation["score"] = _research_score(validation, validation["parameters"])
     validation["training"] = report
+    validation["pretraining"] = pretraining
     validation["weight_transfer"] = transfer
     return runtime, validation
 
@@ -476,6 +497,8 @@ def _continue_champion(
     seed: int,
     device: str,
     cycle: int,
+    pretrain_chunks: list[CorpusChunk] | None = None,
+    pretrain_steps: int = 0,
 ) -> tuple[GeneralistGenome, GeneralistRuntime, dict[str, Any]]:
     """Fine-tune a copy of the current champion with full replay.
 
@@ -486,6 +509,22 @@ def _continue_champion(
     genome = _continual_candidate_genome(champion_genome, cycle)
     tokenizer = champion_runtime.tokenizer
     model = copy.deepcopy(champion_runtime.model)
+    pretraining = train_causal_pretraining(
+        model,
+        tokenizer,
+        list(pretrain_chunks or []),
+        steps=max(1, int(pretrain_steps)) if pretrain_steps else 1,
+        batch_size=4,
+        learning_rate=min(1e-3, max(1e-5, genome.learning_rate * 0.5)),
+        weight_decay=0.01,
+        seed=seed + 101,
+        device=device,
+    ) if pretrain_chunks and pretrain_steps > 0 else {
+        "ok": True,
+        "skipped": True,
+        "reason": "grounded pretraining disabled or corpus empty",
+        "steps": 0,
+    }
     report = train_sft(
         model,
         tokenizer,
@@ -502,6 +541,7 @@ def _continue_champion(
     validation["parameters"] = parameter_count(runtime.model)
     validation["score"] = _research_score(validation, validation["parameters"])
     validation["training"] = report
+    validation["pretraining"] = pretraining
     validation["continual_learning"] = True
     return genome, runtime, validation
 
@@ -524,6 +564,28 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_CURRICULUM_MAX_ROWS", "1200")), 20_000),
     )
 
+    pretrain_steps = max(
+        0,
+        min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_PRETRAIN_STEPS", "0")), 200),
+    )
+    corpus_root_raw = os.environ.get("AIRI_GENERALIST_RESEARCH_CORPUS_ROOT", "").strip()
+    corpus_chunks: list[CorpusChunk] = []
+    corpus_manifest: dict[str, Any] = {
+        "enabled": False,
+        "chunks": 0,
+        "digest": None,
+    }
+    if corpus_root_raw:
+        corpus_chunks, built_manifest = repository_corpus(
+            corpus_root_raw,
+            max_files=max(1, min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_CORPUS_MAX_FILES", "192")), 2000)),
+            max_bytes=max(32_768, min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_CORPUS_MAX_BYTES", "1500000")), 50_000_000)),
+            max_file_bytes=max(4_096, min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_CORPUS_MAX_FILE_BYTES", "192000")), 5_000_000)),
+            chunk_chars=max(256, min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_CORPUS_CHUNK_CHARS", "1000")), 8000)),
+            max_chunks=max(8, min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_CORPUS_MAX_CHUNKS", "800")), 10000)),
+        )
+        corpus_manifest = {"enabled": bool(corpus_chunks), **built_manifest.to_dict()}
+
     previous = {}
     try:
         previous = json.loads((root / "status.json").read_text(encoding="utf-8"))
@@ -539,6 +601,8 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             steps=max(steps, bootstrap_steps),
             seed=_genome_training_seed(champion_genome, namespace="bootstrap"),
             device=device,
+            pretrain_chunks=corpus_chunks,
+            pretrain_steps=pretrain_steps,
         )
         _save_champion(root, champion_genome, champion_runtime, champion_report)
         bootstrapped = True
@@ -589,6 +653,8 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         seed=_genome_training_seed(champion_genome, namespace=f"continual-{cycle}"),
         device=device,
         cycle=cycle,
+        pretrain_chunks=corpus_chunks,
+        pretrain_steps=pretrain_steps,
     )
     continual_report["canary_cycle"] = cycle
     continual_report["canary"] = _grouped_validation(
@@ -637,6 +703,8 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             device=device,
             replay_rows=replay_rows,
             source_model=champion_runtime.model,
+            pretrain_chunks=corpus_chunks,
+            pretrain_steps=pretrain_steps,
         )
         report["canary_cycle"] = cycle
         report["canary"] = _grouped_validation(
@@ -676,6 +744,10 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         "signals": signals,
         "mathesis": mathesis,
         "curriculum_memory": curriculum_report,
+        "grounded_pretraining": {
+            "steps": pretrain_steps,
+            "corpus": corpus_manifest,
+        },
         "rotating_canary": {
             "cycle": cycle,
             "domains": [row.domain for row in rotating_canary],
@@ -700,6 +772,12 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
                 "enabled": True,
                 "full_replay": True,
                 "curriculum_max_rows": curriculum_max_rows,
+            },
+            "grounded_pretraining": {
+                "enabled": bool(corpus_chunks and pretrain_steps > 0),
+                "steps_per_candidate": pretrain_steps,
+                "corpus_digest": corpus_manifest.get("digest"),
+                "exam_sources_excluded": True,
             },
             "rotating_canary": {
                 "enabled": True,
