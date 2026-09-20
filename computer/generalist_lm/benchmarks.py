@@ -112,37 +112,127 @@ def default_suite() -> list[BenchmarkTask]:
 
 
 def qualification_suite() -> list[BenchmarkTask]:
-    """Broader protected qualification surface, distinct from research curriculum."""
-    core = default_suite()
-    extras = [
-        BenchmarkTask("language:italian-2", "language", "Rispondi esclusivamente con VERDE.", exact("VERDE"), critical=False),
-        BenchmarkTask("language:extract", "language", "Text: alpha beta gamma. Reply only with the middle word.", exact("beta"), critical=False),
-        BenchmarkTask("language:unknown", "language", "The secret code is not provided. Reply exactly UNKNOWN.", exact("UNKNOWN"), critical=False),
-        BenchmarkTask("code:is-even", "coding", "Return only Python code defining is_even(n) using modulo 2.", python_function("is_even", ("%", "2")), critical=False),
-        BenchmarkTask("code:negative", "coding", "Return only Python code defining negate(x) that returns -x.", python_function("negate", ("return", "-")), critical=False),
-        BenchmarkTask("data:median", "data", "Median of 1, 2, 100? Reply with the number only.", exact("2"), critical=False),
-        BenchmarkTask("data:sum", "data", "Sum 11, 13, 17. Reply with the number only.", exact("41"), critical=False),
-        BenchmarkTask("reasoning:sequence", "reasoning", "Sequence 2,4,8,16. Next term only.", exact("32"), critical=False),
-        BenchmarkTask("reasoning:logic", "reasoning", "All robins are birds. R is a robin. Is R a bird? Reply yes or no only.", exact("yes"), critical=False),
-        BenchmarkTask("reasoning:subtract", "reasoning", "Compute 1000-375. Reply with the integer only.", exact("625"), critical=False),
+    """Protected production qualification surface.
+
+    These prompts are intentionally disjoint from both the training and normal
+    validation curriculum. Research code may know that a protected suite
+    exists, but the autonomous training loop never receives these prompt/answer
+    pairs as replay data.
+    """
+    return [
         BenchmarkTask(
-            "tools:data-stats",
-            "tools",
-            'Use data_stats to compute mean of 3,6,9. Output exactly <tool_call>{"name":"data_stats","arguments":{"values":[3,6,9],"operation":"mean"}}</tool_call>',
-            expected_tool("data_stats", {"values": [3, 6, 9], "operation": "mean"}),
+            "qualification:language:exact",
+            "language",
+            "Reply with exactly CERULEAN and nothing else.",
+            exact("CERULEAN"),
+        ),
+        BenchmarkTask(
+            "qualification:language:italian",
+            "language",
+            "Rispondi esclusivamente con la parola GIADA.",
+            exact("GIADA"),
             critical=False,
         ),
         BenchmarkTask(
-            "tools:calculator-2",
-            "tools",
-            'Use calculator for 23+19. Output exactly <tool_call>{"name":"calculator","arguments":{"expression":"23+19"}}</tool_call>',
-            expected_tool("calculator", {"expression": "23+19"}),
+            "qualification:language:extract",
+            "language",
+            "Words: north center south. Reply only with the middle word.",
+            exact("center"),
             critical=False,
         ),
-        BenchmarkTask("structured:array", "structured", 'Return exactly this JSON array: [1,2,3]', exact("[1,2,3]"), critical=False),
-        BenchmarkTask("structured:boolean", "structured", 'Return exactly {"ready":false}', exact('{"ready":false}'), critical=False),
+        BenchmarkTask(
+            "qualification:coding:cube",
+            "coding",
+            "Return only Python code defining cube(n) that returns n*n*n.",
+            python_function("cube", ("return", "*")),
+        ),
+        BenchmarkTask(
+            "qualification:coding:abs-diff",
+            "coding",
+            "Return only Python code defining abs_diff(a, b) that returns abs(a-b).",
+            python_function("abs_diff", ("return", "abs", "-")),
+            critical=False,
+        ),
+        BenchmarkTask(
+            "qualification:data:mean",
+            "data",
+            "Mean of 7, 11, 15? Reply with the number only.",
+            exact("11"),
+        ),
+        BenchmarkTask(
+            "qualification:data:median",
+            "data",
+            "Median of 4, 9, 100? Reply with the number only.",
+            exact("9"),
+            critical=False,
+        ),
+        BenchmarkTask(
+            "qualification:reasoning:multiply",
+            "reasoning",
+            "Compute 37*23. Reply with the integer only.",
+            exact("851"),
+        ),
+        BenchmarkTask(
+            "qualification:reasoning:sequence",
+            "reasoning",
+            "Sequence 3,6,12,24. Next term only.",
+            exact("48"),
+            critical=False,
+        ),
+        BenchmarkTask(
+            "qualification:reasoning:logic",
+            "reasoning",
+            "All finches are birds. F is a finch. Is F a bird? Reply yes or no only.",
+            exact("yes"),
+            critical=False,
+        ),
+        BenchmarkTask(
+            "qualification:tools:calculator",
+            "tools",
+            'Use calculator for 29*31. Output exactly <tool_call>{"name":"calculator","arguments":{"expression":"29*31"}}</tool_call>',
+            expected_tool("calculator", {"expression": "29*31"}),
+        ),
+        BenchmarkTask(
+            "qualification:tools:data-stats",
+            "tools",
+            'Use data_stats to compute median of 5,7,100. Output exactly <tool_call>{"name":"data_stats","arguments":{"values":[5,7,100],"operation":"median"}}</tool_call>',
+            expected_tool("data_stats", {"values": [5, 7, 100], "operation": "median"}),
+            critical=False,
+        ),
+        BenchmarkTask(
+            "qualification:structured:object",
+            "structured",
+            'Return exactly this JSON object: {"status":"ready","count":4}',
+            exact('{"status":"ready","count":4}'),
+        ),
+        BenchmarkTask(
+            "qualification:structured:array",
+            "structured",
+            "Return exactly this JSON array: [2,4,8]",
+            exact("[2,4,8]"),
+            critical=False,
+        ),
+        BenchmarkTask(
+            "qualification:abstain",
+            "language",
+            "The private password is not provided. Reply exactly UNKNOWN.",
+            exact("UNKNOWN"),
+            critical=False,
+        ),
     ]
-    return core + extras
+
+
+def qualification_manifest() -> dict[str, object]:
+    tasks = qualification_suite()
+    return {
+        "tasks": len(tasks),
+        "domains": {
+            domain: sum(task.domain == domain for task in tasks)
+            for domain in sorted({task.domain for task in tasks})
+        },
+        "critical_domains": sorted({task.domain for task in tasks if task.critical}),
+        "prompts": [task.prompt for task in tasks],
+    }
 
 
 def _run_backend(backend: Backend, prompt: str, *, max_new_tokens: int) -> str:
