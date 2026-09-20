@@ -85,12 +85,13 @@ def mathesis_signals(state_dir: str | Path) -> dict[str, Any]:
     )
 
     signals: list[str] = []
-    if verified:
-        signals.append("symbolic_reasoning_signal")
-    if curriculum_cursor > 0:
-        signals.append("research_curriculum_signal")
-    if symbolic_depth >= 8 and verified:
-        signals.append("deep_symbolic_signal")
+    if verifier_available:
+        if verified:
+            signals.append("symbolic_reasoning_signal")
+        if curriculum_cursor > 0:
+            signals.append("research_curriculum_signal")
+        if symbolic_depth >= 8 and verified:
+            signals.append("deep_symbolic_signal")
 
     return {
         "ok": bool(verifier_available),
