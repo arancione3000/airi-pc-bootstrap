@@ -218,6 +218,10 @@ def run_lattice_research_cycle(
     root = Path(state_dir).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     champion = _load_champion(root)
+    # Persist the validated/migrated champion immediately. In particular this
+    # permanently removes champions selected under obsolete gates even when
+    # no v1 challenger wins the current cycle.
+    _atomic_json(root / "lattice-champion.json", champion.to_dict())
 
     population = generate_lattice_population(
         champion,
