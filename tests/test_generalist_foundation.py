@@ -130,7 +130,7 @@ def test_foundation_qualification_is_bound_to_model_manifest_and_suite(tmp_path:
 
     result = qualification.qualify_foundation_model(model, minimum_score=90.0)
     assert result["qualified"] is True
-    assert result["foundation_qualification_version"] == 1
+    assert result["foundation_qualification_version"] == 2
     assert result["manifest_digest"] == foundation_manifest_digest(model)
     assert result["suite_digest"] == foundation_suite_digest()
     assert qualification.foundation_qualification_status(model)["qualified"] is True
@@ -217,3 +217,187 @@ def test_cli_exposes_foundation_track_commands(tmp_path: Path):
 
     args = p.parse_args(["foundation-status", str(tmp_path / "model")])
     assert args.cmd == "foundation-status"
+
+def test_foundation_qualification_forwards_hardware_policy(tmp_path: Path, monkeypatch):
+    from generalist_lm import qualification
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+    seen = {}
+
+    class Backend:
+        def __init__(self, *args, **kwargs):
+            seen.update(kwargs)
+
+        def generate(self, prompt: str, *, max_new_tokens: int = 192) -> str:
+            return ""
+
+    monkeypatch.setattr("generalist_lm.hf_backend.LocalTransformersBackend", Backend)
+    monkeypatch.setattr(
+        qualification,
+        "run_benchmark",
+        lambda backend, tasks: {
+            "ok": True,
+            "score": 100.0,
+            "domain_scores": {domain: 1.0 for domain in FOUNDATION_DOMAINS},
+            "critical_failures": [],
+            "tasks": [],
+        },
+    )
+
+    result = qualification.qualify_foundation_model(
+        model,
+        device="cpu",
+        device_map="auto",
+        torch_dtype="bfloat16",
+        max_memory={"cpu": "8GiB"},
+        offload_folder=tmp_path / "offload",
+    )
+    assert result["qualified"] is True
+    assert seen["device"] == "cpu"
+    assert seen["device_map"] == "auto"
+    assert seen["torch_dtype"] == "bfloat16"
+    assert seen["max_memory"] == {"cpu": "8GiB"}
+    assert seen["offload_folder"] == tmp_path / "offload"
+    assert result["load_policy"]["device_map"] == "auto"
+    assert result["load_policy"]["torch_dtype"] == "bfloat16"
+    assert result["inference_profile"]["torch_dtype"] == "bfloat16"
+
+
+def test_cli_foundation_qualification_exposes_hardware_options(tmp_path: Path):
+    from generalist_lm.cli import parser
+
+    args = parser().parse_args([
+        "qualify-foundation",
+        str(tmp_path / "model"),
+        "--device", "cuda:0",
+        "--device-map", "balanced",
+        "--torch-dtype", "bfloat16",
+        "--max-memory-json", '{"0":"12GiB","cpu":"24GiB"}',
+        "--offload-folder", str(tmp_path / "offload"),
+    ])
+    assert args.device == "cuda:0"
+    assert args.device_map == "balanced"
+    assert args.torch_dtype == "bfloat16"
+    assert args.max_memory_json == '{"0":"12GiB","cpu":"24GiB"}'
+
+def test_foundation_minimum_score_cannot_be_weakened(tmp_path: Path):
+    from generalist_lm import qualification
+
+    with pytest.raises(ValueError, match="between 90.0 and 100.0"):
+        qualification.qualify_foundation_model(
+            tmp_path / "unused",
+            minimum_score=89.999,
+        )
+
+
+def test_foundation_attestation_v2_requires_inference_profile(tmp_path: Path, monkeypatch):
+    from generalist_lm import qualification
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+
+    class Backend:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def generate(self, prompt: str, *, max_new_tokens: int = 192) -> str:
+            return ""
+
+    monkeypatch.setattr("generalist_lm.hf_backend.LocalTransformersBackend", Backend)
+    monkeypatch.setattr(
+        qualification,
+        "run_benchmark",
+        lambda backend, tasks: {
+            "ok": True,
+            "score": 100.0,
+            "domain_scores": {domain: 1.0 for domain in FOUNDATION_DOMAINS},
+            "critical_failures": [],
+            "tasks": [],
+        },
+    )
+    result = qualification.qualify_foundation_model(model)
+    assert result["foundation_qualification_version"] == 2
+    assert result["inference_profile"] == {"torch_dtype": "auto"}
+    assert qualification.foundation_qualification_status(model)["qualified"] is True
+
+    path = model / ".airi-foundation-qualification.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw.pop("inference_profile")
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    status = qualification.foundation_qualification_status(model)
+    assert status["qualified"] is False
+    assert status["integrity_ok"] is False
+
+def test_foundation_status_rejects_tampered_qualified_boolean(tmp_path: Path, monkeypatch):
+    from generalist_lm import qualification
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+
+    class Backend:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def generate(self, prompt: str, *, max_new_tokens: int = 192) -> str:
+            return ""
+
+    monkeypatch.setattr("generalist_lm.hf_backend.LocalTransformersBackend", Backend)
+    monkeypatch.setattr(
+        qualification,
+        "run_benchmark",
+        lambda backend, tasks: {
+            "ok": True,
+            "score": 100.0,
+            "domain_scores": {domain: 1.0 for domain in FOUNDATION_DOMAINS},
+            "critical_failures": [],
+            "tasks": [],
+        },
+    )
+    qualification.qualify_foundation_model(model)
+    path = model / ".airi-foundation-qualification.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+
+    raw["qualified"] = True
+    raw["report"]["score"] = 10.0
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    status = qualification.foundation_qualification_status(model)
+    assert status["qualified"] is False
+    assert status["integrity_ok"] is False
+    assert status["qualification_semantics_ok"] is False
+
+
+def test_foundation_status_requires_all_protected_domain_scores(tmp_path: Path, monkeypatch):
+    from generalist_lm import qualification
+
+    model = _fake_model(tmp_path / "model")
+    write_foundation_manifest(model, _manifest())
+
+    class Backend:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def generate(self, prompt: str, *, max_new_tokens: int = 192) -> str:
+            return ""
+
+    monkeypatch.setattr("generalist_lm.hf_backend.LocalTransformersBackend", Backend)
+    monkeypatch.setattr(
+        qualification,
+        "run_benchmark",
+        lambda backend, tasks: {
+            "ok": True,
+            "score": 100.0,
+            "domain_scores": {domain: 1.0 for domain in FOUNDATION_DOMAINS},
+            "critical_failures": [],
+            "tasks": [],
+        },
+    )
+    qualification.qualify_foundation_model(model)
+    path = model / ".airi-foundation-qualification.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["report"]["domain_scores"].pop("robustness")
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    status = qualification.foundation_qualification_status(model)
+    assert status["qualified"] is False
+    assert status["qualification_semantics_ok"] is False
+

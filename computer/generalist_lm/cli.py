@@ -59,6 +59,19 @@ def parser() -> argparse.ArgumentParser:
     fq.add_argument("model_dir")
     fq.add_argument("--attestation")
     fq.add_argument("--minimum-score", type=float, default=90.0)
+    fq.add_argument("--device", default="cpu")
+    fq.add_argument(
+        "--device-map",
+        choices=("none", "auto", "balanced", "balanced_low_0", "sequential"),
+        default="auto",
+    )
+    fq.add_argument(
+        "--torch-dtype",
+        choices=("auto", "float16", "bfloat16", "float32"),
+        default="auto",
+    )
+    fq.add_argument("--max-memory-json")
+    fq.add_argument("--offload-folder")
 
     fs = sub.add_parser("foundation-status")
     fs.add_argument("model_dir")
@@ -158,10 +171,20 @@ def main(argv=None) -> int:
         )
 
     elif args.cmd == "qualify-foundation":
+        max_memory = None
+        if args.max_memory_json:
+            max_memory = json.loads(args.max_memory_json)
+            if not isinstance(max_memory, dict) or not max_memory:
+                raise ValueError("--max-memory-json must be a non-empty JSON object")
         result = qualify_foundation_model(
             args.model_dir,
             attestation_path=args.attestation,
             minimum_score=args.minimum_score,
+            device=args.device,
+            device_map=None if args.device_map == "none" else args.device_map,
+            torch_dtype=args.torch_dtype,
+            max_memory=max_memory,
+            offload_folder=args.offload_folder,
         )
 
     elif args.cmd == "foundation-status":

@@ -238,7 +238,7 @@ def test_bootstrap_dependency_probe_keeps_generalist_runtime_optional():
     requirements = (ROOT / "computer" / "requirements.txt").read_text(encoding="utf-8")
     assert "import fastapi,uvicorn,pyautogui,pytesseract,PIL,playwright" in start
     assert 'if [ "${AIRI_GENERALIST_ENABLE:-0}" = "1" ]; then' in start
-    assert "import torch,transformers" in start
+    assert "import torch,transformers,accelerate" in start
     assert "generalist_lm/requirements.txt" in start
     assert "generalist_lm/requirements.txt" not in requirements
     assert "control_plane.model_gateway" in start
@@ -571,3 +571,238 @@ def test_generalist_read_tools_enforce_file_size_budget(tmp_path: Path, monkeypa
     )
     assert all(row["path"] != "large.txt" for row in result["matches"])
     assert result["scanned_bytes"] <= 20_000_000
+
+def test_foundation_provider_requires_strict_attestation_and_accelerate(tmp_path: Path, monkeypatch):
+    from control_plane import generalist_provider
+
+    model = tmp_path / "foundation"
+    model.mkdir()
+    (model / "airi-foundation-manifest.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("AIRI_GENERALIST_ENABLE", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_FOUNDATION_MODEL", str(model))
+    monkeypatch.delenv("AIRI_GENERALIST_TRANSFORMERS_MODEL", raising=False)
+    monkeypatch.setattr(
+        generalist_provider,
+        "foundation_qualification_status",
+        lambda model_dir, attestation_path=None: {
+            "qualified": True,
+            "integrity_ok": True,
+            "current_model_digest": "model-digest",
+            "current_manifest_digest": "manifest-digest",
+            "current_suite_digest": "suite-digest",
+            "inference_profile": {"torch_dtype": "auto"},
+        },
+    )
+    real_find = generalist_provider.importlib.util.find_spec
+    monkeypatch.setattr(
+        generalist_provider.importlib.util,
+        "find_spec",
+        lambda name: object() if name in {"torch", "transformers", "accelerate"} else real_find(name),
+    )
+
+    row = generalist_provider.status()
+    assert row["available"] is True
+    assert row["backend"] == "transformers-foundation"
+    assert row["load_policy"]["device_map"] == "auto"
+    assert row["load_policy"]["torch_dtype"] == "auto"
+    assert row["dependencies"] == {
+        "torch": True,
+        "transformers": True,
+        "accelerate": True,
+        "accelerate_required": True,
+    }
+
+
+
+
+def test_foundation_provider_can_disable_device_map_without_accelerate(tmp_path: Path, monkeypatch):
+    from control_plane import generalist_provider
+
+    model = tmp_path / "foundation-single-device"
+    model.mkdir()
+    (model / "airi-foundation-manifest.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("AIRI_GENERALIST_ENABLE", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_FOUNDATION_MODEL", str(model))
+    monkeypatch.setenv("AIRI_GENERALIST_FOUNDATION_DEVICE_MAP", "none")
+    monkeypatch.delenv("AIRI_GENERALIST_TRANSFORMERS_MODEL", raising=False)
+    monkeypatch.setattr(
+        generalist_provider,
+        "foundation_qualification_status",
+        lambda model_dir, attestation_path=None: {
+            "qualified": True,
+            "integrity_ok": True,
+            "inference_profile": {"torch_dtype": "auto"},
+        },
+    )
+    real_find = generalist_provider.importlib.util.find_spec
+    monkeypatch.setattr(
+        generalist_provider.importlib.util,
+        "find_spec",
+        lambda name: (
+            None if name == "accelerate"
+            else object() if name in {"torch", "transformers"}
+            else real_find(name)
+        ),
+    )
+
+    row = generalist_provider.status()
+    assert row["available"] is True
+    assert row["load_policy"]["device_map"] is None
+    assert row["dependencies"]["accelerate"] is False
+    assert row["dependencies"]["accelerate_required"] is False
+
+
+
+
+def test_foundation_provider_rejects_dtype_drift(tmp_path: Path, monkeypatch):
+    from control_plane import generalist_provider
+
+    model = tmp_path / "foundation-dtype"
+    model.mkdir()
+    (model / "airi-foundation-manifest.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("AIRI_GENERALIST_ENABLE", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_FOUNDATION_MODEL", str(model))
+    monkeypatch.setenv("AIRI_GENERALIST_FOUNDATION_DTYPE", "float16")
+    monkeypatch.delenv("AIRI_GENERALIST_TRANSFORMERS_MODEL", raising=False)
+    monkeypatch.setattr(
+        generalist_provider,
+        "foundation_qualification_status",
+        lambda model_dir, attestation_path=None: {
+            "qualified": True,
+            "integrity_ok": True,
+            "inference_profile": {"torch_dtype": "bfloat16"},
+        },
+    )
+    real_find = generalist_provider.importlib.util.find_spec
+    monkeypatch.setattr(
+        generalist_provider.importlib.util,
+        "find_spec",
+        lambda name: object() if name in {"torch", "transformers", "accelerate"} else real_find(name),
+    )
+
+    row = generalist_provider.status()
+    assert row["available"] is False
+    assert row["qualification_profile_match"] is False
+    assert "requalify" in row["reason"]
+
+
+def test_foundation_policy_cache_key_handles_gpu_and_cpu_memory_keys():
+    from control_plane import generalist_provider
+
+    key = generalist_provider._stable_policy_cache_key({
+        "device_map": "auto",
+        "torch_dtype": "auto",
+        "max_memory": {0: "14GiB", "cpu": "32GiB"},
+        "offload_folder": None,
+    })
+    decoded = json.loads(key)
+    assert decoded["max_memory"] == {"0": "14GiB", "cpu": "32GiB"}
+
+
+def test_foundation_provider_rejects_ambiguous_generic_and_foundation_models(tmp_path: Path, monkeypatch):
+    from control_plane import generalist_provider
+
+    foundation = tmp_path / "foundation"
+    generic = tmp_path / "generic"
+    foundation.mkdir()
+    generic.mkdir()
+    monkeypatch.setenv("AIRI_GENERALIST_ENABLE", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_FOUNDATION_MODEL", str(foundation))
+    monkeypatch.setenv("AIRI_GENERALIST_TRANSFORMERS_MODEL", str(generic))
+
+    row = generalist_provider.status()
+    assert row["available"] is False
+    assert row["backend"] == "configuration-error"
+    assert "never both" in row["reason"]
+
+
+def test_foundation_provider_rejects_invalid_memory_policy(tmp_path: Path, monkeypatch):
+    from control_plane import generalist_provider
+
+    model = tmp_path / "foundation"
+    model.mkdir()
+    (model / "airi-foundation-manifest.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("AIRI_GENERALIST_ENABLE", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_FOUNDATION_MODEL", str(model))
+    monkeypatch.setenv("AIRI_GENERALIST_FOUNDATION_MAX_MEMORY", "[]")
+    monkeypatch.delenv("AIRI_GENERALIST_TRANSFORMERS_MODEL", raising=False)
+    monkeypatch.setattr(
+        generalist_provider,
+        "foundation_qualification_status",
+        lambda model_dir, attestation_path=None: {"qualified": True, "integrity_ok": True},
+    )
+    real_find = generalist_provider.importlib.util.find_spec
+    monkeypatch.setattr(
+        generalist_provider.importlib.util,
+        "find_spec",
+        lambda name: object() if name in {"torch", "transformers", "accelerate"} else real_find(name),
+    )
+
+    row = generalist_provider.status()
+    assert row["available"] is False
+    assert row["configuration_error"]
+    assert "non-empty JSON object" in row["reason"]
+
+
+def test_transformers_backend_device_map_does_not_global_to(tmp_path: Path, monkeypatch):
+    torch = pytest.importorskip("torch")
+    transformers = pytest.importorskip("transformers")
+    pytest.importorskip("accelerate")
+    from generalist_lm.hf_backend import LocalTransformersBackend
+
+    model_dir = tmp_path / "model"
+    model_dir.mkdir()
+    seen = {}
+
+    class FakeTokenizer:
+        pad_token_id = 0
+        eos_token_id = 0
+
+        def __call__(self, prompt, return_tensors="pt"):
+            return {"input_ids": torch.tensor([[1, 2]], dtype=torch.long)}
+
+        def decode(self, tokens, skip_special_tokens=True):
+            return "OK"
+
+    class FakeModel:
+        def __init__(self):
+            self.to_calls = []
+
+        def to(self, device):
+            self.to_calls.append(device)
+            raise AssertionError("sharded model must not receive a global .to(device)")
+
+        def eval(self):
+            return self
+
+        def get_input_embeddings(self):
+            class Embeddings:
+                weight = torch.zeros(1)
+            return Embeddings()
+
+        def generate(self, **kwargs):
+            return torch.tensor([[1, 2, 3]], dtype=torch.long)
+
+    fake_model = FakeModel()
+
+    def fake_model_load(path, **kwargs):
+        seen.update(kwargs)
+        return fake_model
+
+    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", lambda *a, **k: FakeTokenizer())
+    monkeypatch.setattr(transformers.AutoModelForCausalLM, "from_pretrained", fake_model_load)
+
+    backend = LocalTransformersBackend(
+        model_dir,
+        device="cpu",
+        device_map="auto",
+        torch_dtype="auto",
+        max_memory={"cpu": "4GiB"},
+    )
+    assert fake_model.to_calls == []
+    assert seen["device_map"] == "auto"
+    assert seen["low_cpu_mem_usage"] is True
+    assert seen["max_memory"] == {"cpu": "4GiB"}
+    assert seen["torch_dtype"] == "auto"
+    assert backend.generate("hello", max_new_tokens=1) == "OK"
+

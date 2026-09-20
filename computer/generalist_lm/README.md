@@ -354,10 +354,34 @@ python -m generalist_lm.cli foundation-init /models/foundation \
   --parameter-count 7000000000 \
   --dtype bfloat16
 
-python -m generalist_lm.cli qualify-foundation /models/foundation
+python -m generalist_lm.cli qualify-foundation /models/foundation \
+  --device-map auto \
+  --torch-dtype auto
 python -m generalist_lm.cli foundation-status /models/foundation
 ```
 
-This tranche does not automatically make a foundation candidate the active
-Airi-PC provider. Provider activation remains a later, separately verified
-promotion step.
+A Foundation candidate is not activated merely by existing on disk. Airi-PC
+uses it only when the dedicated Foundation attestation is still exact-digest
+valid and activation is explicit:
+
+```bash
+export AIRI_GENERALIST_ENABLE=1
+export AIRI_GENERALIST_FOUNDATION_MODEL=/models/foundation
+export AIRI_GENERALIST_FOUNDATION_DEVICE_MAP=auto
+export AIRI_GENERALIST_FOUNDATION_DTYPE=auto
+# Optional examples:
+# export AIRI_GENERALIST_FOUNDATION_MAX_MEMORY='{"0":"14GiB","cpu":"32GiB"}'
+# export AIRI_GENERALIST_FOUNDATION_OFFLOAD=/var/tmp/airi-foundation-offload
+```
+
+The Foundation path is deliberately separate from
+`AIRI_GENERALIST_TRANSFORMERS_MODEL`. Setting both at once is rejected rather
+than silently downgrading to the generic Transformers qualification. With
+`device_map=auto` (the Foundation default), Accelerate is required and the
+backend never applies a global `model.to(device)` after sharding. Set
+`AIRI_GENERALIST_FOUNDATION_DEVICE_MAP=none` for an explicit single-device
+load using `AIRI_GENERALIST_DEVICE`.
+
+This still does not make the model a production champion by declaration:
+qualification remains digest-bound to the model, manifest and protected suite,
+and the existing router/provider opt-ins remain in force.

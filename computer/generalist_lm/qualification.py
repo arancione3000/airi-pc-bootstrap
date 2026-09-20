@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import hashlib
 import json
 from pathlib import Path
@@ -7,6 +8,7 @@ from typing import Any
 
 from .benchmarks import qualification_suite, run_benchmark
 from .foundation import (
+    FOUNDATION_DOMAINS,
     FOUNDATION_MANIFEST_FILENAME,
     foundation_manifest_digest,
     load_foundation_manifest,
@@ -19,7 +21,8 @@ from .foundation_benchmarks import (
 from .runtime import GeneralistRuntime
 
 QUALIFICATION_VERSION = 2
-FOUNDATION_QUALIFICATION_VERSION = 1
+FOUNDATION_QUALIFICATION_VERSION = 2
+FOUNDATION_MINIMUM_SCORE = 90.0
 _DIGEST_CACHE: dict[tuple, str] = {}
 
 
@@ -251,44 +254,80 @@ def qualify_foundation_model(
     *,
     attestation_path: str | Path | None = None,
     minimum_score: float = 90.0,
+    device: str = "cpu",
+    device_map: str | dict[str, Any] | None = None,
+    torch_dtype: str | None = None,
+    max_memory: dict[Any, Any] | None = None,
+    offload_folder: str | Path | None = None,
 ) -> dict[str, Any]:
     """Qualify a first-class open-weight foundation candidate.
 
     Foundation candidates are stricter than the generic Transformers adapter:
     they require a reviewed local manifest and the dedicated harder protected
-    suite. The attestation is bound to the exact model tree, manifest and suite.
+    suite. The attestation is bound to the exact model tree, manifest, suite and
+    inference precision profile.
     """
+    threshold = float(minimum_score)
+    if not math.isfinite(threshold) or threshold < FOUNDATION_MINIMUM_SCORE or threshold > 100.0:
+        raise ValueError(
+            f"foundation minimum_score must be between {FOUNDATION_MINIMUM_SCORE:.1f} and 100.0"
+        )
+    canonical_dtype = str(torch_dtype or "auto").strip().lower()
+    if canonical_dtype not in {"auto", "float16", "bfloat16", "float32"}:
+        raise ValueError("unsupported Foundation inference dtype")
     from .hf_backend import LocalTransformersBackend
 
     root = Path(model_dir).expanduser().resolve()
     manifest = load_foundation_manifest(root)
     manifest_digest = foundation_manifest_digest(root)
     suite_digest = foundation_suite_digest()
-    backend = LocalTransformersBackend(root, local_files_only=True)
+    backend = LocalTransformersBackend(
+        root,
+        device=device,
+        device_map=device_map,
+        torch_dtype=canonical_dtype,
+        max_memory=max_memory,
+        offload_folder=offload_folder,
+        local_files_only=True,
+    )
     report = run_benchmark(backend, foundation_suite())
     target = Path(attestation_path or (root / ".airi-foundation-qualification.json"))
     digest = transformers_model_digest(root, exclude_path=target)
     qualified = bool(
         report.get("ok")
-        and float(report.get("score", 0.0)) >= float(minimum_score)
+        and float(report.get("score", 0.0)) >= threshold
         and not report.get("critical_failures")
     )
     result = {
         "foundation_qualification_version": FOUNDATION_QUALIFICATION_VERSION,
         "qualification_version": QUALIFICATION_VERSION,
-        "attested_by": "airi-generalist-foundation-qualification-v1",
+        "attested_by": "airi-generalist-foundation-qualification-v2",
         "backend_type": "transformers-foundation",
         "model_digest": digest,
         "manifest_digest": manifest_digest,
         "suite_version": FOUNDATION_SUITE_VERSION,
         "suite_digest": suite_digest,
         "qualified": qualified,
-        "minimum_score": float(minimum_score),
+        "minimum_score": threshold,
         "manifest": manifest.to_dict(),
         "report": report,
+        "inference_profile": {
+            "torch_dtype": canonical_dtype,
+        },
+        "load_policy": {
+            "device": str(device),
+            "device_map": device_map,
+            "torch_dtype": canonical_dtype,
+            "max_memory": (
+                {str(key): value for key, value in max_memory.items()}
+                if isinstance(max_memory, dict)
+                else None
+            ),
+            "offload_folder": str(Path(offload_folder).expanduser().resolve()) if offload_folder else None,
+        },
         "policy": (
             "reviewed local manifest + dedicated protected foundation suite; "
-            "local-files-only; trust_remote_code disabled; exact digests bound"
+            "local-files-only; trust_remote_code disabled; exact digests + inference dtype bound"
         ),
     }
     target.write_text(
@@ -312,19 +351,53 @@ def foundation_qualification_status(
         current_model = transformers_model_digest(root, exclude_path=target)
         current_manifest = foundation_manifest_digest(root)
         current_suite = foundation_suite_digest()
+
+        report = value.get("report")
+        minimum_score = value.get("minimum_score")
+        report_score = report.get("score") if isinstance(report, dict) else None
+        domain_scores = report.get("domain_scores") if isinstance(report, dict) else None
+        critical_failures = report.get("critical_failures") if isinstance(report, dict) else None
+        try:
+            minimum_score_value = float(minimum_score)
+            report_score_value = float(report_score)
+            score_values = (
+                [float(domain_scores[name]) for name in FOUNDATION_DOMAINS]
+                if isinstance(domain_scores, dict)
+                and all(name in domain_scores for name in FOUNDATION_DOMAINS)
+                else []
+            )
+            semantics_ok = bool(
+                math.isfinite(minimum_score_value)
+                and FOUNDATION_MINIMUM_SCORE <= minimum_score_value <= 100.0
+                and math.isfinite(report_score_value)
+                and report_score_value >= minimum_score_value
+                and report_score_value <= 100.0
+                and report.get("ok") is True
+                and isinstance(critical_failures, list)
+                and not critical_failures
+                and len(score_values) == len(FOUNDATION_DOMAINS)
+                and all(math.isfinite(score) and 0.0 <= score <= 1.0 for score in score_values)
+            )
+        except (TypeError, ValueError, OverflowError):
+            semantics_ok = False
+
         integrity_ok = bool(
             value.get("backend_type") == "transformers-foundation"
-            and value.get("attested_by") == "airi-generalist-foundation-qualification-v1"
+            and value.get("attested_by") == "airi-generalist-foundation-qualification-v2"
             and int(value.get("qualification_version", 0)) == QUALIFICATION_VERSION
             and int(value.get("foundation_qualification_version", 0)) == FOUNDATION_QUALIFICATION_VERSION
             and int(value.get("suite_version", 0)) == FOUNDATION_SUITE_VERSION
+            and isinstance(value.get("inference_profile"), dict)
+            and value.get("inference_profile", {}).get("torch_dtype") in {"auto", "float16", "bfloat16", "float32"}
             and value.get("model_digest") == current_model
             and value.get("manifest_digest") == current_manifest
             and value.get("suite_digest") == current_suite
+            and semantics_ok
         )
         return {
             **value,
             "integrity_ok": integrity_ok,
+            "qualification_semantics_ok": semantics_ok,
             "qualified": bool(value.get("qualified") and integrity_ok),
             "current_model_digest": current_model,
             "current_manifest_digest": current_manifest,
@@ -334,5 +407,6 @@ def foundation_qualification_status(
         return {
             "qualified": False,
             "integrity_ok": False,
+            "qualification_semantics_ok": False,
             "reason": f"missing_or_invalid_foundation_attestation:{type(exc).__name__}",
         }
