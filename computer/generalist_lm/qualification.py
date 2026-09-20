@@ -278,12 +278,13 @@ def qualify_foundation_model(
         raise ValueError("unsupported Foundation inference dtype")
     from .hf_backend import LocalTransformersBackend
 
-    root = Path(model_dir).expanduser().resolve()
+    supplied = Path(model_dir).expanduser()
     preflight = foundation_preflight(
-        root,
+        supplied,
         max_memory=max_memory,
         probe_hardware=False,
     )
+    root = supplied.resolve()
     if not preflight.get("ok"):
         blockers = preflight.get("blockers") or ["unknown_preflight_failure"]
         raise ValueError("foundation preflight failed: " + "; ".join(str(x) for x in blockers))
@@ -352,7 +353,16 @@ def foundation_qualification_status(
     *,
     attestation_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    root = Path(model_dir).expanduser().resolve()
+    supplied = Path(model_dir).expanduser()
+    if supplied.is_symlink():
+        return {
+            "qualified": False,
+            "integrity_ok": False,
+            "qualification_semantics_ok": False,
+            "preflight_ok": False,
+            "reason": "foundation_model_directory_is_symlink",
+        }
+    root = supplied.resolve()
     target = Path(attestation_path or (root / ".airi-foundation-qualification.json"))
     try:
         value = json.loads(target.read_text(encoding="utf-8"))
