@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,11 @@ from generalist_lm.qualification import (
     transformers_qualification_status,
 )
 from generalist_lm.runtime import GeneralistRuntime
+
+
+_BACKEND_CACHE: dict[str, Any] = {"key": None, "backend": None}
+_BACKEND_LOCK = threading.RLock()
+_GENERATION_LOCK = threading.RLock()
 
 
 def state_dir() -> Path:
@@ -105,29 +111,57 @@ def _backend():
     if not row["available"]:
         raise RuntimeError(row["reason"])
     device = os.environ.get("AIRI_GENERALIST_DEVICE", "cpu")
-    if row.get("backend") == "transformers":
-        from generalist_lm.hf_backend import LocalTransformersBackend
-        return LocalTransformersBackend(
-            transformers_model_dir(),
-            device=device,
-            local_files_only=True,
-        )
-    return GeneralistRuntime.from_checkpoint(state_dir(), device=device)
+    qualification = row.get("qualification") or {}
+    identity = (
+        row.get("backend"),
+        row.get("state_dir"),
+        qualification.get("current_checkpoint_digest")
+        or qualification.get("current_model_digest")
+        or qualification.get("checkpoint_digest")
+        or qualification.get("model_digest"),
+        device,
+    )
+    key = repr(identity)
+    with _BACKEND_LOCK:
+        if _BACKEND_CACHE.get("key") == key and _BACKEND_CACHE.get("backend") is not None:
+            return _BACKEND_CACHE["backend"]
+        if row.get("backend") == "transformers":
+            from generalist_lm.hf_backend import LocalTransformersBackend
+            backend = LocalTransformersBackend(
+                transformers_model_dir(),
+                device=device,
+                local_files_only=True,
+            )
+        else:
+            backend = GeneralistRuntime.from_checkpoint(state_dir(), device=device)
+        _BACKEND_CACHE["key"] = key
+        _BACKEND_CACHE["backend"] = backend
+        return backend
 
 
 def chat(messages: list[dict[str, str]], *, max_new_tokens: int = 256) -> str:
     if not isinstance(messages, list) or not messages:
         raise ValueError("messages must be a non-empty list")
+    if len(messages) > 128:
+        raise ValueError("conversation exceeds 128 messages")
     safe_messages = []
+    total_chars = 0
     for row in messages:
         if not isinstance(row, dict):
             raise ValueError("each message must be an object")
         role = str(row.get("role", "")).strip().lower()
         if role not in {"system", "user", "assistant", "tool"}:
             raise ValueError(f"unsupported role: {role!r}")
-        safe_messages.append({"role": role, "content": str(row.get("content", ""))[:100_000]})
+        content = str(row.get("content", ""))
+        if len(content) > 100_000:
+            raise ValueError("individual message exceeds 100000 characters")
+        total_chars += len(content)
+        if total_chars > 250_000:
+            raise ValueError("conversation exceeds 250000 characters")
+        safe_messages.append({"role": role, "content": content})
     backend = _backend()
-    return backend.chat(
-        safe_messages,
-        max_new_tokens=max(1, min(int(max_new_tokens), 2048)),
-    )
+    with _GENERATION_LOCK:
+        return backend.chat(
+            safe_messages,
+            max_new_tokens=max(1, min(int(max_new_tokens), 2048)),
+        )
