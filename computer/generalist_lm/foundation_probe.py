@@ -69,6 +69,7 @@ def _context_limit(config: dict[str, Any]) -> int | None:
 
 def _chat_template_probe(root: Path) -> dict[str, Any]:
     sources: list[str] = []
+    errors: list[str] = []
     external = root / "chat_template.jinja"
     if external.is_file() and external.stat().st_size > 0:
         sources.append("chat_template.jinja")
@@ -88,8 +89,9 @@ def _chat_template_probe(root: Path) -> dict[str, Any]:
                 or (isinstance(template, dict) and template)
                 or (isinstance(template, list) and template)
             )
-        except ValueError:
+        except ValueError as exc:
             embedded = False
+            errors.append(str(exc))
         if embedded:
             sources.append("tokenizer_config.json:chat_template")
 
@@ -97,6 +99,7 @@ def _chat_template_probe(root: Path) -> dict[str, Any]:
         "available": bool(sources),
         "sources": sorted(set(sources)),
         "embedded": embedded,
+        "errors": errors,
     }
 
 
@@ -386,6 +389,8 @@ def foundation_preflight(
         warnings.append("config_declares_auto_map_remote_code_paths")
 
     chat_template = _chat_template_probe(root)
+    if chat_template.get("errors"):
+        blockers.append("invalid_tokenizer_config")
     quantization_cfg = config.get("quantization_config")
     quantization_cfg = quantization_cfg if isinstance(quantization_cfg, dict) else {}
     detected_quantization = str(quantization_cfg.get("quant_method", "none")).strip().lower() or "none"
