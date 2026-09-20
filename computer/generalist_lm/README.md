@@ -180,3 +180,50 @@ an explicit transactional sync:
 
 The sync is intentionally opt-in. A research promotion on GitHub never silently
 changes the user's active reasoning provider.
+
+
+## Scalable learning: pretraining, distillation and LoRA
+
+The research Continuum deliberately remains small enough for bounded GitHub
+Actions CPU experiments. It is not the mechanism used to train a frontier-sized
+foundation model.
+
+The scalable-learning path is separate:
+
+1. **Native causal pretraining** — `pretraining.py` ingests reviewed local text
+   under explicit allowed roots, rejects path/symlink escapes, unsupported
+   formats, oversized files and duplicate content, packs causal token blocks,
+   and trains next-token prediction. The resulting checkpoint is unqualified
+   until it passes the normal protected benchmark.
+2. **Response distillation** — `distillation.py` can query an already-local
+   teacher backend and turn bounded responses into reviewable SFT JSONL. Teacher
+   output is training data only; it is never treated as factual truth or as a
+   qualification result.
+3. **Local LoRA** — `transformers_lora.py` can fine-tune an already-downloaded
+   open-weight causal LM with PEFT/LoRA. Base weights are opened with
+   `local_files_only=True` and `trust_remote_code=False`. The adapter is
+   written outside the base model directory and must be independently
+   qualified before production use.
+
+CLI examples:
+
+```bash
+python -m generalist_lm.cli pretrain-native CHECKPOINT CORPUS_DIR \
+  --allowed-root /reviewed/data --output /models/airi-pretrained
+
+python -m generalist_lm.cli distill-transformers /models/local-teacher \
+  prompts.jsonl distilled.jsonl
+
+python -m generalist_lm.cli lora-transformers /models/local-foundation \
+  distilled.jsonl /models/airi-lora
+```
+
+Large-model LoRA is intentionally an optional environment and requires
+`transformers` and `peft` in addition to PyTorch. These dependencies are not
+silently installed by Airi-PC and the autonomous Continuum does not download
+foundation weights.
+
+This separation is important: MATHESIS and the small Continuum can discover
+architectural/curriculum ideas continuously, while expensive model training can
+run on suitable hardware. Nothing trained by either path becomes the active
+reasoning provider until protected qualification succeeds.
