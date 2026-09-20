@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+from pathlib import Path
+import random
+from typing import Any, Iterable
+
+from .tokenizer import PAD, ByteTokenizer
+
+
+@dataclass(frozen=True)
+class SFTExample:
+    messages: list[dict[str, str]]
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "SFTExample":
+        messages = raw.get("messages")
+        if not isinstance(messages, list) or not messages:
+            raise ValueError("SFT example requires non-empty messages")
+        cleaned: list[dict[str, str]] = []
+        for row in messages:
+            if not isinstance(row, dict):
+                raise ValueError("each message must be an object")
+            cleaned.append({"role": str(row.get("role", "")), "content": str(row.get("content", ""))})
+        if cleaned[-1]["role"].lower() != "assistant":
+            raise ValueError("last SFT message must be assistant")
+        return cls(cleaned)
+
+
+def load_sft_jsonl(path: str | Path) -> list[SFTExample]:
+    out: list[SFTExample] = []
+    with Path(path).open("r", encoding="utf-8") as handle:
+        for line_no, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            try:
+                out.append(SFTExample.from_dict(json.loads(line)))
+            except Exception as exc:
+                raise ValueError(f"invalid SFT row at line {line_no}: {exc}") from exc
+    return out
+
+
+def encode_sft_example(example: SFTExample, tokenizer: ByteTokenizer, context_length: int):
+    import torch
+    messages = list(example.messages)
+    target = messages[-1]
+    prompt = messages[:-1]
+    prompt_ids = tokenizer.serialize_messages(prompt, add_generation_prompt=True)
+    target_ids = tokenizer.encode(target["content"], eos=True)
+
+    max_target = max(1, context_length - 1)
+    target_ids = target_ids[:max_target]
+    prompt_budget = max(1, context_length - len(target_ids))
+    prompt_ids = prompt_ids[-prompt_budget:]
+
+    ids = (prompt_ids + target_ids)[:context_length]
+    labels = [-100] * min(len(prompt_ids), len(ids))
+    labels.extend(ids[len(labels):])
+
+    if len(ids) < context_length:
+        pad = context_length - len(ids)
+        ids.extend([PAD] * pad)
+        labels.extend([-100] * pad)
+
+    return (
+        torch.tensor(ids, dtype=torch.long),
+        torch.tensor(labels, dtype=torch.long),
+    )
+
+
+def _batch(examples: list[SFTExample], tokenizer: ByteTokenizer, context_length: int, indices: Iterable[int]):
+    import torch
+    rows = [encode_sft_example(examples[i], tokenizer, context_length) for i in indices]
+    return torch.stack([x[0] for x in rows]), torch.stack([x[1] for x in rows])
+
+
+def loss_on_examples(model, tokenizer: ByteTokenizer, examples: list[SFTExample], *, device: str = "cpu") -> float:
+    import torch
+    if not examples:
+        raise ValueError("no SFT examples")
+    model.eval()
+    ids, labels = _batch(examples, tokenizer, model.config.context_length, range(len(examples)))
+    ids, labels = ids.to(device), labels.to(device)
+    with torch.no_grad():
+        loss = model(ids, labels=labels)["loss"]
+    return float(loss.detach().cpu())
+
+
+def train_sft(
+    model,
+    tokenizer: ByteTokenizer,
+    examples: list[SFTExample],
+    *,
+    steps: int = 100,
+    batch_size: int = 4,
+    learning_rate: float = 3e-4,
+    weight_decay: float = 0.01,
+    seed: int = 7,
+    device: str = "cpu",
+) -> dict[str, Any]:
+    import torch
+    if not examples:
+        raise ValueError("no SFT examples")
+    rng = random.Random(seed)
+    torch.manual_seed(seed)
+    model.to(device)
+    initial_loss = loss_on_examples(model, tokenizer, examples, device=device)
+    model.train()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=float(learning_rate), weight_decay=float(weight_decay))
+    losses: list[float] = []
+
+    for _ in range(max(1, int(steps))):
+        indices = [rng.randrange(len(examples)) for _ in range(max(1, int(batch_size)))]
+        ids, labels = _batch(examples, tokenizer, model.config.context_length, indices)
+        ids, labels = ids.to(device), labels.to(device)
+        optimizer.zero_grad(set_to_none=True)
+        loss = model(ids, labels=labels)["loss"]
+        if not torch.isfinite(loss):
+            raise RuntimeError("non-finite language-model loss")
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
+        losses.append(float(loss.detach().cpu()))
+
+    final_loss = loss_on_examples(model, tokenizer, examples, device=device)
+    return {
+        "ok": bool(final_loss < initial_loss),
+        "steps": max(1, int(steps)),
+        "initial_loss": initial_loss,
+        "final_loss": final_loss,
+        "best_step_loss": min(losses),
+        "loss_improvement": initial_loss - final_loss,
+    }

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "default_provider": "chatgpt",
+  "execution_provider": "airi-pc",
+  "local_provider": {
+    "name": "airi-generalist",
+    "allowed": true,
+    "enabled_by_default": false,
+    "qualification_required": true,
+    "exact_artifact_digest_required": true,
+    "explicit_enable_env": "AIRI_GENERALIST_ENABLE",
+    "explicit_prefer_env": "AIRI_GENERALIST_PREFER",
+    "autonomous_downloads": false,
+    "trust_remote_code": false
+  },
+  "remote_providers": {
+    "arbitrary": false,
+    "openrouter": false,
+    "ollama": false
+  },
+  "invariants": [
+    "Unqualified model weights never become a reasoning provider.",
+    "Model output never bypasses Control Plane tool permissions, scope, tests, rollback, or persistence gates.",
+    "Research-champion promotion is separate from production qualification.",
+    "MATHESIS proof results may suggest architecture/curriculum changes but do not directly become language-model truth or weights.",
+    "ChatGPT remains the fallback/default reasoning provider unless the qualified local provider is explicitly preferred."
+  ]
+}

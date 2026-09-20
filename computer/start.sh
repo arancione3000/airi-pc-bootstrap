@@ -18,6 +18,8 @@ LIVE_SESSION_FILE="$ROOT/.ai/state/live_session_id"
 RUNTIME_SHA_FILE="$ROOT/.ai/.runtime_source_sha"
 EVOLUTION_DAEMON_PID_FILE="$ROOT/.ai/evolution-lab/shadow-router/daemon.pid"
 EVOLUTION_DAEMON_LOG="$LOG_DIR/evolution-daemon.log"
+MODEL_GATEWAY_PID_FILE="$LOG_DIR/model-gateway.pid"
+MODEL_GATEWAY_LOG="$LOG_DIR/model-gateway.log"
 server_pids() {
   pgrep -f 'uvicorn (server|contract_server):app --host 127\.0\.0\.1 --port 9010' 2>/dev/null || true
 }
@@ -36,7 +38,23 @@ stop_live_runtime() {
   fi
   pkill -f '[c]ontrol_plane.live_runtime' >/dev/null 2>&1 || true
 }
+stop_model_gateway() {
+  if [ -f "$MODEL_GATEWAY_PID_FILE" ]; then
+    PID=$(cat "$MODEL_GATEWAY_PID_FILE" 2>/dev/null || true)
+    if [ -n "$PID" ]; then
+      kill "$PID" 2>/dev/null || true
+      for _ in $(seq 1 10); do
+        if ! kill -0 "$PID" 2>/dev/null; then break; fi
+        sleep 0.2
+      done
+      kill -9 "$PID" 2>/dev/null || true
+    fi
+    rm -f "$MODEL_GATEWAY_PID_FILE"
+  fi
+  pkill -f '[c]ontrol_plane.model_gateway' >/dev/null 2>&1 || true
+}
 stop_server() {
+  stop_model_gateway
   stop_live_runtime
   if [ -f "$SERVER_PID_FILE" ]; then
     PID=$(cat "$SERVER_PID_FILE" 2>/dev/null || true)
@@ -82,6 +100,22 @@ if [ -f "$ROOT/computer/requirements.txt" ]; then
     command -v pip3 >/dev/null 2>&1 || { echo 'AIRI_START_NO_PIP3' >&2; exit 2; }
     SITE_PACKAGES="$($PYTHON_BIN -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
     pip3 install --disable-pip-version-check --quiet --target "$SITE_PACKAGES" -r "$ROOT/computer/requirements.txt"
+  fi
+fi
+if [ "${AIRI_GENERALIST_ENABLE:-0}" = "1" ]; then
+  if ! "$PYTHON_BIN" -c 'import torch,transformers' >/dev/null 2>&1; then
+    command -v pip3 >/dev/null 2>&1 || { echo 'AIRI_START_NO_PIP3' >&2; exit 2; }
+    SITE_PACKAGES="$($PYTHON_BIN -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+    pip3 install --disable-pip-version-check --quiet --target "$SITE_PACKAGES" -r "$ROOT/computer/generalist_lm/requirements.txt"
+  fi
+fi
+if [ "${AIRI_GENERALIST_ENABLE:-0}" = "1" ] && [ "${AIRI_GENERALIST_SYNC_FROM_GITHUB:-0}" = "1" ]; then
+  echo "AIRI_GENERALIST_SYNC_START"
+  if ! env \
+    AIRI_ROOT="$ROOT" \
+    PYTHONPATH="$ROOT/computer${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PYTHON_BIN" -m generalist_lm.state_sync; then
+    echo "AIRI_GENERALIST_SYNC_FAILED_KEEPING_LOCAL_CHECKPOINT" >&2
   fi
 fi
 if ! "$PYTHON_BIN" -c 'import tkinter' >/dev/null 2>&1; then
@@ -205,6 +239,18 @@ if [ -z "$LIVE_PID" ] || ! kill -0 "$LIVE_PID" 2>/dev/null; then
   echo $! > "$LIVE_PID_FILE"
 fi
 
+if [ "${AIRI_GENERALIST_ENABLE:-0}" = "1" ]; then
+  MODEL_GATEWAY_PID="$(cat "$MODEL_GATEWAY_PID_FILE" 2>/dev/null || true)"
+  if [ -z "$MODEL_GATEWAY_PID" ] || ! kill -0 "$MODEL_GATEWAY_PID" 2>/dev/null; then
+    nohup env \
+      AIRI_ROOT="$ROOT" \
+      AIRIPC_WORKSPACE_ROOT="$ROOT" \
+      PYTHONPATH="$ROOT/computer${PYTHONPATH:+:$PYTHONPATH}" \
+      "$PYTHON_BIN" -m control_plane.model_gateway \
+      >"$MODEL_GATEWAY_LOG" 2>&1 < /dev/null &
+    echo $! > "$MODEL_GATEWAY_PID_FILE"
+  fi
+fi
 if [ "${AIRI_EVOLUTION_DAEMON:-1}" != "0" ]; then
   mkdir -p "$(dirname "$EVOLUTION_DAEMON_PID_FILE")"
   EVOLUTION_DAEMON_PID="$(cat "$EVOLUTION_DAEMON_PID_FILE" 2>/dev/null || true)"

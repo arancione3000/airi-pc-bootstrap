@@ -144,3 +144,112 @@ tests pass.
 - real continuum logs were observed carrying persistent discovery state across
   consecutive cycles and self-dispatching the successor; GitHub availability
   remains an external best-effort dependency.
+
+
+## 2026-09-20 — AIRI Generalist LM foundation
+
+A new general-purpose generative-model layer is being added behind Airi-PC.
+
+Architecture decisions:
+- the generalist model is a real decoder-only causal Transformer, separate from
+  the old factual classifier and separate from MATHESIS-Ω;
+- MATHESIS remains a proof-gated research/evolution signal source, not the user-
+  facing language model and not a direct source of LM truth or weights;
+- the mutable GeneralistGenome is bounded to architecture/training/reasoning
+  parameters and adapters; verifier, permissions, tool execution policy,
+  qualification and host boundaries remain outside the mutable genome;
+- benchmark domains are separated into language, coding, data, reasoning,
+  structured output and tool protocol so aggregate score cannot hide protected-
+  domain regressions;
+- supervised fine-tuning masks prompt tokens and optimizes assistant targets;
+- tool calls are parsed as allowlisted JSON requests and are executed only by an
+  injected Control Plane executor; unknown tools never reach execution and the
+  agent loop has a hard step cap;
+- a local checkpoint is not a production reasoning provider just because
+  weights exist: config/weights/metadata/benchmark must be complete, benchmark
+  qualification must be bound to the exact checkpoint SHA-256 digest, and both
+  AIRI_GENERALIST_ENABLE=1 and AIRI_GENERALIST_PREFER=1 are required before the
+  model can be preferred over ChatGPT;
+- vision remains routed to ChatGPT until a separately benchmarked local vision
+  model exists;
+- already-downloaded Hugging Face causal models may be benchmarked locally via
+  LocalTransformersBackend, using local_files_only=True and
+  trust_remote_code=False. Autonomous model-code downloads are not allowed.
+
+Capability honesty:
+- CI uses a deliberately tiny model to prove causal generation, SFT learning,
+  checkpointing and gating mechanics;
+- no claim is made that the tiny CI model is GPT/Claude-class;
+- useful general capability requires high-quality pretrained weights or
+  substantial pretraining/fine-tuning plus a much broader held-out benchmark.
+
+## 2026-09-20 — AIRI Generalist LM foundation
+
+- added a real decoder-only causal Transformer layer for general-purpose language generation rather than reusing the factual classifier as a chatbot;
+- added reversible versioned tokenization, chat serialization, autoregressive generation, supervised fine-tuning, checkpointing and local open-weight Transformers support with local-files-only loading and remote-code trust disabled;
+- generalist capability is benchmarked separately across language, coding, data, reasoning, tool protocol and structured output;
+- added a bounded GeneralistGenome with real architectural variants and research signals; MATHESIS can influence research directions only through proof-gated signals and cannot directly create trusted LM outputs or weights;
+- added a persistent H24 generalist research continuum with serialized state writers, watchdog recovery, held-out validation and anti-forgetting;
+- added a bounded Generalist Agent whose model can request only explicitly allowlisted tools; current integrated tools are read-only or computational;
+- added an exact-digest qualification gate for native and local Transformers checkpoints, plus an authenticated local OpenAI-style model gateway;
+- Airi-PC keeps ChatGPT as the default reasoning authority. A local Generalist provider appears only with an explicitly enabled, exact-digest qualified checkpoint; preference for it is a separate opt-in;
+- added research-to-production promotion: a changed research champion is qualified once per digest, compared to the previous production champion with protected-domain anti-regression, atomically swapped, post-swap reverified and rolled back on integrity failure;
+- research and production promotion logic remain outside the evolvable genome.
+
+- Generalist autocoding now requires an explicit declared file scope and an explicit real test command; generated edits remain behind snapshot/rollback/diff/guardrail checks.
+- Generalist data analysis now has bounded deterministic table profiling and aggregate/group-by tools in addition to calculator/basic statistics, without arbitrary code execution.
+
+
+## 2026-09-20 — AIRI Generalist continual-learning hardening
+
+- Generalist research now persists a bounded curriculum replay memory inside the Generalist state branch;
+- every cycle adds mechanically labeled, validation-disjoint examples across language, coding, data, reasoning, tool calling and structured output;
+- a dedicated continual-learning challenger starts from the current champion weights, allowing knowledge to accumulate without requiring an architecture mutation;
+- architecture challengers remain independent and train with the same persistent replay corpus;
+- research promotion now checks real autoregressive held-out generation in addition to teacher-forced loss/accuracy;
+- generated held-out items that a champion already solves become anti-forgetting obligations;
+- research health fails closed if persistent curriculum replay overlaps protected validation prompts or if generation metrics are malformed;
+- persistent curriculum size is bounded by `AIRI_GENERALIST_RESEARCH_CURRICULUM_MAX_ROWS` (default 1200);
+- MATHESIS signals still only influence research direction; they do not directly write Generalist weights or bypass independent promotion gates.
+
+
+## 2026-09-20 — Generalist architecture inheritance and replay integrity
+
+- architecture challengers inherit only exact-name/exact-shape champion state
+  tensors before fine-tuning; transfer coverage is persisted in research
+  metrics;
+- the Generalist DSL now permits learned, sinusoidal, and RoPE positional
+  encoding, with RoPE constrained to even attention-head dimensions;
+- rotating canary examples stay outside training and gate promotion against
+  validation memorization;
+- persistent curriculum rows are digest-bound and fail closed on malformed
+  rows, invalid domains, duplicates, cap violations, or validation overlap;
+- no architecture or continual-learning path can edit verifier, qualification,
+  Control Plane permissions, host boundaries, workflow permissions, or secret
+  handling.
+
+
+## 2026-09-20 — AIRI Generalist LM foundation
+
+- Added a real decoder-only causal Transformer with autoregressive generation,
+  SFT, checkpointing and versioned byte tokenizer.
+- Added independent generalist capability gates for language, coding, data,
+  reasoning, tools and structured output; production qualification v2 uses a
+  protected 21-task suite disjoint from autonomous training/replay curricula.
+- Added persistent continual-learning research with rotating canaries,
+  autoregressive validation, anti-forgetting, bounded architecture evolution,
+  compatible weight inheritance, self-handoff and watchdog recovery.
+- Added optional exact-digest local Transformers/Open-Weight backend with
+  `local_files_only=True` and `trust_remote_code=False`.
+- Added bounded model/tool agent loop, safe data profiling/aggregation and
+  scoped coding proposals that require explicit scope, tests, rollback and
+  guardrails; the model cannot modify the Generalist kernel/governance paths.
+- The MATHESIS -> Generalist bridge now re-proves persisted mathematical rows
+  with the current verifier before emitting architecture signals and fails
+  closed if that verifier is unavailable.
+- Generalist read-only workspace tools exclude sensitive files/paths and enforce
+  file/search traversal budgets.
+- Added opt-in `AIRI_GENERALIST_SYNC_FROM_GITHUB=1` deployment sync. It fetches
+  the dedicated state branch, locally re-runs protected production
+  qualification, and transactionally swaps the local checkpoint with rollback.
+  Research promotion never silently enables or prefers the local provider.

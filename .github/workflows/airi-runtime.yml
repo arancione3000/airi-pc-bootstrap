@@ -3,6 +3,24 @@ name: Airi-PC runtime verification
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/**'
+      - 'computer/control_plane/generalist_provider.py'
+      - 'computer/control_plane/model_router.py'
+      - 'computer/control_plane/local_agent.py'
+      - 'computer/control_plane/model_gateway.py'
+      - 'computer/control_plane/generalist_agent_bridge.py'
+      - 'computer/code_agent.py'
+      - 'computer/start.sh'
+      - 'computer/requirements.txt'
+      - 'tests/test_generalist_lm.py'
+      - 'tests/test_generalist_provider.py'
+      - 'tests/test_openrouter_provider.py'
+      - 'tests/test_local_agent.py'
+      - 'tests/test_model_gateway.py'
+      - '.github/workflows/airi-runtime.yml'
   workflow_dispatch:
 
 permissions:
@@ -42,7 +60,7 @@ jobs:
           mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
           .venv/bin/python -m playwright install chromium
 
-      - name: ChatGPT-only rebuild verifier (static)
+      - name: Reasoning-policy rebuild verifier (static)
         working-directory: /home/user/airi
         run: .venv/bin/python scripts/airi-rebuild-verify.py
       - name: Start Airi-PC runtime directly
@@ -210,7 +228,7 @@ jobs:
           echo '--- /ready ---'
           curl -sS --max-time 5 http://127.0.0.1:9010/ready || true
           echo
-          ps -ef | grep -E 'uvicorn|contract_server|model_gateway|Xvfb' | grep -v grep || true
+          pgrep -af 'uvicorn|contract_server|model_gateway|Xvfb' || true
           echo '--- computer-server.log ---'
           cat logs/computer-server.log 2>/dev/null || true
           echo '--- model-gateway.log ---'

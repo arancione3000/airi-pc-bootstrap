@@ -1,0 +1,74 @@
+name: AIRI Generalist Research Watchdog
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17,47 * * * *'
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: airi-generalist-watchdog
+  cancel-in-progress: true
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch recovery only when research state is stale
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          headers=(
+            -H "Accept: application/vnd.github+json"
+            -H "Authorization: Bearer ${GH_TOKEN}"
+            -H "X-GitHub-Api-Version: 2022-11-28"
+          )
+
+          active="$(curl --fail-with-body -sS "${headers[@]}"             "${api}/actions/workflows/generalist-continuum.yml/runs?per_page=50"             | jq '[.workflow_runs[] | select(
+                .status == "pending"
+                or .status == "queued"
+                or .status == "in_progress"
+                or .status == "waiting"
+                or .status == "requested"
+              )] | length')"
+          if (( active > 0 )); then
+            echo "Generalist research is already active; watchdog will not duplicate it."
+            exit 0
+          fi
+
+          branch_json="$(curl -sS -w '\n%{http_code}' "${headers[@]}" "${api}/branches/generalist-state")"
+          http_code="$(tail -n1 <<<"$branch_json")"
+          body="$(sed '$d' <<<"$branch_json")"
+
+          stale=1
+          if [ "$http_code" = "200" ]; then
+            sha="$(jq -r '.commit.sha' <<<"$body")"
+            commit="$(curl --fail-with-body -sS "${headers[@]}" "${api}/commits/${sha}")"
+            stamp="$(jq -r '.commit.committer.date' <<<"$commit")"
+            commit_epoch="$(date -u -d "$stamp" +%s)"
+            now="$(date -u +%s)"
+            age="$((now - commit_epoch))"
+            echo "generalist-state age: ${age}s"
+            if (( age < 5400 )); then
+              stale=0
+            fi
+          elif [ "$http_code" = "404" ]; then
+            echo "generalist-state does not exist yet; bootstrap recovery is required."
+          else
+            echo "Unexpected branch lookup HTTP ${http_code}; refusing speculative dispatch."
+            exit 2
+          fi
+
+          if (( stale == 0 )); then
+            echo "Generalist research heartbeat is healthy."
+            exit 0
+          fi
+
+          curl --fail-with-body -sS -X POST "${headers[@]}"             "${api}/actions/workflows/generalist-continuum.yml/dispatches"             -d '{"ref":"main"}'
+          echo "Dispatched stale-state recovery cycle."
