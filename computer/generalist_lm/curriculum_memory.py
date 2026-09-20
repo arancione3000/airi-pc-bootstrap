@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .curriculum import ResearchRow, validation_rows
+from .curriculum import DOMAINS, ResearchRow, validation_rows
 
 
 SCHEMA_VERSION = 1
@@ -141,34 +141,52 @@ class CurriculumMemory:
     def _load_raw(self) -> dict[str, Any]:
         try:
             value = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(value, dict):
-                raise ValueError("curriculum memory must be an object")
-            if int(value.get("version", 0)) != SCHEMA_VERSION:
-                raise ValueError("unsupported curriculum memory version")
-            rows = value.get("rows")
-            if not isinstance(rows, list):
-                raise ValueError("curriculum rows must be a list")
-            return value
         except FileNotFoundError:
             return {"version": SCHEMA_VERSION, "last_cycle": 0, "rows": []}
+        if not isinstance(value, dict):
+            raise ValueError("curriculum memory must be an object")
+        if int(value.get("version", 0)) != SCHEMA_VERSION:
+            raise ValueError("unsupported curriculum memory version")
+        last_cycle = value.get("last_cycle", 0)
+        if not isinstance(last_cycle, int) or last_cycle < 0:
+            raise ValueError("curriculum last_cycle must be a non-negative integer")
+        rows = value.get("rows")
+        if not isinstance(rows, list):
+            raise ValueError("curriculum rows must be a list")
+        if len(rows) > self.max_rows:
+            raise ValueError("curriculum memory exceeds configured replay cap")
+        return value
 
     @staticmethod
-    def _decode(row: dict[str, Any]) -> ResearchRow | None:
-        try:
-            domain = str(row["domain"])
-            messages = row["messages"]
-            if not isinstance(messages, list) or len(messages) < 2:
-                return None
-            clean = [
-                {"role": str(item["role"]), "content": str(item["content"])}
-                for item in messages
-                if isinstance(item, dict) and "role" in item and "content" in item
-            ]
-            if len(clean) != len(messages):
-                return None
-            return ResearchRow(domain, clean)
-        except Exception:
-            return None
+    def _decode(item: dict[str, Any]) -> ResearchRow:
+        if not isinstance(item, dict):
+            raise ValueError("curriculum row must be an object")
+        row_id = item.get("id")
+        domain = item.get("domain")
+        messages = item.get("messages")
+        if not isinstance(row_id, str) or not row_id:
+            raise ValueError("curriculum row requires a digest id")
+        if domain not in DOMAINS:
+            raise ValueError(f"unsupported curriculum domain: {domain!r}")
+        if not isinstance(messages, list) or len(messages) < 2:
+            raise ValueError("curriculum row requires at least two messages")
+        clean: list[dict[str, str]] = []
+        for message in messages:
+            if not isinstance(message, dict):
+                raise ValueError("curriculum message must be an object")
+            role = message.get("role")
+            content = message.get("content")
+            if role not in {"system", "user", "assistant", "tool"}:
+                raise ValueError(f"unsupported curriculum role: {role!r}")
+            if not isinstance(content, str):
+                raise ValueError("curriculum message content must be a string")
+            clean.append({"role": str(role), "content": content})
+        row = ResearchRow(str(domain), clean)
+        row.sft()  # validates the final assistant supervision target
+        expected = _row_id(row)
+        if row_id != expected:
+            raise ValueError("curriculum row digest mismatch")
+        return row
 
     def rows(self) -> list[ResearchRow]:
         raw = self._load_raw()
@@ -176,17 +194,13 @@ class CurriculumMemory:
         seen: set[str] = set()
         protected = _prompt_set(validation_rows())
         for item in raw.get("rows", []):
-            if not isinstance(item, dict):
-                continue
             row = self._decode(item)
-            if row is None or not row.messages:
-                continue
-            if row.messages[0]["content"] in protected:
-                continue
             rid = _row_id(row)
             if rid in seen:
-                continue
+                raise ValueError("duplicate curriculum replay row")
             seen.add(rid)
+            if not row.messages or row.messages[0]["content"] in protected:
+                raise ValueError("curriculum replay overlaps protected validation")
             out.append(row)
         return out
 
