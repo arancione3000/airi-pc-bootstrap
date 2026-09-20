@@ -3,6 +3,18 @@ name: Airi-PC runtime verification
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/**'
+      - 'computer/control_plane/generalist_provider.py'
+      - 'computer/control_plane/model_router.py'
+      - 'computer/control_plane/local_agent.py'
+      - 'computer/requirements.txt'
+      - 'tests/test_generalist_lm.py'
+      - 'tests/test_generalist_provider.py'
+      - 'tests/test_openrouter_provider.py'
+      - '.github/workflows/airi-runtime.yml'
   workflow_dispatch:
 
 permissions:
