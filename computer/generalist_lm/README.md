@@ -261,3 +261,16 @@ extra full-model forward passes per candidate.
 Repository pretraining is research-only. It cannot qualify or promote a model
 to production by itself. Held-out generalist validation, rotating canaries and
 production qualification remain separate.
+
+
+## Domain-balanced replay
+
+Persistent curriculum expansion is intentionally weakness-directed, so its raw
+history can contain more coding/reasoning examples than language or data.
+Before supervised fine-tuning, the neutral replay base is now deterministically
+equalized across every observed generalist domain. Explicit genome focus genes
+are applied only after that balance is established.
+
+This is an anti-interference mechanism, not a relaxed promotion rule. Held-out
+per-domain loss, rotating canaries, token accuracy and autoregressive
+anti-forgetting gates remain unchanged.
