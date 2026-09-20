@@ -263,6 +263,24 @@ to production by itself. Held-out generalist validation, rotating canaries and
 production qualification remain separate.
 
 
+## BPE tokenizer checkpoint support
+
+The Generalist stack includes a deterministic `bpe-v1` tokenizer research
+implementation. It starts from the reversible byte vocabulary and learns
+bounded byte-pair merges, preserving the existing chat-role special tokens.
+
+BPE artifacts are versioned and digest-bound. A `bpe-v1` checkpoint must
+contain `tokenizer.json`; the runtime refuses to load the checkpoint without
+it or when vocabulary/version metadata disagree. Production qualification
+includes the tokenizer artifact in the exact checkpoint digest, so modifying
+the tokenizer after qualification invalidates the attestation.
+
+This tranche adds tokenizer training, persistence and checkpoint support only.
+The autonomous research genome remains `byte-v1` until a later migration path
+can compare byte and BPE checkpoints fairly without silently resetting learned
+weights or changing the protected benchmark contract.
+
+
 ## Domain-balanced replay
 
 Persistent curriculum expansion is intentionally weakness-directed, so its raw
