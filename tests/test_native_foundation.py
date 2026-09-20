@@ -41,6 +41,30 @@ def test_native_profiles_scale_without_instantiating_large_models():
     assert seven.context_length == 32768
 
 
+def test_native_parameter_estimate_matches_real_model():
+    pytest.importorskip("torch")
+    from generalist_lm.native_foundation import (
+        NativeFoundationConfig,
+        NativeFoundationLM,
+        native_parameter_count,
+    )
+
+    for bias in (False, True):
+        cfg = NativeFoundationConfig(
+            vocab_size=128,
+            context_length=32,
+            d_model=32,
+            n_heads=4,
+            n_kv_heads=2,
+            n_layers=2,
+            d_ff=96,
+            bias=bias,
+        ).validate()
+        model = NativeFoundationLM(cfg)
+        actual = sum(int(parameter.numel()) for parameter in model.parameters())
+        assert native_parameter_count(cfg) == actual
+
+
 def test_native_model_forward_loss_and_compact_kv_cache():
     torch = pytest.importorskip("torch")
     from generalist_lm.native_foundation import NativeFoundationConfig, NativeFoundationLM
