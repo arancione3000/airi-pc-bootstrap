@@ -238,7 +238,7 @@ def test_bootstrap_dependency_probe_keeps_generalist_runtime_optional():
     requirements = (ROOT / "computer" / "requirements.txt").read_text(encoding="utf-8")
     assert "import fastapi,uvicorn,pyautogui,pytesseract,PIL,playwright" in start
     assert 'if [ "${AIRI_GENERALIST_ENABLE:-0}" = "1" ]; then' in start
-    assert "import torch,transformers,accelerate" in start
+    assert "import torch,transformers,accelerate,openai_harmony" in start
     assert "generalist_lm/requirements.txt" in start
     assert "generalist_lm/requirements.txt" not in requirements
     assert "control_plane.model_gateway" in start
@@ -805,4 +805,79 @@ def test_transformers_backend_device_map_does_not_global_to(tmp_path: Path, monk
     assert seen["max_memory"] == {"cpu": "4GiB"}
     assert seen["torch_dtype"] == "auto"
     assert backend.generate("hello", max_new_tokens=1) == "OK"
+
+def test_gpt_oss_backend_uses_harmony_and_returns_only_final(tmp_path: Path, monkeypatch):
+    torch = pytest.importorskip("torch")
+    transformers = pytest.importorskip("transformers")
+    harmony = pytest.importorskip("openai_harmony")
+    pytest.importorskip("accelerate")
+
+    from generalist_lm.harmony_adapter import harmony_stop_tokens
+    from generalist_lm.hf_backend import LocalTransformersBackend
+
+    model_dir = tmp_path / "gpt-oss"
+    model_dir.mkdir()
+    seen = {}
+
+    encoding = harmony.load_harmony_encoding(harmony.HarmonyEncodingName.HARMONY_GPT_OSS)
+    completion = encoding.encode(
+        "<|channel|>analysis<|message|>hidden thought<|end|>"
+        "<|start|>assistant<|channel|>final<|message|>visible answer",
+        allowed_special="all",
+    )
+
+    class FakeTokenizer:
+        pad_token_id = 0
+        eos_token_id = 0
+
+        def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=True):
+            seen["messages"] = messages
+            seen["template_tokenize"] = tokenize
+            seen["add_generation_prompt"] = add_generation_prompt
+            return "<|start|>user<|message|>hello<|end|><|start|>assistant"
+
+        def __call__(self, prompt, return_tensors="pt", add_special_tokens=True):
+            seen["prompt"] = prompt
+            seen["add_special_tokens"] = add_special_tokens
+            return {"input_ids": torch.tensor([[101, 102]], dtype=torch.long)}
+
+        def decode(self, tokens, skip_special_tokens=True):
+            return "generic-decode-must-not-be-used"
+
+    class FakeConfig:
+        model_type = "gpt_oss"
+
+    class FakeModel:
+        config = FakeConfig()
+        hf_device_map = {"model": "cpu"}
+
+        def eval(self):
+            return self
+
+        def get_input_embeddings(self):
+            class Embeddings:
+                weight = torch.zeros(1)
+            return Embeddings()
+
+        def generate(self, **kwargs):
+            seen["generation_kwargs"] = kwargs
+            prefix = kwargs["input_ids"][0].detach().cpu().tolist()
+            return torch.tensor([prefix + completion], dtype=torch.long)
+
+    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", lambda *a, **k: FakeTokenizer())
+    monkeypatch.setattr(transformers.AutoModelForCausalLM, "from_pretrained", lambda *a, **k: FakeModel())
+
+    backend = LocalTransformersBackend(
+        model_dir,
+        device="cpu",
+        device_map="auto",
+        torch_dtype="auto",
+    )
+    answer = backend.chat([{"role": "user", "content": "hello"}], max_new_tokens=64)
+    assert answer == "visible answer"
+    assert "hidden thought" not in answer
+    assert seen["template_tokenize"] is False
+    assert seen["add_generation_prompt"] is True
+    assert seen["add_special_tokens"] is False
+    assert sorted(seen["generation_kwargs"]["eos_token_id"]) == harmony_stop_tokens()
 

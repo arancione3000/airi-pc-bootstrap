@@ -132,7 +132,7 @@ def test_foundation_qualification_is_bound_to_model_manifest_and_suite(tmp_path:
 
     result = qualification.qualify_foundation_model(model, minimum_score=90.0)
     assert result["qualified"] is True
-    assert result["foundation_qualification_version"] == 3
+    assert result["foundation_qualification_version"] == 4
     assert result["manifest_digest"] == foundation_manifest_digest(model)
     assert result["suite_digest"] == foundation_suite_digest()
     assert qualification.foundation_qualification_status(model)["qualified"] is True
@@ -295,7 +295,7 @@ def test_foundation_minimum_score_cannot_be_weakened(tmp_path: Path):
         )
 
 
-def test_foundation_attestation_v3_requires_inference_profile(tmp_path: Path, monkeypatch):
+def test_foundation_attestation_v4_requires_inference_profile(tmp_path: Path, monkeypatch):
     from generalist_lm import qualification
 
     _stub_transformers_preflight(monkeypatch)
@@ -323,7 +323,7 @@ def test_foundation_attestation_v3_requires_inference_profile(tmp_path: Path, mo
         },
     )
     result = qualification.qualify_foundation_model(model)
-    assert result["foundation_qualification_version"] == 3
+    assert result["foundation_qualification_version"] == 4
     assert result["inference_profile"] == {"torch_dtype": "auto"}
     assert qualification.foundation_qualification_status(model)["qualified"] is True
 
@@ -463,7 +463,7 @@ def test_foundation_preflight_accepts_metadata_only_candidate(tmp_path: Path, mo
 
     result = foundation_preflight(model, probe_hardware=False)
     assert result["ok"] is True
-    assert result["preflight_version"] == 1
+    assert result["preflight_version"] == 2
     assert result["config"]["model_type"] == "gpt2"
     assert result["config"]["context_limit"] == 4096
     assert result["weights"]["weight_files"] == ["model.safetensors"]
@@ -589,9 +589,7 @@ def test_foundation_preflight_rejects_manifest_quantization_drift(tmp_path: Path
     assert "manifest_quantization_mismatch" in result["blockers"]
 
 
-def test_foundation_preflight_flags_gpt_oss_harmony_requirement(tmp_path: Path, monkeypatch):
-    from generalist_lm.foundation_probe import foundation_preflight
-
+def _fake_gpt_oss_model(tmp_path: Path) -> Path:
     model = _fake_model(tmp_path / "gpt-oss")
     config = {
         "model_type": "gpt_oss",
@@ -615,14 +613,58 @@ def test_foundation_preflight_flags_gpt_oss_harmony_requirement(tmp_path: Path, 
             quantization="mxfp4",
         ),
     )
+    return model
+
+
+def test_foundation_preflight_blocks_gpt_oss_without_pinned_harmony(tmp_path: Path, monkeypatch):
+    from generalist_lm import foundation_probe
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_gpt_oss_model(tmp_path)
     _stub_transformers_preflight(monkeypatch)
+    monkeypatch.setattr(
+        foundation_probe,
+        "harmony_runtime_status",
+        lambda: {
+            "available": False,
+            "installed": False,
+            "version": None,
+            "required_version": "0.0.8",
+            "reason": "missing",
+        },
+    )
 
     result = foundation_preflight(model, probe_hardware=False)
     assert result["ok"] is False
     assert result["protocol_requirements"] == ["harmony"]
+    assert "gpt_oss_harmony_runtime_unavailable" in result["blockers"]
+    assert result["special_runtime"]["harmony"]["available"] is False
+
+
+def test_foundation_preflight_accepts_gpt_oss_with_pinned_harmony(tmp_path: Path, monkeypatch):
+    from generalist_lm import foundation_probe
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_gpt_oss_model(tmp_path)
+    _stub_transformers_preflight(monkeypatch)
+    monkeypatch.setattr(
+        foundation_probe,
+        "harmony_runtime_status",
+        lambda: {
+            "available": True,
+            "installed": True,
+            "version": "0.0.8",
+            "required_version": "0.0.8",
+            "reason": "ok",
+        },
+    )
+
+    result = foundation_preflight(model, probe_hardware=False)
+    assert result["ok"] is True
+    assert result["protocol_requirements"] == ["harmony"]
     assert result["chat_template"]["available"] is True
-    assert "gpt_oss_harmony_adapter_required" in result["blockers"]
     assert result["quantization"]["detected"] == "mxfp4"
+    assert result["special_runtime"]["harmony"]["available"] is True
     assert "mxfp4" in result["special_runtime"]
 
 
@@ -678,17 +720,29 @@ def test_foundation_qualification_refuses_preflight_blocker_before_backend(tmp_p
         ),
     )
     _stub_transformers_preflight(monkeypatch)
+    from generalist_lm import foundation_probe
+    monkeypatch.setattr(
+        foundation_probe,
+        "harmony_runtime_status",
+        lambda: {
+            "available": False,
+            "installed": False,
+            "version": None,
+            "required_version": "0.0.8",
+            "reason": "missing",
+        },
+    )
 
     class Backend:
         def __init__(self, *args, **kwargs):
             raise AssertionError("blocked preflight must prevent backend construction")
 
     monkeypatch.setattr("generalist_lm.hf_backend.LocalTransformersBackend", Backend)
-    with pytest.raises(ValueError, match="gpt_oss_harmony_adapter_required"):
+    with pytest.raises(ValueError, match="gpt_oss_harmony_runtime_unavailable"):
         qualification.qualify_foundation_model(model)
 
 
-def test_foundation_attestation_v3_requires_preflight_record(tmp_path: Path, monkeypatch):
+def test_foundation_attestation_v4_requires_preflight_record(tmp_path: Path, monkeypatch):
     from generalist_lm import qualification
 
     model = _fake_model(tmp_path / "model")
@@ -715,7 +769,7 @@ def test_foundation_attestation_v3_requires_preflight_record(tmp_path: Path, mon
         },
     )
     result = qualification.qualify_foundation_model(model)
-    assert result["foundation_qualification_version"] == 3
+    assert result["foundation_qualification_version"] == 4
     assert result["preflight"]["ok"] is True
     assert qualification.foundation_qualification_status(model)["qualified"] is True
 
@@ -740,4 +794,45 @@ def test_cli_exposes_foundation_preflight_command(tmp_path: Path):
     assert args.cmd == "foundation-preflight"
     assert args.no_hardware is True
     assert args.max_memory_json == '{"0":"12GiB","cpu":"24GiB"}'
+
+def test_harmony_runtime_is_pinned():
+    pytest.importorskip("openai_harmony")
+    from generalist_lm.harmony_adapter import harmony_runtime_status
+
+    status = harmony_runtime_status()
+    assert status["available"] is True
+    assert status["version"] == "0.0.8"
+    assert status["required_version"] == "0.0.8"
+
+
+def test_harmony_adapter_parses_official_final_channel():
+    harmony = pytest.importorskip("openai_harmony")
+    from generalist_lm.harmony_adapter import parse_harmony_assistant_tokens
+
+    encoding = harmony.load_harmony_encoding(harmony.HarmonyEncodingName.HARMONY_GPT_OSS)
+    tokens = encoding.encode(
+        "<|channel|>final<|message|>Hello from AIRI",
+        allowed_special="all",
+    )
+    parsed = parse_harmony_assistant_tokens(tokens)
+    assert parsed["ok"] is True
+    assert parsed["kind"] == "final"
+    assert parsed["final_text"] == "Hello from AIRI"
+    assert all(row["channel"] != "analysis" or row["text"] != parsed["final_text"] for row in parsed["messages"])
+
+
+def test_harmony_adapter_does_not_expose_analysis_as_final():
+    harmony = pytest.importorskip("openai_harmony")
+    from generalist_lm.harmony_adapter import parse_harmony_assistant_tokens
+
+    encoding = harmony.load_harmony_encoding(harmony.HarmonyEncodingName.HARMONY_GPT_OSS)
+    tokens = encoding.encode(
+        "<|channel|>analysis<|message|>private reasoning<|end|>"
+        "<|start|>assistant<|channel|>final<|message|>public answer",
+        allowed_special="all",
+    )
+    parsed = parse_harmony_assistant_tokens(tokens)
+    assert parsed["ok"] is True
+    assert parsed["final_text"] == "public answer"
+    assert "private reasoning" not in parsed["final_text"]
 

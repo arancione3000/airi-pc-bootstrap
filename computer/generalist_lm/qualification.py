@@ -22,7 +22,7 @@ from .foundation_probe import FOUNDATION_PREFLIGHT_VERSION, foundation_preflight
 from .runtime import GeneralistRuntime
 
 QUALIFICATION_VERSION = 2
-FOUNDATION_QUALIFICATION_VERSION = 3
+FOUNDATION_QUALIFICATION_VERSION = 4
 FOUNDATION_MINIMUM_SCORE = 90.0
 _DIGEST_CACHE: dict[tuple, str] = {}
 
@@ -311,7 +311,7 @@ def qualify_foundation_model(
     result = {
         "foundation_qualification_version": FOUNDATION_QUALIFICATION_VERSION,
         "qualification_version": QUALIFICATION_VERSION,
-        "attested_by": "airi-generalist-foundation-qualification-v3",
+        "attested_by": "airi-generalist-foundation-qualification-v4",
         "backend_type": "transformers-foundation",
         "model_digest": digest,
         "manifest_digest": manifest_digest,
@@ -419,7 +419,7 @@ def foundation_qualification_status(
 
         integrity_ok = bool(
             value.get("backend_type") == "transformers-foundation"
-            and value.get("attested_by") == "airi-generalist-foundation-qualification-v3"
+            and value.get("attested_by") == "airi-generalist-foundation-qualification-v4"
             and int(value.get("qualification_version", 0)) == QUALIFICATION_VERSION
             and int(value.get("foundation_qualification_version", 0)) == FOUNDATION_QUALIFICATION_VERSION
             and int(value.get("suite_version", 0)) == FOUNDATION_SUITE_VERSION

@@ -136,6 +136,15 @@ class LocalTransformersBackend:
             self.model.to(device)
         self.model.eval()
 
+        self.model_type = str(
+            getattr(getattr(self.model, "config", None), "model_type", "") or ""
+        ).strip().lower()
+        if self.model_type == "gpt_oss":
+            from .harmony_adapter import harmony_runtime_status
+            harmony = harmony_runtime_status()
+            if not harmony.get("available"):
+                raise RuntimeError(str(harmony.get("reason") or "Harmony runtime unavailable"))
+
         self.device = str(device)
         self.device_map = checked_device_map
         self.input_device = self._resolve_input_device(torch, fallback=device)
@@ -168,24 +177,82 @@ class LocalTransformersBackend:
                     return torch_module.device(target)
         return torch_module.device(fallback)
 
-    def generate(self, prompt: str, *, max_new_tokens: int = 192) -> str:
+    def _generate_encoded(
+        self,
+        encoded: dict[str, Any],
+        *,
+        max_new_tokens: int,
+        eos_token_id: int | list[int] | None = None,
+    ) -> list[int]:
         import torch
-        encoded = self.tokenizer(str(prompt), return_tensors="pt")
-        encoded = {k: v.to(self.input_device) for k, v in encoded.items()}
+
+        placed = {key: value.to(self.input_device) for key, value in encoded.items()}
+        kwargs: dict[str, Any] = {
+            **placed,
+            "max_new_tokens": int(max_new_tokens),
+            "do_sample": False,
+        }
+        pad_token_id = self.tokenizer.pad_token_id
+        if pad_token_id is None:
+            pad_token_id = self.tokenizer.eos_token_id
+        if pad_token_id is not None:
+            kwargs["pad_token_id"] = pad_token_id
+        if eos_token_id is not None:
+            kwargs["eos_token_id"] = eos_token_id
+
         with torch.no_grad():
-            pad_token_id = self.tokenizer.pad_token_id
-            if pad_token_id is None:
-                pad_token_id = self.tokenizer.eos_token_id
-            out = self.model.generate(
-                **encoded,
-                max_new_tokens=int(max_new_tokens),
-                do_sample=False,
-                pad_token_id=pad_token_id,
-            )
-        generated = out[0, encoded["input_ids"].shape[1]:]
+            out = self.model.generate(**kwargs)
+        generated = out[0, placed["input_ids"].shape[1]:]
+        return [int(token) for token in generated.detach().cpu().tolist()]
+
+    def generate(self, prompt: str, *, max_new_tokens: int = 192) -> str:
+        encoded = self.tokenizer(str(prompt), return_tensors="pt")
+        generated = self._generate_encoded(
+            dict(encoded),
+            max_new_tokens=max_new_tokens,
+        )
         return self.tokenizer.decode(generated, skip_special_tokens=True)
 
+    def _chat_harmony(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        max_new_tokens: int,
+    ) -> str:
+        from .harmony_adapter import harmony_stop_tokens, parse_harmony_assistant_tokens
+
+        if not hasattr(self.tokenizer, "apply_chat_template"):
+            raise RuntimeError("gpt-oss requires a Transformers Harmony chat template")
+        try:
+            prompt = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError("gpt-oss Harmony chat template could not render messages") from exc
+        if not isinstance(prompt, str) or not prompt:
+            raise RuntimeError("gpt-oss Harmony chat template returned an empty prompt")
+
+        encoded = self.tokenizer(
+            prompt,
+            return_tensors="pt",
+            add_special_tokens=False,
+        )
+        generated = self._generate_encoded(
+            dict(encoded),
+            max_new_tokens=max_new_tokens,
+            eos_token_id=harmony_stop_tokens(),
+        )
+        parsed = parse_harmony_assistant_tokens(generated)
+        if not parsed.get("ok"):
+            raise RuntimeError(str(parsed.get("reason") or "Harmony completion is not a final answer"))
+        return str(parsed.get("final_text") or "")
+
     def chat(self, messages: list[dict[str, str]], *, max_new_tokens: int = 256) -> str:
+        if self.model_type == "gpt_oss":
+            return self._chat_harmony(messages, max_new_tokens=max_new_tokens)
+
         prompt = None
         if hasattr(self.tokenizer, "apply_chat_template"):
             try:

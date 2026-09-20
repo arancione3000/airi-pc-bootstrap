@@ -103,7 +103,7 @@ if [ -f "$ROOT/computer/requirements.txt" ]; then
   fi
 fi
 if [ "${AIRI_GENERALIST_ENABLE:-0}" = "1" ]; then
-  if ! "$PYTHON_BIN" -c 'import torch,transformers,accelerate' >/dev/null 2>&1; then
+  if ! "$PYTHON_BIN" -c 'import torch,transformers,accelerate,openai_harmony' >/dev/null 2>&1; then
     command -v pip3 >/dev/null 2>&1 || { echo 'AIRI_START_NO_PIP3' >&2; exit 2; }
     SITE_PACKAGES="$($PYTHON_BIN -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
     pip3 install --disable-pip-version-check --quiet --target "$SITE_PACKAGES" -r "$ROOT/computer/generalist_lm/requirements.txt"
