@@ -391,9 +391,16 @@ def _transfer_compatible_weights(source_model, target_model) -> dict[str, Any]:
         copied_params += int(tensor.numel())
 
     target_model.load_state_dict(copied, strict=False)
+    source_unmatched = sorted(
+        name
+        for name, tensor in source.items()
+        if name not in target or tuple(target[name].shape) != tuple(tensor.shape)
+    )
     return {
         "copied_tensors": len(copied),
+        "source_tensors": len(source),
         "target_tensors": len(target),
+        "source_unmatched_tensors": source_unmatched,
         "copied_parameters": copied_params,
         "target_parameters": total_params,
         "parameter_fraction": (
@@ -419,7 +426,9 @@ def _train_genome(
         if source_model is not None
         else {
             "copied_tensors": 0,
+            "source_tensors": 0,
             "target_tensors": len(model.state_dict()),
+            "source_unmatched_tensors": [],
             "copied_parameters": 0,
             "target_parameters": parameter_count(model),
             "parameter_fraction": 0.0,
