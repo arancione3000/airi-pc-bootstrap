@@ -15,6 +15,7 @@ from generalist_lm.runtime import GeneralistRuntime
 
 
 def make_qualified_checkpoint(path: Path) -> Path:
+    pytest.importorskip("torch")
     cfg = GeneralistLMConfig(
         vocab_size=264,
         context_length=64,
@@ -159,3 +160,15 @@ def test_model_change_parser_rejects_escape_and_sensitive_paths(tmp_path: Path, 
     )
     with pytest.raises(RuntimeError, match="Unsafe model change path"):
         local_agent.ask_local_model_changes("edit", "context", root=tmp_path / "repo")
+
+
+def test_provider_reports_missing_torch_as_unavailable(tmp_path: Path, monkeypatch):
+    from control_plane import generalist_provider
+
+    make_qualified_checkpoint(tmp_path)
+    monkeypatch.setenv("AIRI_GENERALIST_STATE", str(tmp_path))
+    monkeypatch.setenv("AIRI_GENERALIST_ENABLE", "1")
+    monkeypatch.setattr(generalist_provider.importlib.util, "find_spec", lambda name: None if name == "torch" else __import__("importlib").util.find_spec(name))
+    row = generalist_provider.status()
+    assert row["available"] is False
+    assert row["runtime_dependency"] is False
