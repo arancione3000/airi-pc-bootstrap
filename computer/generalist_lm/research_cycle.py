@@ -12,7 +12,7 @@ from typing import Any
 from .curriculum import ResearchRow, train_rows, validation_rows
 from .evolution import GeneralistGenome, generate_challengers
 from .mathesis_bridge import mathesis_signals
-from .model import CausalTransformerLM, parameter_count
+from .model import CausalTransformerLM, estimate_parameter_count, parameter_count
 from .runtime import GeneralistRuntime
 from .tokenizer import ByteTokenizer
 from .training import loss_on_examples, train_sft
@@ -157,6 +157,26 @@ def _training_rows_for_genome(genome: GeneralistGenome) -> list[ResearchRow]:
     return base + extra
 
 
+def _research_budget_reason(
+    genome: GeneralistGenome,
+    *,
+    max_params: int,
+    max_context: int,
+    max_width: int,
+    max_layers: int,
+) -> str | None:
+    if genome.context_length > max_context:
+        return f"context_length {genome.context_length} exceeds research max {max_context}"
+    if genome.d_model > max_width:
+        return f"d_model {genome.d_model} exceeds research max {max_width}"
+    if genome.n_layers > max_layers:
+        return f"n_layers {genome.n_layers} exceeds research max {max_layers}"
+    estimated = estimate_parameter_count(genome.model_config())
+    if estimated > max_params:
+        return f"estimated parameters {estimated} exceed research max {max_params}"
+    return None
+
+
 def _train_genome(
     genome: GeneralistGenome,
     *,
@@ -194,6 +214,10 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
     challenger_count = max(1, min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "2")), 6))
     minimum_loss_gain = max(0.0, float(os.environ.get("AIRI_GENERALIST_RESEARCH_MIN_LOSS_GAIN", "0.02")))
     max_domain_regression = max(0.0, float(os.environ.get("AIRI_GENERALIST_RESEARCH_MAX_DOMAIN_REGRESSION", "0.10")))
+    max_params = max(100_000, int(os.environ.get("AIRI_GENERALIST_RESEARCH_MAX_PARAMS", "5000000")))
+    max_context = max(64, int(os.environ.get("AIRI_GENERALIST_RESEARCH_MAX_CONTEXT", "512")))
+    max_width = max(32, int(os.environ.get("AIRI_GENERALIST_RESEARCH_MAX_WIDTH", "256")))
+    max_layers = max(1, int(os.environ.get("AIRI_GENERALIST_RESEARCH_MAX_LAYERS", "6")))
 
     previous = {}
     try:
@@ -232,6 +256,21 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
     winner: tuple[GeneralistGenome, GeneralistRuntime, dict[str, Any]] | None = None
 
     for index, genome in enumerate(challengers):
+        budget_reason = _research_budget_reason(
+            genome,
+            max_params=max_params,
+            max_context=max_context,
+            max_width=max_width,
+            max_layers=max_layers,
+        )
+        if budget_reason:
+            trials.append({
+                "genome": genome.to_dict(),
+                "report": None,
+                "eligible": False,
+                "reason": f"research_resource_budget:{budget_reason}",
+            })
+            continue
         runtime, report = _train_genome(
             genome,
             steps=steps,
@@ -273,6 +312,12 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             "production_qualification_separate": True,
             "minimum_loss_gain": minimum_loss_gain,
             "max_domain_regression": max_domain_regression,
+            "research_resource_budget": {
+                "max_params": max_params,
+                "max_context": max_context,
+                "max_width": max_width,
+                "max_layers": max_layers,
+            },
         },
         "updated_at": time.time(),
     }
