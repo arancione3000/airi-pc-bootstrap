@@ -92,6 +92,76 @@ def _teacher_forced_accuracy(model, tokenizer: ByteTokenizer, rows: list[Researc
     }
 
 
+def _generation_probe(
+    model,
+    tokenizer: ByteTokenizer,
+    rows: list[ResearchRow],
+    *,
+    device: str,
+) -> dict[str, Any]:
+    """Probe real autoregressive decoding on held-out examples.
+
+    One deterministic row per domain keeps the research loop bounded while
+    ensuring teacher-forced loss cannot be the only promotion signal.
+    """
+    selected: list[ResearchRow] = []
+    seen_domains: set[str] = set()
+    for row in rows:
+        if row.domain in seen_domains:
+            continue
+        seen_domains.add(row.domain)
+        selected.append(row)
+
+    runtime = GeneralistRuntime(model, model.config, tokenizer, device=device)
+    solved: list[str] = []
+    domain_accuracy: dict[str, float] = {}
+    outputs: list[dict[str, Any]] = []
+
+    for row in selected:
+        target = str(row.messages[-1]["content"]).strip()
+        prompt_messages = row.messages[:-1]
+        max_new_tokens = min(
+            96,
+            max(4, len(tokenizer.encode(target, eos=True)) + 2),
+        )
+        try:
+            output = runtime.chat(
+                prompt_messages,
+                max_new_tokens=max_new_tokens,
+                temperature=0.0,
+            ).strip()
+            ok = output == target
+        except Exception as exc:
+            output = f"<generation-error:{type(exc).__name__}>"
+            ok = False
+
+        prompt = str(row.messages[0]["content"])
+        digest = hashlib.sha256(
+            f"{row.domain}\0{prompt}".encode("utf-8")
+        ).hexdigest()[:16]
+        if ok:
+            solved.append(f"{row.domain}:{digest}")
+        domain_accuracy[row.domain] = 1.0 if ok else 0.0
+        outputs.append({
+            "domain": row.domain,
+            "item": f"{row.domain}:{digest}",
+            "ok": ok,
+            "target": target[:500],
+            "output": output[:500],
+        })
+
+    accuracy = (
+        sum(1 for row in outputs if row["ok"]) / len(outputs)
+        if outputs else 0.0
+    )
+    return {
+        "generation_exact_accuracy": float(accuracy),
+        "domain_generation_accuracy": domain_accuracy,
+        "generated_solved_items": sorted(solved),
+        "generation_probe": outputs,
+    }
+
+
 def _grouped_validation(model, tokenizer: ByteTokenizer, rows: list[ResearchRow], *, device: str = "cpu") -> dict[str, Any]:
     all_examples = [row.sft() for row in rows]
     overall = loss_on_examples(model, tokenizer, all_examples, device=device)
@@ -100,10 +170,12 @@ def _grouped_validation(model, tokenizer: ByteTokenizer, rows: list[ResearchRow]
         examples = [row.sft() for row in rows if row.domain == domain]
         domains[domain] = loss_on_examples(model, tokenizer, examples, device=device)
     accuracy = _teacher_forced_accuracy(model, tokenizer, rows, device=device)
+    generation = _generation_probe(model, tokenizer, rows, device=device)
     return {
         "loss": float(overall),
         "domain_loss": domains,
         **accuracy,
+        **generation,
         "finite": bool(math.isfinite(overall) and all(math.isfinite(v) for v in domains.values())),
     }
 
@@ -161,7 +233,26 @@ def _research_eligible(
     if forgotten:
         return False, f"candidate forgot {len(forgotten)} previously solved held-out items"
 
-    return True, "held-out multi-domain loss and anti-forgetting gates passed"
+    old_generation = float(champion.get("generation_exact_accuracy", 0.0))
+    new_generation = float(candidate.get("generation_exact_accuracy", 0.0))
+    if new_generation + 1e-12 < old_generation:
+        return False, "candidate regressed in held-out autoregressive generation"
+
+    old_generation_domains = champion.get("domain_generation_accuracy") or {}
+    new_generation_domains = candidate.get("domain_generation_accuracy") or {}
+    for domain, old_value in old_generation_domains.items():
+        if domain not in new_generation_domains:
+            return False, f"candidate lost generation domain: {domain}"
+        if float(new_generation_domains[domain]) + 1e-12 < float(old_value):
+            return False, f"candidate regressed in autoregressive generation domain: {domain}"
+
+    generated_remembered = set(champion.get("generated_solved_items") or [])
+    generated_retained = set(candidate.get("generated_solved_items") or [])
+    generated_forgotten = sorted(generated_remembered - generated_retained)
+    if generated_forgotten:
+        return False, f"candidate forgot {len(generated_forgotten)} generated held-out items"
+
+    return True, "held-out multi-domain loss, generation, and anti-forgetting gates passed"
 
 
 def _weaknesses(report: dict[str, Any]) -> list[str]:
