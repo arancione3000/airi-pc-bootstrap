@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import threading
 from pathlib import Path
@@ -77,12 +78,24 @@ def status() -> dict[str, Any]:
 
     root = state_dir()
     qualification = qualification_status(root)
+    config_path = root / "config.json"
+    tokenizer_version = None
+    try:
+        raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+        if isinstance(raw_config, dict):
+            tokenizer_version = str(raw_config.get("tokenizer_version", "byte-v1"))
+    except Exception:
+        tokenizer_version = None
     files = {
-        "config": (root / "config.json").exists(),
+        "config": config_path.exists(),
         "weights": (root / "model.pt").exists(),
         "metadata": (root / "metadata.json").exists(),
         "benchmark": (root / "benchmark.json").exists(),
     }
+    if tokenizer_version == "bpe-v1":
+        files["tokenizer"] = (root / "tokenizer.json").exists()
+    elif tokenizer_version not in {None, "byte-v1"}:
+        files["tokenizer_version_supported"] = False
     checkpoint_complete = all(files.values())
     qualified = bool(qualification.get("qualified"))
     available = bool(enabled() and checkpoint_complete and qualified and torch_ready)
