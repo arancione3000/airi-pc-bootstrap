@@ -125,6 +125,39 @@ def test_bpe_generalist_checkpoint_roundtrip(tmp_path: Path):
     )
 
 
+def test_bpe_checkpoint_rejects_metadata_digest_mismatch(tmp_path: Path):
+    pytest.importorskip("torch")
+    tokenizer = train_bpe(training_texts(), vocab_size=320)
+    config = GeneralistLMConfig(
+        vocab_size=tokenizer.vocab_size,
+        tokenizer_version="bpe-v1",
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+    ).validate()
+    runtime = GeneralistRuntime.fresh(config, tokenizer=tokenizer)
+    metadata = runtime.save_checkpoint(
+        tmp_path,
+        metadata={
+            "tokenizer_version": "byte-v1",
+            "tokenizer_digest": "0" * 64,
+            "parameters": -1,
+        },
+    )
+
+    assert metadata["tokenizer_version"] == "bpe-v1"
+    assert metadata["tokenizer_digest"] == tokenizer.digest
+    assert metadata["parameters"] == parameter_count(runtime.model)
+
+    raw = json.loads((tmp_path / "metadata.json").read_text(encoding="utf-8"))
+    raw["tokenizer_digest"] = "0" * 64
+    (tmp_path / "metadata.json").write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="tokenizer digest does not match metadata"):
+        GeneralistRuntime.from_checkpoint(tmp_path)
+
+
 def test_bpe_checkpoint_requires_tokenizer_artifact(tmp_path: Path):
     pytest.importorskip("torch")
     tokenizer = train_bpe(training_texts(), vocab_size=320)
