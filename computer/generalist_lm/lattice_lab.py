@@ -134,8 +134,6 @@ def _evaluate(
     model.eval()
     total = 0.0
     rows_seen = 0
-    domain_total: dict[str, float] = {}
-    domain_rows: dict[str, int] = {}
     stats_accum: dict[str, float] = {}
     stats_count = 0
 
@@ -150,9 +148,6 @@ def _evaluate(
             value = float(loss.detach().float().cpu())
             total += value * len(rows)
             rows_seen += len(rows)
-            for row in rows:
-                domain_total[row.domain] = domain_total.get(row.domain, 0.0) + value
-                domain_rows[row.domain] = domain_rows.get(row.domain, 0) + 1
             stats = output.get("stats")
             if isinstance(stats, dict):
                 for key in ("mean_surprise", "mean_reasoning_steps"):
@@ -160,13 +155,31 @@ def _evaluate(
                         stats_accum[key] = stats_accum.get(key, 0.0) + float(stats[key])
                 stats_count += 1
 
+        # Recompute domain losses on domain-pure mini-batches. This prevents a
+        # mixed batch mean from hiding a regression in one protected domain.
+        domain_loss: dict[str, float] = {}
+        for domain in sorted({row.domain for row in selected}):
+            rows_for_domain = [row for row in selected if row.domain == domain]
+            domain_total = 0.0
+            domain_seen = 0
+            for start in range(0, len(rows_for_domain), batch_size):
+                rows = rows_for_domain[start:start + batch_size]
+                ids, labels = _tensor_batch(torch, rows, device=device)
+                output = model(ids, labels=labels)
+                loss = output["loss"]
+                if loss is None or not torch.isfinite(loss):
+                    raise RuntimeError(
+                        f"non-finite Lattice Lab domain loss: {domain}"
+                    )
+                value = float(loss.detach().float().cpu())
+                domain_total += value * len(rows)
+                domain_seen += len(rows)
+            domain_loss[domain] = domain_total / max(1, domain_seen)
+
     result = {
         "loss": total / max(1, rows_seen),
         "blocks": rows_seen,
-        "domain_loss": {
-            domain: domain_total[domain] / max(1, domain_rows[domain])
-            for domain in sorted(domain_total)
-        },
+        "domain_loss": domain_loss,
     }
     if stats_count:
         result["model_stats"] = {
