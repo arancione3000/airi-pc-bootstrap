@@ -136,6 +136,23 @@ def _save_champion(root: Path, genome: GeneralistGenome, runtime: GeneralistRunt
     _atomic_json(genome_path, genome.to_dict())
 
 
+def _training_rows_for_genome(genome: GeneralistGenome) -> list[ResearchRow]:
+    """Turn strategy genes into real curriculum weighting, never metadata-only."""
+    base = list(train_rows())
+    extra: list[ResearchRow] = []
+    if genome.code_adapter:
+        extra.extend(row for row in base if row.domain == "coding")
+    if genome.data_adapter:
+        extra.extend(row for row in base if row.domain == "data")
+    if genome.retrieval_adapter:
+        extra.extend(row for row in base if row.domain in {"tools", "structured"})
+    if genome.symbolic_adapter:
+        extra.extend(row for row in base if row.domain == "reasoning")
+    for _ in range(max(0, int(genome.reasoning_depth) - 1)):
+        extra.extend(row for row in base if row.domain == "reasoning")
+    return base + extra
+
+
 def _train_genome(
     genome: GeneralistGenome,
     *,
@@ -148,7 +165,7 @@ def _train_genome(
     report = train_sft(
         model,
         tokenizer,
-        [row.sft() for row in train_rows()],
+        [row.sft() for row in _training_rows_for_genome(genome)],
         steps=steps,
         batch_size=4,
         learning_rate=genome.learning_rate,
