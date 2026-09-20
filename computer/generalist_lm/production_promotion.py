@@ -24,13 +24,25 @@ def _append_history(path: Path, payload: dict[str, Any]) -> None:
         handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
 
 
-def _copy_checkpoint(source: Path, target: Path) -> None:
+def _copy_checkpoint(source: Path, target: Path, *, source_digest: str) -> None:
     target.mkdir(parents=True, exist_ok=True)
     for name in ("config.json", "model.pt", "metadata.json"):
         src = source / name
         if not src.exists() or not src.is_file():
             raise FileNotFoundError(f"research checkpoint is missing {name}")
         shutil.copy2(src, target / name)
+
+    metadata_path = target / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if not isinstance(metadata, dict):
+        raise ValueError("research checkpoint metadata must be a JSON object")
+    metadata["source_research_checkpoint_digest"] = source_digest
+    metadata["source_role"] = metadata.get("role")
+    metadata["role"] = "production_champion"
+    metadata_path.write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
 
 def attempt_production_promotion(
@@ -90,7 +102,7 @@ def attempt_production_promotion(
     backup = parent / ".production-backup"
     shutil.rmtree(candidate, ignore_errors=True)
     shutil.rmtree(backup, ignore_errors=True)
-    _copy_checkpoint(source, candidate)
+    _copy_checkpoint(source, candidate, source_digest=source_digest)
 
     qualification = qualify_checkpoint(candidate, minimum_score=minimum_score)
     candidate_report = qualification.get("report") or {}
