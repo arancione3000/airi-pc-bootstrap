@@ -16,6 +16,7 @@ from .native_foundation import (
     native_parameter_count,
     native_scale_profile,
 )
+from .native_acquisition import acquire_native_corpus
 from .native_data import (
     NATIVE_CORPUS_DOMAINS,
     audit_native_corpus,
@@ -126,6 +127,17 @@ def parser() -> argparse.ArgumentParser:
 
     nfs = sub.add_parser("native-foundation-status")
     nfs.add_argument("state")
+
+    nac = sub.add_parser(
+        "native-corpus-acquire",
+        help="download a pinned approved source catalog into an AIRI Native corpus",
+    )
+    nac.add_argument("catalog")
+    nac.add_argument("output")
+    nac.add_argument("--allowed-host", action="append")
+    nac.add_argument("--max-file-bytes", type=int, default=250_000_000)
+    nac.add_argument("--max-total-bytes", type=int, default=5_000_000_000)
+    nac.add_argument("--timeout-seconds", type=float, default=60.0)
 
     nca = sub.add_parser(
         "native-corpus-audit",
@@ -346,6 +358,16 @@ def main(argv=None) -> int:
 
     elif args.cmd == "native-foundation-status":
         result = native_checkpoint_status(args.state)
+
+    elif args.cmd == "native-corpus-acquire":
+        result = acquire_native_corpus(
+            args.catalog,
+            args.output,
+            allowed_hosts=args.allowed_host,
+            max_file_bytes=args.max_file_bytes,
+            max_total_bytes=args.max_total_bytes,
+            timeout_seconds=args.timeout_seconds,
+        )
 
     elif args.cmd == "native-corpus-audit":
         corpus = load_native_corpus(
