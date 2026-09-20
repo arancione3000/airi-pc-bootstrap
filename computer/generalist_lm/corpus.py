@@ -26,6 +26,8 @@ _BLOCKED_BASENAMES = {
 }
 _PROTECTED_PATHS = {
     "computer/generalist_lm/benchmarks.py",
+    "computer/generalist_lm/foundation.py",
+    "computer/generalist_lm/foundation_benchmarks.py",
     "computer/generalist_lm/qualification.py",
     "computer/generalist_lm/production_promotion.py",
     "computer/generalist_lm/research_health.py",

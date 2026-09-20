@@ -6,9 +6,20 @@ from pathlib import Path
 from typing import Any
 
 from .benchmarks import qualification_suite, run_benchmark
+from .foundation import (
+    FOUNDATION_MANIFEST_FILENAME,
+    foundation_manifest_digest,
+    load_foundation_manifest,
+)
+from .foundation_benchmarks import (
+    FOUNDATION_SUITE_VERSION,
+    foundation_suite,
+    foundation_suite_digest,
+)
 from .runtime import GeneralistRuntime
 
 QUALIFICATION_VERSION = 2
+FOUNDATION_QUALIFICATION_VERSION = 1
 _DIGEST_CACHE: dict[tuple, str] = {}
 
 
@@ -126,12 +137,20 @@ def transformers_model_digest(model_dir: str | Path, *, exclude_path: str | Path
         path for path in sorted(root.rglob("*"))
         if path.is_file()
         and ".git" not in path.parts
-        and path.name not in {".airi-qualification.json"}
+        and path.name not in {".airi-qualification.json", ".airi-foundation-qualification.json"}
         and (excluded is None or path.resolve() != excluded)
     ]
     if not files:
         raise FileNotFoundError("transformers model directory is empty")
-    key = tuple((str(p.relative_to(root)), p.stat().st_size, p.stat().st_mtime_ns) for p in files)
+    key = tuple(
+        (
+            str(p.relative_to(root)),
+            p.stat().st_size,
+            p.stat().st_mtime_ns,
+            p.stat().st_ctime_ns,
+        )
+        for p in files
+    )
     cached = _TRANSFORMERS_DIGEST_CACHE.get(key)
     if cached:
         return cached
@@ -161,6 +180,10 @@ def qualify_transformers_model(
     from .hf_backend import LocalTransformersBackend
 
     root = Path(model_dir).expanduser().resolve()
+    if (root / FOUNDATION_MANIFEST_FILENAME).exists():
+        raise ValueError(
+            "foundation manifest present; use qualify_foundation_model instead of generic Transformers qualification"
+        )
     backend = LocalTransformersBackend(root, local_files_only=True)
     report = run_benchmark(backend, qualification_suite())
     target = Path(attestation_path or (root / ".airi-qualification.json"))
@@ -192,6 +215,12 @@ def transformers_qualification_status(
 ) -> dict[str, Any]:
     root = Path(model_dir).expanduser().resolve()
     target = Path(attestation_path or (root / ".airi-qualification.json"))
+    if (root / FOUNDATION_MANIFEST_FILENAME).exists():
+        return {
+            "qualified": False,
+            "integrity_ok": False,
+            "reason": "foundation_model_requires_foundation_qualification",
+        }
     try:
         value = json.loads(target.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
@@ -214,4 +243,96 @@ def transformers_qualification_status(
             "qualified": False,
             "integrity_ok": False,
             "reason": f"missing_or_invalid_transformers_attestation:{type(exc).__name__}",
+        }
+
+
+def qualify_foundation_model(
+    model_dir: str | Path,
+    *,
+    attestation_path: str | Path | None = None,
+    minimum_score: float = 90.0,
+) -> dict[str, Any]:
+    """Qualify a first-class open-weight foundation candidate.
+
+    Foundation candidates are stricter than the generic Transformers adapter:
+    they require a reviewed local manifest and the dedicated harder protected
+    suite. The attestation is bound to the exact model tree, manifest and suite.
+    """
+    from .hf_backend import LocalTransformersBackend
+
+    root = Path(model_dir).expanduser().resolve()
+    manifest = load_foundation_manifest(root)
+    manifest_digest = foundation_manifest_digest(root)
+    suite_digest = foundation_suite_digest()
+    backend = LocalTransformersBackend(root, local_files_only=True)
+    report = run_benchmark(backend, foundation_suite())
+    target = Path(attestation_path or (root / ".airi-foundation-qualification.json"))
+    digest = transformers_model_digest(root, exclude_path=target)
+    qualified = bool(
+        report.get("ok")
+        and float(report.get("score", 0.0)) >= float(minimum_score)
+        and not report.get("critical_failures")
+    )
+    result = {
+        "foundation_qualification_version": FOUNDATION_QUALIFICATION_VERSION,
+        "qualification_version": QUALIFICATION_VERSION,
+        "attested_by": "airi-generalist-foundation-qualification-v1",
+        "backend_type": "transformers-foundation",
+        "model_digest": digest,
+        "manifest_digest": manifest_digest,
+        "suite_version": FOUNDATION_SUITE_VERSION,
+        "suite_digest": suite_digest,
+        "qualified": qualified,
+        "minimum_score": float(minimum_score),
+        "manifest": manifest.to_dict(),
+        "report": report,
+        "policy": (
+            "reviewed local manifest + dedicated protected foundation suite; "
+            "local-files-only; trust_remote_code disabled; exact digests bound"
+        ),
+    }
+    target.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return result
+
+
+def foundation_qualification_status(
+    model_dir: str | Path,
+    *,
+    attestation_path: str | Path | None = None,
+) -> dict[str, Any]:
+    root = Path(model_dir).expanduser().resolve()
+    target = Path(attestation_path or (root / ".airi-foundation-qualification.json"))
+    try:
+        value = json.loads(target.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise ValueError("foundation qualification attestation must be an object")
+        current_model = transformers_model_digest(root, exclude_path=target)
+        current_manifest = foundation_manifest_digest(root)
+        current_suite = foundation_suite_digest()
+        integrity_ok = bool(
+            value.get("backend_type") == "transformers-foundation"
+            and value.get("attested_by") == "airi-generalist-foundation-qualification-v1"
+            and int(value.get("qualification_version", 0)) == QUALIFICATION_VERSION
+            and int(value.get("foundation_qualification_version", 0)) == FOUNDATION_QUALIFICATION_VERSION
+            and int(value.get("suite_version", 0)) == FOUNDATION_SUITE_VERSION
+            and value.get("model_digest") == current_model
+            and value.get("manifest_digest") == current_manifest
+            and value.get("suite_digest") == current_suite
+        )
+        return {
+            **value,
+            "integrity_ok": integrity_ok,
+            "qualified": bool(value.get("qualified") and integrity_ok),
+            "current_model_digest": current_model,
+            "current_manifest_digest": current_manifest,
+            "current_suite_digest": current_suite,
+        }
+    except Exception as exc:
+        return {
+            "qualified": False,
+            "integrity_ok": False,
+            "reason": f"missing_or_invalid_foundation_attestation:{type(exc).__name__}",
         }

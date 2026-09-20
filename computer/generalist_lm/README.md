@@ -316,3 +316,48 @@ This is deliberately stricter than merely supporting BPE checkpoint files:
 This prevents a tokenizer from appearing better merely because it emits fewer
 tokens while still allowing genuinely more efficient representations to
 compete.
+
+
+## Foundation Track v1
+
+The scalable path now has a first-class foundation-model track instead of
+treating every local Transformers directory as an anonymous backend.
+
+A foundation candidate must contain a reviewed `airi-foundation-manifest.json`
+that declares model identity, source revision, license, architecture, context
+window, parameter count/dtype/quantization and the complete protected capability
+surface. The manifest is intentionally fail-closed: foundation candidates are
+local-files-only and `trust_remote_code` is permanently disabled.
+
+Foundation qualification is separate from both the tiny research benchmark and
+generic Transformers qualification. It adds protected long-context and
+robustness domains and binds the attestation to three integrity identities:
+
+1. the exact local model-tree digest;
+2. the canonical foundation-manifest digest;
+3. the current protected foundation-suite digest/version.
+
+Changing weights, tokenizer/config files, provenance metadata or the protected
+suite invalidates the attestation automatically. The repository-grounded corpus
+explicitly excludes the foundation manifest/governance and foundation benchmark
+files, preventing the research learner from training on its own examination.
+
+Typical local workflow:
+
+```bash
+python -m generalist_lm.cli foundation-init /models/foundation \
+  --model-id reviewed/model \
+  --revision COMMIT_OR_REVIEWED_REVISION \
+  --license LICENSE_ID \
+  --architecture decoder-only \
+  --context-length 8192 \
+  --parameter-count 7000000000 \
+  --dtype bfloat16
+
+python -m generalist_lm.cli qualify-foundation /models/foundation
+python -m generalist_lm.cli foundation-status /models/foundation
+```
+
+This tranche does not automatically make a foundation candidate the active
+Airi-PC provider. Provider activation remains a later, separately verified
+promotion step.
