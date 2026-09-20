@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+import os
 from typing import Any, Iterable, Optional
 import time
 from coding import (analyze, read, search, write, patch, test, build, lint, shell,
@@ -110,8 +111,43 @@ def atomic_commit(message, project_path='.', declared_scope=None, allow_test_cha
     session_event('git-commit','committed' if result.get('committed') else 'noop',prepared['review']['summary'],result.get('commit_sha'))
     return {'ok':result.get('ok',False),'prepared':prepared,'commit':result}
 
+def _generalist_autocode_enabled() -> bool:
+    return os.environ.get('AIRI_GENERALIST_AUTOCODE','0').strip().lower() in {'1','true','yes','on'}
+
+
+def _generalist_propose_changes(goal, project_path, scope):
+    if not _generalist_autocode_enabled():
+        return None
+    if not scope:
+        raise PermissionError('AIRI Generalist autocoding requires an explicit declared scope')
+    from control_plane import local_agent
+    status=local_agent.provider_status()
+    if not status.get('available'):
+        raise RuntimeError('AIRI Generalist autocoding requested but no qualified local provider is available')
+    context=load_project_context(project_path)
+    project=analyze(project_path)
+    git=git_status(project_path)
+    packed={
+        'project_path':project_path,
+        'declared_scope':list(scope),
+        'project':project,
+        'project_context':context,
+        'git_status':git,
+    }
+    import json
+    return local_agent.ask_local_model_changes(
+        goal,
+        json.dumps(packed,ensure_ascii=False,default=str),
+        root=Path(project_path).resolve(),
+    )
+
+
 def agent(goal, project_path='.', max_attempts=5, steps=None, scope=None, changes=None, test_command=''):
     attempts=min(MAX_ATTEMPTS,max(1,int(max_attempts)))
+    generated_by_generalist=False
+    if not changes and _generalist_autocode_enabled():
+        changes=_generalist_propose_changes(goal,project_path,scope)
+        generated_by_generalist=True
     if not changes:
         p=plan(goal,project_path,steps,scope)
         return {'ok':True,'mode':'coding-agent-orchestrator','max_attempts':attempts,'plan':p,
@@ -121,5 +157,6 @@ def agent(goal, project_path='.', max_attempts=5, steps=None, scope=None, change
     checkpoint(goal, list(scope or []), 0, 'coding cycle started', [c.get('path','') for c in (changes or [])])
     cycle=autonomous_change_cycle(changes,project_path,test_command,scope,attempts)
     return {'ok':cycle.get('ok',False),'mode':'coding-agent-orchestrator','max_attempts':attempts,
+            'generated_by_generalist':generated_by_generalist,
             'plan':{'goal':goal,'project':analyze(project_path),'context':ctx,'scope':list(scope or []),'steps':steps or [c['path'] for c in changes]},
             'cycle':cycle}
