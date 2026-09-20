@@ -1133,3 +1133,60 @@ def test_research_cycle_persists_rotating_canary_contract(tmp_path: Path, monkey
     assert result["champion_report"]["canary_cycle"] == 1
     assert set(result["champion_report"]["canary"]["domain_loss"]) == set(DOMAINS)
     assert research_health(tmp_path)["ok"] is True
+
+
+def test_rope_position_encoding_runs_real_forward_and_generation():
+    torch = pytest.importorskip("torch")
+    from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
+
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        dropout=0.0,
+        position_encoding="rope",
+    ).validate()
+    model = CausalTransformerLM(cfg)
+    ids = torch.randint(8, cfg.vocab_size, (2, 12))
+    result = model(ids, labels=ids.clone())
+    assert tuple(result["logits"].shape) == (2, 12, cfg.vocab_size)
+    assert torch.isfinite(result["loss"])
+    generated = model.generate(ids[:, :4], max_new_tokens=3, eos_token_id=None)
+    assert tuple(generated.shape) == (2, 7)
+
+
+def test_rope_rejects_odd_attention_head_dimension():
+    from generalist_lm.model import GeneralistLMConfig
+    with pytest.raises(ValueError, match="even attention head dimension"):
+        GeneralistLMConfig(
+            vocab_size=264,
+            context_length=64,
+            d_model=36,
+            n_heads=4,
+            n_layers=1,
+            d_ff=72,
+            position_encoding="rope",
+        ).validate()
+
+
+def test_evolution_can_propose_rope_without_forcing_it():
+    from dataclasses import replace
+    from generalist_lm.evolution import generate_challengers, GeneralistGenome
+
+    champion = GeneralistGenome(
+        context_length=128,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=128,
+        position_encoding="learned",
+    ).validate()
+    challengers = generate_challengers(champion, count=4, exploration_offset=0)
+    assert any(row.position_encoding == "rope" for row in challengers)
+    assert all(row.position_encoding in {"learned", "sinusoidal", "rope"} for row in challengers)
+
+    rope = replace(champion, position_encoding="rope").validate()
+    assert rope.position_encoding == "rope"
