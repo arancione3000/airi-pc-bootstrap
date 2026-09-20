@@ -251,6 +251,11 @@ def qualify_foundation_model(
     *,
     attestation_path: str | Path | None = None,
     minimum_score: float = 90.0,
+    device: str = "cpu",
+    device_map: str | dict[str, Any] | None = None,
+    torch_dtype: str | None = None,
+    max_memory: dict[Any, Any] | None = None,
+    offload_folder: str | Path | None = None,
 ) -> dict[str, Any]:
     """Qualify a first-class open-weight foundation candidate.
 
@@ -264,7 +269,15 @@ def qualify_foundation_model(
     manifest = load_foundation_manifest(root)
     manifest_digest = foundation_manifest_digest(root)
     suite_digest = foundation_suite_digest()
-    backend = LocalTransformersBackend(root, local_files_only=True)
+    backend = LocalTransformersBackend(
+        root,
+        device=device,
+        device_map=device_map,
+        torch_dtype=torch_dtype,
+        max_memory=max_memory,
+        offload_folder=offload_folder,
+        local_files_only=True,
+    )
     report = run_benchmark(backend, foundation_suite())
     target = Path(attestation_path or (root / ".airi-foundation-qualification.json"))
     digest = transformers_model_digest(root, exclude_path=target)
@@ -286,6 +299,13 @@ def qualify_foundation_model(
         "minimum_score": float(minimum_score),
         "manifest": manifest.to_dict(),
         "report": report,
+        "load_policy": {
+            "device": str(device),
+            "device_map": device_map,
+            "torch_dtype": torch_dtype,
+            "max_memory": max_memory,
+            "offload_folder": str(Path(offload_folder).expanduser().resolve()) if offload_folder else None,
+        },
         "policy": (
             "reviewed local manifest + dedicated protected foundation suite; "
             "local-files-only; trust_remote_code disabled; exact digests bound"
