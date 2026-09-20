@@ -109,6 +109,15 @@ if [ "${AIRI_GENERALIST_ENABLE:-0}" = "1" ]; then
     pip3 install --disable-pip-version-check --quiet --target "$SITE_PACKAGES" -r "$ROOT/computer/generalist_lm/requirements.txt"
   fi
 fi
+if [ "${AIRI_GENERALIST_ENABLE:-0}" = "1" ] && [ "${AIRI_GENERALIST_SYNC_FROM_GITHUB:-0}" = "1" ]; then
+  echo "AIRI_GENERALIST_SYNC_START"
+  if ! env \
+    AIRI_ROOT="$ROOT" \
+    PYTHONPATH="$ROOT/computer${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PYTHON_BIN" -m generalist_lm.state_sync; then
+    echo "AIRI_GENERALIST_SYNC_FAILED_KEEPING_LOCAL_CHECKPOINT" >&2
+  fi
+fi
 if ! "$PYTHON_BIN" -c 'import tkinter' >/dev/null 2>&1; then
   sudo -n apt-get update >/dev/null 2>&1
   sudo -n apt-get install -y python3-tk python3-dev >/dev/null 2>&1
