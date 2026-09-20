@@ -459,6 +459,9 @@ def test_generalist_registration_cannot_escalate_unimplemented_capabilities(tmp_
 
 @pytest.mark.parametrize("protected_path", [
     "computer/generalist_lm/qualification.py",
+    "computer/generalist_lm/benchmarks.py",
+    "computer/generalist_lm/research_cycle.py",
+    "computer/generalist_lm/model.py",
     "computer/control_plane/local_agent.py",
     "computer/code_agent.py",
     ".ai/generalist-lm/champion/benchmark.json",
