@@ -1,0 +1,690 @@
+{
+  "champion": {
+    "config": {
+      "active_experts": 1,
+      "architecture_version": "airi-lattice-v0",
+      "context_length": 64,
+      "d_expert": 48,
+      "d_model": 32,
+      "deep_write_power": 1.6,
+      "dropout": 0.0,
+      "init_std": 0.02,
+      "lattice_mix": 0.2,
+      "max_reasoning_steps": 2,
+      "memory_bands": 3,
+      "memory_decay_max": 0.995,
+      "memory_decay_min": 0.25,
+      "n_cells": 1,
+      "n_experts": 4,
+      "rms_eps": 1e-06,
+      "surprise_power": 1.5,
+      "surprise_threshold": 0.25,
+      "tie_embeddings": true,
+      "tokenizer_version": "byte-v1",
+      "vocab_size": 264
+    },
+    "generation": 0,
+    "genome_id": "lattice-0-0363d63fd379",
+    "learning_rate": 0.002,
+    "min_learning_rate": 0.0002,
+    "parent_id": null,
+    "weight_decay": 0.05
+  },
+  "cycle": 1,
+  "final_reports": [
+    {
+      "active_parameters": 22799.0,
+      "all_seed_wins": false,
+      "candidate_id": "lattice-1-99d963fc2659",
+      "candidate_index": 3,
+      "cycle": 1,
+      "external_pretrained": false,
+      "genome": {
+        "config": {
+          "active_experts": 1,
+          "architecture_version": "airi-lattice-v0",
+          "context_length": 64,
+          "d_expert": 48,
+          "d_model": 32,
+          "deep_write_power": 1.6,
+          "dropout": 0.0,
+          "init_std": 0.02,
+          "lattice_mix": 0.2,
+          "max_reasoning_steps": 2,
+          "memory_bands": 3,
+          "memory_decay_max": 0.9975,
+          "memory_decay_min": 0.25,
+          "n_cells": 1,
+          "n_experts": 4,
+          "rms_eps": 1e-06,
+          "surprise_power": 1.5,
+          "surprise_threshold": 0.25,
+          "tie_embeddings": true,
+          "tokenizer_version": "byte-v1",
+          "vocab_size": 264
+        },
+        "generation": 1,
+        "genome_id": "lattice-1-99d963fc2659",
+        "learning_rate": 0.002,
+        "min_learning_rate": 0.0002,
+        "parent_id": "lattice-0-0363d63fd379",
+        "weight_decay": 0.05
+      },
+      "loss": 5.091334134340286,
+      "mutation": {
+        "changes": {
+          "memory_decay_max": 0.9975
+        },
+        "family": "memory",
+        "mathesis_tags": [
+          "long-context"
+        ],
+        "name": "memory-longer-slow-band",
+        "rationale": "extend the slowest mathematical half-life without increasing state size"
+      },
+      "ok": true,
+      "repeat_seeds": 2,
+      "reports": [
+        {
+          "baseline": {
+            "active_parameters": 22944,
+            "config": {
+              "architecture_version": "native-foundation-v1",
+              "bias": false,
+              "context_length": 64,
+              "d_ff": 32,
+              "d_model": 32,
+              "dropout": 0.0,
+              "init_std": 0.02,
+              "n_heads": 1,
+              "n_kv_heads": 1,
+              "n_layers": 2,
+              "rms_eps": 1e-06,
+              "rope_theta": 10000.0,
+              "tie_embeddings": true,
+              "tokenizer_version": "byte-v1",
+              "vocab_size": 264
+            },
+            "family": "airi-native-foundation",
+            "parameters": 22944,
+            "state_bytes_at_context": 32768,
+            "training": {
+              "best_train_loss": 4.772228717803955,
+              "final": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 4.885895252227783
+                },
+                "loss": 4.885895252227783
+              },
+              "initial": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.541647017002106
+                },
+                "loss": 5.541647017002106
+              },
+              "steps": 18,
+              "tokens_per_second": 16231.069792770508,
+              "tokens_processed": 1152,
+              "train_seconds": 0.07097498899999266
+            }
+          },
+          "candidate": {
+            "active_parameters": 22799,
+            "config": {
+              "active_experts": 1,
+              "architecture_version": "airi-lattice-v0",
+              "context_length": 64,
+              "d_expert": 48,
+              "d_model": 32,
+              "deep_write_power": 1.6,
+              "dropout": 0.0,
+              "init_std": 0.02,
+              "lattice_mix": 0.2,
+              "max_reasoning_steps": 2,
+              "memory_bands": 3,
+              "memory_decay_max": 0.9975,
+              "memory_decay_min": 0.25,
+              "n_cells": 1,
+              "n_experts": 4,
+              "rms_eps": 1e-06,
+              "surprise_power": 1.5,
+              "surprise_threshold": 0.25,
+              "tie_embeddings": true,
+              "tokenizer_version": "byte-v1",
+              "vocab_size": 264
+            },
+            "family": "airi-native-lattice",
+            "parameters": 36623,
+            "state_bytes_at_context": 384,
+            "training": {
+              "best_train_loss": 4.982659816741943,
+              "final": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.124406218528748
+                },
+                "loss": 5.124406218528748,
+                "model_stats": {
+                  "mean_reasoning_steps": 1.0,
+                  "mean_surprise": 0.5123656764626503
+                }
+              },
+              "initial": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.55500203371048
+                },
+                "loss": 5.55500203371048,
+                "model_stats": {
+                  "mean_reasoning_steps": 1.0,
+                  "mean_surprise": 0.4986613802611828
+                }
+              },
+              "steps": 18,
+              "tokens_per_second": 373.6507012197147,
+              "tokens_processed": 1152,
+              "train_seconds": 3.0830933709999897
+            }
+          },
+          "candidate_wins": false,
+          "corpus_digest": "fbbde6f9ebe1be75fd75cb1fea305886387fcbaa8ae844a28ef7d3b2259768a3",
+          "decision": "Lattice did not beat the matched Transformer loss margin",
+          "external_pretrained": false,
+          "lab": {
+            "batch_size": 1,
+            "device": "cpu",
+            "grad_clip": 1.0,
+            "learning_rate": 0.002,
+            "max_active_parameter_ratio": 1.2,
+            "max_domain_regression": 0.08,
+            "max_eval_blocks": 8,
+            "min_learning_rate": 0.0002,
+            "minimum_loss_gain": 0.001,
+            "seed": 9130328,
+            "steps": 18,
+            "validation_fraction": 0.2,
+            "weight_decay": 0.05
+          },
+          "ok": true,
+          "research_only": true,
+          "train_blocks": 5917,
+          "train_documents": 26,
+          "validation_blocks": 1161,
+          "validation_documents": 6,
+          "version": "airi-lattice-lab-v0"
+        },
+        {
+          "baseline": {
+            "active_parameters": 22944,
+            "config": {
+              "architecture_version": "native-foundation-v1",
+              "bias": false,
+              "context_length": 64,
+              "d_ff": 32,
+              "d_model": 32,
+              "dropout": 0.0,
+              "init_std": 0.02,
+              "n_heads": 1,
+              "n_kv_heads": 1,
+              "n_layers": 2,
+              "rms_eps": 1e-06,
+              "rope_theta": 10000.0,
+              "tie_embeddings": true,
+              "tokenizer_version": "byte-v1",
+              "vocab_size": 264
+            },
+            "family": "airi-native-foundation",
+            "parameters": 22944,
+            "state_bytes_at_context": 32768,
+            "training": {
+              "best_train_loss": 4.681449890136719,
+              "final": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 4.7959606647491455
+                },
+                "loss": 4.7959606647491455
+              },
+              "initial": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.5304800271987915
+                },
+                "loss": 5.5304800271987915
+              },
+              "steps": 18,
+              "tokens_per_second": 16164.174582178086,
+              "tokens_processed": 1152,
+              "train_seconds": 0.0712687179999989
+            }
+          },
+          "candidate": {
+            "active_parameters": 22799,
+            "config": {
+              "active_experts": 1,
+              "architecture_version": "airi-lattice-v0",
+              "context_length": 64,
+              "d_expert": 48,
+              "d_model": 32,
+              "deep_write_power": 1.6,
+              "dropout": 0.0,
+              "init_std": 0.02,
+              "lattice_mix": 0.2,
+              "max_reasoning_steps": 2,
+              "memory_bands": 3,
+              "memory_decay_max": 0.9975,
+              "memory_decay_min": 0.25,
+              "n_cells": 1,
+              "n_experts": 4,
+              "rms_eps": 1e-06,
+              "surprise_power": 1.5,
+              "surprise_threshold": 0.25,
+              "tie_embeddings": true,
+              "tokenizer_version": "byte-v1",
+              "vocab_size": 264
+            },
+            "family": "airi-native-lattice",
+            "parameters": 36623,
+            "state_bytes_at_context": 384,
+            "training": {
+              "best_train_loss": 4.915499210357666,
+              "final": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.058262050151825
+                },
+                "loss": 5.058262050151825,
+                "model_stats": {
+                  "mean_reasoning_steps": 1.0,
+                  "mean_surprise": 0.4918067157268524
+                }
+              },
+              "initial": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.548024952411652
+                },
+                "loss": 5.548024952411652,
+                "model_stats": {
+                  "mean_reasoning_steps": 1.0,
+                  "mean_surprise": 0.503178596496582
+                }
+              },
+              "steps": 18,
+              "tokens_per_second": 390.73790130202855,
+              "tokens_processed": 1152,
+              "train_seconds": 2.948267869999995
+            }
+          },
+          "candidate_wins": false,
+          "corpus_digest": "fbbde6f9ebe1be75fd75cb1fea305886387fcbaa8ae844a28ef7d3b2259768a3",
+          "decision": "Lattice did not beat the matched Transformer loss margin",
+          "external_pretrained": false,
+          "lab": {
+            "batch_size": 1,
+            "device": "cpu",
+            "grad_clip": 1.0,
+            "learning_rate": 0.002,
+            "max_active_parameter_ratio": 1.2,
+            "max_domain_regression": 0.08,
+            "max_eval_blocks": 8,
+            "min_learning_rate": 0.0002,
+            "minimum_loss_gain": 0.001,
+            "seed": 9130329,
+            "steps": 18,
+            "validation_fraction": 0.2,
+            "weight_decay": 0.05
+          },
+          "ok": true,
+          "research_only": true,
+          "train_blocks": 5545,
+          "train_documents": 26,
+          "validation_blocks": 1533,
+          "validation_documents": 6,
+          "version": "airi-lattice-lab-v0"
+        }
+      ],
+      "stage": 3,
+      "state_bytes": 384.0,
+      "steps": 18,
+      "train_seconds": 3.0156806204999924,
+      "version": "airi-lattice-swarm-v1"
+    },
+    {
+      "active_parameters": 22760.0,
+      "all_seed_wins": false,
+      "candidate_id": "lattice-1-5877a4a8f887",
+      "candidate_index": 4,
+      "cycle": 1,
+      "external_pretrained": false,
+      "genome": {
+        "config": {
+          "active_experts": 1,
+          "architecture_version": "airi-lattice-v0",
+          "context_length": 64,
+          "d_expert": 48,
+          "d_model": 32,
+          "deep_write_power": 1.6,
+          "dropout": 0.0,
+          "init_std": 0.02,
+          "lattice_mix": 0.2,
+          "max_reasoning_steps": 2,
+          "memory_bands": 2,
+          "memory_decay_max": 0.995,
+          "memory_decay_min": 0.25,
+          "n_cells": 1,
+          "n_experts": 4,
+          "rms_eps": 1e-06,
+          "surprise_power": 1.5,
+          "surprise_threshold": 0.25,
+          "tie_embeddings": true,
+          "tokenizer_version": "byte-v1",
+          "vocab_size": 264
+        },
+        "generation": 1,
+        "genome_id": "lattice-1-5877a4a8f887",
+        "learning_rate": 0.002,
+        "min_learning_rate": 0.0002,
+        "parent_id": "lattice-0-0363d63fd379",
+        "weight_decay": 0.05
+      },
+      "loss": 5.2045800387859344,
+      "mutation": {
+        "changes": {
+          "memory_bands": 2
+        },
+        "family": "memory",
+        "mathesis_tags": [
+          "efficiency"
+        ],
+        "name": "memory-remove-band",
+        "rationale": "compress the hierarchy when an intermediate timescale is redundant"
+      },
+      "ok": true,
+      "repeat_seeds": 2,
+      "reports": [
+        {
+          "baseline": {
+            "active_parameters": 22944,
+            "config": {
+              "architecture_version": "native-foundation-v1",
+              "bias": false,
+              "context_length": 64,
+              "d_ff": 32,
+              "d_model": 32,
+              "dropout": 0.0,
+              "init_std": 0.02,
+              "n_heads": 1,
+              "n_kv_heads": 1,
+              "n_layers": 2,
+              "rms_eps": 1e-06,
+              "rope_theta": 10000.0,
+              "tie_embeddings": true,
+              "tokenizer_version": "byte-v1",
+              "vocab_size": 264
+            },
+            "family": "airi-native-foundation",
+            "parameters": 22944,
+            "state_bytes_at_context": 32768,
+            "training": {
+              "best_train_loss": 4.539917945861816,
+              "final": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 4.761055290699005
+                },
+                "loss": 4.761055290699005
+              },
+              "initial": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.484403431415558
+                },
+                "loss": 5.484403431415558
+              },
+              "steps": 18,
+              "tokens_per_second": 16139.90314629,
+              "tokens_processed": 1152,
+              "train_seconds": 0.07137589300000258
+            }
+          },
+          "candidate": {
+            "active_parameters": 22760,
+            "config": {
+              "active_experts": 1,
+              "architecture_version": "airi-lattice-v0",
+              "context_length": 64,
+              "d_expert": 48,
+              "d_model": 32,
+              "deep_write_power": 1.6,
+              "dropout": 0.0,
+              "init_std": 0.02,
+              "lattice_mix": 0.2,
+              "max_reasoning_steps": 2,
+              "memory_bands": 2,
+              "memory_decay_max": 0.995,
+              "memory_decay_min": 0.25,
+              "n_cells": 1,
+              "n_experts": 4,
+              "rms_eps": 1e-06,
+              "surprise_power": 1.5,
+              "surprise_threshold": 0.25,
+              "tie_embeddings": true,
+              "tokenizer_version": "byte-v1",
+              "vocab_size": 264
+            },
+            "family": "airi-native-lattice",
+            "parameters": 36584,
+            "state_bytes_at_context": 256,
+            "training": {
+              "best_train_loss": 4.737759113311768,
+              "final": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.097052574157715
+                },
+                "loss": 5.097052574157715,
+                "model_stats": {
+                  "mean_reasoning_steps": 1.0,
+                  "mean_surprise": 0.5486278384923935
+                }
+              },
+              "initial": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.495044708251953
+                },
+                "loss": 5.495044708251953,
+                "model_stats": {
+                  "mean_reasoning_steps": 1.0,
+                  "mean_surprise": 0.5081172287464142
+                }
+              },
+              "steps": 18,
+              "tokens_per_second": 362.5969171946521,
+              "tokens_processed": 1152,
+              "train_seconds": 3.177081616999999
+            }
+          },
+          "candidate_wins": false,
+          "corpus_digest": "fbbde6f9ebe1be75fd75cb1fea305886387fcbaa8ae844a28ef7d3b2259768a3",
+          "decision": "Lattice did not beat the matched Transformer loss margin",
+          "external_pretrained": false,
+          "lab": {
+            "batch_size": 1,
+            "device": "cpu",
+            "grad_clip": 1.0,
+            "learning_rate": 0.002,
+            "max_active_parameter_ratio": 1.2,
+            "max_domain_regression": 0.08,
+            "max_eval_blocks": 8,
+            "min_learning_rate": 0.0002,
+            "minimum_loss_gain": 0.001,
+            "seed": 9130429,
+            "steps": 18,
+            "validation_fraction": 0.2,
+            "weight_decay": 0.05
+          },
+          "ok": true,
+          "research_only": true,
+          "train_blocks": 6052,
+          "train_documents": 26,
+          "validation_blocks": 1026,
+          "validation_documents": 6,
+          "version": "airi-lattice-lab-v0"
+        },
+        {
+          "baseline": {
+            "active_parameters": 22944,
+            "config": {
+              "architecture_version": "native-foundation-v1",
+              "bias": false,
+              "context_length": 64,
+              "d_ff": 32,
+              "d_model": 32,
+              "dropout": 0.0,
+              "init_std": 0.02,
+              "n_heads": 1,
+              "n_kv_heads": 1,
+              "n_layers": 2,
+              "rms_eps": 1e-06,
+              "rope_theta": 10000.0,
+              "tie_embeddings": true,
+              "tokenizer_version": "byte-v1",
+              "vocab_size": 264
+            },
+            "family": "airi-native-foundation",
+            "parameters": 22944,
+            "state_bytes_at_context": 32768,
+            "training": {
+              "best_train_loss": 4.676082611083984,
+              "final": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.218506693840027
+                },
+                "loss": 5.218506693840027
+              },
+              "initial": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.577168643474579
+                },
+                "loss": 5.577168643474579
+              },
+              "steps": 18,
+              "tokens_per_second": 15579.626619642542,
+              "tokens_processed": 1152,
+              "train_seconds": 0.07394272199999818
+            }
+          },
+          "candidate": {
+            "active_parameters": 22760,
+            "config": {
+              "active_experts": 1,
+              "architecture_version": "airi-lattice-v0",
+              "context_length": 64,
+              "d_expert": 48,
+              "d_model": 32,
+              "deep_write_power": 1.6,
+              "dropout": 0.0,
+              "init_std": 0.02,
+              "lattice_mix": 0.2,
+              "max_reasoning_steps": 2,
+              "memory_bands": 2,
+              "memory_decay_max": 0.995,
+              "memory_decay_min": 0.25,
+              "n_cells": 1,
+              "n_experts": 4,
+              "rms_eps": 1e-06,
+              "surprise_power": 1.5,
+              "surprise_threshold": 0.25,
+              "tie_embeddings": true,
+              "tokenizer_version": "byte-v1",
+              "vocab_size": 264
+            },
+            "family": "airi-native-lattice",
+            "parameters": 36584,
+            "state_bytes_at_context": 256,
+            "training": {
+              "best_train_loss": 4.701546669006348,
+              "final": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.312107503414154
+                },
+                "loss": 5.312107503414154,
+                "model_stats": {
+                  "mean_reasoning_steps": 1.0,
+                  "mean_surprise": 0.4989504814147949
+                }
+              },
+              "initial": {
+                "blocks": 8,
+                "domain_loss": {
+                  "code": 5.584485352039337
+                },
+                "loss": 5.584485352039337,
+                "model_stats": {
+                  "mean_reasoning_steps": 1.0,
+                  "mean_surprise": 0.49556393548846245
+                }
+              },
+              "steps": 18,
+              "tokens_per_second": 368.4220052300342,
+              "tokens_processed": 1152,
+              "train_seconds": 3.1268490579999906
+            }
+          },
+          "candidate_wins": false,
+          "corpus_digest": "fbbde6f9ebe1be75fd75cb1fea305886387fcbaa8ae844a28ef7d3b2259768a3",
+          "decision": "Lattice did not beat the matched Transformer loss margin",
+          "external_pretrained": false,
+          "lab": {
+            "batch_size": 1,
+            "device": "cpu",
+            "grad_clip": 1.0,
+            "learning_rate": 0.002,
+            "max_active_parameter_ratio": 1.2,
+            "max_domain_regression": 0.08,
+            "max_eval_blocks": 8,
+            "min_learning_rate": 0.0002,
+            "minimum_loss_gain": 0.001,
+            "seed": 9130430,
+            "steps": 18,
+            "validation_fraction": 0.2,
+            "weight_decay": 0.05
+          },
+          "ok": true,
+          "research_only": true,
+          "train_blocks": 5648,
+          "train_documents": 26,
+          "validation_blocks": 1430,
+          "validation_documents": 6,
+          "version": "airi-lattice-lab-v0"
+        }
+      ],
+      "stage": 3,
+      "state_bytes": 256.0,
+      "steps": 18,
+      "train_seconds": 3.1519653374999947,
+      "version": "airi-lattice-swarm-v1"
+    }
+  ],
+  "ok": true,
+  "policy": {
+    "candidate_can_self_promote": false,
+    "canonical_native_transformer_unchanged": true,
+    "equal_budget_transformer_gate_required": true,
+    "external_pretrained": false,
+    "external_reducer": true,
+    "final_multi_seed_gate_required": true
+  },
+  "promoted": false,
+  "promotion_reason": "no finalist beat the matched scratch Transformer on every final seed",
+  "swarm_version": "airi-lattice-swarm-v1",
+  "version": "airi-lattice-state-v1",
+  "winner": null
+}
