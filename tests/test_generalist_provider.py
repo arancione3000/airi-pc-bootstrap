@@ -233,11 +233,15 @@ def test_transformers_provider_requires_exact_qualification_and_dependencies(tmp
     assert row["runtime_dependency"] is True
 
 
-def test_bootstrap_dependency_probe_includes_generalist_runtime():
+def test_bootstrap_dependency_probe_keeps_generalist_runtime_optional():
     start = (ROOT / "computer" / "start.sh").read_text(encoding="utf-8")
-    assert "import fastapi,uvicorn,pyautogui,pytesseract,PIL,playwright,torch,transformers" in start
+    requirements = (ROOT / "computer" / "requirements.txt").read_text(encoding="utf-8")
+    assert "import fastapi,uvicorn,pyautogui,pytesseract,PIL,playwright" in start
+    assert 'if [ "${AIRI_GENERALIST_ENABLE:-0}" = "1" ]; then' in start
+    assert "import torch,transformers" in start
+    assert "generalist_lm/requirements.txt" in start
+    assert "generalist_lm/requirements.txt" not in requirements
     assert "control_plane.model_gateway" in start
-    assert 'AIRI_GENERALIST_ENABLE' in start
 
 
 def test_readonly_generalist_tools_compute_without_code_execution():
