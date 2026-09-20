@@ -146,6 +146,8 @@ def agent(goal, project_path='.', max_attempts=5, steps=None, scope=None, change
     attempts=min(MAX_ATTEMPTS,max(1,int(max_attempts)))
     generated_by_generalist=False
     if not changes and _generalist_autocode_enabled():
+        if not scope:
+            raise PermissionError('AIRI Generalist autocoding requires an explicit declared scope')
         if not test_command:
             raise PermissionError('AIRI Generalist autocoding requires an explicit test command')
         changes=_generalist_propose_changes(goal,project_path,scope)
