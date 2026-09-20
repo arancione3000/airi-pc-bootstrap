@@ -1385,3 +1385,16 @@ def test_legacy_v1_qualification_attestation_is_rejected(tmp_path: Path):
     status = qualification_status(tmp_path)
     assert status["qualified"] is False
     assert status["integrity_ok"] is False
+
+
+def test_untrained_causal_checkpoint_fails_real_production_qualification(tmp_path: Path):
+    from generalist_lm.qualification import qualify_checkpoint
+    from generalist_lm.runtime import GeneralistRuntime
+
+    runtime = GeneralistRuntime.fresh(tiny_config())
+    runtime.save_checkpoint(tmp_path, metadata={"purpose": "untrained-negative-control"})
+    report = qualify_checkpoint(tmp_path, minimum_score=85.0)
+
+    assert report["qualified"] is False
+    assert report["qualification_version"] == 2
+    assert report["report"]["score"] < 85.0 or report["report"]["critical_failures"]
