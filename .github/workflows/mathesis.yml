@@ -2,6 +2,17 @@ name: MATHESIS Omega verification
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'computer/mathesis/**'
+      - 'computer/requirements.txt'
+      - 'tests/test_mathesis.py'
+      - '.github/workflows/mathesis.yml'
+      - '.github/workflows/mathesis-continuum.yml'
+      - '.github/workflows/mathesis-watchdog.yml'
+      - '.github/workflows/mathesis-deep-math.yml'
+      - '.ai/PROJECT_MEMORY.md'
   pull_request:
     branches: [main]
     paths:
