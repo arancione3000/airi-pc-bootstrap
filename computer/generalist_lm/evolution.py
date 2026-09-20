@@ -153,6 +153,9 @@ def evolution_cost(genome: GeneralistGenome) -> dict[str, Any]:
         "context_length": cfg.context_length,
         "layers": cfg.n_layers,
         "width": cfg.d_model,
+        "norm_type": cfg.norm_type,
+        "position_encoding": cfg.position_encoding,
+        "ff_variant": cfg.ff_variant,
     }
 
 
