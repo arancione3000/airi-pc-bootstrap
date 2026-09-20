@@ -1230,8 +1230,9 @@ def test_architecture_weight_transfer_copies_only_shape_compatible_tensors():
     target = CausalTransformerLM(rope)
     report = _transfer_compatible_weights(source, target)
 
-    assert 0.0 < report["parameter_fraction"] < 1.0
-    assert report["copied_tensors"] < report["target_tensors"]
+    assert report["parameter_fraction"] == pytest.approx(1.0)
+    assert report["source_tensors"] > report["target_tensors"]
+    assert "position_embedding.weight" in report["source_unmatched_tensors"]
     assert torch.equal(
         source.token_embedding.weight.detach(),
         target.token_embedding.weight.detach(),
