@@ -1,15 +1,10 @@
 {
-  "allow_local_llm": false,
-  "allow_model_gateway": false,
+  "deprecated": true,
+  "replaced_by": "config/AIRI_REASONING_POLICY.json",
+  "architecture": "chatgpt-default-qualified-local-optional",
+  "default_reasoning_authority": "chatgpt",
+  "allow_qualified_local_generalist": true,
+  "allow_arbitrary_local_llm": false,
   "allow_remote_llm": false,
-  "architecture": "chatgpt-only",
-  "execution_layer": "airi-pc",
-  "legacy_local_agent": "disabled",
-  "legacy_model_gateway": "disabled",
-  "reasoning_authority": "chatgpt",
-  "required_invariants": [
-    "ChatGPT is the sole reasoning authority.",
-    "Airi-PC only executes operations and verification.",
-    "No second model is invoked by runtime code."
-  ]
+  "note": "Retained only for compatibility with older bootstrap references. New code must load AIRI_REASONING_POLICY.json."
 }
