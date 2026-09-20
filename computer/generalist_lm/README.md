@@ -92,3 +92,21 @@ Research can experiment continuously, while production promotion stays conservat
 Qualified Generalist autocoding is opt-in and requires both an explicit file scope and an explicit test command. Proposed edits still pass the existing snapshot, rollback, diff and guardrail workflow before any commit.
 
 For data work, the Generalist Agent exposes deterministic read-only helpers for arithmetic, descriptive statistics, JSON-table profiling, and bounded aggregate/group-by operations. These helpers do not execute model-generated Python.
+
+
+## Continual learning and persistent curriculum
+
+The Generalist research loop no longer relies only on architecture search over a fixed toy curriculum.
+
+Each autonomous research cycle now:
+
+1. expands a bounded, persistent, mechanically-labeled curriculum memory;
+2. guarantees that persistent training prompts do not overlap the protected validation prompts;
+3. replays the stored curriculum on every research candidate;
+4. creates a dedicated continual-learning challenger by copying the current champion weights and fine-tuning them further;
+5. still trains independent architecture challengers in parallel;
+6. rejects any candidate that regresses in held-out domain loss, teacher-forced target accuracy, solved-item replay, or real autoregressive generation.
+
+The curriculum memory is stored inside the same persistent Generalist state directory, so the cloud continuum carries it from one cycle to the next. It is bounded by `AIRI_GENERALIST_RESEARCH_CURRICULUM_MAX_ROWS` (default 1200) to keep compute/storage finite.
+
+Research validation now includes a real generation probe: one held-out item per protected domain is decoded autoregressively. A model cannot be promoted merely because teacher-forced loss improves while previously generated capabilities disappear.
