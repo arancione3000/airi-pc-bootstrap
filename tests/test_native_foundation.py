@@ -34,6 +34,9 @@ def test_native_profiles_scale_without_instantiating_large_models():
     seven = native_scale_profile("7b")
     counts = [native_parameter_count(row) for row in (one, three, seven)]
     assert counts[0] < counts[1] < counts[2]
+    assert 1_000_000_000 <= counts[0] <= 1_300_000_000
+    assert 3_000_000_000 <= counts[1] <= 3_700_000_000
+    assert 6_800_000_000 <= counts[2] <= 7_400_000_000
     assert one.tokenizer_version == "bpe-v1"
     assert seven.context_length == 32768
 
@@ -276,3 +279,34 @@ def test_native_bpe_root_requires_own_tokenizer_artifact(tmp_path: Path):
     )
     with pytest.raises(ValueError, match="requires an AIRI tokenizer"):
         create_native_root_checkpoint(tmp_path / "native", cfg, root_seed=1)
+
+
+def test_native_cli_plans_without_allocating_weights():
+    from generalist_lm.cli import parser
+
+    args = parser().parse_args([
+        "native-foundation-plan",
+        "7b",
+        "--vocab-size",
+        "32768",
+    ])
+    assert args.cmd == "native-foundation-plan"
+    assert args.profile == "7b"
+    assert args.vocab_size == 32768
+
+
+def test_native_cli_init_has_large_allocation_guard(tmp_path: Path):
+    from generalist_lm.cli import parser
+
+    args = parser().parse_args([
+        "native-foundation-init",
+        str(tmp_path / "native"),
+        "--profile",
+        "1b",
+        "--seed",
+        "42",
+    ])
+    assert args.cmd == "native-foundation-init"
+    assert args.profile == "1b"
+    assert args.max_init_parameters == 100_000_000
+    assert args.allow_large_init is False
