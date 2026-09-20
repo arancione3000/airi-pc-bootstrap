@@ -444,6 +444,22 @@ def test_foundation_preflight_accepts_metadata_only_candidate(tmp_path: Path, mo
     assert "chat_template_not_declared" in result["warnings"]
 
 
+
+
+def test_foundation_preflight_rejects_malformed_tokenizer_config(tmp_path: Path, monkeypatch):
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "model")
+    (model / "tokenizer_config.json").write_text("{not-json", encoding="utf-8")
+    write_foundation_manifest(model, _manifest())
+    _stub_transformers_preflight(monkeypatch)
+
+    result = foundation_preflight(model, probe_hardware=False)
+    assert result["ok"] is False
+    assert "invalid_tokenizer_config" in result["blockers"]
+    assert result["chat_template"]["errors"]
+
+
 def test_foundation_preflight_validates_sharded_weight_index(tmp_path: Path, monkeypatch):
     from generalist_lm.foundation_probe import foundation_preflight
 
@@ -488,6 +504,26 @@ def test_foundation_preflight_rejects_missing_indexed_shard(tmp_path: Path, monk
     result = foundation_preflight(model, probe_hardware=False)
     assert result["ok"] is False
     assert any("missing shard" in row for row in result["blockers"])
+
+
+
+
+def test_foundation_preflight_rejects_non_string_index_shard_path(tmp_path: Path, monkeypatch):
+    from generalist_lm.foundation_probe import foundation_preflight
+
+    model = _fake_model(tmp_path / "model")
+    (model / "model.safetensors.index.json").write_text(json.dumps({
+        "weight_map": {
+            "a": "model.safetensors",
+            "b": 123,
+        },
+    }), encoding="utf-8")
+    write_foundation_manifest(model, _manifest())
+    _stub_transformers_preflight(monkeypatch)
+
+    result = foundation_preflight(model, probe_hardware=False)
+    assert result["ok"] is False
+    assert any("shard paths must be non-empty strings" in row for row in result["blockers"])
 
 
 def test_foundation_preflight_rejects_weight_index_escape(tmp_path: Path, monkeypatch):
