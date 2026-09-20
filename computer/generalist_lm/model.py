@@ -15,6 +15,7 @@ def _torch():
 _ALLOWED_NORMS = {"layernorm", "rmsnorm"}
 _ALLOWED_POSITIONS = {"learned", "sinusoidal", "rope"}
 _ALLOWED_FF = {"swiglu", "gelu"}
+_ALLOWED_TOKENIZERS = {"byte-v1", "bpe-v1"}
 
 
 @dataclass
@@ -42,6 +43,8 @@ class GeneralistLMConfig:
         self.n_layers = max(1, min(96, int(self.n_layers)))
         self.d_ff = max(self.d_model, min(16384, int(self.d_ff)))
         self.dropout = min(0.5, max(0.0, float(self.dropout)))
+        if self.tokenizer_version not in _ALLOWED_TOKENIZERS:
+            raise ValueError("unsupported tokenizer_version")
         if self.norm_type not in _ALLOWED_NORMS:
             raise ValueError("unsupported norm_type")
         if self.position_encoding not in _ALLOWED_POSITIONS:
