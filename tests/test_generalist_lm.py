@@ -1416,7 +1416,7 @@ def test_generalist_research_health_rejects_oversized_persisted_checkpoint(tmp_p
     )
 
     # A tiny limit must fail closed before such a checkpoint could be persisted.
-    monkeypatch.setenv("AIRI_GENERALIST_MAX_PERSISTED_CHECKPOINT_BYTES", "1048576")
+    monkeypatch.setenv("AIRI_GENERALIST_MAX_PERSISTED_CHECKPOINT_BYTES", "65536")
     report = research_health(tmp_path)
     failed = {row["name"] for row in report["failed"]}
     assert "checkpoint:persistence_size" in failed
