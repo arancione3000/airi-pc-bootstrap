@@ -542,6 +542,14 @@ def train_native_foundation(
             optimizer=optimizer,
             rng=rng,
         )
+        # Resume restores moment estimates and RNG state, but the challenger
+        # policy owns the current optimizer hyperparameters. Re-apply them
+        # after loading state so evolution is real rather than metadata-only.
+        for group in optimizer.param_groups:
+            group["lr"] = train_config.learning_rate
+            group["betas"] = (train_config.adam_beta1, train_config.adam_beta2)
+            group["eps"] = train_config.adam_eps
+            group["weight_decay"] = train_config.weight_decay
         if start_step >= train_config.max_steps:
             raise ValueError(
                 "max_steps must be greater than the resumed native global_step"
