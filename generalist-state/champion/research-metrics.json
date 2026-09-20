@@ -1,4 +1,83 @@
 {
+  "canary": {
+    "domain_generation_accuracy": {
+      "coding": 0.0,
+      "data": 0.0,
+      "language": 0.0,
+      "reasoning": 0.0,
+      "structured": 0.0,
+      "tools": 0.0
+    },
+    "domain_loss": {
+      "coding": 3.405324935913086,
+      "data": 3.536320447921753,
+      "language": 4.366434097290039,
+      "reasoning": 4.224654674530029,
+      "structured": 3.4106762409210205,
+      "tools": 1.4618781805038452
+    },
+    "domain_token_accuracy": {
+      "coding": 0.2631578947368421,
+      "data": 0.14285714285714285,
+      "language": 0.09090909090909091,
+      "reasoning": 0.16666666666666666,
+      "structured": 0.2962962962962963,
+      "tools": 0.6585365853658537
+    },
+    "finite": true,
+    "generated_solved_items": [],
+    "generation_exact_accuracy": 0.0,
+    "generation_probe": [
+      {
+        "domain": "language",
+        "item": "language:5c9bbd0c1f5cc28c",
+        "ok": false,
+        "output": "11111111",
+        "target": "CANARY0002"
+      },
+      {
+        "domain": "coding",
+        "item": "coding:e8a6ae44843b01dc",
+        "ok": false,
+        "output": "{\":{\":toooon\":  return     +",
+        "target": "def canary_sub_2(x):\n    return x - 5"
+      },
+      {
+        "domain": "data",
+        "item": "data:35de62fd72564573",
+        "ok": false,
+        "output": "{\"\"alue\":",
+        "target": "150793"
+      },
+      {
+        "domain": "reasoning",
+        "item": "reasoning:ca4fce0893599a20",
+        "ok": false,
+        "output": ",\"ooooor",
+        "target": "50278"
+      },
+      {
+        "domain": "tools",
+        "item": "tools:72c5687d761c79ae",
+        "ok": false,
+        "output": "<toolllllllluuuuue\"\"allallarruue\"aruuue\":\"\":\"t_callalllalluuurn x   \":\"alllcalllllal",
+        "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"50262*4\"}}</tool_call>"
+      },
+      {
+        "domain": "structured",
+        "item": "structured:ca64a99fea646bdc",
+        "ok": false,
+        "output": "11111111111",
+        "target": "{\"canary\":2,\"value\":50262}"
+      }
+    ],
+    "loss": 2.5701611042022705,
+    "solved_items": [],
+    "target_token_accuracy": 0.43859649122807015,
+    "target_tokens": 171
+  },
+  "canary_cycle": 2,
+  "continual_learning": true,
   "domain_generation_accuracy": {
     "coding": 0.0,
     "data": 0.0,
@@ -8,20 +87,20 @@
     "tools": 0.0
   },
   "domain_loss": {
-    "coding": 3.084519386291504,
-    "data": 3.3790767192840576,
-    "language": 4.678239822387695,
-    "reasoning": 3.3138458728790283,
-    "structured": 2.4544432163238525,
-    "tools": 2.4853665828704834
+    "coding": 2.7786240577697754,
+    "data": 2.5315513610839844,
+    "language": 4.304450035095215,
+    "reasoning": 2.6386067867279053,
+    "structured": 1.2585692405700684,
+    "tools": 1.6640223264694214
   },
   "domain_token_accuracy": {
-    "coding": 0.3111111111111111,
+    "coding": 0.32222222222222224,
     "data": 0.3333333333333333,
-    "language": 0.16129032258064516,
-    "reasoning": 0.3684210526315789,
-    "structured": 0.4807692307692308,
-    "tools": 0.4177215189873418
+    "language": 0.1935483870967742,
+    "reasoning": 0.47368421052631576,
+    "structured": 0.8173076923076923,
+    "tools": 0.5873417721518988
   },
   "finite": true,
   "generated_solved_items": [],
@@ -31,67 +110,57 @@
       "domain": "language",
       "item": "language:69dcd673152135b7",
       "ok": false,
-      "output": "3",
+      "output": "1",
       "target": "orange"
     },
     {
       "domain": "coding",
       "item": "coding:9f36f220338cd9ff",
       "ok": false,
-      "output": "de\":::::::::::::::::::::::::::::::",
+      "output": "dddddddddddddetokeef add_const___c",
       "target": "def sub(a, b):\n    return a - b"
     },
     {
       "domain": "data",
       "item": "data:5bd96918425fd195",
       "ok": false,
-      "output": "3",
+      "output": "11",
       "target": "20"
     },
     {
       "domain": "reasoning",
       "item": "reasoning:d206563c75c2d4bd",
       "ok": false,
-      "output": "3",
+      "output": "1",
       "target": "144"
     },
     {
       "domain": "tools",
       "item": "tools:169b024c50474998",
       "ok": false,
-      "output": "11113",
+      "output": "<toooooolllllllluuuuue\"\"allallaaluue\"aruuue\"\"\"\"\"\"\"\"\":\"\"\":\":\":\"\":\"toooorruuullll_",
       "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
     },
     {
       "domain": "structured",
       "item": "structured:b4833d19223b3d60",
       "ok": false,
-      "output": "",
+      "output": "111",
       "target": "{\"count\":2}"
     }
   ],
-  "loss": 2.7565457820892334,
+  "loss": 2.029405117034912,
   "parameters": 107648,
-  "score": 26.620092344447368,
+  "score": 33.00967352576289,
   "solved_items": [],
-  "target_token_accuracy": 0.3870967741935484,
+  "target_token_accuracy": 0.5309139784946236,
   "target_tokens": 744,
   "training": {
-    "best_step_loss": 2.5442991256713867,
-    "final_loss": 2.493579387664795,
-    "initial_loss": 5.533844470977783,
-    "loss_improvement": 3.0402650833129883,
+    "best_step_loss": 1.487271785736084,
+    "final_loss": 1.662408709526062,
+    "initial_loss": 2.66776967048645,
+    "loss_improvement": 1.0053609609603882,
     "ok": true,
-    "steps": 30
-  },
-  "weight_transfer": {
-    "copied_parameters": 0,
-    "copied_tensors": 0,
-    "parameter_fraction": 0.0,
-    "policy": "fresh initialization",
-    "source_tensors": 0,
-    "source_unmatched_tensors": [],
-    "target_parameters": 107648,
-    "target_tensors": 21
+    "steps": 20
   }
 }
