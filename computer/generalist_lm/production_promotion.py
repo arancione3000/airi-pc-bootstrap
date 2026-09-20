@@ -67,11 +67,22 @@ def attempt_production_promotion(
                 and previous.get("source_checkpoint_digest") == source_digest
                 and previous.get("qualification_version") == QUALIFICATION_VERSION
             ):
-                return {
-                    **previous,
-                    "cached": True,
-                    "reason": "research champion digest already evaluated",
-                }
+                if previous.get("promoted"):
+                    current = qualification_status(target) if target.exists() else {"qualified": False}
+                    if not current.get("qualified"):
+                        previous = {}
+                    else:
+                        return {
+                            **previous,
+                            "cached": True,
+                            "reason": "research champion digest already promoted and production integrity is healthy",
+                        }
+                else:
+                    return {
+                        **previous,
+                        "cached": True,
+                        "reason": "research champion digest already evaluated",
+                    }
         except Exception:
             pass
 
