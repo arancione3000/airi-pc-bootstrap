@@ -550,3 +550,24 @@ def test_generalist_read_tools_exclude_sensitive_workspace_files(tmp_path: Path,
     assert ".env" not in analysis["files"]
     assert "credentials.json" not in analysis["files"]
     assert all(not path.startswith("secrets/") for path in analysis["files"])
+
+
+def test_generalist_read_tools_enforce_file_size_budget(tmp_path: Path, monkeypatch):
+    import coding
+    from control_plane.generalist_agent_bridge import execute_readonly_tool
+
+    monkeypatch.setattr(coding, "ROOT", tmp_path)
+    large = tmp_path / "large.txt"
+    with large.open("wb") as handle:
+        handle.seek(2_000_001 - 1)
+        handle.write(b"x")
+
+    with pytest.raises(ValueError, match="read budget"):
+        execute_readonly_tool("file_read", {"path": "large.txt"})
+
+    result = execute_readonly_tool(
+        "file_search",
+        {"query": "x", "path": "."},
+    )
+    assert all(row["path"] != "large.txt" for row in result["matches"])
+    assert result["scanned_bytes"] <= 20_000_000
