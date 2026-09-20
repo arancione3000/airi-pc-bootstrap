@@ -89,7 +89,7 @@ def test_online_research_treats_remote_text_as_untrusted_metadata():
         "items": [{
             "full_name": "example/research",
             "html_url": "https://github.com/example/research",
-            "description": "BPE tokenizer and curriculum experiments",
+            "description": "Open dataset corpus with BPE tokenizer and curriculum experiments",
             "updated_at": "2026-09-19T12:00:00Z",
             "stargazers_count": 42,
             "topics": ["tokenization", "curriculum"],
@@ -116,6 +116,9 @@ def test_online_research_treats_remote_text_as_untrusted_metadata():
     assert report["tag_counts"]["gqa"] >= 1
     assert report["tag_counts"]["optimizer"] >= 1
     assert report["tag_counts"]["tokenizer"] >= 1
+    assert report["tag_counts"]["dataset"] >= 1
+    assert report["source_candidates"]
+    assert report["source_candidates"][0]["status"] == "proposal_only"
     assert all("changes" not in row for row in report["evidence"])
 
 
