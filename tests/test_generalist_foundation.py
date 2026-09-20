@@ -55,6 +55,8 @@ def test_foundation_manifest_binds_local_inventory(tmp_path: Path):
     assert identity["manifest"]["local_files_only"] is True
     assert identity["manifest"]["trust_remote_code"] is False
     assert identity["inventory"]["weight_files"] == ["model.safetensors"]
+    assert identity["inventory"]["config_context_limit"] == 4096
+    assert written["inventory"]["files"] == identity["inventory"]["files"]
     assert identity["manifest_digest"] == foundation_manifest_digest(model)
 
 
@@ -63,6 +65,16 @@ def test_foundation_manifest_rejects_remote_code_and_missing_domains():
         _manifest(trust_remote_code=True).validate()
     with pytest.raises(ValueError, match="missing protected domains"):
         _manifest(intended_domains=("language", "coding")).validate()
+    with pytest.raises(ValueError, match="context_length must be an integer"):
+        _manifest(context_length="4096").validate()
+    with pytest.raises(ValueError, match="field license must be a string"):
+        _manifest(license=123).validate()
+
+
+def test_foundation_manifest_cannot_overstate_local_config_context(tmp_path: Path):
+    model = _fake_model(tmp_path / "model")
+    with pytest.raises(ValueError, match="exceeds the local config.json limit"):
+        write_foundation_manifest(model, _manifest(context_length=8192))
 
 
 def test_foundation_manifest_rejects_symlinked_model_tree(tmp_path: Path):
