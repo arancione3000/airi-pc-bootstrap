@@ -453,6 +453,12 @@ def native_parameter_count(config: NativeFoundationConfig) -> int:
     ff = 3 * cfg.d_model * cfg.d_ff
     norms = 2 * cfg.d_model
     per_layer = q + kv + out + ff + norms
+    if cfg.bias:
+        kv_width = cfg.n_kv_heads * head_dim
+        per_layer += (
+            (2 * cfg.d_model + 2 * kv_width)
+            + (2 * cfg.d_ff + cfg.d_model)
+        )
     embeddings = cfg.vocab_size * cfg.d_model
     output = 0 if cfg.tie_embeddings else cfg.vocab_size * cfg.d_model
     final_norm = cfg.d_model
