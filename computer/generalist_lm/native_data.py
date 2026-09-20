@@ -251,7 +251,18 @@ def load_native_corpus(
     if not documents:
         raise ValueError("native corpus contains no trainable documents")
 
-    metadata = [row.metadata() for row in documents]
+    metadata = [
+        {
+            "domain": row.domain,
+            "language": row.language,
+            "license": row.license,
+            "source_type": row.source_type,
+            "weight": row.weight,
+            "sha256": row.sha256,
+            "bytes": row.bytes,
+        }
+        for row in documents
+    ]
     digest = _sha256_bytes(_canonical_json({
         "version": NATIVE_CORPUS_VERSION,
         "documents": metadata,
@@ -284,7 +295,7 @@ def audit_native_corpus(
     if unknown:
         raise ValueError(f"unknown required native corpus domains: {unknown}")
     missing = [domain for domain in required if report.domains.get(domain, 0) <= 0]
-    return {
+    result = {
         **report.summary(),
         "required_domains": list(required),
         "missing_domains": missing,
@@ -292,6 +303,8 @@ def audit_native_corpus(
         "local_only": True,
         "external_model_generated_required": False,
     }
+    result["ok"] = bool(result["documents"] and result["coverage_ok"])
+    return result
 
 
 def train_native_bpe(
