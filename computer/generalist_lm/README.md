@@ -379,6 +379,155 @@ autonomous-evolution phases. The external Foundation/Transformers track below
 remains optional compatibility infrastructure and is not required to become the
 AIRI champion.
 
+### Native Phase 2 — AIRI-owned data and scratch pretraining
+
+The Native track has its own training path in
+`generalist_lm/native_data.py` and `generalist_lm/native_training.py`.
+It does not call Transformers, Hugging Face or `from_pretrained`.
+
+A corpus is admitted through a local `native-corpus-v1` JSON manifest. Every
+document must be explicitly marked `approved_for_training=true` and declare its
+domain, language, license/provenance class and sampling weight. Corpus loading is
+bounded, exact-content deduplicated, local-only and rejects path/symlink escapes.
+The canonical domain surface is:
+
+- general language;
+- English;
+- Italian;
+- code;
+- mathematics;
+- reasoning;
+- data analysis;
+- tool use.
+
+The AIRI BPE tokenizer is trained directly from that reviewed corpus. Its digest
+and vocabulary are then bound into the Native root checkpoint, so tokenizer and
+model ancestry stay independently verifiable.
+
+Example manifest:
+
+```json
+{
+  "version": "native-corpus-v1",
+  "documents": [
+    {
+      "path": "text/it-0001.txt",
+      "domain": "language-it",
+      "language": "it",
+      "license": "REVIEWED_LICENSE_ID",
+      "source_type": "permissive",
+      "approved_for_training": true,
+      "weight": 1.0
+    }
+  ]
+}
+```
+
+The corpus can also be materialized automatically from a reviewed
+`native-sources-v1` catalog. This removes the need to copy training files by
+hand while keeping source admission fail-closed. AIRI downloads only pinned
+HTTPS objects, verifies the exact SHA-256 before accepting bytes, enforces host
+and size budgets, refuses unsafe paths/redirects, records source URL/license in
+the generated manifest, and then hands the result to the same local corpus
+audit used above. Source discovery is intentionally **not** part of Phase 2;
+later autonomous research may propose catalog changes, but it does not bypass
+these acquisition checks.
+
+Example source catalog:
+
+```json
+{
+  "version": "native-sources-v1",
+  "allowed_hosts": ["datasets.example.org"],
+  "sources": [
+    {
+      "name": "approved-general-shard-0001",
+      "url": "https://datasets.example.org/general-0001.jsonl",
+      "sha256": "REPLACE_WITH_64_HEX_SHA256",
+      "filename": "general/general-0001.jsonl",
+      "domain": "general",
+      "language": "en",
+      "license": "REVIEWED_LICENSE_ID",
+      "source_type": "permissive",
+      "approved_for_training": true,
+      "weight": 1.0
+    }
+  ]
+}
+```
+
+Materialize the corpus without manually supplying document files:
+
+```bash
+python -m generalist_lm.cli native-corpus-acquire \
+  ./sources/native-sources.json ./corpus \
+  --allowed-host datasets.example.org
+
+python -m generalist_lm.cli native-corpus-audit \
+  ./corpus/native-corpus.json --allowed-root ./corpus
+```
+
+Audit and train the tokenizer before allocating a BPE Native model:
+
+```bash
+python -m generalist_lm.cli native-corpus-audit ./corpus/native-corpus.json \
+  --allowed-root ./corpus
+
+python -m generalist_lm.cli native-tokenizer-train \
+  ./corpus/native-corpus.json ./artifacts/tokenizer.json \
+  --allowed-root ./corpus \
+  --vocab-size 32768
+
+# Use the vocab_size reported by the tokenizer command.
+python -m generalist_lm.cli native-foundation-init ./native-root \
+  --profile micro \
+  --vocab-size 32768 \
+  --tokenizer-json ./artifacts/tokenizer.json \
+  --seed 17
+```
+
+Native pretraining uses AdamW with beta2=0.95, warmup plus cosine decay,
+gradient clipping, gradient accumulation, held-out validation, deterministic
+weighted curriculum sampling and optional fp16/bf16 autocast. It understands a
+`torchrun` distributed environment and uses DDP when `WORLD_SIZE>1`. Training
+writes a new `airi-native-descendant` checkpoint; it never overwrites the
+parent. The child manifest binds the exact parent checkpoint digest, and the
+trainer state is independently hashed so optimizer/RNG resume data cannot be
+silently modified.
+
+Single-process example:
+
+```bash
+python -m generalist_lm.cli native-train \
+  ./native-root ./corpus/native-corpus.json \
+  --allowed-root ./corpus \
+  --output ./native-step-10000 \
+  --max-steps 10000 \
+  --micro-batch-size 2 \
+  --gradient-accumulation-steps 16 \
+  --precision auto
+
+python -m generalist_lm.cli native-training-status ./native-step-10000
+```
+
+Multi-GPU example:
+
+```bash
+torchrun --standalone --nproc-per-node=8 -m generalist_lm.cli native-train \
+  ./native-root ./corpus/native-corpus.json \
+  --allowed-root ./corpus \
+  --output ./native-step-10000 \
+  --max-steps 10000 \
+  --device cuda \
+  --precision bf16
+```
+
+CI intentionally proves this path only on tiny randomly initialized models and
+small project-owned corpora: it verifies that held-out next-token loss falls,
+lineage is preserved, optimizer state resumes, and tampering is rejected. A
+1B/3B/7B model is not claimed to be trained by CI; those profiles require a
+separate reviewed large corpus and suitable accelerator capacity.
+
 
 ## Foundation Track v1
 
