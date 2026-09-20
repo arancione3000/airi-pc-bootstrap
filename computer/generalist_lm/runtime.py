@@ -53,6 +53,22 @@ class GeneralistRuntime:
             tokenizer = BPETokenizer.load(tokenizer_path)
         else:  # validate() should already make this unreachable.
             raise ValueError(f"unsupported tokenizer version: {config.tokenizer_version}")
+
+        metadata_path = root / "metadata.json"
+        if metadata_path.exists():
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            if not isinstance(metadata, dict):
+                raise ValueError("checkpoint metadata must be a JSON object")
+            declared_version = str(metadata.get("tokenizer_version", config.tokenizer_version))
+            if declared_version != config.tokenizer_version:
+                raise ValueError("checkpoint tokenizer version does not match metadata")
+            declared_digest = metadata.get("tokenizer_digest")
+            if config.tokenizer_version == "bpe-v1":
+                if str(declared_digest or "") != tokenizer.digest:
+                    raise ValueError("checkpoint tokenizer digest does not match metadata")
+            elif declared_digest not in {None, ""}:
+                raise ValueError("byte-v1 checkpoint metadata must not declare a tokenizer digest")
+
         model = CausalTransformerLM(config)
         model.load_state_dict(torch.load(model_path, map_location="cpu", weights_only=True))
         return cls(model, config, tokenizer=tokenizer, device=device)
@@ -74,11 +90,11 @@ class GeneralistRuntime:
             tokenizer_path.unlink(missing_ok=True)
             tokenizer_digest = None
         info = {
+            **dict(metadata or {}),
             "format": "airi-generalist-lm-v1",
             "tokenizer_version": self.tokenizer.version,
             "tokenizer_digest": tokenizer_digest,
             "parameters": parameter_count(self.model),
-            **dict(metadata or {}),
         }
         (root / "metadata.json").write_text(json.dumps(info, indent=2, sort_keys=True), encoding="utf-8")
         self.model.to(self.device)

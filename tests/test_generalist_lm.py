@@ -1297,10 +1297,17 @@ def test_research_cycle_architecture_trial_records_weight_transfer(tmp_path: Pat
         if row.get("kind") == "architecture" and row.get("report")
     ]
     assert architecture_trials
-    transfer = architecture_trials[0]["report"]["weight_transfer"]
+    trial = architecture_trials[0]
+    transfer = trial["report"]["weight_transfer"]
     assert transfer["copied_tensors"] > 0
     assert 0.0 < transfer["parameter_fraction"] <= 1.0
-    assert transfer["policy"] == "exact name and exact shape only"
+    if trial["genome"]["tokenizer_version"] == result["champion"]["tokenizer_version"]:
+        assert transfer["policy"] == "exact name and exact shape only"
+        assert transfer["tokenizer_identical"] is True
+    else:
+        assert transfer["policy"] == "exact name/shape tensors plus deterministic byte-compatible vocabulary migration"
+        assert transfer["vocabulary_migrated"] is True
+        assert transfer["shared_token_rows"] > 0
 
 
 def test_curriculum_memory_fails_closed_on_digest_corruption(tmp_path: Path):

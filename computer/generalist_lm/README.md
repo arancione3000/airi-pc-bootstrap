@@ -292,3 +292,27 @@ are applied only after that balance is established.
 This is an anti-interference mechanism, not a relaxed promotion rule. Held-out
 per-domain loss, rotating canaries, token accuracy and autoregressive
 anti-forgetting gates remain unchanged.
+
+
+## Evolutionary BPE migration
+
+The research loop may now evaluate `bpe-v1` as an architecture challenger.
+This is deliberately stricter than merely supporting BPE checkpoint files:
+
+- BPE merges are learned only from the normal training/replay corpus and the
+  protected repository-pretraining corpus; validation, rotating-canary and
+  production-qualification prompts are excluded;
+- the 264 stable special/byte embedding rows are inherited exactly;
+- each newly created BPE token is initialized from the mean of the inherited
+  byte embeddings that spell that token, instead of random reinitialization;
+- the actual BPE vocabulary size is included in the parameter budget;
+- cross-tokenizer research promotion uses held-out negative log-likelihood per
+  UTF-8 target byte (and bits/byte), not cross-entropy per token;
+- token-accuracy comparisons are retained within one tokenizer family but are
+  not used as a cross-tokenizer promotion signal;
+- real autoregressive generation, per-domain byte-normalized validation,
+  rotating canaries and solved-item anti-forgetting remain hard gates.
+
+This prevents a tokenizer from appearing better merely because it emits fewer
+tokens while still allowing genuinely more efficient representations to
+compete.

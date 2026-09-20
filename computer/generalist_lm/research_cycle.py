@@ -15,13 +15,14 @@ from typing import Any
 from .curriculum import ResearchRow, train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
 from .corpus import repository_corpus
+from .bpe_tokenizer import BPETokenizer, train_bpe
 from .evolution import GeneralistGenome, generate_challengers
 from .mathesis_bridge import mathesis_signals
 from .model import CausalTransformerLM, estimate_parameter_count, parameter_count
 from .runtime import GeneralistRuntime
 from .pretraining import CorpusDocument, pretrain_causal
-from .tokenizer import ByteTokenizer
-from .training import encode_sft_example, loss_on_examples, train_sft
+from .tokenizer import BYTE_OFFSET, VOCAB_SIZE as BYTE_VOCAB_SIZE, ByteTokenizer
+from .training import encode_sft_example, loss_on_examples, nll_stats_on_examples, train_sft
 
 
 def research_seed() -> GeneralistGenome:
@@ -164,28 +165,56 @@ def _generation_probe(
     }
 
 
-def _grouped_validation(model, tokenizer: ByteTokenizer, rows: list[ResearchRow], *, device: str = "cpu") -> dict[str, Any]:
+def _grouped_validation(model, tokenizer, rows: list[ResearchRow], *, device: str = "cpu") -> dict[str, Any]:
     all_examples = [row.sft() for row in rows]
-    overall = loss_on_examples(model, tokenizer, all_examples, device=device)
+    overall_stats = nll_stats_on_examples(
+        model,
+        tokenizer,
+        all_examples,
+        device=device,
+    )
     domains: dict[str, float] = {}
+    domain_nll_per_byte: dict[str, float] = {}
+    domain_bits_per_byte: dict[str, float] = {}
     for domain in sorted({row.domain for row in rows}):
         examples = [row.sft() for row in rows if row.domain == domain]
-        domains[domain] = loss_on_examples(model, tokenizer, examples, device=device)
+        stats = nll_stats_on_examples(
+            model,
+            tokenizer,
+            examples,
+            device=device,
+        )
+        domains[domain] = float(stats["loss_per_token"])
+        domain_nll_per_byte[domain] = float(stats["nll_per_byte"])
+        domain_bits_per_byte[domain] = float(stats["bits_per_byte"])
     accuracy = _teacher_forced_accuracy(model, tokenizer, rows, device=device)
     generation = _generation_probe(model, tokenizer, rows, device=device)
+    finite_values = [
+        float(overall_stats["loss_per_token"]),
+        float(overall_stats["nll_per_byte"]),
+        float(overall_stats["bits_per_byte"]),
+        *domains.values(),
+        *domain_nll_per_byte.values(),
+    ]
     return {
-        "loss": float(overall),
+        "tokenizer_version": str(getattr(tokenizer, "version", "unknown")),
+        "loss": float(overall_stats["loss_per_token"]),
+        "nll_per_byte": float(overall_stats["nll_per_byte"]),
+        "bits_per_byte": float(overall_stats["bits_per_byte"]),
+        "validation_target_tokens": int(overall_stats["target_tokens"]),
+        "validation_target_bytes": int(overall_stats["target_bytes"]),
         "domain_loss": domains,
+        "domain_nll_per_byte": domain_nll_per_byte,
+        "domain_bits_per_byte": domain_bits_per_byte,
         **accuracy,
         **generation,
-        "finite": bool(math.isfinite(overall) and all(math.isfinite(v) for v in domains.values())),
+        "finite": bool(all(math.isfinite(v) for v in finite_values)),
     }
 
-
 def _research_score(report: dict[str, Any], params: int) -> float:
-    loss = float(report["loss"])
+    quality = float(report.get("nll_per_byte", report["loss"]))
     efficiency_penalty = min(1.0, params / 10_000_000.0) * 0.01
-    return float(100.0 / (1.0 + loss) - efficiency_penalty)
+    return float(100.0 / (1.0 + quality) - efficiency_penalty)
 
 
 def _genome_training_seed(genome: GeneralistGenome, *, namespace: str = "candidate") -> int:
@@ -206,28 +235,39 @@ def _research_eligible(
 ) -> tuple[bool, str]:
     if not candidate.get("finite"):
         return False, "candidate validation is non-finite"
-    old_loss = float(champion["loss"])
-    new_loss = float(candidate["loss"])
-    if old_loss - new_loss < float(minimum_loss_gain):
-        return False, "candidate did not reduce held-out loss by the research margin"
-    for domain, old_value in (champion.get("domain_loss") or {}).items():
-        if domain not in (candidate.get("domain_loss") or {}):
+
+    old_quality = float(champion.get("nll_per_byte", champion["loss"]))
+    new_quality = float(candidate.get("nll_per_byte", candidate["loss"]))
+    if old_quality - new_quality < float(minimum_loss_gain):
+        return False, "candidate did not reduce held-out NLL per byte by the research margin"
+
+    old_domain_quality = champion.get("domain_nll_per_byte") or champion.get("domain_loss") or {}
+    new_domain_quality = candidate.get("domain_nll_per_byte") or candidate.get("domain_loss") or {}
+    for domain, old_value in old_domain_quality.items():
+        if domain not in new_domain_quality:
             return False, f"candidate lost validation domain: {domain}"
-        if float(candidate["domain_loss"][domain]) > float(old_value) + float(max_domain_regression):
-            return False, f"candidate regressed in validation domain: {domain}"
+        if float(new_domain_quality[domain]) > float(old_value) + float(max_domain_regression):
+            return False, f"candidate regressed in byte-normalized validation domain: {domain}"
 
-    old_accuracy = float(champion.get("target_token_accuracy", 0.0))
-    new_accuracy = float(candidate.get("target_token_accuracy", 0.0))
-    if new_accuracy + 0.01 < old_accuracy:
-        return False, "candidate regressed in held-out target-token accuracy"
+    same_tokenizer = (
+        str(champion.get("tokenizer_version", "byte-v1"))
+        == str(candidate.get("tokenizer_version", "byte-v1"))
+    )
+    # Token accuracy is meaningful within one tokenizer family, but is not a
+    # fair cross-tokenizer comparison because segmentation changes.
+    if same_tokenizer:
+        old_accuracy = float(champion.get("target_token_accuracy", 0.0))
+        new_accuracy = float(candidate.get("target_token_accuracy", 0.0))
+        if new_accuracy + 0.01 < old_accuracy:
+            return False, "candidate regressed in held-out target-token accuracy"
 
-    old_domains = champion.get("domain_token_accuracy") or {}
-    new_domains = candidate.get("domain_token_accuracy") or {}
-    for domain, old_value in old_domains.items():
-        if domain not in new_domains:
-            return False, f"candidate lost token-accuracy domain: {domain}"
-        if float(new_domains[domain]) + 0.02 < float(old_value):
-            return False, f"candidate regressed in target-token domain: {domain}"
+        old_domains = champion.get("domain_token_accuracy") or {}
+        new_domains = candidate.get("domain_token_accuracy") or {}
+        for domain, old_value in old_domains.items():
+            if domain not in new_domains:
+                return False, f"candidate lost token-accuracy domain: {domain}"
+            if float(new_domains[domain]) + 0.02 < float(old_value):
+                return False, f"candidate regressed in target-token domain: {domain}"
 
     remembered = set(champion.get("solved_items") or [])
     retained = set(candidate.get("solved_items") or [])
@@ -261,15 +301,20 @@ def _research_eligible(
             return False, "candidate is missing the rotating held-out canary"
         if not new_canary.get("finite"):
             return False, "candidate rotating canary validation is non-finite"
-        if float(new_canary.get("loss", float("inf"))) > float(old_canary.get("loss", 0.0)) + float(max_domain_regression):
-            return False, "candidate regressed on rotating canary loss"
-        old_canary_domains = old_canary.get("domain_loss") or {}
-        new_canary_domains = new_canary.get("domain_loss") or {}
+
+        old_canary_quality = float(old_canary.get("nll_per_byte", old_canary.get("loss", 0.0)))
+        new_canary_quality = float(new_canary.get("nll_per_byte", new_canary.get("loss", float("inf"))))
+        if new_canary_quality > old_canary_quality + float(max_domain_regression):
+            return False, "candidate regressed on rotating canary NLL per byte"
+
+        old_canary_domains = old_canary.get("domain_nll_per_byte") or old_canary.get("domain_loss") or {}
+        new_canary_domains = new_canary.get("domain_nll_per_byte") or new_canary.get("domain_loss") or {}
         for domain, old_value in old_canary_domains.items():
             if domain not in new_canary_domains:
                 return False, f"candidate lost rotating canary domain: {domain}"
             if float(new_canary_domains[domain]) > float(old_value) + float(max_domain_regression):
                 return False, f"candidate regressed on rotating canary domain: {domain}"
+
         old_canary_generation = float(old_canary.get("generation_exact_accuracy", 0.0))
         new_canary_generation = float(new_canary.get("generation_exact_accuracy", 0.0))
         if new_canary_generation + 1e-12 < old_canary_generation:
@@ -279,11 +324,10 @@ def _research_eligible(
         if old_canary_solved - new_canary_solved:
             return False, "candidate forgot a solved rotating canary item"
 
-    return True, "held-out loss, rotating canary, generation, and anti-forgetting gates passed"
-
+    return True, "held-out NLL/byte, rotating canary, generation, and anti-forgetting gates passed"
 
 def _weaknesses(report: dict[str, Any]) -> list[str]:
-    domains = report.get("domain_loss") or {}
+    domains = report.get("domain_nll_per_byte") or report.get("domain_loss") or {}
     if not domains:
         return []
     ordered = sorted(domains.items(), key=lambda item: float(item[1]), reverse=True)
@@ -377,6 +421,47 @@ def _training_rows_for_genome(
     return base + extra
 
 
+def _tokenizer_training_texts(
+    replay_rows: list[ResearchRow] | None,
+    pretrain_documents: list[CorpusDocument] | None,
+) -> list[str]:
+    """Build BPE text only from allowed training/repository sources.
+
+    Protected validation, qualification and rotating canary rows are never
+    passed here.
+    """
+    texts: list[str] = []
+    for row in list(train_rows()) + list(replay_rows or []):
+        for message in row.messages:
+            texts.append(str(message.get("content", "")))
+    for document in list(pretrain_documents or []):
+        texts.append(str(document.text))
+    return [text for text in texts if text]
+
+
+def _tokenizer_for_genome(
+    genome: GeneralistGenome,
+    *,
+    source_runtime: GeneralistRuntime | None = None,
+    replay_rows: list[ResearchRow] | None = None,
+    pretrain_documents: list[CorpusDocument] | None = None,
+    bpe_vocab_size: int = 384,
+    bpe_max_bytes: int = 256_000,
+):
+    if source_runtime is not None and source_runtime.tokenizer.version == genome.tokenizer_version:
+        return source_runtime.tokenizer
+    if genome.tokenizer_version == "byte-v1":
+        return ByteTokenizer()
+    if genome.tokenizer_version == "bpe-v1":
+        return train_bpe(
+            _tokenizer_training_texts(replay_rows, pretrain_documents),
+            vocab_size=max(BYTE_VOCAB_SIZE, int(bpe_vocab_size)),
+            min_frequency=2,
+            max_bytes=max(8_192, int(bpe_max_bytes)),
+        )
+    raise ValueError(f"unsupported research tokenizer: {genome.tokenizer_version}")
+
+
 def _research_budget_reason(
     genome: GeneralistGenome,
     *,
@@ -384,6 +469,7 @@ def _research_budget_reason(
     max_context: int,
     max_width: int,
     max_layers: int,
+    vocab_size: int = BYTE_VOCAB_SIZE,
 ) -> str | None:
     if genome.context_length > max_context:
         return f"context_length {genome.context_length} exceeds research max {max_context}"
@@ -391,27 +477,95 @@ def _research_budget_reason(
         return f"d_model {genome.d_model} exceeds research max {max_width}"
     if genome.n_layers > max_layers:
         return f"n_layers {genome.n_layers} exceeds research max {max_layers}"
-    estimated = estimate_parameter_count(genome.model_config())
+    estimated = estimate_parameter_count(genome.model_config(vocab_size))
     if estimated > max_params:
         return f"estimated parameters {estimated} exceed research max {max_params}"
     return None
 
 
-def _transfer_compatible_weights(source_model, target_model) -> dict[str, Any]:
-    """Copy only exact-name/exact-shape tensors from champion to challenger."""
+def _transfer_compatible_weights(
+    source_model,
+    target_model,
+    *,
+    source_tokenizer=None,
+    target_tokenizer=None,
+) -> dict[str, Any]:
+    """Transfer compatible tensors and migrate vocabulary embeddings safely."""
     source = source_model.state_dict()
     target = target_model.state_dict()
     copied: dict[str, Any] = {}
     copied_params = 0
-    total_params = 0
+    total_params = sum(int(tensor.numel()) for tensor in target.values())
+
+    source_version = str(getattr(source_tokenizer, "version", "unknown"))
+    target_version = str(getattr(target_tokenizer, "version", "unknown"))
+    source_digest = getattr(source_tokenizer, "digest", None)
+    target_digest = getattr(target_tokenizer, "digest", None)
+    tokenizer_identical = (
+        source_version == target_version
+        and (source_version != "bpe-v1" or source_digest == target_digest)
+    )
+    vocab_names = {"token_embedding.weight", "lm_head.weight"}
 
     for name, tensor in target.items():
-        total_params += int(tensor.numel())
         old = source.get(name)
         if old is None or tuple(old.shape) != tuple(tensor.shape):
             continue
+        if name in vocab_names and not tokenizer_identical:
+            continue
         copied[name] = old.detach().to(device=tensor.device, dtype=tensor.dtype).clone()
         copied_params += int(tensor.numel())
+
+    shared_token_rows = 0
+    derived_bpe_rows = 0
+    source_embed = source.get("token_embedding.weight")
+    target_embed = target.get("token_embedding.weight")
+    if (
+        source_embed is not None
+        and target_embed is not None
+        and source_embed.ndim == 2
+        and target_embed.ndim == 2
+        and source_embed.shape[1] == target_embed.shape[1]
+        and not tokenizer_identical
+    ):
+        migrated = target_embed.detach().clone()
+        shared_token_rows = min(
+            BYTE_VOCAB_SIZE,
+            int(source_embed.shape[0]),
+            int(target_embed.shape[0]),
+        )
+        if shared_token_rows:
+            migrated[:shared_token_rows] = source_embed[:shared_token_rows].to(
+                device=migrated.device,
+                dtype=migrated.dtype,
+            )
+
+        if isinstance(target_tokenizer, BPETokenizer):
+            for token_id in range(BYTE_VOCAB_SIZE, int(target_embed.shape[0])):
+                raw = target_tokenizer.token_bytes(token_id)
+                byte_rows = [
+                    BYTE_OFFSET + value
+                    for value in raw
+                    if BYTE_OFFSET + value < int(source_embed.shape[0])
+                ]
+                if not byte_rows:
+                    continue
+                migrated[token_id] = source_embed[byte_rows].to(
+                    device=migrated.device,
+                    dtype=migrated.dtype,
+                ).mean(dim=0)
+                derived_bpe_rows += 1
+
+        copied["token_embedding.weight"] = migrated
+        # The model ties lm_head to token_embedding. Supplying the same migrated
+        # values for both state-dict keys keeps loading deterministic.
+        if "lm_head.weight" in target and tuple(target["lm_head.weight"].shape) == tuple(migrated.shape):
+            copied["lm_head.weight"] = migrated.clone()
+
+        migrated_params = int(migrated.numel())
+        copied_params += migrated_params
+        if "lm_head.weight" in copied:
+            copied_params += migrated_params
 
     target_model.load_state_dict(copied, strict=False)
     source_unmatched = sorted(
@@ -427,11 +581,20 @@ def _transfer_compatible_weights(source_model, target_model) -> dict[str, Any]:
         "copied_parameters": copied_params,
         "target_parameters": total_params,
         "parameter_fraction": (
-            float(copied_params / total_params) if total_params else 0.0
+            float(min(copied_params, total_params) / total_params) if total_params else 0.0
         ),
-        "policy": "exact name and exact shape only",
+        "source_tokenizer": source_version,
+        "target_tokenizer": target_version,
+        "tokenizer_identical": tokenizer_identical,
+        "shared_token_rows": shared_token_rows,
+        "derived_bpe_rows": derived_bpe_rows,
+        "vocabulary_migrated": bool(shared_token_rows or derived_bpe_rows),
+        "policy": (
+            "exact name and exact shape only"
+            if tokenizer_identical
+            else "exact name/shape tensors plus deterministic byte-compatible vocabulary migration"
+        ),
     }
-
 
 def _train_genome(
     genome: GeneralistGenome,
@@ -441,15 +604,22 @@ def _train_genome(
     device: str,
     replay_rows: list[ResearchRow] | None = None,
     source_model=None,
+    source_tokenizer=None,
+    tokenizer=None,
     gradient_accumulation_steps: int = 1,
     precision: str = "fp32",
     pretrain_documents: list[CorpusDocument] | None = None,
     pretrain_steps: int = 0,
 ) -> tuple[GeneralistRuntime, dict[str, Any]]:
-    tokenizer = ByteTokenizer()
+    tokenizer = tokenizer or ByteTokenizer()
     model = CausalTransformerLM(genome.model_config(tokenizer.vocab_size))
     transfer = (
-        _transfer_compatible_weights(source_model, model)
+        _transfer_compatible_weights(
+            source_model,
+            model,
+            source_tokenizer=source_tokenizer,
+            target_tokenizer=tokenizer,
+        )
         if source_model is not None
         else {
             "copied_tensors": 0,
@@ -609,6 +779,15 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_CURRICULUM_MAX_ROWS", "1200")), 20_000),
     )
 
+    bpe_vocab_size = max(
+        BYTE_VOCAB_SIZE,
+        min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_BPE_VOCAB", "384")), 2048),
+    )
+    bpe_max_bytes = max(
+        8_192,
+        min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_BPE_MAX_BYTES", "256000")), 5_000_000),
+    )
+
     pretrain_steps = max(
         0,
         min(int(os.environ.get("AIRI_GENERALIST_RESEARCH_PRETRAIN_STEPS", "0")), 100),
@@ -681,6 +860,11 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
     if mathesis_dir and Path(mathesis_dir).exists():
         mathesis = mathesis_signals(mathesis_dir)
         signals.extend(mathesis.get("signals") or [])
+    if (
+        champion_genome.tokenizer_version == "byte-v1"
+        and float(champion_report.get("generation_exact_accuracy", 0.0)) < 1.0
+    ):
+        signals.append("tokenizer_efficiency_gap")
     signals = list(dict.fromkeys(signals))
 
     curriculum_memory = CurriculumMemory(root, max_rows=curriculum_max_rows)
@@ -733,12 +917,21 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         winner = (continual_genome, continual_runtime, continual_report)
 
     for index, genome in enumerate(challengers):
+        candidate_tokenizer = _tokenizer_for_genome(
+            genome,
+            source_runtime=champion_runtime,
+            replay_rows=replay_rows,
+            pretrain_documents=corpus_documents,
+            bpe_vocab_size=bpe_vocab_size,
+            bpe_max_bytes=bpe_max_bytes,
+        )
         budget_reason = _research_budget_reason(
             genome,
             max_params=max_params,
             max_context=max_context,
             max_width=max_width,
             max_layers=max_layers,
+            vocab_size=candidate_tokenizer.vocab_size,
         )
         if budget_reason:
             trials.append({
@@ -756,6 +949,8 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             device=device,
             replay_rows=replay_rows,
             source_model=champion_runtime.model,
+            source_tokenizer=champion_runtime.tokenizer,
+            tokenizer=candidate_tokenizer,
             gradient_accumulation_steps=gradient_accumulation_steps,
             precision=precision,
             pretrain_documents=corpus_documents,
@@ -781,7 +976,11 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             "eligible": eligible,
             "reason": reason,
         })
-        if eligible and (winner is None or report["loss"] < winner[2]["loss"]):
+        if eligible and (
+            winner is None
+            or float(report.get("nll_per_byte", report["loss"]))
+            < float(winner[2].get("nll_per_byte", winner[2]["loss"]))
+        ):
             winner = (genome, runtime, report)
 
     promoted = winner is not None
@@ -845,6 +1044,14 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             "architecture_weight_transfer": {
                 "enabled": True,
                 "exact_name_and_shape_only": True,
+                "byte_to_bpe_embedding_migration": True,
+            },
+            "tokenizer_research": {
+                "allowed": ["byte-v1", "bpe-v1"],
+                "comparison_metric": "nll_per_byte",
+                "bpe_vocab_size": bpe_vocab_size,
+                "bpe_max_training_bytes": bpe_max_bytes,
+                "protected_eval_rows_excluded_from_tokenizer_training": True,
             },
         },
         "updated_at": time.time(),

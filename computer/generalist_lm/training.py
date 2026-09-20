@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import json
 from pathlib import Path
 import random
@@ -85,6 +86,82 @@ def loss_on_examples(model, tokenizer: ByteTokenizer, examples: list[SFTExample]
     with torch.no_grad():
         loss = model(ids, labels=labels)["loss"]
     return float(loss.detach().cpu())
+
+
+def _utf8_prefix(text: str, max_bytes: int) -> str:
+    """Return the longest valid UTF-8 character prefix within max_bytes."""
+    raw = str(text).encode("utf-8", errors="replace")
+    if len(raw) <= max_bytes:
+        return str(text)
+    return raw[:max(0, int(max_bytes))].decode("utf-8", errors="ignore")
+
+
+def nll_stats_on_examples(model, tokenizer, examples: list[SFTExample], *, device: str = "cpu") -> dict[str, float | int]:
+    """Return tokenizer-comparable held-out negative log-likelihood metrics.
+
+    Cross-entropy per token is not comparable across tokenizer families because
+    changing tokenization changes the number and entropy of target tokens. NLL
+    per UTF-8 target byte keeps the promotion signal on a common denominator.
+
+    The supervised assistant target is first truncated by a tokenizer-independent
+    UTF-8 byte budget. This guarantees byte-v1 and merge-only bpe-v1 score the
+    same target byte prefix even when the original answer exceeds context.
+    """
+    import torch
+    from torch.nn import functional as F
+
+    if not examples:
+        raise ValueError("no SFT examples")
+
+    # byte-v1 is the worst-case tokenization for merge-only bpe-v1: one token
+    # per UTF-8 byte. Reserve one token for prompt context and one for EOS, so
+    # the selected target prefix fits both tokenizer families without
+    # tokenizer-dependent target truncation.
+    target_byte_budget = max(1, int(model.config.context_length) - 2)
+    fair_examples: list[SFTExample] = []
+    for example in examples:
+        messages = [dict(row) for row in example.messages]
+        messages[-1]["content"] = _utf8_prefix(
+            messages[-1].get("content", ""),
+            target_byte_budget,
+        )
+        fair_examples.append(SFTExample(messages))
+
+    model.eval()
+    ids, labels = _batch(fair_examples, tokenizer, model.config.context_length, range(len(fair_examples)))
+    ids, labels = ids.to(device), labels.to(device)
+    with torch.no_grad():
+        logits = model(ids)["logits"][:, :-1, :].contiguous()
+        targets = labels[:, 1:].contiguous()
+        total_nll = F.cross_entropy(
+            logits.view(-1, logits.shape[-1]),
+            targets.view(-1),
+            ignore_index=-100,
+            reduction="sum",
+        )
+
+    target_tokens = int((targets != -100).sum().item())
+    target_bytes = 0
+    labels_cpu = labels.detach().cpu()
+    for row in labels_cpu:
+        supervised = [int(token) for token in row.tolist() if int(token) != -100]
+        target_bytes += len(
+            tokenizer.decode(supervised, skip_special=True).encode(
+                "utf-8",
+                errors="replace",
+            )
+        )
+    nll = float(total_nll.detach().cpu())
+    per_token = nll / max(1, target_tokens)
+    per_byte = nll / max(1, target_bytes)
+    return {
+        "total_nll": nll,
+        "target_tokens": target_tokens,
+        "target_bytes": int(target_bytes),
+        "loss_per_token": per_token,
+        "nll_per_byte": per_byte,
+        "bits_per_byte": per_byte / math.log(2.0),
+    }
 
 
 def train_sft(

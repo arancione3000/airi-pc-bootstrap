@@ -69,6 +69,11 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
             [cfg.position_encoding, genome.position_encoding],
         )
         check("checkpoint:ff_variant_match", cfg.ff_variant == genome.ff_variant, [cfg.ff_variant, genome.ff_variant])
+        check(
+            "checkpoint:tokenizer_match",
+            cfg.tokenizer_version == genome.tokenizer_version == runtime.tokenizer.version,
+            [cfg.tokenizer_version, genome.tokenizer_version, runtime.tokenizer.version],
+        )
 
     production = root / "production"
     if production.exists():
@@ -124,6 +129,24 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
         domain_accuracy = report.get("domain_token_accuracy") or {}
         check("report:finite", bool(report.get("finite")), report.get("loss"))
         check("report:domains", bool(domain_loss) and all(float(v) >= 0 for v in domain_loss.values()), domain_loss)
+        nll_per_byte = report.get("nll_per_byte")
+        domain_nll = report.get("domain_nll_per_byte") or {}
+        check(
+            "report:nll_per_byte",
+            isinstance(nll_per_byte, (int, float)) and float(nll_per_byte) >= 0.0,
+            nll_per_byte,
+        )
+        check(
+            "report:domain_nll_per_byte",
+            set(domain_nll) == set(DOMAINS)
+            and all(isinstance(v, (int, float)) and float(v) >= 0.0 for v in domain_nll.values()),
+            domain_nll,
+        )
+        check(
+            "report:tokenizer_version",
+            report.get("tokenizer_version") in {"byte-v1", "bpe-v1"},
+            report.get("tokenizer_version"),
+        )
         accuracy = report.get("target_token_accuracy")
         check(
             "report:target_token_accuracy",
@@ -183,6 +206,22 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
         check("report:canary_object", isinstance(canary, dict), type(canary).__name__)
         if isinstance(canary, dict):
             check("report:canary_finite", canary.get("finite") is True, canary.get("loss"))
+            check(
+                "report:canary_nll_per_byte",
+                isinstance(canary.get("nll_per_byte"), (int, float))
+                and float(canary.get("nll_per_byte")) >= 0.0,
+                canary.get("nll_per_byte"),
+            )
+            canary_domain_nll = canary.get("domain_nll_per_byte") or {}
+            check(
+                "report:canary_domain_nll_per_byte",
+                set(canary_domain_nll) == set(DOMAINS)
+                and all(
+                    isinstance(value, (int, float)) and float(value) >= 0.0
+                    for value in canary_domain_nll.values()
+                ),
+                canary_domain_nll,
+            )
             canary_domains = canary.get("domain_loss") or {}
             check(
                 "report:canary_domains",
@@ -222,6 +261,14 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
             "policy:continual_full_replay",
             continual.get("enabled") is True and continual.get("full_replay") is True,
             continual,
+        )
+        tokenizer_policy = policy.get("tokenizer_research") or {}
+        check(
+            "policy:tokenizer_research",
+            tokenizer_policy.get("comparison_metric") == "nll_per_byte"
+            and tokenizer_policy.get("protected_eval_rows_excluded_from_tokenizer_training") is True
+            and set(tokenizer_policy.get("allowed") or []) == {"byte-v1", "bpe-v1"},
+            tokenizer_policy,
         )
         rotating_policy = policy.get("rotating_canary") or {}
         check(

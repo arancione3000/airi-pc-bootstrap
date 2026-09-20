@@ -86,6 +86,12 @@ class BPETokenizer:
         self.vocab_size = BYTE_VOCAB_SIZE + len(self.merges)
         self.digest = merges_digest(self.merges)
 
+    def token_bytes(self, token_id: int) -> bytes:
+        token = int(token_id)
+        if token not in self._token_bytes:
+            raise ValueError(f"token has no byte representation: {token}")
+        return bytes(self._token_bytes[token])
+
     def encode(self, text: str, *, bos: bool = False, eos: bool = False) -> list[int]:
         tokens = [BYTE_OFFSET + byte for byte in str(text).encode("utf-8", errors="replace")]
         next_id = BYTE_VOCAB_SIZE
