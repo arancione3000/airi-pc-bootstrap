@@ -8,7 +8,7 @@ from typing import Any
 
 _DEVICE_MAP_STRATEGIES = {"auto", "balanced", "balanced_low_0", "sequential"}
 _DTYPE_NAMES = {"auto", "float16", "bfloat16", "float32"}
-_MEMORY_RE = re.compile(r"^\\d+(?:\\.\\d+)?\\s*(?:B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)$", re.IGNORECASE)
+_MEMORY_RE = re.compile(r"^\d+(?:\.\d+)?\s*(?:B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)$", re.IGNORECASE)
 
 
 def _normalized_device_map(value: str | dict[str, Any] | None) -> str | dict[str, Any] | None:
