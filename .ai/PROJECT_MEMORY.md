@@ -283,3 +283,22 @@ Capability honesty:
 - autoregressive decoding now has a bounded per-layer KV cache with equivalence regressions against full-prefix greedy decoding and context-limit fallback;
 - SFT supports bounded gradient accumulation and fp32/bf16/fp16 policies with fail-closed device checks;
 - qualification, protected-domain promotion gates, Airi-PC permissions and the MATHESIS verifier boundary remain unchanged.
+
+
+## 2026-09-20 — Grounded Generalist repository learning
+
+- added a deterministic bounded repository corpus builder for Generalist causal
+  pretraining;
+- tests, Generalist benchmark/qualification/promotion/governance files,
+  persistent state, .ai internals and sensitive paths are excluded from
+  training to prevent evaluation leakage and secret ingestion;
+- symlink escapes are rejected and common token/private-key patterns are
+  redacted from otherwise permitted source files;
+- repository traversal prunes blocked directories before descent instead of
+  scanning them and discarding afterward;
+- causal-pretraining evaluation uses a deterministic bounded block subset so a
+  larger grounded corpus cannot explode autonomous cycle runtime;
+- bootstrap, continual-learning and architecture-challenger paths all receive
+  the same optional grounded-pretraining stage;
+- the Generalist H24 continuum uses a bounded repository corpus and a small
+  number of pretraining steps; production qualification remains independent.

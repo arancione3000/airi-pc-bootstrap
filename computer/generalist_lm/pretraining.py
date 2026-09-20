@@ -165,17 +165,32 @@ def _batch(blocks: Sequence[Sequence[int]], indices: Sequence[int], *, device: s
     return ids, labels
 
 
-def corpus_loss(model, blocks: Sequence[Sequence[int]], *, device: str = "cpu", batch_size: int = 8) -> float:
+def corpus_loss(
+    model,
+    blocks: Sequence[Sequence[int]],
+    *,
+    device: str = "cpu",
+    batch_size: int = 8,
+    max_blocks: int | None = None,
+    seed: int = 0,
+) -> float:
     import torch
 
     if not blocks:
         raise ValueError("no causal-pretraining blocks")
+
+    indices = list(range(len(blocks)))
+    if max_blocks is not None and len(indices) > max(1, int(max_blocks)):
+        rng = random.Random(int(seed))
+        indices = sorted(rng.sample(indices, max(1, int(max_blocks))))
+
     model.eval()
     weighted = 0.0
     count = 0
+    batch_size = max(1, int(batch_size))
     with torch.no_grad():
-        for start in range(0, len(blocks), max(1, int(batch_size))):
-            rows = list(range(start, min(len(blocks), start + max(1, int(batch_size)))))
+        for start in range(0, len(indices), batch_size):
+            rows = indices[start:start + batch_size]
             ids, labels = _batch(blocks, rows, device=device)
             result = model(ids, labels=labels)
             loss = result["loss"]
@@ -197,6 +212,7 @@ def pretrain_causal(
     weight_decay: float = 0.01,
     seed: int = 17,
     device: str = "cpu",
+    max_eval_blocks: int = 128,
 ) -> dict:
     """Run bounded causal next-token pretraining on a local reviewed corpus."""
     import torch
@@ -212,7 +228,15 @@ def pretrain_causal(
     rng = random.Random(seed)
     torch.manual_seed(seed)
     model.to(device)
-    initial_loss = corpus_loss(model, blocks, device=device, batch_size=batch_size)
+    eval_blocks = max(1, min(int(max_eval_blocks), len(blocks)))
+    initial_loss = corpus_loss(
+        model,
+        blocks,
+        device=device,
+        batch_size=batch_size,
+        max_blocks=eval_blocks,
+        seed=seed + 1,
+    )
     model.train()
 
     optimizer = torch.optim.AdamW(
@@ -233,11 +257,19 @@ def pretrain_causal(
         optimizer.step()
         losses.append(float(loss.detach().cpu()))
 
-    final_loss = corpus_loss(model, blocks, device=device, batch_size=batch_size)
+    final_loss = corpus_loss(
+        model,
+        blocks,
+        device=device,
+        batch_size=batch_size,
+        max_blocks=eval_blocks,
+        seed=seed + 1,
+    )
     return {
         "ok": bool(final_loss < initial_loss),
         "documents": len(documents),
         "blocks": len(blocks),
+        "eval_blocks": eval_blocks,
         "steps": max(1, int(steps)),
         "initial_loss": initial_loss,
         "final_loss": final_loss,
