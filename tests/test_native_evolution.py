@@ -778,3 +778,66 @@ def test_vectorized_lattice_sparse_expert_banks_receive_gradients():
         assert parameter.grad is not None
         assert torch.isfinite(parameter.grad).all()
         assert float(parameter.grad.abs().sum()) > 0.0
+
+
+
+def test_lattice_v1_cycle_persists_reset_even_without_a_winner(tmp_path: Path, monkeypatch):
+    import generalist_lm.lattice_research_cycle as module
+    from generalist_lm.lattice_evolution import root_lattice_genome
+
+    root = tmp_path / "lattice-state"
+    root.mkdir()
+    stale = root_lattice_genome(module._research_root_config())
+    stale.generation = 7
+    stale.genome_id = "stale-v0-winner"
+    (root / "lattice-champion.json").write_text(
+        json.dumps(stale.to_dict()),
+        encoding="utf-8",
+    )
+    (root / "lattice-status.json").write_text(
+        json.dumps({"version": "airi-lattice-research-state-v0"}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        module,
+        "benchmark_lattice_against_transformer",
+        lambda *args, **kwargs: {
+            "ok": True,
+            "candidate_wins": False,
+            "decision": "deliberate test rejection",
+            "candidate": {
+                "training": {
+                    "final": {
+                        "loss": 9.0,
+                        "domain_loss": {"reasoning": 9.0},
+                    }
+                }
+            },
+            "baseline": {
+                "training": {
+                    "final": {
+                        "loss": 8.0,
+                        "domain_loss": {"reasoning": 8.0},
+                    }
+                }
+            },
+        },
+    )
+
+    result = module.run_lattice_research_cycle(
+        root,
+        tmp_path / "unused.json",
+        allowed_roots=[tmp_path],
+        cycle=10,
+        population_size=2,
+        empirical_candidates=1,
+        benchmark_steps=1,
+        repeat_seeds=1,
+    )
+    assert result["promoted"] is False
+    persisted = json.loads(
+        (root / "lattice-champion.json").read_text(encoding="utf-8")
+    )
+    assert persisted["generation"] == 0
+    assert persisted["genome_id"] != "stale-v0-winner"
