@@ -488,3 +488,14 @@ def test_generalist_model_cannot_edit_its_own_governance_or_attestation(
             "context",
             root=tmp_path / "repo",
         )
+
+
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), float("-inf")])
+def test_generalist_data_tools_reject_non_finite_numbers(bad_value):
+    from control_plane.generalist_agent_bridge import execute_readonly_tool
+
+    with pytest.raises(ValueError, match="finite numeric value"):
+        execute_readonly_tool(
+            "data_stats",
+            {"values": [1.0, bad_value, 3.0], "operation": "mean"},
+        )
