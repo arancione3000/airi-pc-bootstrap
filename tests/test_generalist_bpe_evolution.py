@@ -120,6 +120,37 @@ def test_nll_per_byte_denominator_is_tokenizer_invariant_for_same_target():
     assert bpe_stats["nll_per_byte"] > 0
 
 
+def test_nll_per_byte_scores_same_long_target_prefix_across_tokenizers():
+    pytest.importorskip("torch")
+    long_target = "OK" * 80
+    example = SFTExample([
+        {"role": "user", "content": "Repeat the requested sequence exactly"},
+        {"role": "assistant", "content": long_target},
+    ])
+
+    byte = ByteTokenizer()
+    bpe = BPETokenizer((
+        (BYTE_OFFSET + ord("O"), BYTE_OFFSET + ord("K")),
+        (BYTE_VOCAB_SIZE, BYTE_VOCAB_SIZE),
+    ))
+
+    byte_model = CausalTransformerLM(
+        tiny_config(vocab_size=byte.vocab_size, tokenizer_version="byte-v1")
+    )
+    bpe_model = CausalTransformerLM(
+        tiny_config(vocab_size=bpe.vocab_size, tokenizer_version="bpe-v1")
+    )
+
+    byte_stats = nll_stats_on_examples(byte_model, byte, [example])
+    bpe_stats = nll_stats_on_examples(bpe_model, bpe, [example])
+
+    # context_length=64 reserves one prompt token and EOS, leaving a common
+    # 62-byte assistant prefix for both tokenizers.
+    assert byte_stats["target_bytes"] == 62
+    assert bpe_stats["target_bytes"] == 62
+    assert bpe_stats["target_tokens"] < byte_stats["target_tokens"]
+
+
 def report(
     *,
     tokenizer: str,
