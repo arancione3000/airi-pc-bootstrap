@@ -455,3 +455,36 @@ def test_generalist_registration_cannot_escalate_unimplemented_capabilities(tmp_
     assert set(row["capabilities"]) == {"coding", "data"}
     assert "vision" not in row["capabilities"]
     assert "research" not in row["capabilities"]
+
+
+@pytest.mark.parametrize("protected_path", [
+    "computer/generalist_lm/qualification.py",
+    "computer/control_plane/local_agent.py",
+    "computer/code_agent.py",
+    ".ai/generalist-lm/champion/benchmark.json",
+    "generalist-state/production/benchmark.json",
+])
+def test_generalist_model_cannot_edit_its_own_governance_or_attestation(
+    tmp_path: Path,
+    monkeypatch,
+    protected_path: str,
+):
+    from control_plane import generalist_provider, local_agent
+
+    make_qualified_checkpoint(tmp_path / "model")
+    monkeypatch.setenv("AIRI_GENERALIST_STATE", str(tmp_path / "model"))
+    monkeypatch.setenv("AIRI_GENERALIST_ENABLE", "1")
+    monkeypatch.setattr(
+        generalist_provider,
+        "chat",
+        lambda messages, max_new_tokens=1600: json.dumps([
+            {"path": protected_path, "content": "tampered"}
+        ]),
+    )
+
+    with pytest.raises(RuntimeError, match="protected"):
+        local_agent.ask_local_model_changes(
+            "change your own verifier",
+            "context",
+            root=tmp_path / "repo",
+        )
