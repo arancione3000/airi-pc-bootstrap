@@ -11,9 +11,16 @@ sys.path.insert(0, str(ROOT / "computer"))
 from generalist_lm.bpe_tokenizer import BPETokenizer
 from generalist_lm.evolution import GeneralistGenome, generate_challengers
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
-from generalist_lm.research_cycle import _research_eligible, _transfer_compatible_weights
+from generalist_lm.research_cycle import (
+    _research_eligible,
+    _tokenizer_for_genome,
+    _tokenizer_training_texts,
+    _train_genome,
+    _transfer_compatible_weights,
+)
 from generalist_lm.tokenizer import BYTE_OFFSET, VOCAB_SIZE as BYTE_VOCAB_SIZE, ByteTokenizer
 from generalist_lm.training import SFTExample, nll_stats_on_examples
+from generalist_lm.curriculum import validation_rows
 
 
 def tiny_config(*, vocab_size: int, tokenizer_version: str):
@@ -185,3 +192,70 @@ def test_cross_tokenizer_domain_nll_regression_is_blocked():
     )
     assert ok is False
     assert "byte-normalized validation domain" in reason
+
+
+
+def test_bpe_training_text_builder_excludes_validation_prompts():
+    texts = _tokenizer_training_texts([], [])
+    joined = "\n".join(texts)
+    assert texts
+    for row in validation_rows():
+        assert str(row.messages[0]["content"]) not in joined
+
+
+def test_byte_champion_can_train_real_bpe_challenger():
+    pytest.importorskip("torch")
+    source_genome = GeneralistGenome(
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        learning_rate=3e-3,
+        tokenizer_version="byte-v1",
+        retrieval_adapter=False,
+        symbolic_adapter=False,
+        code_adapter=False,
+        data_adapter=False,
+        reasoning_depth=1,
+    ).validate()
+    source_tokenizer = ByteTokenizer()
+    source_model = CausalTransformerLM(
+        source_genome.model_config(source_tokenizer.vocab_size)
+    )
+
+    candidate = GeneralistGenome(**{
+        **source_genome.to_dict(),
+        "generation": 1,
+        "parent_id": source_genome.genome_id,
+        "genome_id": "bpe-e2e-candidate",
+        "tokenizer_version": "bpe-v1",
+    }).validate()
+    tokenizer = _tokenizer_for_genome(
+        candidate,
+        replay_rows=[],
+        pretrain_documents=[],
+        bpe_vocab_size=300,
+        bpe_max_bytes=32_000,
+    )
+    assert tokenizer.version == "bpe-v1"
+    assert tokenizer.vocab_size > BYTE_VOCAB_SIZE
+
+    runtime, report = _train_genome(
+        candidate,
+        steps=2,
+        seed=123,
+        device="cpu",
+        replay_rows=[],
+        source_model=source_model,
+        source_tokenizer=source_tokenizer,
+        tokenizer=tokenizer,
+        pretrain_documents=[],
+        pretrain_steps=0,
+    )
+    assert runtime.tokenizer.version == "bpe-v1"
+    assert report["tokenizer_version"] == "bpe-v1"
+    assert report["finite"] is True
+    assert report["nll_per_byte"] > 0
+    assert report["weight_transfer"]["vocabulary_migrated"] is True
+    assert report["weight_transfer"]["derived_bpe_rows"] > 0
