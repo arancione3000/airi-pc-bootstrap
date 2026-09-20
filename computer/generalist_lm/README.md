@@ -130,3 +130,25 @@ Persistent curriculum state is fail-closed. Every replay row carries a digest;
 invalid domains, malformed SFT messages, duplicate rows, replay-cap violations,
 digest mismatches, or protected-validation overlap stop research health and
 prevent state persistence.
+
+
+## Qualification v2 and immutable governance
+
+Production qualification is versioned independently from model checkpoints.
+Qualification v2 uses prompts that are disjoint from fixed training,
+validation, deterministic continual-learning replay and rotating canaries. Each
+generalist capability domain has at least one critical production gate.
+Changing the protected suite invalidates legacy v1 attestations, so old
+checkpoints must be requalified against the new examination.
+
+The local Generalist autocoder cannot edit its own model/research package,
+qualification and promotion code, Control Plane provider/router/gateway,
+autocoding engine, reasoning policy, Generalist workflows, or Generalist state
+and attestations. Architecture improvement happens through the bounded genome
+DSL and research cycle instead of source-level self-modification of the
+verifier/governance layer.
+
+The Generalist agent tool loop remains read-only: calculator, bounded data
+statistics/table aggregation, workspace file reads/search and project
+inspection. Tool requests are parsed against an explicit allowlist and numeric
+analysis rejects non-finite inputs.
