@@ -275,3 +275,11 @@ Capability honesty:
   independent Generalist protected benchmark and production promotion gates;
 - CI regressions verify corpus confinement/deduplication, actual causal-loss
   reduction, distillation provenance semantics and LoRA path/config boundaries.
+
+
+## 2026-09-20 — Generalist LM scalable execution integration
+
+- integrated the KV-cache/scalable-training work on top of the already-merged causal pretraining, distillation and local-LoRA tranche rather than force-merging a stale conflicting PR;
+- autoregressive decoding now has a bounded per-layer KV cache with equivalence regressions against full-prefix greedy decoding and context-limit fallback;
+- SFT supports bounded gradient accumulation and fp32/bf16/fp16 policies with fail-closed device checks;
+- qualification, protected-domain promotion gates, Airi-PC permissions and the MATHESIS verifier boundary remain unchanged.
