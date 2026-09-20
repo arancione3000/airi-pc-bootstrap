@@ -285,7 +285,7 @@ def qualify_foundation_model(
         root,
         device=device,
         device_map=device_map,
-        torch_dtype=torch_dtype,
+        torch_dtype=canonical_dtype,
         max_memory=max_memory,
         offload_folder=offload_folder,
         local_files_only=True,
