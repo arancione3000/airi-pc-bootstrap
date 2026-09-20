@@ -1258,3 +1258,66 @@ def test_research_cycle_architecture_trial_records_weight_transfer(tmp_path: Pat
     assert transfer["copied_tensors"] > 0
     assert 0.0 < transfer["parameter_fraction"] <= 1.0
     assert transfer["policy"] == "exact name and exact shape only"
+
+
+def test_curriculum_memory_fails_closed_on_digest_corruption(tmp_path: Path):
+    from generalist_lm.curriculum_memory import CurriculumMemory
+
+    memory = CurriculumMemory(tmp_path)
+    memory.expand(1, signals=[])
+    raw = json.loads((tmp_path / "curriculum-memory.json").read_text(encoding="utf-8"))
+    raw["rows"][0]["id"] = "tampered"
+    (tmp_path / "curriculum-memory.json").write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="digest mismatch"):
+        memory.rows()
+
+
+def test_curriculum_memory_fails_closed_on_invalid_domain_and_validation_overlap(tmp_path: Path):
+    from generalist_lm.curriculum import validation_rows
+    from generalist_lm.curriculum_memory import CurriculumMemory, _row_id
+    from generalist_lm.curriculum import ResearchRow
+
+    memory = CurriculumMemory(tmp_path)
+    memory.expand(1, signals=[])
+    path = tmp_path / "curriculum-memory.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["rows"][0]["domain"] = "unbounded_web_truth"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="unsupported curriculum domain|digest mismatch"):
+        memory.rows()
+
+    protected = validation_rows()[0]
+    malicious = ResearchRow(protected.domain, protected.messages)
+    path.write_text(json.dumps({
+        "version": 1,
+        "last_cycle": 1,
+        "rows": [{
+            "id": _row_id(malicious),
+            "domain": malicious.domain,
+            "messages": malicious.messages,
+        }],
+    }), encoding="utf-8")
+    with pytest.raises(ValueError, match="protected validation"):
+        memory.rows()
+
+
+def test_research_health_rejects_corrupted_persistent_curriculum(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    from generalist_lm.research_cycle import run_research_cycle
+    from generalist_lm.research_health import research_health
+
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_BOOTSTRAP_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_STEPS", "2")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_CHALLENGERS", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_RESEARCH_MIN_LOSS_GAIN", "999")
+
+    run_research_cycle(tmp_path)
+    path = tmp_path / "curriculum-memory.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["rows"][0]["id"] = "corrupted"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    report = research_health(tmp_path)
+    assert report["ok"] is False
+    assert any(row["name"] == "curriculum_memory:loadable" for row in report["failed"])
