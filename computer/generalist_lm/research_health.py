@@ -160,6 +160,47 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
             generation_probe,
         )
 
+        canary_cycle = report.get("canary_cycle")
+        canary = report.get("canary")
+        check(
+            "report:canary_cycle",
+            isinstance(canary_cycle, int) and canary_cycle >= 1,
+            canary_cycle,
+        )
+        check("report:canary_object", isinstance(canary, dict), type(canary).__name__)
+        if isinstance(canary, dict):
+            check("report:canary_finite", canary.get("finite") is True, canary.get("loss"))
+            canary_domains = canary.get("domain_loss") or {}
+            check(
+                "report:canary_domains",
+                set(canary_domains) == set(DOMAINS)
+                and all(isinstance(value, (int, float)) and float(value) >= 0.0 for value in canary_domains.values()),
+                canary_domains,
+            )
+            canary_generation = canary.get("domain_generation_accuracy") or {}
+            check(
+                "report:canary_generation_domains",
+                set(canary_generation) == set(DOMAINS)
+                and all(
+                    isinstance(value, (int, float))
+                    and 0.0 <= float(value) <= 1.0
+                    for value in canary_generation.values()
+                ),
+                canary_generation,
+            )
+
+        rotating = status.get("rotating_canary") or {}
+        check(
+            "canary:training_disjoint",
+            rotating.get("training_overlap") == [],
+            rotating.get("training_overlap"),
+        )
+        check(
+            "canary:domains",
+            set(rotating.get("domains") or []) == set(DOMAINS),
+            rotating.get("domains"),
+        )
+
         policy = status.get("policy") or {}
         check("policy:research_only", policy.get("research_only") is True, policy)
         check("policy:production_separate", policy.get("production_qualification_separate") is True, policy)
@@ -168,6 +209,14 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
             "policy:continual_full_replay",
             continual.get("enabled") is True and continual.get("full_replay") is True,
             continual,
+        )
+        rotating_policy = policy.get("rotating_canary") or {}
+        check(
+            "policy:rotating_canary",
+            rotating_policy.get("enabled") is True
+            and rotating_policy.get("training_excluded") is True
+            and int(rotating_policy.get("domains", 0) or 0) == len(DOMAINS),
+            rotating_policy,
         )
 
     failed = [row for row in checks if not row["ok"]]
