@@ -318,6 +318,68 @@ tokens while still allowing genuinely more efficient representations to
 compete.
 
 
+
+## AIRI Native Foundation — canonical scratch track
+
+The canonical AIRI path does **not** require or inherit an external pretrained
+model. The repository now contains a separate `AIRI Native Foundation` family
+whose root checkpoint is created from random initialization only.
+
+Native Foundation v1 is implemented directly in
+`generalist_lm/native_foundation.py` and intentionally has no Hugging Face,
+Transformers or `from_pretrained` dependency. Its architecture is a
+decoder-only causal LM with:
+
+- pre-norm RMSNorm;
+- rotary positional embeddings (RoPE);
+- grouped-query attention (GQA) with compact KV caches;
+- SwiGLU feed-forward blocks;
+- residual-projection scaling;
+- optional tied token/output embeddings;
+- causal generation with KV-cache reuse.
+
+The legacy small Generalist LM remains untouched for checkpoint compatibility.
+The Native family is a new architecture line intended to scale independently.
+
+Every Native root checkpoint contains
+`airi-native-foundation.json`, `native-config.json` and `model.pt`.
+A BPE-based root additionally contains an AIRI-owned `tokenizer.json`.
+The manifest records and verifies the architecture family, random-init seed,
+weight origin, tokenizer identity and digests of the config/model/tokenizer.
+`external_pretrained=true` is invalid by construction.
+
+The root-creation API accepts no source-model or pretrained-weight argument.
+BPE roots accept only a tokenizer that parses as AIRI `bpe-v1`, and its
+vocabulary must exactly match the Native model config.
+
+Planning is deliberately separate from allocation:
+
+```bash
+# No weights allocated; useful for hardware/training planning.
+python -m generalist_lm.cli native-foundation-plan 1b
+python -m generalist_lm.cli native-foundation-plan 3b
+python -m generalist_lm.cli native-foundation-plan 7b
+
+# Actual random initialization. The default safety guard refuses accidental
+# large allocations unless the caller raises the limit explicitly.
+python -m generalist_lm.cli native-foundation-init ./native-root \
+  --profile micro \
+  --tokenizer-json ./tokenizer.json \
+  --seed 17
+
+python -m generalist_lm.cli native-foundation-status ./native-root
+```
+
+The provided planning profiles are approximately 1.1B, 3.3B and 7.1B
+parameters with GQA. These are architecture plans only; CI never instantiates
+the billion-parameter profiles.
+
+This Native track is the canonical basis for the later data/training and
+autonomous-evolution phases. The external Foundation/Transformers track below
+remains optional compatibility infrastructure and is not required to become the
+AIRI champion.
+
+
 ## Foundation Track v1
 
 The scalable path now has a first-class foundation-model track instead of

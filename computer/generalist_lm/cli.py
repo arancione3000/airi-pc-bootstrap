@@ -9,6 +9,13 @@ from .distillation import DistillationPrompt, distill_prompts, save_distilled_js
 from .hf_backend import LocalTransformersBackend
 from .foundation import FoundationManifest, foundation_identity, write_foundation_manifest
 from .foundation_probe import foundation_preflight
+from .native_foundation import (
+    NativeFoundationConfig,
+    create_native_root_checkpoint,
+    native_checkpoint_status,
+    native_parameter_count,
+    native_scale_profile,
+)
 from .pretraining import load_local_corpus, pretrain_causal
 from .qualification import (
     qualify_checkpoint,
@@ -85,6 +92,29 @@ def parser() -> argparse.ArgumentParser:
     fp.add_argument("model_dir")
     fp.add_argument("--max-memory-json")
     fp.add_argument("--no-hardware", action="store_true")
+
+    nfp = sub.add_parser(
+        "native-foundation-plan",
+        help="plan an AIRI scratch Foundation scale without allocating model weights",
+    )
+    nfp.add_argument("profile", choices=("micro", "1b", "3b", "7b"))
+    nfp.add_argument("--vocab-size", type=int, default=32768)
+
+    nfi = sub.add_parser(
+        "native-foundation-init",
+        help="create an AIRI Native Foundation root checkpoint from random init only",
+    )
+    nfi.add_argument("output")
+    nfi.add_argument("--profile", choices=("micro", "1b", "3b", "7b"), default="micro")
+    nfi.add_argument("--vocab-size", type=int, default=32768)
+    nfi.add_argument("--config-json")
+    nfi.add_argument("--tokenizer-json")
+    nfi.add_argument("--seed", type=int, default=17)
+    nfi.add_argument("--max-init-parameters", type=int, default=100_000_000)
+    nfi.add_argument("--allow-large-init", action="store_true")
+
+    nfs = sub.add_parser("native-foundation-status")
+    nfs.add_argument("state")
 
     rc = sub.add_parser("research-cycle")
     rc.add_argument("--state", default=os.environ.get("AIRI_GENERALIST_RESEARCH_STATE", ".ai/generalist-research"))
@@ -217,6 +247,41 @@ def main(argv=None) -> int:
             max_memory=max_memory,
             probe_hardware=not args.no_hardware,
         )
+
+    elif args.cmd == "native-foundation-plan":
+        cfg = native_scale_profile(args.profile, vocab_size=args.vocab_size)
+        result = {
+            "ok": True,
+            "family": "airi-native-foundation",
+            "profile": args.profile,
+            "config": cfg.to_dict(),
+            "parameters": native_parameter_count(cfg),
+            "weights_origin": "random-init",
+            "external_pretrained": False,
+            "allocation_performed": False,
+        }
+
+    elif args.cmd == "native-foundation-init":
+        if args.config_json:
+            raw = json.loads(Path(args.config_json).read_text(encoding="utf-8"))
+            cfg = NativeFoundationConfig.from_dict(raw)
+        else:
+            cfg = native_scale_profile(args.profile, vocab_size=args.vocab_size)
+        parameters = native_parameter_count(cfg)
+        if parameters > int(args.max_init_parameters) and not args.allow_large_init:
+            raise ValueError(
+                f"native init would allocate {parameters} parameters; "
+                "raise --max-init-parameters or pass --allow-large-init explicitly"
+            )
+        result = create_native_root_checkpoint(
+            args.output,
+            cfg,
+            root_seed=args.seed,
+            tokenizer_path=args.tokenizer_json,
+        )
+
+    elif args.cmd == "native-foundation-status":
+        result = native_checkpoint_status(args.state)
 
     elif args.cmd == "research-cycle":
         result = run_research_cycle(args.state)
