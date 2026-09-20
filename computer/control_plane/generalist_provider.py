@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import os
 from pathlib import Path
 from typing import Any
@@ -28,7 +29,8 @@ def status() -> dict[str, Any]:
     }
     checkpoint_complete = all(files.values())
     qualified = bool(qualification.get("qualified"))
-    available = bool(enabled() and checkpoint_complete and qualified)
+    runtime_dependency = importlib.util.find_spec("torch") is not None
+    available = bool(enabled() and checkpoint_complete and qualified and runtime_dependency)
     return {
         "available": available,
         "enabled": enabled(),
@@ -37,12 +39,13 @@ def status() -> dict[str, Any]:
         "model": "local-causal-lm" if checkpoint_complete else None,
         "state_dir": str(root),
         "checkpoint_complete": checkpoint_complete,
+        "runtime_dependency": runtime_dependency,
         "files": files,
         "qualification": qualification,
         "reason": (
             "qualified local generalist checkpoint is enabled"
             if available
-            else "provider requires AIRI_GENERALIST_ENABLE=1 and a complete qualified checkpoint"
+            else "provider requires AIRI_GENERALIST_ENABLE=1, PyTorch, and a complete qualified checkpoint"
         ),
     }
 
