@@ -616,3 +616,30 @@ def test_genome_training_seed_is_stable_for_same_effective_architecture():
 
     changed = replace(genome, norm_type="rmsnorm")
     assert _genome_training_seed(genome) != _genome_training_seed(changed)
+
+
+def test_benchmark_prefers_chat_interface_for_instruction_models():
+    from generalist_lm.benchmarks import BenchmarkTask, exact, run_benchmark
+
+    class ChatAwareBackend:
+        def __init__(self):
+            self.chat_calls = 0
+            self.generate_calls = 0
+
+        def chat(self, messages, *, max_new_tokens=192):
+            self.chat_calls += 1
+            assert messages == [{"role": "user", "content": "say READY"}]
+            return "READY"
+
+        def generate(self, prompt, *, max_new_tokens=192):
+            self.generate_calls += 1
+            return "WRONG"
+
+    backend = ChatAwareBackend()
+    report = run_benchmark(
+        backend,
+        [BenchmarkTask("language:chat-path", "language", "say READY", exact("READY"))],
+    )
+    assert report["ok"] is True
+    assert backend.chat_calls == 1
+    assert backend.generate_calls == 0
