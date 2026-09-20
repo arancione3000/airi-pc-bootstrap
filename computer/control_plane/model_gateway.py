@@ -93,6 +93,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
             return _json_response(self, 404, {"error": "not_found"})
         try:
             length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0 or length > 1_000_000:
+                return _json_response(self, 413, {"error": "request_too_large"})
             payload = json.loads(self.rfile.read(length))
         except (ValueError, json.JSONDecodeError):
             return _json_response(self, 400, {"error": "invalid_request"})
