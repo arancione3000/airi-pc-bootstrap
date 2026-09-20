@@ -7,6 +7,7 @@ from typing import Any
 from .curriculum import DOMAINS, curriculum_manifest
 from .evolution import GeneralistGenome
 from .model import parameter_count
+from .qualification import qualification_status
 from .runtime import GeneralistRuntime
 
 
@@ -54,6 +55,15 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
             [cfg.position_encoding, genome.position_encoding],
         )
         check("checkpoint:ff_variant_match", cfg.ff_variant == genome.ff_variant, [cfg.ff_variant, genome.ff_variant])
+
+    production = root / "production"
+    if production.exists():
+        production_status = qualification_status(production)
+        check(
+            "production:qualified_integrity",
+            bool(production_status.get("qualified") and production_status.get("integrity_ok")),
+            production_status,
+        )
 
     curriculum = curriculum_manifest()
     check("curriculum:no_prompt_overlap", curriculum.get("prompt_overlap") == [], curriculum.get("prompt_overlap"))
