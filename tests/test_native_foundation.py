@@ -23,7 +23,7 @@ def test_native_config_validates_gqa_and_rope():
     assert cfg.n_heads // cfg.n_kv_heads == 4
 
     with pytest.raises(ValueError, match="n_heads must be divisible"):
-        NativeFoundationConfig(n_heads=6, n_kv_heads=4).validate()
+        NativeFoundationConfig(d_model=120, n_heads=6, n_kv_heads=4).validate()
 
 
 def test_native_profiles_scale_without_instantiating_large_models():
