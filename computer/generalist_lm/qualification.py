@@ -79,7 +79,7 @@ def qualify_checkpoint(
     digest = checkpoint_digest(root)
     qualified = bool(
         report.get("ok")
-        and float(report.get("score", 0.0)) >= threshold
+        and float(report.get("score", 0.0)) >= float(minimum_score)
         and not report.get("critical_failures")
     )
     result = {
@@ -87,7 +87,7 @@ def qualify_checkpoint(
         "attested_by": "airi-generalist-qualification-v2",
         "checkpoint_digest": digest,
         "qualified": qualified,
-        "minimum_score": threshold,
+        "minimum_score": float(minimum_score),
         "report": report,
         "policy": "qualification is bound to the exact checkpoint digest and critical-domain benchmark result",
     }
