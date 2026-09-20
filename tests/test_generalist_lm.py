@@ -1398,3 +1398,25 @@ def test_untrained_causal_checkpoint_fails_real_production_qualification(tmp_pat
     assert report["qualified"] is False
     assert report["qualification_version"] == 2
     assert report["report"]["score"] < 85.0 or report["report"]["critical_failures"]
+
+
+def test_generalist_research_health_rejects_oversized_persisted_checkpoint(tmp_path: Path, monkeypatch):
+    import json
+    from generalist_lm.research_cycle import research_seed
+    from generalist_lm.research_health import research_health
+    from generalist_lm.runtime import GeneralistRuntime
+
+    genome = research_seed()
+    runtime = GeneralistRuntime.fresh(genome.model_config())
+    champion = tmp_path / "champion"
+    runtime.save_checkpoint(champion, metadata={"role": "research_champion"})
+    (tmp_path / "champion-genome.json").write_text(
+        json.dumps(genome.to_dict()),
+        encoding="utf-8",
+    )
+
+    # A tiny limit must fail closed before such a checkpoint could be persisted.
+    monkeypatch.setenv("AIRI_GENERALIST_MAX_PERSISTED_CHECKPOINT_BYTES", "1048576")
+    report = research_health(tmp_path)
+    failed = {row["name"] for row in report["failed"]}
+    assert "checkpoint:persistence_size" in failed
