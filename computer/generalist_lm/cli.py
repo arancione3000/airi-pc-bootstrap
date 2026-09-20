@@ -20,6 +20,19 @@ from .native_acquisition import acquire_native_corpus
 from .native_evaluation import evaluate_native_checkpoint
 from .native_evolution_cycle import run_native_evolution_cycle
 from .native_online_research import discover_native_research
+from .native_lattice import (
+    AiriLatticeConfig,
+    lattice_active_parameter_estimate,
+    lattice_parameter_count,
+    lattice_state_bytes,
+)
+from .lattice_lab import LatticeLabConfig, benchmark_lattice_against_transformer
+from .lattice_math import memory_horizon_summary, stability_certificate
+from .lattice_evolution import (
+    generate_lattice_population,
+    root_lattice_genome,
+    successive_halving_plan,
+)
 from .native_data import (
     NATIVE_CORPUS_DOMAINS,
     audit_native_corpus,
@@ -239,6 +252,42 @@ def parser() -> argparse.ArgumentParser:
     nevo.add_argument("--minimum-gain", type=float, default=0.002)
     nevo.add_argument("--max-domain-regression", type=float, default=0.05)
     nevo.add_argument("--max-parameter-ratio", type=float, default=1.5)
+
+    lp = sub.add_parser(
+        "lattice-plan",
+        help="inspect an AIRI Lattice architecture without training it",
+    )
+    lp.add_argument("--config-json")
+
+    lb = sub.add_parser(
+        "lattice-benchmark",
+        help="scratch-compare AIRI Lattice against a matched Native Transformer",
+    )
+    lb.add_argument("manifest")
+    lb.add_argument("--allowed-root", action="append", required=True)
+    lb.add_argument("--config-json")
+    lb.add_argument("--steps", type=int, default=8)
+    lb.add_argument("--batch-size", type=int, default=1)
+    lb.add_argument("--learning-rate", type=float, default=2e-3)
+    lb.add_argument("--min-learning-rate", type=float, default=2e-4)
+    lb.add_argument("--weight-decay", type=float, default=0.05)
+    lb.add_argument("--validation-fraction", type=float, default=0.25)
+    lb.add_argument("--max-eval-blocks", type=int, default=12)
+    lb.add_argument("--seed", type=int, default=1701)
+    lb.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
+
+    lpop = sub.add_parser(
+        "lattice-population",
+        help="generate mathematically stable AIRI Lattice architecture challengers",
+    )
+    lpop.add_argument("--config-json")
+    lpop.add_argument("--signal", action="append")
+    lpop.add_argument("--count", type=int, default=8)
+    lpop.add_argument("--exploration-offset", type=int, default=0)
+    lpop.add_argument("--max-total-parameters", type=int, default=8_000_000)
+    lpop.add_argument("--max-active-parameter-ratio", type=float, default=1.5)
+    lpop.add_argument("--first-stage-steps", type=int, default=2)
+    lpop.add_argument("--stages", type=int, default=3)
 
     rc = sub.add_parser("research-cycle")
     rc.add_argument("--state", default=os.environ.get("AIRI_GENERALIST_RESEARCH_STATE", ".ai/generalist-research"))
@@ -514,6 +563,89 @@ def main(argv=None) -> int:
             max_domain_regression=max(0.0, float(args.max_domain_regression)),
             max_parameter_ratio=max(1.0, float(args.max_parameter_ratio)),
         )
+
+    elif args.cmd == "lattice-plan":
+        cfg = (
+            AiriLatticeConfig.from_dict(
+                json.loads(Path(args.config_json).read_text(encoding="utf-8"))
+            )
+            if args.config_json
+            else AiriLatticeConfig().validate()
+        )
+        result = {
+            "ok": True,
+            "family": "airi-native-lattice",
+            "architecture_version": cfg.architecture_version,
+            "config": cfg.to_dict(),
+            "parameters": lattice_parameter_count(cfg),
+            "active_parameters": lattice_active_parameter_estimate(cfg),
+            "state_bytes_batch1": lattice_state_bytes(cfg),
+            "memory_horizon": memory_horizon_summary(cfg),
+            "stability": stability_certificate(cfg),
+            "external_pretrained": False,
+            "research_only": True,
+        }
+
+    elif args.cmd == "lattice-benchmark":
+        cfg = (
+            AiriLatticeConfig.from_dict(
+                json.loads(Path(args.config_json).read_text(encoding="utf-8"))
+            )
+            if args.config_json
+            else AiriLatticeConfig().validate()
+        )
+        result = benchmark_lattice_against_transformer(
+            args.manifest,
+            allowed_roots=args.allowed_root,
+            lattice_config=cfg,
+            lab_config=LatticeLabConfig(
+                steps=args.steps,
+                batch_size=args.batch_size,
+                learning_rate=args.learning_rate,
+                min_learning_rate=args.min_learning_rate,
+                weight_decay=args.weight_decay,
+                validation_fraction=args.validation_fraction,
+                max_eval_blocks=args.max_eval_blocks,
+                seed=args.seed,
+                device=args.device,
+            ),
+        )
+
+    elif args.cmd == "lattice-population":
+        cfg = (
+            AiriLatticeConfig.from_dict(
+                json.loads(Path(args.config_json).read_text(encoding="utf-8"))
+            )
+            if args.config_json
+            else AiriLatticeConfig().validate()
+        )
+        champion = root_lattice_genome(cfg)
+        population = generate_lattice_population(
+            champion,
+            count=max(1, args.count),
+            exploration_offset=max(0, args.exploration_offset),
+            mathesis_signals=args.signal,
+            max_total_parameters=max(1, args.max_total_parameters),
+            max_active_parameter_ratio=max(1.0, args.max_active_parameter_ratio),
+        )
+        result = {
+            "ok": True,
+            "champion": champion.to_dict(),
+            "population": [
+                {
+                    "mutation": mutation.to_dict(),
+                    "genome": genome.to_dict(),
+                }
+                for mutation, genome in population
+            ],
+            "successive_halving": successive_halving_plan(
+                len(population),
+                first_stage_steps=max(1, args.first_stage_steps),
+                stages=max(1, args.stages),
+            ),
+            "external_pretrained": False,
+            "research_only": True,
+        }
 
     elif args.cmd == "research-cycle":
         result = run_research_cycle(args.state)

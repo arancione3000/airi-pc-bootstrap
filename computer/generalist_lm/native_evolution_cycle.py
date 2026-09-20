@@ -30,6 +30,7 @@ from .native_foundation import (
     native_checkpoint_status,
 )
 from .native_online_research import discover_native_research
+from .lattice_research_cycle import run_lattice_research_cycle
 from .native_training import train_native_foundation
 
 
@@ -218,6 +219,11 @@ def run_native_evolution_cycle(
     max_parameter_ratio: float = 1.5,
     max_parameters: int | None = None,
     keep_trial_checkpoints: bool = False,
+    lattice_research: bool = False,
+    lattice_population_size: int = 8,
+    lattice_empirical_candidates: int = 1,
+    lattice_benchmark_steps: int = 1,
+    lattice_repeat_seeds: int = 1,
 ) -> dict[str, Any]:
     """Run one proof-gated AIRI Native self-evolution cycle.
 
@@ -513,6 +519,36 @@ def run_native_evolution_cycle(
 
     final_status = native_checkpoint_status(root / "champion")
     final_genome = _load_genome(root / "champion-genome.json")
+
+    lattice_report: dict[str, Any] | None = None
+    if lattice_research:
+        try:
+            lattice_report = run_lattice_research_cycle(
+                root / "lattice-research",
+                corpus_manifest,
+                allowed_roots=allowed_roots,
+                cycle=cycle,
+                mathesis_signals=signals,
+                research=research,
+                population_size=max(1, int(lattice_population_size)),
+                empirical_candidates=max(1, int(lattice_empirical_candidates)),
+                benchmark_steps=max(1, int(lattice_benchmark_steps)),
+                max_eval_blocks=min(8, max(2, int(max_eval_blocks))),
+                repeat_seeds=max(1, int(lattice_repeat_seeds)),
+            )
+        except Exception as exc:
+            lattice_report = {
+                "ok": False,
+                "version": "airi-lattice-research-state-v0",
+                "cycle": cycle,
+                "error": f"{type(exc).__name__}:{exc}",
+                "policy": {
+                    "canonical_native_transformer_unchanged": True,
+                    "failure_isolated_from_native_champion": True,
+                },
+            }
+            _atomic_json(root / "lattice-research-error.json", lattice_report)
+
     payload = {
         "ok": bool(final_status.get("ok")),
         "version": NATIVE_EVOLUTION_STATE_VERSION,
@@ -543,6 +579,7 @@ def run_native_evolution_cycle(
             "remote_content_trusted": False,
         },
         "trials": trials,
+        "lattice_research": lattice_report,
         "policy": {
             "candidate_can_self_promote": False,
             "verifier_external_to_candidate": True,
@@ -598,6 +635,23 @@ def main() -> int:
             int(os.environ["AIRI_NATIVE_MAX_PARAMETERS"])
             if os.environ.get("AIRI_NATIVE_MAX_PARAMETERS")
             else None
+        ),
+        lattice_research=os.environ.get("AIRI_LATTICE_RESEARCH", "1") != "0",
+        lattice_population_size=max(
+            1,
+            min(int(os.environ.get("AIRI_LATTICE_POPULATION", "8")), 32),
+        ),
+        lattice_empirical_candidates=max(
+            1,
+            min(int(os.environ.get("AIRI_LATTICE_EMPIRICAL", "1")), 4),
+        ),
+        lattice_benchmark_steps=max(
+            1,
+            min(int(os.environ.get("AIRI_LATTICE_BENCHMARK_STEPS", "1")), 100),
+        ),
+        lattice_repeat_seeds=max(
+            1,
+            min(int(os.environ.get("AIRI_LATTICE_REPEAT_SEEDS", "1")), 4),
         ),
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))

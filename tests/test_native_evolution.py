@@ -477,3 +477,173 @@ def test_cli_exposes_native_phase3_commands(tmp_path: Path):
         "--offline",
     ])
     assert evolve.cmd == "native-evolve"
+
+
+
+def _tiny_lattice_config(**overrides):
+    from generalist_lm.native_lattice import AiriLatticeConfig
+
+    values = dict(
+        vocab_size=264,
+        context_length=32,
+        d_model=32,
+        n_cells=1,
+        memory_bands=3,
+        d_expert=48,
+        n_experts=4,
+        active_experts=1,
+        max_reasoning_steps=3,
+        surprise_threshold=0.25,
+        dropout=0.0,
+    )
+    values.update(overrides)
+    return AiriLatticeConfig(**values).validate()
+
+
+def test_airi_lattice_core_is_causal_sparse_and_stateful():
+    torch = pytest.importorskip("torch")
+    from generalist_lm.native_lattice import (
+        AiriLatticeLM,
+        lattice_active_parameter_estimate,
+        lattice_parameter_count,
+        lattice_state_bytes,
+    )
+
+    torch.manual_seed(41)
+    cfg = _tiny_lattice_config()
+    model = AiriLatticeLM(cfg).eval()
+    left = torch.tensor([[1, 10, 11, 12, 13, 14]], dtype=torch.long)
+    right = left.clone()
+    right[0, -2:] = torch.tensor([101, 102])
+    a = model(left, return_state=True)
+    b = model(right, return_state=True)
+
+    assert a["logits"].shape == (1, left.shape[1], cfg.vocab_size)
+    assert torch.allclose(a["logits"][:, :-2], b["logits"][:, :-2], atol=1e-6, rtol=1e-6)
+    assert a["lattice_state"][0].shape == (cfg.memory_bands, 1, cfg.d_model)
+    assert sum(a["stats"]["expert_usage"]) == pytest.approx(1.0, abs=1e-5)
+    assert lattice_active_parameter_estimate(cfg) < lattice_parameter_count(cfg)
+
+    longer = _tiny_lattice_config(context_length=8192)
+    assert lattice_state_bytes(cfg) == lattice_state_bytes(longer)
+
+    generated = model.generate(left[:, :3], max_new_tokens=3, eos_token_id=None)
+    assert generated.shape[1] == 6
+
+
+def test_airi_lattice_mathesis_architecture_search_is_stable_and_halved():
+    pytest.importorskip("torch")
+    from generalist_lm.lattice_evolution import (
+        generate_lattice_population,
+        root_lattice_genome,
+        successive_halving_plan,
+    )
+    from generalist_lm.lattice_math import memory_half_lives, stability_certificate
+
+    champion = root_lattice_genome(_tiny_lattice_config())
+    population = generate_lattice_population(
+        champion,
+        count=6,
+        mathesis_signals=["symbolic_reasoning_signal", "deep_symbolic_signal"],
+        research={"tag_counts": {"reasoning": 3, "efficiency": 2, "long-context": 1}},
+        max_total_parameters=3_000_000,
+        max_active_parameter_ratio=2.0,
+    )
+    assert len(population) >= 3
+    half_lives = memory_half_lives(champion.lattice_config())
+    assert all(b > a for a, b in zip(half_lives, half_lives[1:]))
+    for mutation, genome in population:
+        assert mutation.changes
+        assert stability_certificate(genome.lattice_config())["ok"] is True
+
+    assert successive_halving_plan(8, first_stage_steps=2, stages=3) == [
+        {"stage": 0, "candidates": 8, "steps": 2},
+        {"stage": 1, "candidates": 4, "steps": 6},
+        {"stage": 2, "candidates": 2, "steps": 18},
+    ]
+
+
+def test_airi_lattice_lab_runs_real_scratch_comparison(tmp_path: Path):
+    pytest.importorskip("torch")
+    from generalist_lm.lattice_lab import LatticeLabConfig, benchmark_lattice_against_transformer
+
+    corpus_root = tmp_path / "lattice-corpus"
+    corpus_root.mkdir()
+    manifest = _write_corpus(corpus_root)
+    result = benchmark_lattice_against_transformer(
+        str(manifest),
+        allowed_roots=[str(corpus_root)],
+        lattice_config=_tiny_lattice_config(max_reasoning_steps=2),
+        lab_config=LatticeLabConfig(
+            steps=1,
+            batch_size=1,
+            learning_rate=3e-3,
+            min_learning_rate=5e-4,
+            validation_fraction=0.25,
+            max_eval_blocks=2,
+            seed=321,
+            device="cpu",
+            minimum_loss_gain=0.0,
+            max_domain_regression=10.0,
+            max_active_parameter_ratio=2.0,
+        ),
+    )
+    assert result["ok"] is True
+    assert result["external_pretrained"] is False
+    assert result["baseline"]["family"] == "airi-native-foundation"
+    assert result["candidate"]["family"] == "airi-native-lattice"
+    assert result["candidate"]["state_bytes_at_context"] < result["baseline"]["state_bytes_at_context"]
+
+
+
+def test_lattice_research_cycle_persists_architecture_champion_without_touching_native(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    import generalist_lm.lattice_research_cycle as module
+
+    champion_loss = 1.8
+
+    def fake_benchmark(*args, **kwargs):
+        return {
+            "ok": True,
+            "candidate_wins": True,
+            "decision": "test win",
+            "candidate": {
+                "training": {
+                    "final": {
+                        "loss": champion_loss,
+                        "domain_loss": {"reasoning": champion_loss},
+                    }
+                }
+            },
+            "baseline": {
+                "training": {
+                    "final": {
+                        "loss": 2.0,
+                        "domain_loss": {"reasoning": 2.0},
+                    }
+                }
+            },
+        }
+
+    monkeypatch.setattr(module, "benchmark_lattice_against_transformer", fake_benchmark)
+
+    result = module.run_lattice_research_cycle(
+        tmp_path / "state",
+        tmp_path / "unused-manifest.json",
+        allowed_roots=[tmp_path],
+        cycle=1,
+        mathesis_signals=["symbolic_reasoning_signal"],
+        research={"tag_counts": {"reasoning": 1}},
+        population_size=4,
+        empirical_candidates=1,
+        benchmark_steps=1,
+        max_eval_blocks=2,
+        repeat_seeds=1,
+    )
+
+    assert result["ok"] is True
+    assert result["promoted"] is True
+    assert result["policy"]["canonical_native_transformer_unchanged"] is True
+    assert (tmp_path / "state" / "lattice-champion.json").is_file()
+    assert (tmp_path / "state" / "lattice-status.json").is_file()
+    assert (tmp_path / "state" / "lattice-history.jsonl").is_file()
