@@ -8,7 +8,7 @@ from typing import Any
 from .model import GeneralistLMConfig, estimate_flops_per_token
 
 
-_ALLOWED_TOKENIZERS = {"byte-v1"}
+_ALLOWED_TOKENIZERS = {"byte-v1", "bpe-v1"}
 _ALLOWED_TOOL_PROTOCOLS = {"tool-json-v1"}
 
 
@@ -123,6 +123,10 @@ def generate_challengers(
         variants = variants[shift:] + variants[:shift]
 
     directed: list[dict[str, Any]] = []
+    if "tokenizer_efficiency_gap" in signals:
+        directed.append({
+            "tokenizer_version": "bpe-v1" if champion.tokenizer_version == "byte-v1" else "byte-v1"
+        })
     if "coding_gap" in signals:
         directed.append({"code_adapter": True, "reasoning_depth": min(16, champion.reasoning_depth + 1)})
     if "data_gap" in signals:
