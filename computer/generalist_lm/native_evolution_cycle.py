@@ -295,11 +295,15 @@ def run_native_evolution_cycle(
         **eval_kwargs,
     )
 
+    matched_train_seed = _seed_for(cycle, "matched-train")
+    scratch_train_seed = _seed_for(cycle, "scratch-train")
+    scratch_root_seed = _seed_for(cycle, "scratch-root")
+
     control_dir = trial_root / "control"
     control_config = _trial_training_config(
         champion_genome,
         max_steps=target_step,
-        seed=_seed_for(cycle, "control"),
+        seed=matched_train_seed,
         device=device,
         precision=precision,
         micro_batch_size=micro_batch_size,
@@ -366,14 +370,14 @@ def run_native_evolution_cycle(
                 create_native_root_checkpoint(
                     scratch_root,
                     candidate.foundation_config(),
-                    root_seed=_seed_for(cycle, mutation.name, "root"),
+                    root_seed=scratch_root_seed,
                     tokenizer_path=tokenizer_path,
                 )
                 scratch_steps = max(1, int(reinit_training_steps))
                 train_config = _trial_training_config(
                     candidate,
                     max_steps=scratch_steps,
-                    seed=_seed_for(cycle, mutation.name, "train"),
+                    seed=scratch_train_seed,
                     device=device,
                     precision=precision,
                     micro_batch_size=micro_batch_size,
@@ -411,7 +415,7 @@ def run_native_evolution_cycle(
                 train_config = _trial_training_config(
                     candidate,
                     max_steps=target_step,
-                    seed=_seed_for(cycle, mutation.name, "train"),
+                    seed=matched_train_seed,
                     device=device,
                     precision=precision,
                     micro_batch_size=micro_batch_size,
