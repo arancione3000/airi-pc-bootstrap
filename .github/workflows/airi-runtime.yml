@@ -59,7 +59,7 @@ jobs:
           mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
           .venv/bin/python -m playwright install chromium
 
-      - name: ChatGPT-only rebuild verifier (static)
+      - name: Reasoning-policy rebuild verifier (static)
         working-directory: /home/user/airi
         run: .venv/bin/python scripts/airi-rebuild-verify.py
       - name: Start Airi-PC runtime directly
@@ -227,7 +227,7 @@ jobs:
           echo '--- /ready ---'
           curl -sS --max-time 5 http://127.0.0.1:9010/ready || true
           echo
-          ps -ef | grep -E 'uvicorn|contract_server|model_gateway|Xvfb' | grep -v grep || true
+          pgrep -af 'uvicorn|contract_server|model_gateway|Xvfb' || true
           echo '--- computer-server.log ---'
           cat logs/computer-server.log 2>/dev/null || true
           echo '--- model-gateway.log ---'
