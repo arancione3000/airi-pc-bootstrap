@@ -198,3 +198,16 @@ Capability honesty:
 
 - Generalist autocoding now requires an explicit declared file scope and an explicit real test command; generated edits remain behind snapshot/rollback/diff/guardrail checks.
 - Generalist data analysis now has bounded deterministic table profiling and aggregate/group-by tools in addition to calculator/basic statistics, without arbitrary code execution.
+
+
+## 2026-09-20 — AIRI Generalist continual-learning hardening
+
+- Generalist research now persists a bounded curriculum replay memory inside the Generalist state branch;
+- every cycle adds mechanically labeled, validation-disjoint examples across language, coding, data, reasoning, tool calling and structured output;
+- a dedicated continual-learning challenger starts from the current champion weights, allowing knowledge to accumulate without requiring an architecture mutation;
+- architecture challengers remain independent and train with the same persistent replay corpus;
+- research promotion now checks real autoregressive held-out generation in addition to teacher-forced loss/accuracy;
+- generated held-out items that a champion already solves become anti-forgetting obligations;
+- research health fails closed if persistent curriculum replay overlaps protected validation prompts or if generation metrics are malformed;
+- persistent curriculum size is bounded by `AIRI_GENERALIST_RESEARCH_CURRICULUM_MAX_ROWS` (default 1200);
+- MATHESIS signals still only influence research direction; they do not directly write Generalist weights or bypass independent promotion gates.
