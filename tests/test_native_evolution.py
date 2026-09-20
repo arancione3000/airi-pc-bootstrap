@@ -647,3 +647,134 @@ def test_lattice_research_cycle_persists_architecture_champion_without_touching_
     assert (tmp_path / "state" / "lattice-champion.json").is_file()
     assert (tmp_path / "state" / "lattice-status.json").is_file()
     assert (tmp_path / "state" / "lattice-history.jsonl").is_file()
+
+
+
+def test_lattice_swarm_prepares_parallel_population_and_reducer_promotes_only_final_winner(tmp_path: Path):
+    pytest.importorskip("torch")
+    from generalist_lm.lattice_swarm import (
+        finalize_swarm,
+        prepare_swarm_plan,
+        select_survivors,
+    )
+
+    state = tmp_path / "state"
+    plan_path = tmp_path / "plan.json"
+    plan = prepare_swarm_plan(
+        state,
+        plan_path,
+        cycle=1,
+        mathesis_signals=["symbolic_reasoning_signal"],
+        research={"tag_counts": {"reasoning": 2, "efficiency": 1}},
+        population_size=4,
+        max_total_parameters=3_000_000,
+        max_active_parameter_ratio=2.0,
+    )
+    assert plan["ok"] is True
+    assert len(plan["candidates"]) == 4
+    assert len(plan["matrix"]["include"]) == 4
+    assert plan["policy"]["candidate_can_self_promote"] is False
+
+    reports_dir = tmp_path / "stage"
+    reports_dir.mkdir()
+    for index, candidate in enumerate(plan["candidates"]):
+        payload = {
+            "ok": True,
+            "version": "airi-lattice-swarm-v1",
+            "cycle": 1,
+            "stage": 1,
+            "steps": 2,
+            "candidate_index": index,
+            "candidate_id": candidate["candidate_id"],
+            "mutation": candidate["mutation"],
+            "genome": candidate["genome"],
+            "reports": [],
+            "all_seed_wins": index == 1,
+            "loss": 1.5 + index * 0.1,
+            "active_parameters": candidate["cost"]["active_parameters"],
+            "state_bytes": candidate["cost"]["state_bytes"],
+            "train_seconds": 2.0 + index,
+            "repeat_seeds": 2,
+            "external_pretrained": False,
+        }
+        (reports_dir / f"{index}.json").write_text(
+            json.dumps(payload),
+            encoding="utf-8",
+        )
+
+    selection_path = tmp_path / "selection.json"
+    selection = select_survivors(
+        [reports_dir],
+        selection_path,
+        survivor_count=2,
+    )
+    assert selection["ok"] is True
+    assert len(selection["selected"]) == 2
+
+    final_path = tmp_path / "final.json"
+    final = finalize_swarm(
+        state,
+        plan_path,
+        [reports_dir],
+        final_path,
+    )
+    assert final["ok"] is True
+    assert final["promoted"] is True
+    assert final["winner"]["candidate_index"] == 1
+    assert final["policy"]["external_reducer"] is True
+    assert final["policy"]["canonical_native_transformer_unchanged"] is True
+    assert (state / "lattice-champion.json").is_file()
+    assert (state / "lattice-history.jsonl").is_file()
+
+
+def test_lattice_swarm_finalizer_refuses_unverified_candidate(tmp_path: Path):
+    pytest.importorskip("torch")
+    from generalist_lm.lattice_swarm import finalize_swarm, prepare_swarm_plan
+
+    state = tmp_path / "state"
+    plan_path = tmp_path / "plan.json"
+    plan = prepare_swarm_plan(
+        state,
+        plan_path,
+        cycle=2,
+        population_size=2,
+        max_total_parameters=3_000_000,
+        max_active_parameter_ratio=2.0,
+    )
+
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    for candidate in plan["candidates"]:
+        payload = {
+            "ok": True,
+            "version": "airi-lattice-swarm-v1",
+            "cycle": 2,
+            "stage": 3,
+            "steps": 18,
+            "candidate_index": candidate["index"],
+            "candidate_id": candidate["candidate_id"],
+            "mutation": candidate["mutation"],
+            "genome": candidate["genome"],
+            "reports": [],
+            "all_seed_wins": False,
+            "loss": 1.0,
+            "active_parameters": candidate["cost"]["active_parameters"],
+            "state_bytes": candidate["cost"]["state_bytes"],
+            "train_seconds": 1.0,
+            "repeat_seeds": 2,
+            "external_pretrained": False,
+        }
+        (reports_dir / f"{candidate['index']}.json").write_text(
+            json.dumps(payload),
+            encoding="utf-8",
+        )
+
+    final = finalize_swarm(
+        state,
+        plan_path,
+        [reports_dir],
+        tmp_path / "final.json",
+    )
+    assert final["promoted"] is False
+    assert final["winner"] is None
+    assert final["policy"]["candidate_can_self_promote"] is False
