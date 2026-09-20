@@ -647,3 +647,106 @@ def test_lattice_research_cycle_persists_architecture_champion_without_touching_
     assert (tmp_path / "state" / "lattice-champion.json").is_file()
     assert (tmp_path / "state" / "lattice-status.json").is_file()
     assert (tmp_path / "state" / "lattice-history.jsonl").is_file()
+
+
+
+def test_lattice_v1_gate_rejects_quality_win_that_is_too_slow():
+    from generalist_lm.lattice_lab import LatticeLabConfig, lattice_promotion_gate
+
+    baseline = {
+        "parameters": 20_000,
+        "training": {
+            "final": {
+                "loss": 5.50,
+                "domain_loss": {"code": 5.50},
+            },
+            "tokens_per_second": 10_000.0,
+        },
+    }
+    candidate = {
+        "active_parameters": 19_500,
+        "training": {
+            "final": {
+                "loss": 5.40,
+                "domain_loss": {"code": 5.40},
+            },
+            "tokens_per_second": 400.0,
+        },
+    }
+    ok, reason = lattice_promotion_gate(
+        baseline,
+        candidate,
+        lab=LatticeLabConfig(
+            minimum_loss_gain=0.001,
+            max_domain_regression=0.0,
+            max_active_parameter_ratio=1.2,
+            min_throughput_ratio=0.5,
+        ),
+    )
+    assert ok is False
+    assert "throughput" in reason.lower()
+
+
+def test_lattice_v1_gate_accepts_balanced_quality_and_speed_win():
+    from generalist_lm.lattice_lab import LatticeLabConfig, lattice_promotion_gate
+
+    baseline = {
+        "parameters": 20_000,
+        "training": {
+            "final": {
+                "loss": 5.50,
+                "domain_loss": {"code": 5.50},
+            },
+            "tokens_per_second": 10_000.0,
+        },
+    }
+    candidate = {
+        "active_parameters": 19_500,
+        "training": {
+            "final": {
+                "loss": 5.40,
+                "domain_loss": {"code": 5.40},
+            },
+            "tokens_per_second": 7_000.0,
+        },
+    }
+    ok, reason = lattice_promotion_gate(
+        baseline,
+        candidate,
+        lab=LatticeLabConfig(
+            minimum_loss_gain=0.001,
+            max_domain_regression=0.0,
+            max_active_parameter_ratio=1.2,
+            min_throughput_ratio=0.5,
+        ),
+    )
+    assert ok is True
+    assert "throughput" in reason.lower()
+
+
+def test_lattice_v1_research_resets_v0_speed_blind_champion(tmp_path: Path):
+    from generalist_lm.lattice_evolution import root_lattice_genome
+    from generalist_lm.lattice_research_cycle import (
+        LATTICE_RESEARCH_STATE_VERSION,
+        _load_champion,
+        _research_root_config,
+    )
+
+    root = tmp_path / "lattice-state"
+    root.mkdir()
+    stale = root_lattice_genome(_research_root_config())
+    stale.generation = 9
+    stale.genome_id = "stale-speed-blind"
+    (root / "lattice-champion.json").write_text(
+        json.dumps(stale.to_dict()),
+        encoding="utf-8",
+    )
+    (root / "lattice-status.json").write_text(
+        json.dumps({"version": "airi-lattice-research-state-v0"}),
+        encoding="utf-8",
+    )
+
+    loaded = _load_champion(root)
+    assert LATTICE_RESEARCH_STATE_VERSION == "airi-lattice-research-state-v1"
+    assert loaded.generation == 0
+    assert loaded.genome_id != "stale-speed-blind"
