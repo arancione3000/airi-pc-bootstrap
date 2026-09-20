@@ -62,7 +62,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/computer
         run: |
-          .venv/bin/python -m pytest -q tests/test_generalist_lm.py tests/test_generalist_scalable_learning.py tests/test_generalist_grounded_learning.py tests/test_generalist_provider.py tests/test_model_gateway.py tests/test_local_agent.py tests/test_openrouter_provider.py
+          .venv/bin/python -m pytest -q tests/test_generalist_lm.py tests/test_generalist_scalable_learning.py tests/test_generalist_grounded_learning.py tests/test_generalist_bpe.py tests/test_generalist_provider.py tests/test_model_gateway.py tests/test_local_agent.py tests/test_openrouter_provider.py
 
       - name: Qualified local gateway end-to-end smoke
         env:
