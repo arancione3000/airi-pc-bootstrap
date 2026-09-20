@@ -178,6 +178,9 @@ def parser() -> argparse.ArgumentParser:
     nt.add_argument("--min-learning-rate", type=float, default=3e-5)
     nt.add_argument("--warmup-steps", type=int, default=100)
     nt.add_argument("--weight-decay", type=float, default=0.1)
+    nt.add_argument("--adam-beta1", type=float, default=0.9)
+    nt.add_argument("--adam-beta2", type=float, default=0.95)
+    nt.add_argument("--adam-eps", type=float, default=1e-8)
     nt.add_argument("--grad-clip", type=float, default=1.0)
     nt.add_argument("--validation-fraction", type=float, default=0.05)
     nt.add_argument("--max-eval-blocks", type=int, default=128)
@@ -453,6 +456,9 @@ def main(argv=None) -> int:
             min_learning_rate=args.min_learning_rate,
             warmup_steps=args.warmup_steps,
             weight_decay=args.weight_decay,
+            adam_beta1=args.adam_beta1,
+            adam_beta2=args.adam_beta2,
+            adam_eps=args.adam_eps,
             grad_clip=args.grad_clip,
             validation_fraction=args.validation_fraction,
             max_eval_blocks=args.max_eval_blocks,
