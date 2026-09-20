@@ -47,6 +47,13 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
         check("checkpoint:layers_match", cfg.n_layers == genome.n_layers, [cfg.n_layers, genome.n_layers])
         check("checkpoint:heads_match", cfg.n_heads == genome.n_heads, [cfg.n_heads, genome.n_heads])
         check("checkpoint:ff_match", cfg.d_ff == genome.d_ff, [cfg.d_ff, genome.d_ff])
+        check("checkpoint:norm_match", cfg.norm_type == genome.norm_type, [cfg.norm_type, genome.norm_type])
+        check(
+            "checkpoint:position_match",
+            cfg.position_encoding == genome.position_encoding,
+            [cfg.position_encoding, genome.position_encoding],
+        )
+        check("checkpoint:ff_variant_match", cfg.ff_variant == genome.ff_variant, [cfg.ff_variant, genome.ff_variant])
 
     curriculum = curriculum_manifest()
     check("curriculum:no_prompt_overlap", curriculum.get("prompt_overlap") == [], curriculum.get("prompt_overlap"))
