@@ -5,7 +5,7 @@ import hashlib
 import json
 from typing import Any
 
-from .model import GeneralistLMConfig, estimate_flops_per_token
+from .model import GeneralistLMConfig, estimate_flops_per_token, estimate_parameter_count
 
 
 _ALLOWED_TOKENIZERS = {"byte-v1", "bpe-v1"}
@@ -156,6 +156,134 @@ def generate_challengers(
         seen.add(signature)
         out.append(candidate)
     return out
+
+
+def progressive_scale_candidate(
+    champion: GeneralistGenome,
+    *,
+    target_parameters: int,
+    vocab_size: int = 264,
+    max_width: int = 512,
+    max_layers: int = 12,
+) -> GeneralistGenome:
+    """Construct the closest bounded larger genome to a target parameter tier.
+
+    Search is deterministic and deliberately small. It preserves tokenizer,
+    adapters and architectural choices while scaling width/depth/FFN. The
+    resulting candidate still has to pass the normal research and production
+    gates.
+    """
+    champion.validate()
+    target = max(1, int(target_parameters))
+    current = estimate_parameter_count(champion.model_config(vocab_size))
+    if target <= current:
+        raise ValueError("progressive scaling target must exceed current parameters")
+
+    widths = sorted({
+        champion.d_model,
+        *range(
+            max(32, ((champion.d_model + 31) // 32) * 32),
+            max(64, int(max_width)) + 1,
+            32,
+        ),
+    })
+    candidates: list[tuple[int, int, int, int, int]] = []
+    for width in widths:
+        head_options = [
+            heads for heads in (1, 2, 4, 8, 16)
+            if heads <= width
+            and width % heads == 0
+            and (
+                champion.position_encoding != "rope"
+                or (width // heads) % 2 == 0
+            )
+        ]
+        if not head_options:
+            continue
+        heads = min(
+            head_options,
+            key=lambda value: abs(value - champion.n_heads),
+        )
+        for layers in range(
+            max(1, champion.n_layers),
+            max(1, int(max_layers)) + 1,
+        ):
+            for ratio in (2.0, 3.0, 4.0):
+                ff = max(width, int(round(width * ratio / 32.0)) * 32)
+                try:
+                    cfg = GeneralistLMConfig(
+                        vocab_size=int(vocab_size),
+                        context_length=champion.context_length,
+                        d_model=width,
+                        n_heads=heads,
+                        n_layers=layers,
+                        d_ff=ff,
+                        dropout=champion.dropout,
+                        tokenizer_version=champion.tokenizer_version,
+                        norm_type=champion.norm_type,
+                        position_encoding=champion.position_encoding,
+                        ff_variant=champion.ff_variant,
+                    ).validate()
+                except Exception:
+                    continue
+                params = estimate_parameter_count(cfg)
+                if params <= current:
+                    continue
+                distance = abs(params - target)
+                candidates.append((distance, params, width, layers, ff))
+
+    if not candidates:
+        raise RuntimeError("unable to construct progressive scaling candidate")
+    _distance, _params, width, layers, ff = min(candidates)
+    valid_heads = [
+        heads for heads in (1, 2, 4, 8, 16)
+        if heads <= width
+        and width % heads == 0
+        and (
+            champion.position_encoding != "rope"
+            or (width // heads) % 2 == 0
+        )
+    ]
+    heads = min(valid_heads, key=lambda value: abs(value - champion.n_heads))
+    payload = {
+        **champion.to_dict(),
+        "generation": champion.generation + 1,
+        "parent_id": champion.genome_id,
+        "d_model": width,
+        "n_heads": heads,
+        "n_layers": layers,
+        "d_ff": ff,
+    }
+    raw = json.dumps(
+        {
+            "parent": champion.genome_id,
+            "target": target,
+            "width": width,
+            "heads": heads,
+            "layers": layers,
+            "ff": ff,
+        },
+        sort_keys=True,
+    ).encode("utf-8")
+    payload["genome_id"] = (
+        f"generalist-{champion.generation + 1}-scale-"
+        f"{hashlib.sha256(raw).hexdigest()[:8]}"
+    )
+    return GeneralistGenome(**payload).validate()
+
+
+def progressive_scale_target(
+    current_parameters: int,
+    *,
+    tiers: tuple[int, ...] = (250_000, 500_000, 1_000_000, 2_000_000),
+    max_parameters: int = 2_000_000,
+) -> int | None:
+    current = max(0, int(current_parameters))
+    cap = max(current, int(max_parameters))
+    for tier in tiers:
+        if current < tier <= cap:
+            return int(tier)
+    return None
 
 
 def evolution_cost(genome: GeneralistGenome) -> dict[str, Any]:
