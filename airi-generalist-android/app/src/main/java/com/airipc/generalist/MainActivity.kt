@@ -325,10 +325,10 @@ class GeneralistController(context: Context) : Closeable {
                     }
 
                     val effectiveLive = liveSnapshot ?: _state.value.liveEvolution
-                    val modelBehind = effectiveLive != null &&
-                        fetched.manifest.stateSha.isNotBlank() &&
-                        effectiveLive.stateRevision.isNotBlank() &&
-                        fetched.manifest.stateSha != effectiveLive.stateRevision
+                    val modelBehind = isModelBehindState(
+                        fetched.manifest.stateSha,
+                        effectiveLive?.stateRevision,
+                    )
 
                     val statusText = when {
                         !fetched.freshFromNetwork ->
