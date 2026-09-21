@@ -31,6 +31,32 @@ def _language_rows(words: list[str]) -> list[ResearchRow]:
     ]
 
 
+def _language_sentence_rows(specs: Iterable[tuple[str, str, str]]) -> list[ResearchRow]:
+    """Mechanically generate short compositional language examples.
+
+    The prompt exposes the semantic slots explicitly, so the target remains
+    deterministic while requiring multi-token sentence generation instead of
+    single-word copying.
+    """
+    rows: list[ResearchRow] = []
+    for subject, verb, object_ in specs:
+        target = f"{subject.capitalize()} {verb} {object_}."
+        rows.append(ResearchRow(
+            "language",
+            [
+                {
+                    "role": "user",
+                    "content": (
+                        "Write one grammatical sentence using exactly these "
+                        f"content words: subject={subject}; verb={verb}; object={object_}."
+                    ),
+                },
+                {"role": "assistant", "content": target},
+            ],
+        ))
+    return rows
+
+
 def _coding_rows(prefix: str, constants: Iterable[int], *, operation: str) -> list[ResearchRow]:
     rows: list[ResearchRow] = []
     for value in constants:
@@ -96,6 +122,14 @@ def _structured_rows(values: Iterable[int]) -> list[ResearchRow]:
 def _generated_train_rows() -> list[ResearchRow]:
     rows: list[ResearchRow] = []
     rows.extend(_language_rows(["amber", "violet", "silver", "coral", "indigo", "pearl"]))
+    rows.extend(_language_sentence_rows([
+        ("robots", "build", "tools"),
+        ("students", "read", "books"),
+        ("birds", "build", "nests"),
+        ("artists", "paint", "murals"),
+        ("friends", "share", "stories"),
+        ("developers", "write", "code"),
+    ]))
     rows.extend(_coding_rows("add_const", range(3, 9), operation="add"))
     rows.extend(_data_rows(range(31, 43, 2)))
     rows.extend(_reasoning_rows([(21, 3), (22, 4), (24, 5), (26, 3), (28, 4), (32, 3)]))
@@ -107,6 +141,12 @@ def _generated_train_rows() -> list[ResearchRow]:
 def _generated_validation_rows() -> list[ResearchRow]:
     rows: list[ResearchRow] = []
     rows.extend(_language_rows(["teal", "crimson", "ivory", "mint"]))
+    rows.extend(_language_sentence_rows([
+        ("farmers", "grow", "food"),
+        ("teachers", "explain", "ideas"),
+        ("cats", "chase", "shadows"),
+        ("musicians", "play", "music"),
+    ]))
     rows.extend(_coding_rows("mul_const", range(3, 7), operation="multiply"))
     rows.extend(_data_rows(range(51, 59, 2)))
     rows.extend(_reasoning_rows([(33, 3), (27, 5), (34, 4), (29, 6)]))
