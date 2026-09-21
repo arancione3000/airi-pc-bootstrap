@@ -137,7 +137,7 @@ jobs:
           rm -rf "${BUNDLE}"
           mkdir -p "${BUNDLE}"
 
-          python -m generalist_lm.generalist_swarm prepare             "${STATE_DIR}" "${BUNDLE}/plan.json"             --mathesis-state "${MATHESIS_STATE_DIR}"             --population-size 8             --max-params 2000000             --max-context 512             --max-width 256             --max-layers 6             --curriculum-max-rows 4000             --data-max-new-bytes 8000000             --data-max-total-bytes 50000000
+          python -m generalist_lm.generalist_swarm prepare             "${STATE_DIR}" "${BUNDLE}/plan.json"             --mathesis-state "${MATHESIS_STATE_DIR}"             --population-size 8             --max-params 7000000             --max-context 512             --max-width 384             --max-layers 10             --curriculum-max-rows 4000             --data-max-new-bytes 8000000             --data-max-total-bytes 50000000
 
           cp -a "${STATE_DIR}" "${BUNDLE}/state"
           matrix="$(jq -c '.matrix' "${BUNDLE}/plan.json")"
