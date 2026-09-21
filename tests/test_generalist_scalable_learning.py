@@ -846,3 +846,110 @@ def test_generalist_cumulative_stage_source_is_identity_bound(tmp_path: Path):
             cycle=70,
             stage=2,
         )
+
+
+
+def test_generalist_cumulative_stage1_bootstraps_without_source_checkpoint(
+    tmp_path: Path,
+):
+    pytest.importorskip("torch")
+    import json
+
+    from generalist_lm.evolution import GeneralistGenome
+    from generalist_lm.generalist_swarm import run_candidate
+    from generalist_lm.model import GeneralistLMConfig
+    from generalist_lm.runtime import GeneralistRuntime
+
+    state = tmp_path / "state"
+    champion_dir = state / "champion"
+    state.mkdir()
+
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        dropout=0.0,
+    ).validate()
+    runtime = GeneralistRuntime.fresh(cfg)
+    runtime.save_checkpoint(
+        champion_dir,
+        metadata={
+            "role": "research_champion",
+            "production_qualified": False,
+        },
+    )
+    genome = GeneralistGenome(
+        generation=1,
+        parent_id="seed",
+        genome_id="stage1-bootstrap",
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        dropout=0.0,
+        retrieval_adapter=False,
+        symbolic_adapter=False,
+        code_adapter=False,
+        data_adapter=False,
+        reasoning_depth=1,
+    ).validate()
+    (state / "champion-genome.json").write_text(
+        json.dumps(genome.to_dict()),
+        encoding="utf-8",
+    )
+
+    plan = {
+        "cycle": 1,
+        "champion": genome.to_dict(),
+        "champion_report": {
+            "loss": 100.0,
+            "nll_per_byte": 100.0,
+            "domain_nll_per_byte": {},
+        },
+        "domain_weights": {},
+        "limits": {
+            "max_params": 2_000_000,
+            "max_context": 512,
+            "max_width": 256,
+            "max_layers": 6,
+        },
+        "candidates": [{
+            "index": 0,
+            "kind": "continual",
+            "candidate_id": genome.genome_id,
+            "genome": genome.to_dict(),
+        }],
+    }
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+
+    output = tmp_path / "out"
+    result = run_candidate(
+        plan_path,
+        state,
+        tmp_path,
+        output,
+        candidate_index=0,
+        stage=1,
+        steps=1,
+        repeat_seeds=1,
+        pretrain_steps=0,
+        max_repo_bytes=64_000,
+        max_external_bytes=0,
+        source_checkpoint=None,
+    )
+    assert result["ok"] is True
+    assert result["continued_from_stage"] is None
+    assert result["cumulative_steps"] == 1
+
+    metadata = json.loads(
+        (output / "best-checkpoint" / "metadata.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert metadata["previous_stage"] is None
+    assert metadata["cumulative_steps"] == 1
