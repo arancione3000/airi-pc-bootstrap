@@ -951,6 +951,15 @@ def _transfer_compatible_weights(
         and int(target_cfg.n_heads) == int(source_cfg.n_heads)
         and str(target_cfg.norm_type) == str(source_cfg.norm_type)
         and str(target_cfg.position_encoding) == str(source_cfg.position_encoding)
+        and str(target_cfg.attention_type) == str(source_cfg.attention_type)
+        and int(target_cfg.n_kv_heads or target_cfg.n_heads)
+            == int(source_cfg.n_kv_heads or source_cfg.n_heads)
+        and int(target_cfg.local_attention_window)
+            == int(source_cfg.local_attention_window)
+        and int(target_cfg.local_attention_every)
+            == int(source_cfg.local_attention_every)
+        and str(target_cfg.norm_placement) == str(source_cfg.norm_placement)
+        and bool(target_cfg.tie_embeddings) == bool(source_cfg.tie_embeddings)
     )
     return {
         "copied_tensors": len(copied),
