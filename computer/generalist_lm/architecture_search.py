@@ -5,7 +5,9 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from .architecture_ir import ArchitectureSpec, architecture_manifest
+from dataclasses import replace
+
+from .architecture_ir import ArchitectureSpec, architecture_id, architecture_manifest
 from .architecture_mutations import proposal_set
 from .architecture_verifier import verify_architecture
 from .evolution import GeneralistGenome
@@ -142,9 +144,21 @@ def prepare_architecture_search(
 
     candidates: list[dict[str, Any]] = []
 
-    # Same-architecture control: architectural gains must beat simply training
-    # the existing brain for the same budget.
-    control = parent.to_genome()
+    # Same-topology control: gains must beat simply continuing the current
+    # architecture under the exact same training budget, but the experiment
+    # receives its own lineage identity/checkpoint metadata.
+    control_generation = int(parent.generation) + 1
+    control_spec = replace(
+        parent,
+        generation=control_generation,
+        parent_id=parent.architecture_id,
+        architecture_id=architecture_id(
+            parent.architecture_id,
+            control_generation,
+            parent.canonical_payload(),
+        ),
+    ).validate()
+    control = control_spec.to_genome()
     candidates.append({
         "index": 0,
         "kind": "architecture_control",
@@ -153,8 +167,9 @@ def prepare_architecture_search(
         "estimated_parameters": estimate_parameter_count(
             control.model_config(current_vocab)
         ),
-        "architecture": parent.to_dict(),
-        "hypothesis": "same architecture, equal training budget control",
+        "architecture": control_spec.to_dict(),
+        "architecture_fingerprint": control_spec.fingerprint(),
+        "hypothesis": "same topology, equal training budget control",
     })
 
     seen = {parent.fingerprint()}
