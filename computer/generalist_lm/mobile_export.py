@@ -129,15 +129,35 @@ def _neural_diagnostics(runtime) -> dict[str, Any]:
     heads: list[dict[str, Any]] = []
     for layer in range(int(cfg.n_layers)):
         module = runtime.model.blocks[layer].attn
-        weight = module.qkv.weight.detach().float().cpu()
         head_dim = int(cfg.d_model) // int(cfg.n_heads)
-        reshaped = weight.view(3, int(cfg.n_heads), head_dim, int(cfg.d_model))
-        for head in range(int(cfg.n_heads)):
-            tensor = reshaped[:, head]
+        if getattr(module, "qkv", None) is not None:
+            weight = module.qkv.weight.detach().float().cpu()
+            reshaped = weight.view(
+                3,
+                int(cfg.n_heads),
+                head_dim,
+                int(cfg.d_model),
+            )
+            per_head = [reshaped[:, head] for head in range(int(cfg.n_heads))]
+            head_kind = "mha_qkv"
+        else:
+            # GQA has fewer KV heads, so a single QKV tensor per query head
+            # does not exist.  Visualize the query-head weights truthfully
+            # rather than fabricating duplicated KV parameters.
+            weight = module.q_proj.weight.detach().float().cpu()
+            reshaped = weight.view(
+                int(cfg.n_heads),
+                head_dim,
+                int(cfg.d_model),
+            )
+            per_head = [reshaped[head] for head in range(int(cfg.n_heads))]
+            head_kind = "gqa_query"
+        for head, tensor in enumerate(per_head):
             heads.append(
                 {
                     "layer": layer,
                     "head": head,
+                    "kind": head_kind,
                     "parameters": int(tensor.numel()),
                     "mean_abs_weight": float(tensor.abs().mean().item()),
                     "rms_weight": float(tensor.pow(2).mean().sqrt().item()),
@@ -172,7 +192,12 @@ def _neural_diagnostics(runtime) -> dict[str, Any]:
             "norm_type": str(cfg.norm_type),
             "position_encoding": str(cfg.position_encoding),
             "ff_variant": str(cfg.ff_variant),
-            "tied_embedding_lm_head": True,
+            "attention_type": str(cfg.attention_type),
+            "n_kv_heads": int(cfg.n_kv_heads or cfg.n_heads),
+            "local_attention_window": int(cfg.local_attention_window),
+            "local_attention_every": int(cfg.local_attention_every),
+            "norm_placement": str(cfg.norm_placement),
+            "tied_embedding_lm_head": bool(cfg.tie_embeddings),
         },
         "components": components,
         "heads": heads,
