@@ -33,6 +33,18 @@ data class ChatLine(
     val content: String,
     val modelId: String = "",
     val elapsedMs: Long = 0L,
+    val generatedTokens: Int = 0,
+    val repetitionRate: Double = 0.0,
+    val meanEntropy: Double = 0.0,
+    val decodeMode: DecodeMode = DecodeMode.GREEDY,
+)
+
+data class ModelComparison(
+    val prompt: String,
+    val champion: InferenceTrace,
+    val research: InferenceTrace,
+    val championMs: Long,
+    val researchMs: Long,
 )
 
 data class AppUiState(
@@ -43,6 +55,13 @@ data class AppUiState(
     val liveError: String? = null,
     val lastInferenceTrace: InferenceTrace? = null,
     val loadedModelId: String = "",
+    val decodeMode: DecodeMode = DecodeMode.GREEDY,
+    val temperature: Double = 0.8,
+    val topP: Double = 0.9,
+    val topK: Int = 40,
+    val repetitionPenalty: Double = 1.08,
+    val comparison: ModelComparison? = null,
+    val comparing: Boolean = false,
     val messages: List<ChatLine> = emptyList(),
     val loadingModel: Boolean = true,
     val generating: Boolean = false,
@@ -107,7 +126,91 @@ class GeneralistController(context: Context) : Closeable {
     }
 
     fun clearChat() {
-        _state.value = _state.value.copy(messages = emptyList())
+        _state.value = _state.value.copy(messages = emptyList(), comparison = null)
+    }
+
+    fun setDecodeMode(mode: DecodeMode) {
+        _state.value = _state.value.copy(decodeMode = mode)
+    }
+
+    fun setTemperature(value: Double) {
+        _state.value = _state.value.copy(temperature = value.coerceIn(0.05, 2.0))
+    }
+
+    fun setTopP(value: Double) {
+        _state.value = _state.value.copy(topP = value.coerceIn(0.05, 1.0))
+    }
+
+    fun setTopK(value: Int) {
+        _state.value = _state.value.copy(topK = value.coerceIn(1, 100))
+    }
+
+    fun setRepetitionPenalty(value: Double) {
+        _state.value = _state.value.copy(repetitionPenalty = value.coerceIn(1.0, 2.0))
+    }
+
+    private fun decodeSettings(state: AppUiState = _state.value) = DecodeSettings(
+        mode = state.decodeMode,
+        temperature = state.temperature,
+        topP = state.topP,
+        topK = state.topK,
+        repetitionPenalty = state.repetitionPenalty,
+    )
+
+    fun compare(text: String) {
+        val prompt = text.trim()
+        val manifest = _state.value.manifest ?: return
+        val championSlot = manifest.slots["champion"] ?: return
+        val researchSlot = manifest.slots["research"] ?: return
+        if (prompt.isEmpty() || _state.value.generating || _state.value.comparing) return
+        val settings = decodeSettings()
+        _state.value = _state.value.copy(comparing = true, comparison = null, error = null)
+        scope.launch {
+            try {
+                val championBundle = repository.ensureBundle(championSlot)
+                val researchBundle = repository.ensureBundle(researchSlot)
+
+                val championStarted = SystemClock.elapsedRealtime()
+                val championTrace = withContext(Dispatchers.Default) {
+                    AiriOnnxEngine(championBundle).use { candidate ->
+                        candidate.chat(
+                            listOf(ChatMessage("user", prompt)),
+                            maxNewTokens = 64,
+                            settings = settings,
+                        )
+                    }
+                }
+                val championMs = SystemClock.elapsedRealtime() - championStarted
+
+                val researchStarted = SystemClock.elapsedRealtime()
+                val researchTrace = withContext(Dispatchers.Default) {
+                    AiriOnnxEngine(researchBundle).use { candidate ->
+                        candidate.chat(
+                            listOf(ChatMessage("user", prompt)),
+                            maxNewTokens = 64,
+                            settings = settings,
+                        )
+                    }
+                }
+                val researchMs = SystemClock.elapsedRealtime() - researchStarted
+
+                _state.value = _state.value.copy(
+                    comparing = false,
+                    comparison = ModelComparison(
+                        prompt = prompt,
+                        champion = championTrace,
+                        research = researchTrace,
+                        championMs = championMs,
+                        researchMs = researchMs,
+                    ),
+                )
+            } catch (exc: Exception) {
+                _state.value = _state.value.copy(
+                    comparing = false,
+                    error = "Confronto fallito: ${exc.message}",
+                )
+            }
+        }
     }
 
     fun send(text: String) {
@@ -127,12 +230,13 @@ class GeneralistController(context: Context) : Closeable {
                 .takeLast(10)
                 .map { ChatMessage(it.role, it.content) }
             val modelId = _state.value.loadedModelId
+            val settings = decodeSettings()
             val startedAt = SystemClock.elapsedRealtime()
             try {
                 val trace = engineMutex.withLock {
                     val active = engine ?: error("Modello non caricato")
                     withContext(Dispatchers.Default) {
-                        active.chat(history, maxNewTokens = 64)
+                        active.chat(history, maxNewTokens = 64, settings = settings)
                     }
                 }
                 val elapsed = SystemClock.elapsedRealtime() - startedAt
@@ -146,6 +250,10 @@ class GeneralistController(context: Context) : Closeable {
                         content = trace.text,
                         modelId = modelId,
                         elapsedMs = elapsed,
+                        generatedTokens = trace.generatedTokenIds.size,
+                        repetitionRate = trace.repetitionRate,
+                        meanEntropy = trace.meanEntropy,
+                        decodeMode = settings.mode,
                     ),
                     generating = false,
                     lastInferenceTrace = trace,
