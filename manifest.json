@@ -499,7 +499,7 @@
     ]
   },
   "generalist_version": "airi-generalist-free-speed-v4",
-  "generated_at": 1790022340,
+  "generated_at": 1790023349,
   "promoted_this_cycle": false,
   "promotion_reason": "no finalist passed every independent research gate",
   "schema": 1,
@@ -510,8 +510,8 @@
       "cycle": 95,
       "files": {
         "config.json": {
-          "bytes": 270,
-          "sha256": "b06eee25c57bf19fbbc963f5e7905ad08bf2ed39f7b294944edb7295ff03d09f"
+          "bytes": 430,
+          "sha256": "cc843a0ae532467ade2bbe2c5483898cbc9f81deee6a8cc864b5bd14c9b57d09"
         },
         "metadata.json": {
           "bytes": 311,
@@ -533,13 +533,18 @@
       "name": "champion",
       "neural": {
         "architecture": {
+          "attention_type": "mha",
           "context_length": 128,
           "d_ff": 128,
           "d_model": 64,
           "ff_variant": "swiglu",
           "head_dim": 16,
+          "local_attention_every": 0,
+          "local_attention_window": 0,
           "n_heads": 4,
+          "n_kv_heads": 4,
           "n_layers": 2,
+          "norm_placement": "pre",
           "norm_type": "layernorm",
           "position_encoding": "learned",
           "tied_embedding_lm_head": true,
@@ -665,6 +670,7 @@
         "heads": [
           {
             "head": 0,
+            "kind": "mha_qkv",
             "layer": 0,
             "max_abs_weight": 0.13608510792255402,
             "mean_abs_weight": 0.025500604882836342,
@@ -673,6 +679,7 @@
           },
           {
             "head": 1,
+            "kind": "mha_qkv",
             "layer": 0,
             "max_abs_weight": 0.1364440768957138,
             "mean_abs_weight": 0.024278515949845314,
@@ -681,6 +688,7 @@
           },
           {
             "head": 2,
+            "kind": "mha_qkv",
             "layer": 0,
             "max_abs_weight": 0.10939045250415802,
             "mean_abs_weight": 0.024038532748818398,
@@ -689,6 +697,7 @@
           },
           {
             "head": 3,
+            "kind": "mha_qkv",
             "layer": 0,
             "max_abs_weight": 0.11839597672224045,
             "mean_abs_weight": 0.02543315477669239,
@@ -697,6 +706,7 @@
           },
           {
             "head": 0,
+            "kind": "mha_qkv",
             "layer": 1,
             "max_abs_weight": 0.11913395673036575,
             "mean_abs_weight": 0.026155121624469757,
@@ -705,6 +715,7 @@
           },
           {
             "head": 1,
+            "kind": "mha_qkv",
             "layer": 1,
             "max_abs_weight": 0.0986587181687355,
             "mean_abs_weight": 0.024065805599093437,
@@ -713,6 +724,7 @@
           },
           {
             "head": 2,
+            "kind": "mha_qkv",
             "layer": 1,
             "max_abs_weight": 0.14151355624198914,
             "mean_abs_weight": 0.02646651305258274,
@@ -721,6 +733,7 @@
           },
           {
             "head": 3,
+            "kind": "mha_qkv",
             "layer": 1,
             "max_abs_weight": 0.10939116775989532,
             "mean_abs_weight": 0.025266289710998535,
@@ -746,8 +759,8 @@
       "cycle": 95,
       "files": {
         "config.json": {
-          "bytes": 270,
-          "sha256": "7683e05487462ce3b7942233127c0a4d8517d908ede5c90e3ce7629f187b0e43"
+          "bytes": 430,
+          "sha256": "5593f1f4f734d44a9ee2a7b757ba74b8dbeadbbb05fb2b867cfac4f7eb3637a3"
         },
         "metadata.json": {
           "bytes": 380,
@@ -769,13 +782,18 @@
       "name": "research",
       "neural": {
         "architecture": {
+          "attention_type": "mha",
           "context_length": 128,
           "d_ff": 192,
           "d_model": 64,
           "ff_variant": "swiglu",
           "head_dim": 16,
+          "local_attention_every": 0,
+          "local_attention_window": 0,
           "n_heads": 4,
+          "n_kv_heads": 4,
           "n_layers": 4,
+          "norm_placement": "pre",
           "norm_type": "layernorm",
           "position_encoding": "learned",
           "tied_embedding_lm_head": true,
@@ -979,6 +997,7 @@
         "heads": [
           {
             "head": 0,
+            "kind": "mha_qkv",
             "layer": 0,
             "max_abs_weight": 0.1429973691701889,
             "mean_abs_weight": 0.026115842163562775,
@@ -987,6 +1006,7 @@
           },
           {
             "head": 1,
+            "kind": "mha_qkv",
             "layer": 0,
             "max_abs_weight": 0.15008345246315002,
             "mean_abs_weight": 0.02466312050819397,
@@ -995,6 +1015,7 @@
           },
           {
             "head": 2,
+            "kind": "mha_qkv",
             "layer": 0,
             "max_abs_weight": 0.10173548758029938,
             "mean_abs_weight": 0.024407781660556793,
@@ -1003,6 +1024,7 @@
           },
           {
             "head": 3,
+            "kind": "mha_qkv",
             "layer": 0,
             "max_abs_weight": 0.12543734908103943,
             "mean_abs_weight": 0.026071524247527122,
@@ -1011,6 +1033,7 @@
           },
           {
             "head": 0,
+            "kind": "mha_qkv",
             "layer": 1,
             "max_abs_weight": 0.11659698933362961,
             "mean_abs_weight": 0.026261426508426666,
@@ -1019,6 +1042,7 @@
           },
           {
             "head": 1,
+            "kind": "mha_qkv",
             "layer": 1,
             "max_abs_weight": 0.10808765888214111,
             "mean_abs_weight": 0.02432599663734436,
@@ -1027,6 +1051,7 @@
           },
           {
             "head": 2,
+            "kind": "mha_qkv",
             "layer": 1,
             "max_abs_weight": 0.140610009431839,
             "mean_abs_weight": 0.02656477689743042,
@@ -1035,6 +1060,7 @@
           },
           {
             "head": 3,
+            "kind": "mha_qkv",
             "layer": 1,
             "max_abs_weight": 0.10939697921276093,
             "mean_abs_weight": 0.025556905195116997,
@@ -1043,6 +1069,7 @@
           },
           {
             "head": 0,
+            "kind": "mha_qkv",
             "layer": 2,
             "max_abs_weight": 0.08917264640331268,
             "mean_abs_weight": 0.016223924234509468,
@@ -1051,6 +1078,7 @@
           },
           {
             "head": 1,
+            "kind": "mha_qkv",
             "layer": 2,
             "max_abs_weight": 0.08260461688041687,
             "mean_abs_weight": 0.016972800716757774,
@@ -1059,6 +1087,7 @@
           },
           {
             "head": 2,
+            "kind": "mha_qkv",
             "layer": 2,
             "max_abs_weight": 0.08475653827190399,
             "mean_abs_weight": 0.016235990449786186,
@@ -1067,6 +1096,7 @@
           },
           {
             "head": 3,
+            "kind": "mha_qkv",
             "layer": 2,
             "max_abs_weight": 0.08009706437587738,
             "mean_abs_weight": 0.016366170719265938,
@@ -1075,6 +1105,7 @@
           },
           {
             "head": 0,
+            "kind": "mha_qkv",
             "layer": 3,
             "max_abs_weight": 0.07441413402557373,
             "mean_abs_weight": 0.01633705385029316,
@@ -1083,6 +1114,7 @@
           },
           {
             "head": 1,
+            "kind": "mha_qkv",
             "layer": 3,
             "max_abs_weight": 0.09074457734823227,
             "mean_abs_weight": 0.016860365867614746,
@@ -1091,6 +1123,7 @@
           },
           {
             "head": 2,
+            "kind": "mha_qkv",
             "layer": 3,
             "max_abs_weight": 0.07739394158124924,
             "mean_abs_weight": 0.01666233316063881,
@@ -1099,6 +1132,7 @@
           },
           {
             "head": 3,
+            "kind": "mha_qkv",
             "layer": 3,
             "max_abs_weight": 0.07293906807899475,
             "mean_abs_weight": 0.016473855823278427,
