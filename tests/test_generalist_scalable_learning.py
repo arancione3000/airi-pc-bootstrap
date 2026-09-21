@@ -503,7 +503,7 @@ def test_generalist_swarm_reducer_prefers_safe_generation_and_nll(tmp_path: Path
         folder.mkdir()
         payload = {
             "ok": True,
-            "version": "airi-generalist-free-speed-v2",
+            "version": "airi-generalist-free-speed-v3",
             "cycle": 1,
             "stage": 1,
             "steps": 3,
@@ -1003,7 +1003,7 @@ def test_generalist_swarm_reducer_reserves_one_safe_scale_probe(tmp_path: Path):
         folder.mkdir()
         payload = {
             "ok": True,
-            "version": "airi-generalist-free-speed-v2",
+            "version": "airi-generalist-free-speed-v3",
             "cycle": 1,
             "stage": 1,
             "steps": 3,
@@ -1141,3 +1141,174 @@ def test_generalist_data_growth_discovery_is_license_first_and_quality_ranked():
     assert "license%3Amit" in seen[0]
     assert "size%3A%3C100000" in seen[0]
     assert "sort=stars" in seen[0]
+
+
+def test_generalist_weaknesses_routes_language_gap():
+    from generalist_lm.research_cycle import _weaknesses
+
+    signals = _weaknesses({
+        "domain_nll_per_byte": {
+            "language": 5.0,
+            "coding": 2.0,
+            "data": 1.5,
+            "reasoning": 1.0,
+            "tools": 0.5,
+            "structured": 0.25,
+        }
+    })
+    assert signals[0] == "language_gap"
+    assert "coding_gap" in signals
+
+
+def test_generalist_language_curriculum_has_compositional_targets():
+    from generalist_lm.curriculum import train_rows, validation_rows
+
+    train_targets = [
+        row.messages[-1]["content"]
+        for row in train_rows()
+        if row.domain == "language"
+    ]
+    validation_targets = [
+        row.messages[-1]["content"]
+        for row in validation_rows()
+        if row.domain == "language"
+    ]
+    assert any(" " in target and target.endswith(".") for target in train_targets)
+    assert any(" " in target and target.endswith(".") for target in validation_targets)
+
+
+def test_generalist_text_similarity_tracks_partial_generation():
+    from generalist_lm.research_cycle import _text_similarity
+
+    assert _text_similarity("orange", "orange") == pytest.approx(1.0)
+    partial = _text_similarity("orang", "orange")
+    unrelated = _text_similarity("111111", "orange")
+    assert 0.0 < partial < 1.0
+    assert partial > unrelated
+
+
+def test_generalist_adaptive_pretraining_budget_scales_but_stays_bounded():
+    from generalist_lm.generalist_swarm import _adaptive_pretrain_steps
+
+    tiny = _adaptive_pretrain_steps(
+        1,
+        corpus_bytes=100_000,
+        stage=1,
+        scale_multiplier=1.0,
+    )
+    large = _adaptive_pretrain_steps(
+        2,
+        corpus_bytes=10_000_000,
+        stage=3,
+        scale_multiplier=1.44,
+    )
+    assert tiny == 1
+    assert large > tiny
+    assert large <= 24
+
+
+def test_generalist_swarm_reducer_prefers_partial_generation_before_nll(tmp_path: Path):
+    from generalist_lm.generalist_swarm import select_survivors
+
+    root = tmp_path / "partial-generation-results"
+    root.mkdir()
+    cases = [
+        (0, 0.40, 1.60),
+        (1, 0.10, 1.40),
+    ]
+    for index, similarity, nll in cases:
+        folder = root / str(index)
+        folder.mkdir()
+        payload = {
+            "ok": True,
+            "version": "airi-generalist-free-speed-v3",
+            "cycle": 1,
+            "stage": 1,
+            "steps": 3,
+            "candidate_index": index,
+            "candidate_id": f"partial-{index}",
+            "kind": "architecture",
+            "genome": {},
+            "reports": [],
+            "all_seed_eligible": False,
+            "any_seed_eligible": False,
+            "mean_nll_per_byte": nll,
+            "best_nll_per_byte": nll,
+            "mean_generation_accuracy": 0.0,
+            "mean_generation_similarity": similarity,
+            "mean_generation_nonempty_rate": 1.0,
+            "worst_domain_regression": 0.02,
+            "parameters": 120_000,
+            "score": 10.0,
+            "corpus": {},
+            "checkpoint_dir": "best-checkpoint",
+            "external_pretrained": False,
+        }
+        (folder / "result.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    result = select_survivors([root], tmp_path / "partial-selected.json", survivors=1)
+    assert result["selected"][0]["index"] == 0
+
+
+def test_generalist_external_corpus_preserves_manifest_domains(tmp_path: Path):
+    from generalist_lm.generalist_swarm import _corpus_documents
+
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    (repo_root / "README.md").write_text(
+        "A small repository document used for corpus classification. " * 4,
+        encoding="utf-8",
+    )
+
+    state = tmp_path / "state"
+    approved = state / "autodata" / "approved"
+    approved.mkdir(parents=True)
+    raw = ("name,value\nalpha,1\nbeta,2\n" * 30).encode("utf-8")
+    digest = __import__("hashlib").sha256(raw).hexdigest()
+    (approved / "dataset.csv").write_bytes(raw)
+    (state / "autodata" / "manifest.json").write_text(
+        json.dumps({
+            "version": "generalist-data-growth-v3",
+            "files": [{
+                "sha256": digest,
+                "domain": "data",
+                "repo": "example/data",
+                "path": "dataset.csv",
+            }],
+        }),
+        encoding="utf-8",
+    )
+
+    documents, report = _corpus_documents(
+        repo_root,
+        state,
+        max_repo_bytes=100_000,
+        max_external_bytes=100_000,
+    )
+    external = [row for row in documents if row.sha256 == digest]
+    assert len(external) == 1
+    assert external[0].domain == "data"
+    assert report["external"]["domain_documents"]["data"] == 1
+
+
+def test_generalist_language_weakness_weights_general_and_language_autodata():
+    from generalist_lm.research_cycle import _pretraining_domain_weights
+
+    weights = _pretraining_domain_weights({
+        "language": 3.0,
+        "coding": 1.5,
+        "data": 2.0,
+        "reasoning": 2.25,
+    })
+    assert weights["general"] == pytest.approx(3.0)
+    assert weights["language-it"] == pytest.approx(3.0)
+    assert weights["code"] == pytest.approx(1.5)
+
+
+def test_generalist_language_gap_expands_license_first_discovery():
+    from generalist_lm.generalist_data_growth import _candidate_queries
+
+    queries = _candidate_queries(["language_gap"])
+    assert any(query.startswith("natural language corpus") for query in queries)
+    assert any(query.startswith("italian corpus") for query in queries)
+    assert all("license:" in query for query in queries)

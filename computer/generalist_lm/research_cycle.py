@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import replace
+from difflib import SequenceMatcher
 import hashlib
 import json
 import math
@@ -95,6 +96,18 @@ def _teacher_forced_accuracy(model, tokenizer: ByteTokenizer, rows: list[Researc
     }
 
 
+def _text_similarity(output: str, target: str) -> float:
+    """Return deterministic character-level progress for imperfect decoding."""
+    return float(
+        SequenceMatcher(
+            None,
+            str(output),
+            str(target),
+            autojunk=False,
+        ).ratio()
+    )
+
+
 def _generation_probe(
     model,
     tokenizer: ByteTokenizer,
@@ -104,21 +117,29 @@ def _generation_probe(
 ) -> dict[str, Any]:
     """Probe real autoregressive decoding on held-out examples.
 
-    One deterministic row per domain keeps the research loop bounded while
-    ensuring teacher-forced loss cannot be the only promotion signal.
+    Exactly one deterministic row per domain preserves the persisted health
+    contract. Language deliberately uses the compositional held-out row so
+    partial similarity measures sentence generation rather than word copying.
+    Exact match remains the strict promotion signal; similarity is an additional
+    fail-closed/tie-breaking diagnostic.
     """
-    selected: list[ResearchRow] = []
-    seen_domains: set[str] = set()
+    grouped: dict[str, list[ResearchRow]] = {}
     for row in rows:
-        if row.domain in seen_domains:
-            continue
-        seen_domains.add(row.domain)
-        selected.append(row)
+        grouped.setdefault(row.domain, []).append(row)
+
+    selected: list[ResearchRow] = []
+    for domain in sorted(grouped):
+        items = grouped[domain]
+        selected.append(items[-1] if domain == "language" else items[0])
 
     runtime = GeneralistRuntime(model, model.config, tokenizer, device=device)
     solved: list[str] = []
-    domain_accuracy: dict[str, float] = {}
     outputs: list[dict[str, Any]] = []
+    domain_correct: dict[str, int] = {}
+    domain_total: dict[str, int] = {}
+    domain_similarity_sum: dict[str, float] = {}
+    similarity_sum = 0.0
+    nonempty = 0
 
     for row in selected:
         target = str(row.messages[-1]["content"]).strip()
@@ -138,17 +159,26 @@ def _generation_probe(
             output = f"<generation-error:{type(exc).__name__}>"
             ok = False
 
+        similarity = _text_similarity(output, target)
+        similarity_sum += similarity
+        nonempty += int(bool(output))
+        domain_total[row.domain] = domain_total.get(row.domain, 0) + 1
+        domain_correct[row.domain] = domain_correct.get(row.domain, 0) + int(ok)
+        domain_similarity_sum[row.domain] = (
+            domain_similarity_sum.get(row.domain, 0.0) + similarity
+        )
+
         prompt = str(row.messages[0]["content"])
         digest = hashlib.sha256(
             f"{row.domain}\0{prompt}".encode("utf-8")
         ).hexdigest()[:16]
         if ok:
             solved.append(f"{row.domain}:{digest}")
-        domain_accuracy[row.domain] = 1.0 if ok else 0.0
         outputs.append({
             "domain": row.domain,
             "item": f"{row.domain}:{digest}",
             "ok": ok,
+            "similarity": similarity,
             "target": target[:500],
             "output": output[:500],
         })
@@ -157,14 +187,22 @@ def _generation_probe(
         sum(1 for row in outputs if row["ok"]) / len(outputs)
         if outputs else 0.0
     )
+    similarity = similarity_sum / len(outputs) if outputs else 0.0
     return {
         "generation_exact_accuracy": float(accuracy),
-        "domain_generation_accuracy": domain_accuracy,
+        "generation_similarity": float(similarity),
+        "generation_nonempty_rate": float(nonempty / len(outputs)) if outputs else 0.0,
+        "domain_generation_accuracy": {
+            domain: domain_correct.get(domain, 0) / max(1, total)
+            for domain, total in sorted(domain_total.items())
+        },
+        "domain_generation_similarity": {
+            domain: domain_similarity_sum.get(domain, 0.0) / max(1, total)
+            for domain, total in sorted(domain_total.items())
+        },
         "generated_solved_items": sorted(solved),
         "generation_probe": outputs,
     }
-
-
 def _grouped_validation(model, tokenizer, rows: list[ResearchRow], *, device: str = "cpu") -> dict[str, Any]:
     all_examples = [row.sft() for row in rows]
     overall_stats = nll_stats_on_examples(
@@ -288,6 +326,19 @@ def _research_eligible(
         if float(new_generation_domains[domain]) + 1e-12 < float(old_value):
             return False, f"candidate regressed in autoregressive generation domain: {domain}"
 
+    old_similarity = float(champion.get("generation_similarity", 0.0) or 0.0)
+    new_similarity = float(candidate.get("generation_similarity", 0.0) or 0.0)
+    if new_similarity + 0.03 < old_similarity:
+        return False, "candidate regressed in partial autoregressive generation quality"
+
+    old_similarity_domains = champion.get("domain_generation_similarity") or {}
+    new_similarity_domains = candidate.get("domain_generation_similarity") or {}
+    for domain, old_value in old_similarity_domains.items():
+        if domain not in new_similarity_domains:
+            return False, f"candidate lost generation-similarity domain: {domain}"
+        if float(new_similarity_domains[domain]) + 0.05 < float(old_value):
+            return False, f"candidate regressed in partial generation domain: {domain}"
+
     generated_remembered = set(champion.get("generated_solved_items") or [])
     generated_retained = set(candidate.get("generated_solved_items") or [])
     generated_forgotten = sorted(generated_remembered - generated_retained)
@@ -333,7 +384,9 @@ def _weaknesses(report: dict[str, Any]) -> list[str]:
     ordered = sorted(domains.items(), key=lambda item: float(item[1]), reverse=True)
     signals: list[str] = []
     for domain, _loss in ordered[:3]:
-        if domain == "coding":
+        if domain == "language":
+            signals.append("language_gap")
+        elif domain == "coding":
             signals.append("coding_gap")
         elif domain == "data":
             signals.append("data_gap")
@@ -341,6 +394,8 @@ def _weaknesses(report: dict[str, Any]) -> list[str]:
             signals.append("tool_gap")
         elif domain == "reasoning":
             signals.append("reasoning_gap")
+        elif domain == "structured":
+            signals.append("structured_gap")
     return signals
 
 
@@ -843,6 +898,29 @@ def _transfer_compatible_weights(
         ),
     }
 
+def _pretraining_domain_weights(
+    domain_weights: dict[str, float] | None,
+) -> dict[str, float]:
+    """Map held-out task weakness onto grounded pretraining domains."""
+    source = dict(domain_weights or {})
+    mapping = {
+        "coding": "code",
+        "data": "data",
+        "reasoning": "reasoning",
+    }
+    out: dict[str, float] = {}
+    language_weight = source.get("language")
+    if isinstance(language_weight, (int, float)) and math.isfinite(float(language_weight)):
+        value = max(0.05, float(language_weight))
+        out["general"] = value
+        out["language-it"] = value
+    for task_domain, corpus_domain in mapping.items():
+        value = source.get(task_domain)
+        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+            out[corpus_domain] = max(0.05, float(value))
+    return out
+
+
 def _train_genome(
     genome: GeneralistGenome,
     *,
@@ -891,6 +969,7 @@ def _train_genome(
             weight_decay=0.01,
             seed=seed + 101,
             device=device,
+            domain_weights=_pretraining_domain_weights(domain_weights),
         )
     else:
         pretraining = {
@@ -899,6 +978,11 @@ def _train_genome(
             "reason": "grounded pretraining disabled or corpus empty",
             "steps": 0,
         }
+    sft_learning_rate = (
+        float(genome.learning_rate)
+        if source_model is None
+        else min(float(genome.learning_rate), 1e-3)
+    )
     report = train_sft(
         model,
         tokenizer,
@@ -912,7 +996,7 @@ def _train_genome(
         ],
         steps=steps,
         batch_size=4,
-        learning_rate=genome.learning_rate,
+        learning_rate=sft_learning_rate,
         weight_decay=0.0,
         seed=seed,
         device=device,
@@ -954,6 +1038,7 @@ def _continue_champion(
     precision: str = "fp32",
     pretrain_documents: list[CorpusDocument] | None = None,
     pretrain_steps: int = 0,
+    domain_weights: dict[str, float] | None = None,
 ) -> tuple[GeneralistGenome, GeneralistRuntime, dict[str, Any]]:
     """Fine-tune a copy of the current champion with full replay.
 
@@ -975,6 +1060,7 @@ def _continue_champion(
             weight_decay=0.01,
             seed=seed + 101,
             device=device,
+            domain_weights=_pretraining_domain_weights(domain_weights),
         )
     else:
         pretraining = {
@@ -986,10 +1072,17 @@ def _continue_champion(
     report = train_sft(
         model,
         tokenizer,
-        [row.sft() for row in _training_rows_for_genome(genome, replay_rows)],
+        [
+            row.sft()
+            for row in _training_rows_for_genome(
+                genome,
+                replay_rows,
+                domain_weights=domain_weights,
+            )
+        ],
         steps=steps,
         batch_size=4,
-        learning_rate=genome.learning_rate,
+        learning_rate=min(float(genome.learning_rate), 1e-3),
         weight_decay=0.0,
         seed=seed,
         device=device,
@@ -1122,6 +1215,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         signals.append("tokenizer_efficiency_gap")
     signals = list(dict.fromkeys(signals))
 
+    domain_weights = adaptive_domain_weights(champion_report)
     curriculum_memory = CurriculumMemory(root, max_rows=curriculum_max_rows)
     curriculum_report = curriculum_memory.expand(cycle, signals=signals)
     replay_rows = curriculum_memory.rows()
@@ -1147,6 +1241,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         precision=precision,
         pretrain_documents=corpus_documents,
         pretrain_steps=pretrain_steps,
+        domain_weights=domain_weights,
     )
     continual_report["canary_cycle"] = cycle
     continual_report["canary"] = _grouped_validation(
@@ -1203,6 +1298,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             seed=_genome_training_seed(genome),
             device=device,
             replay_rows=replay_rows,
+            domain_weights=domain_weights,
             source_model=champion_runtime.model,
             source_tokenizer=champion_runtime.tokenizer,
             tokenizer=candidate_tokenizer,
@@ -1253,6 +1349,9 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         "signals": signals,
         "mathesis": mathesis,
         "curriculum_memory": curriculum_report,
+        "adaptive_curriculum": {
+            "domain_weights": domain_weights,
+        },
         "grounded_pretraining": {
             "steps": pretrain_steps,
             "corpus": corpus_manifest,

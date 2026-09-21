@@ -22,6 +22,7 @@ class CorpusDocument:
     text: str
     sha256: str
     bytes: int
+    domain: str = "general"
 
 
 @dataclass(frozen=True)
@@ -213,17 +214,49 @@ def pretrain_causal(
     seed: int = 17,
     device: str = "cpu",
     max_eval_blocks: int = 128,
+    domain_weights: dict[str, float] | None = None,
 ) -> dict:
     """Run bounded causal next-token pretraining on a local reviewed corpus."""
     import torch
 
-    blocks = pack_causal_blocks(
-        documents,
-        tokenizer,
-        context_length=model.config.context_length,
-    )
+    grouped_documents: dict[str, list[CorpusDocument]] = {}
+    for document in documents:
+        domain = str(getattr(document, "domain", "general") or "general")
+        grouped_documents.setdefault(domain, []).append(document)
+
+    blocks: list[list[int]] = []
+    domain_indices: dict[str, list[int]] = {}
+    domain_block_counts: dict[str, int] = {}
+    for domain in sorted(grouped_documents):
+        packed = pack_causal_blocks(
+            grouped_documents[domain],
+            tokenizer,
+            context_length=model.config.context_length,
+        )
+        if not packed:
+            continue
+        start = len(blocks)
+        blocks.extend(packed)
+        domain_indices[domain] = list(range(start, len(blocks)))
+        domain_block_counts[domain] = len(packed)
+
     if not blocks:
         raise ValueError("corpus produced no training blocks")
+
+    clean_domain_weights = {
+        domain: max(
+            0.05,
+            float((domain_weights or {}).get(domain, 1.0)),
+        )
+        for domain in sorted(domain_indices)
+    }
+    weight_total = sum(clean_domain_weights.values()) or 1.0
+    normalized_domain_weights = {
+        domain: value / weight_total
+        for domain, value in clean_domain_weights.items()
+    }
+    sampling_domains = sorted(domain_indices)
+    sampling_weights = [clean_domain_weights[domain] for domain in sampling_domains]
 
     rng = random.Random(seed)
     torch.manual_seed(seed)
@@ -246,7 +279,15 @@ def pretrain_causal(
     )
     losses: list[float] = []
     for _ in range(max(1, int(steps))):
-        rows = [rng.randrange(len(blocks)) for _ in range(max(1, int(batch_size)))]
+        chosen_domains = rng.choices(
+            sampling_domains,
+            weights=sampling_weights,
+            k=max(1, int(batch_size)),
+        )
+        rows = [
+            rng.choice(domain_indices[domain])
+            for domain in chosen_domains
+        ]
         ids, labels = _batch(blocks, rows, device=device)
         optimizer.zero_grad(set_to_none=True)
         loss = model(ids, labels=labels)["loss"]
@@ -269,8 +310,11 @@ def pretrain_causal(
         "ok": bool(final_loss < initial_loss),
         "documents": len(documents),
         "blocks": len(blocks),
+        "domain_blocks": domain_block_counts,
+        "sampling_domain_weights": normalized_domain_weights,
         "eval_blocks": eval_blocks,
         "steps": max(1, int(steps)),
+        "learning_rate": float(learning_rate),
         "initial_loss": initial_loss,
         "final_loss": final_loss,
         "loss_improvement": initial_loss - final_loss,

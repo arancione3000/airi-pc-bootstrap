@@ -108,6 +108,29 @@ def _mechanical_rows(cycle: int, signals: list[str]) -> list[ResearchRow]:
     ]
 
     signal_set = set(signals)
+    if "language_gap" in signal_set:
+        subject = f"agent{c}"
+        object_ = f"report{c}"
+        rows.append(ResearchRow("language", [
+            {
+                "role": "user",
+                "content": (
+                    "Write one grammatical sentence using exactly these content "
+                    f"words: subject={subject}; verb=checks; object={object_}."
+                ),
+            },
+            {"role": "assistant", "content": f"{subject.capitalize()} checks {object_}."},
+        ]))
+        rows.append(ResearchRow("language", [
+            {
+                "role": "user",
+                "content": (
+                    "Write one grammatical sentence using exactly these content "
+                    f"words: subject=system{c}; verb=stores; object=result{c}."
+                ),
+            },
+            {"role": "assistant", "content": f"System{c} stores result{c}."},
+        ]))
     if "coding_gap" in signal_set:
         rows.append(ResearchRow("coding", [
             {"role": "user", "content": f"Return only Python code defining scale_{c}(x) that returns x * {c % 7 + 2}."},

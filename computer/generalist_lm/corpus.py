@@ -12,7 +12,7 @@ from .pretraining import CorpusDocument
 _ALLOWED_SUFFIXES = {
     ".py", ".md", ".txt", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".sh",
     ".html", ".css", ".js", ".ts", ".java", ".kt", ".c", ".cc", ".cpp",
-    ".h", ".hpp", ".rs", ".go", ".sql", ".rst",
+    ".h", ".hpp", ".rs", ".go", ".sql", ".rst", ".tex",
 }
 _BLOCKED_PARTS = {
     ".git", ".svn", ".hg", ".venv", "venv", "node_modules", "dist", "build",
@@ -80,6 +80,28 @@ class RepositoryCorpusManifest:
             "excluded_sensitive": self.excluded_sensitive,
             "excluded_budget": self.excluded_budget,
         }
+
+
+_CODE_SUFFIXES = {
+    ".py", ".sh", ".js", ".ts", ".java", ".kt", ".c", ".cc", ".cpp",
+    ".h", ".hpp", ".rs", ".go",
+}
+
+
+def _document_domain(rel: str) -> str:
+    lower = str(rel).lower()
+    suffix = Path(lower).suffix
+    if suffix in _CODE_SUFFIXES:
+        return "code"
+    if suffix in {".csv", ".json", ".jsonl", ".sql"} or any(
+        token in lower for token in ("dataset", "data/", "tables/", "records/")
+    ):
+        return "data"
+    if suffix == ".tex" or any(
+        token in lower for token in ("proof", "theorem", "math/", "reasoning")
+    ):
+        return "reasoning"
+    return "general"
 
 
 def _relative(root: Path, path: Path) -> str:
@@ -216,6 +238,7 @@ def repository_corpus(
                         text=f"FILE: {rel}\n{piece}",
                         sha256=digest,
                         bytes=len(piece.encode("utf-8")),
+                        domain=_document_domain(rel),
                     )
                 )
             if stop:
