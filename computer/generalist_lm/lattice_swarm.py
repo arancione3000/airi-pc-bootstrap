@@ -27,6 +27,7 @@ from .lattice_meta import (
     mutation_family_feedback,
     update_elite_archive,
 )
+from .lattice_scale_gate import evaluate_lattice_migration_readiness
 from .native_lattice import AiriLatticeConfig
 
 
@@ -485,6 +486,15 @@ def finalize_swarm(
             "elite_can_self_promote": False,
         },
     }
+    status["migration_readiness"] = evaluate_lattice_migration_readiness(
+        root / "lattice-history.jsonl",
+        champion.to_dict(),
+        additional_history=[status],
+    )
+    _atomic_json(
+        root / "lattice-migration-readiness.json",
+        status["migration_readiness"],
+    )
     _atomic_json(root / "lattice-status.json", status)
     with (root / "lattice-history.jsonl").open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(status, ensure_ascii=False, sort_keys=True) + "\n")
