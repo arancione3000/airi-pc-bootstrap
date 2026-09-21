@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from difflib import SequenceMatcher
 import math
+import re
 from typing import Any, Iterable
 
 from .tokenizer import EOS, BYTE_OFFSET, VOCAB_SIZE as BYTE_VOCAB_SIZE
@@ -127,6 +128,8 @@ def evaluate_phase5_language(runtime, *, max_new_tokens: int = 48) -> dict[str, 
     similarities: list[float] = []
     exact: list[bool] = []
     nonempty: list[bool] = []
+    word_outputs: list[bool] = []
+    multiword_outputs: list[bool] = []
 
     for probe in PHASE5_PROBES:
         trace = _single_greedy_trace(
@@ -150,6 +153,9 @@ def evaluate_phase5_language(runtime, *, max_new_tokens: int = 48) -> dict[str, 
         similarities.append(float(similarity))
         exact.append(bool(is_exact))
         nonempty.append(bool(output.strip()))
+        words = re.findall(r"[^\\W\\d_]+", output, flags=re.UNICODE)
+        word_outputs.append(bool(words))
+        multiword_outputs.append(len(words) >= 2)
 
     nll_examples = [
         SFTExample([
@@ -191,6 +197,8 @@ def evaluate_phase5_language(runtime, *, max_new_tokens: int = 48) -> dict[str, 
         "generation_similarity": _mean(similarities),
         "exact_accuracy": float(sum(exact) / len(exact)) if exact else 0.0,
         "non_empty_rate": float(sum(nonempty) / len(nonempty)) if nonempty else 0.0,
+        "word_output_rate": float(sum(word_outputs) / len(word_outputs)) if word_outputs else 0.0,
+        "multiword_output_rate": float(sum(multiword_outputs) / len(multiword_outputs)) if multiword_outputs else 0.0,
         "token_entropy": _mean(row["token_entropy"] for row in traces),
         "top1_probability": _mean(row["top1_probability"] for row in traces),
         "top5_probability_mass": _mean(row["top5_probability_mass"] for row in traces),
