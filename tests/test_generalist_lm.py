@@ -586,13 +586,18 @@ def test_research_promotion_accepts_loss_gain_with_retained_solutions():
     assert "anti-forgetting" in reason
 
 
-def test_generalist_continuum_has_serialized_self_handoff_and_nonforce_state_push():
+def test_generalist_continuum_has_parallel_free_speed_swarm_and_nonforce_state_push():
     workflow = (ROOT / ".github" / "workflows" / "generalist-continuum.yml").read_text(encoding="utf-8")
     assert "group: airi-generalist-research" in workflow
     assert "cancel-in-progress: false" in workflow
-    assert "AIRI_GENERALIST_MIN_CHAIN_SECONDS: '900'" in workflow
-    assert "Next autonomous AIRI Generalist research cycle dispatched." in workflow
-    assert "active_other" in workflow
+    assert "max-parallel: 8" in workflow
+    assert "max-parallel: 4" in workflow
+    assert "max-parallel: 2" in workflow
+    assert "--survivors 4" in workflow
+    assert "--survivors 2" in workflow
+    assert "--repeat-seeds 2" in workflow
+    assert "python -m generalist_lm.generalist_swarm finalize" in workflow
+    assert "candidate_can_self_promote == false" in workflow
     assert "git push --quiet origin HEAD:generalist-state" in workflow
     assert "git push --force" not in workflow
     assert "git push -f" not in workflow
@@ -875,7 +880,7 @@ def test_generalist_continuum_attempts_production_qualification_before_persist()
     assert "python -m generalist_lm.production_promotion" in workflow
     assert "AIRI_GENERALIST_PRODUCTION_MIN_SCORE: '85'" in workflow
     assert "AIRI_GENERALIST_PRODUCTION_MIN_GAIN: '2'" in workflow
-    assert workflow.index("python -m generalist_lm.production_promotion") < workflow.index("Persist only health-gated research state")
+    assert workflow.index("python -m generalist_lm.production_promotion") < workflow.index("Persist health-gated Free-Speed state")
 
 
 def test_cached_promoted_digest_retries_when_production_integrity_is_lost(tmp_path: Path, monkeypatch):
@@ -1302,10 +1307,11 @@ def test_research_cycle_architecture_trial_records_weight_transfer(tmp_path: Pat
     assert transfer["copied_tensors"] > 0
     assert 0.0 < transfer["parameter_fraction"] <= 1.0
     if trial["genome"]["tokenizer_version"] == result["champion"]["tokenizer_version"]:
-        assert transfer["policy"] == "exact name and exact shape only"
+        assert transfer["policy"] == "exact tensors plus safe prefix inheritance for expansions"
         assert transfer["tokenizer_identical"] is True
+        assert isinstance(transfer["partial_prefix_tensors"], list)
     else:
-        assert transfer["policy"] == "exact name/shape tensors plus deterministic byte-compatible vocabulary migration"
+        assert transfer["policy"] == "exact/prefix-compatible tensors plus deterministic byte-compatible vocabulary migration"
         assert transfer["vocabulary_migrated"] is True
         assert transfer["shared_token_rows"] > 0
 
