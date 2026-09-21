@@ -667,8 +667,26 @@ research architecture champion. The state is persisted separately on
 No matrix worker can promote itself. Every empirical comparison still trains a
 matched Native Transformer from scratch on the same tokens, split and step
 budget, and the final reducer revalidates the winning genome's stability before
-persistence. The canonical Native Transformer is not replaced by a Lattice
-research win; migration requires a later, stronger scale-transfer gate.
+persistence.
+
+The swarm also keeps a persistent **elite archive**. A finalist that is not
+good enough to become research champion can still be retained when it is
+Pareto-useful or wins some independent seeds. Those elites are research-only:
+they cannot self-promote, but later cycles may use them as parents and apply a
+second structural mutation. This lets AIRI cross local valleys and test
+multi-gene combinations such as routing + predictive memory without weakening
+the champion gate.
+
+A separate fail-closed migration-readiness gate accumulates evidence for the
+current research champion across independent cycles and seeds. It requires
+repeated all-seed wins, positive loss margins and active-parameter compliance
+before writing `lattice-migration-readiness.json` with
+`migration_ready=true`. Even that attestation does **not** rewrite the
+canonical model; it only authorizes a later scale-transfer qualification on
+larger corpora and budgets.
+
+The canonical Native Transformer therefore remains unchanged by ordinary
+Lattice research wins.
 
 Useful commands:
 
