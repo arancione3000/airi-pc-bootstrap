@@ -107,3 +107,78 @@ def mathesis_signals(state_dir: str | Path) -> dict[str, Any]:
             "generalist promotion remains independently benchmark-gated"
         ),
     }
+
+
+
+def mathesis_architecture_hypotheses(
+    state_dir: str | Path,
+    *,
+    observed_signals: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Turn re-verified MATHESIS evidence into falsifiable Architecture-IR hints.
+
+    This never emits executable code and never promotes a model.  It only
+    selects mutations already implemented in the trusted model factory.
+    """
+    evidence = mathesis_signals(state_dir)
+    if not evidence.get("verifier_available"):
+        return []
+    signals = set(str(x) for x in (observed_signals or []))
+    signals.update(str(x) for x in (evidence.get("signals") or []))
+
+    hypotheses: list[dict[str, Any]] = []
+    if "language_gap" in signals or "language_collapse" in signals:
+        hypotheses.append({
+            "hypothesis": (
+                "RMSNorm + pre-norm + RoPE may stabilize optimization and "
+                "autoregressive language relative to the current tiny baseline."
+            ),
+            "mutation": {
+                "norm_type": "rmsnorm",
+                "norm_placement": "pre",
+                "position_encoding": "rope",
+                "ff_variant": "swiglu",
+            },
+            "expected_advantage": "lower language NLL without repetition collapse",
+            "risk": "optimization gain may not compensate for insufficient capacity",
+        })
+    if (
+        "deep_symbolic_signal" in signals
+        or "reasoning_gap" in signals
+        or "symbolic_reasoning_signal" in signals
+    ):
+        hypotheses.append({
+            "hypothesis": (
+                "A deeper model with GQA may buy reasoning depth while keeping "
+                "KV-cache cost below equivalent MHA scaling."
+            ),
+            "mutation": {
+                "attention_type": "gqa",
+                "n_kv_heads_policy": "half_query_heads",
+                "scale_depth": True,
+            },
+            "expected_advantage": "more depth per inference-memory budget",
+            "risk": "GQA can reduce quality at very small widths",
+        })
+    if "data_gap" in signals or "long_context_gap" in signals:
+        hypotheses.append({
+            "hypothesis": (
+                "Alternating local/global causal attention may allocate more "
+                "capacity to local syntax while retaining periodic global mixing."
+            ),
+            "mutation": {
+                "local_attention_window_policy": "half_context",
+                "local_attention_every": 2,
+            },
+            "expected_advantage": "lower attention cost and stronger local structure",
+            "risk": "local windows may harm tasks requiring dense long-range recall",
+        })
+
+    for index, row in enumerate(hypotheses):
+        row["hypothesis_id"] = (
+            f"mathesis-arch-{int(evidence.get('mathesis_generation', 0))}-{index}"
+        )
+        row["verified_math_items"] = int(evidence.get("verified_math_items", 0))
+        row["promotion_authority"] = False
+        row["requires_empirical_falsification"] = True
+    return hypotheses
