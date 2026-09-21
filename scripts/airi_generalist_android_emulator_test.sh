@@ -161,6 +161,52 @@ grep -q 'AIRI_GENERALIST_INFERENCE=PASS' "$OUT/logcat.txt"
 adb exec-out screencap -p > "$OUT/chat-after.png"
 test -s "$OUT/chat-after.png"
 
+# Switch to the research-only model and prove that the exact ONNX bundle
+# downloaded from generalist-mobile can execute on Android as well. This is
+# deliberately separate from the Champion smoke because evolved architectures
+# may use RoPE/GQA/local attention before they are production-promoted.
+dismiss_system_anr
+dump_ui /sdcard/airi-research-select.xml "$OUT/research-select.xml"
+read RESEARCH_X RESEARCH_Y < <(center_for_text "$OUT/research-select.xml" "Latest Research")
+adb shell input tap "$RESEARCH_X" "$RESEARCH_Y"
+
+RESEARCH_READY=0
+for _ in $(seq 1 45); do
+  sleep 1
+  dismiss_system_anr
+  dump_ui /sdcard/airi-research-ready.xml "$OUT/research-ready.xml" || true
+  if grep -Eq 'Latest Research sincronizzato|Latest Research pronto|AI aggiornata · modello mobile in sincronizzazione|cache offline' "$OUT/research-ready.xml" 2>/dev/null; then
+    RESEARCH_READY=1
+    break
+  fi
+done
+test "$RESEARCH_READY" -eq 1
+
+adb logcat -c
+read RESEARCH_INPUT_X RESEARCH_INPUT_Y < <(center_for_edit_text "$OUT/research-ready.xml")
+adb shell input tap "$RESEARCH_INPUT_X" "$RESEARCH_INPUT_Y"
+adb shell input text hello
+sleep 1
+dismiss_system_anr
+
+dump_ui /sdcard/airi-research-chat.xml "$OUT/research-chat-before.xml"
+read RESEARCH_SEND_X RESEARCH_SEND_Y < <(center_for_text "$OUT/research-chat-before.xml" "Invia")
+adb shell input tap "$RESEARCH_SEND_X" "$RESEARCH_SEND_Y"
+
+RESEARCH_INFERENCE=0
+for _ in $(seq 1 60); do
+  if adb logcat -d | grep -q 'AIRI_GENERALIST_INFERENCE=PASS'; then
+    RESEARCH_INFERENCE=1
+    break
+  fi
+  sleep 1
+done
+test "$RESEARCH_INFERENCE" -eq 1
+adb logcat -d > "$OUT/research-logcat.txt"
+grep -q 'AIRI_GENERALIST_INFERENCE=PASS' "$OUT/research-logcat.txt"
+adb exec-out screencap -p > "$OUT/research-chat-after.png"
+test -s "$OUT/research-chat-after.png"
+
 # Verify all requested observability screens.
 for TAB in Live Neural Airi-PC; do
   dismiss_system_anr
@@ -172,4 +218,4 @@ for TAB in Live Neural Airi-PC; do
   test -s "$OUT/tab-$TAB.png"
 done
 
-echo "AIRI_GENERALIST_ANDROID_SMOKE=PASS pid=$PID apk=$APK refresh=PASS inference=PASS observability=PASS"
+echo "AIRI_GENERALIST_ANDROID_SMOKE=PASS pid=$PID apk=$APK refresh=PASS champion_inference=PASS research_inference=PASS observability=PASS"
