@@ -1,0 +1,5613 @@
+"""Persistent, versioned storage for multi-paper theorem graphs."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from dataclasses import replace
+from datetime import datetime, timezone
+from functools import wraps
+from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
+from threading import RLock
+
+from papergraph.arxiv import prepare_arxiv_project
+from papergraph.citations import build_citation_records
+from papergraph.cross_paper_reading_plan import build_cross_paper_reading_plan
+from papergraph.evidence import (
+    EVIDENCE_EMPTY_DEPENDENCY_WARNING,
+    bounded_excerpt,
+    EvidenceDocument,
+    SourceSpanEvidence,
+    slug_fragment,
+    source_span_payload,
+)
+from papergraph.evidence_extractors import build_pdf_evidence_document
+from papergraph.identity import (
+    global_theorem_id,
+    normalize_paper_id,
+    paper_id_from_arxiv,
+    split_global_theorem_id,
+)
+from papergraph.models import (
+    DEPENDENCY_EXTRACTION_BASIS,
+    EMPTY_DEPENDENCY_WARNING,
+    WorkspaceImportResult,
+)
+from papergraph.parser import latex_project_to_evidence_document, parse_project
+from papergraph.paper_map import build_paper_map
+from papergraph.pdf import load_pdf_evidence_spans
+from papergraph.project import LoadedProject, load_project
+from papergraph.reading_report import build_paper_reading_report
+from papergraph.reference_providers import default_reference_search_providers
+from papergraph.reference_expansion import ReferenceExpansionMixin
+from papergraph.reference_expansion_store import TABLES as EXPANSION_TABLES, migrate as migrate_expansion
+from papergraph.reference_search import (
+    build_reference_search_query,
+    candidate_id_for,
+    rank_reference_candidates,
+    search_run_id,
+)
+from papergraph.starter import (
+    bootstrap_reading_project,
+    plan_starter_project,
+)
+from papergraph.reading import (
+    base_bridge_payload,
+    interpretation_policy,
+    interpretation_prompts,
+    proof_methods_from_proof_payload,
+    reading_uri_map,
+    result_to_reading_entity,
+    result_to_reading_result,
+    source_handle,
+)
+
+
+SCHEMA_VERSION = 8
+_RESOLVED_RESOLUTION_STATUSES = (
+    "resolved",
+    "resolved_bibliography_entry",
+    "resolved_candidate",
+    "resolved_unique",
+)
+_READING_SESSION_STATUSES = {"active", "paused", "completed"}
+_READING_CHECKPOINT_STATUSES = {"queued", "reviewed", "blocked", "skipped"}
+_READING_TARGET_KINDS = {
+    "result_id",
+    "proof_id",
+    "span_id",
+    "external_stop",
+    "unresolved_stop",
+}
+_READING_NOTE_TARGET_KINDS = {*_READING_TARGET_KINDS, "session"}
+_READING_NOTE_TYPES = {"note", "question", "warning", "decision"}
+_READING_QUEUE_STATUSES = {"active", "archived"}
+_READING_QUEUE_ITEM_PRIORITIES = {"required", "recommended", "caution"}
+_REQUIRED_TABLES = {
+    "workspace_meta",
+    "papers",
+    "theorems",
+    "theorem_refs",
+    "citation_evidence",
+    "source_spans",
+    "results",
+    "result_source_spans",
+    "proofs",
+    "proof_source_spans",
+    "bibliography_entries",
+    "local_result_mentions",
+    "citation_mentions",
+    "external_result_mentions",
+    "evidence_edges",
+    "evidence_edge_source_spans",
+    "reading_sessions",
+    "reading_checkpoints",
+    "reading_notes",
+    "reading_queues",
+    "reading_queue_items",
+    "reference_resolutions",
+    "reference_search_runs",
+    "reference_search_candidates",
+}
+_REQUIRED_THEOREM_COLUMNS = {
+    "global_id",
+    "paper_id",
+    "local_id",
+    "kind",
+    "raw_kind",
+    "display_kind",
+    "normalized_kind",
+    "title",
+    "label",
+    "content",
+    "source_file",
+    "position",
+}
+_REQUIRED_TABLE_COLUMNS = {
+    "theorems": _REQUIRED_THEOREM_COLUMNS,
+    "source_spans": {
+        "id",
+        "span_id",
+        "paper_id",
+        "source_type",
+        "source_ref",
+        "page",
+        "block_index",
+        "start_offset",
+        "end_offset",
+        "bbox_json",
+        "text",
+        "method",
+        "confidence",
+    },
+    "results": {
+        "result_id",
+        "paper_id",
+        "local_id",
+        "kind",
+        "raw_kind",
+        "display_kind",
+        "normalized_kind",
+        "label",
+        "visible_number",
+        "title",
+        "statement",
+        "method",
+        "confidence",
+    },
+    "result_source_spans": {"result_id", "span_id", "position"},
+    "proofs": {
+        "proof_id",
+        "paper_id",
+        "result_id",
+        "text",
+        "association_basis",
+        "association_confidence",
+        "method",
+        "confidence",
+    },
+    "proof_source_spans": {"proof_id", "span_id", "position"},
+    "bibliography_entries": {
+        "entry_id",
+        "paper_id",
+        "raw_label",
+        "raw_text",
+        "entry_type",
+        "title",
+        "authors_json",
+        "year",
+        "arxiv_id",
+        "arxiv_version",
+        "doi",
+        "url",
+        "method",
+        "confidence",
+    },
+    "local_result_mentions": {
+        "mention_id",
+        "paper_id",
+        "proof_id",
+        "raw_text",
+        "kind",
+        "visible_number",
+        "target_result_id",
+        "resolution_status",
+        "method",
+        "confidence",
+    },
+    "citation_mentions": {
+        "mention_id",
+        "paper_id",
+        "proof_id",
+        "raw_text",
+        "raw_key",
+        "entry_id",
+        "resolution_status",
+        "method",
+        "confidence",
+    },
+    "external_result_mentions": {
+        "mention_id",
+        "paper_id",
+        "proof_id",
+        "citation_mention_id",
+        "raw_text",
+        "external_kind",
+        "external_number",
+        "entry_id",
+        "target_paper_id",
+        "resolution_status",
+        "method",
+        "confidence",
+    },
+    "evidence_edges": {
+        "edge_id",
+        "paper_id",
+        "source_id",
+        "target_id",
+        "relation",
+        "evidence_ids_json",
+        "method",
+        "confidence",
+    },
+    "evidence_edge_source_spans": {"edge_id", "span_id", "position"},
+    "reading_sessions": {
+        "session_id",
+        "paper_id",
+        "target_result_id",
+        "label",
+        "status",
+        "created_at",
+        "updated_at",
+    },
+    "reading_checkpoints": {
+        "checkpoint_id",
+        "session_id",
+        "target_kind",
+        "target_id",
+        "status",
+        "summary",
+        "evidence_json",
+        "created_at",
+        "updated_at",
+    },
+    "reading_notes": {
+        "note_id",
+        "session_id",
+        "target_kind",
+        "target_id",
+        "note_type",
+        "text",
+        "created_at",
+    },
+    "reading_queues": {
+        "queue_id",
+        "paper_id",
+        "target_result_id",
+        "label",
+        "status",
+        "created_at",
+        "updated_at",
+    },
+    "reading_queue_items": {
+        "item_id",
+        "queue_id",
+        "position",
+        "target_kind",
+        "target_id",
+        "priority",
+        "reason",
+        "evidence_json",
+        "created_at",
+    },
+    "reference_resolutions": {
+        "resolution_id",
+        "source_paper_id",
+        "blocked_id",
+        "target_kind",
+        "target_json",
+        "status",
+        "imported_paper_id",
+        "evidence_json",
+        "review_json",
+        "artifact_json",
+        "warning_json",
+        "created_at",
+        "updated_at",
+    },
+    "reference_search_runs": {
+        "search_run_id",
+        "source_paper_id",
+        "blocked_id",
+        "query_json",
+        "provider_json",
+        "boundary_json",
+        "created_at",
+    },
+    "reference_search_candidates": {
+        "candidate_id",
+        "search_run_id",
+        "source_paper_id",
+        "blocked_id",
+        "target_json",
+        "score",
+        "confidence",
+        "evidence_json",
+        "provider_record_json",
+        "warning_json",
+        "rank",
+    },
+}
+
+_PAPERS_TABLE_SQL = """
+CREATE TABLE papers (
+    paper_id TEXT PRIMARY KEY,
+    source_type TEXT NOT NULL CHECK (source_type IN ('local', 'arxiv', 'pdf')),
+    source_ref TEXT NOT NULL,
+    source_version TEXT,
+    title TEXT,
+    authors_json TEXT NOT NULL,
+    main_file TEXT NOT NULL,
+    imported_at TEXT NOT NULL,
+    parser_version TEXT NOT NULL
+)
+"""
+
+_EVIDENCE_SCHEMA_SQL = """
+CREATE TABLE source_spans (
+    id INTEGER PRIMARY KEY,
+    span_id TEXT,
+    paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    source_type TEXT NOT NULL CHECK (source_type IN ('local', 'arxiv', 'pdf', 'tex')),
+    source_ref TEXT NOT NULL,
+    page INTEGER,
+    block_index INTEGER,
+    start_offset INTEGER,
+    end_offset INTEGER,
+    bbox_json TEXT,
+    text TEXT NOT NULL,
+    method TEXT NOT NULL,
+    confidence REAL NOT NULL
+);
+CREATE TABLE results (
+    result_id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    local_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    raw_kind TEXT NOT NULL,
+    display_kind TEXT NOT NULL,
+    normalized_kind TEXT NOT NULL,
+    label TEXT,
+    visible_number TEXT,
+    title TEXT,
+    statement TEXT NOT NULL,
+    method TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    UNIQUE (paper_id, local_id)
+);
+CREATE TABLE result_source_spans (
+    result_id TEXT NOT NULL REFERENCES results(result_id) ON DELETE CASCADE,
+    span_id INTEGER NOT NULL REFERENCES source_spans(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (result_id, span_id, position)
+);
+CREATE TABLE proofs (
+    proof_id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    result_id TEXT REFERENCES results(result_id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    association_basis TEXT NOT NULL,
+    association_confidence REAL NOT NULL,
+    method TEXT NOT NULL,
+    confidence REAL NOT NULL
+);
+CREATE TABLE proof_source_spans (
+    proof_id TEXT NOT NULL REFERENCES proofs(proof_id) ON DELETE CASCADE,
+    span_id INTEGER NOT NULL REFERENCES source_spans(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (proof_id, span_id, position)
+);
+CREATE TABLE bibliography_entries (
+    entry_id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    raw_label TEXT NOT NULL,
+    raw_text TEXT NOT NULL,
+    entry_type TEXT NOT NULL,
+    title TEXT,
+    authors_json TEXT NOT NULL,
+    year INTEGER,
+    arxiv_id TEXT,
+    arxiv_version TEXT,
+    doi TEXT,
+    url TEXT,
+    method TEXT NOT NULL,
+    confidence REAL NOT NULL
+);
+CREATE TABLE local_result_mentions (
+    mention_id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    proof_id TEXT REFERENCES proofs(proof_id) ON DELETE CASCADE,
+    raw_text TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    visible_number TEXT,
+    target_result_id TEXT REFERENCES results(result_id) ON DELETE SET NULL,
+    resolution_status TEXT NOT NULL,
+    method TEXT NOT NULL,
+    confidence REAL NOT NULL
+);
+CREATE TABLE citation_mentions (
+    mention_id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    proof_id TEXT REFERENCES proofs(proof_id) ON DELETE CASCADE,
+    raw_text TEXT NOT NULL,
+    raw_key TEXT NOT NULL,
+    entry_id TEXT REFERENCES bibliography_entries(entry_id) ON DELETE SET NULL,
+    resolution_status TEXT NOT NULL,
+    method TEXT NOT NULL,
+    confidence REAL NOT NULL
+);
+CREATE TABLE external_result_mentions (
+    mention_id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    proof_id TEXT REFERENCES proofs(proof_id) ON DELETE CASCADE,
+    citation_mention_id TEXT REFERENCES citation_mentions(mention_id) ON DELETE SET NULL,
+    raw_text TEXT NOT NULL,
+    external_kind TEXT NOT NULL,
+    external_number TEXT,
+    entry_id TEXT REFERENCES bibliography_entries(entry_id) ON DELETE SET NULL,
+    target_paper_id TEXT,
+    resolution_status TEXT NOT NULL,
+    method TEXT NOT NULL,
+    confidence REAL NOT NULL
+);
+CREATE TABLE evidence_edges (
+    edge_id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    relation TEXT NOT NULL,
+    evidence_ids_json TEXT NOT NULL,
+    method TEXT NOT NULL,
+    confidence REAL NOT NULL
+);
+CREATE TABLE evidence_edge_source_spans (
+    edge_id TEXT NOT NULL REFERENCES evidence_edges(edge_id) ON DELETE CASCADE,
+    span_id INTEGER NOT NULL REFERENCES source_spans(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (edge_id, span_id, position)
+);
+CREATE INDEX source_spans_paper_location
+    ON source_spans(paper_id, source_type, source_ref, page, block_index, id);
+CREATE INDEX results_paper_kind ON results(paper_id, normalized_kind, result_id);
+CREATE INDEX result_spans_result ON result_source_spans(result_id, position);
+CREATE INDEX proof_result ON proofs(result_id);
+CREATE INDEX proof_spans_proof ON proof_source_spans(proof_id, position);
+CREATE INDEX bibliography_entries_paper ON bibliography_entries(paper_id, raw_label);
+CREATE INDEX local_mentions_proof ON local_result_mentions(proof_id, mention_id);
+CREATE INDEX citation_mentions_proof ON citation_mentions(proof_id, mention_id);
+CREATE INDEX external_mentions_proof ON external_result_mentions(proof_id, mention_id);
+CREATE INDEX evidence_edges_source ON evidence_edges(source_id, relation, edge_id);
+CREATE INDEX evidence_edges_target ON evidence_edges(target_id, relation, edge_id);
+"""
+
+_READING_SESSION_SCHEMA_SQL = """
+CREATE TABLE reading_sessions (
+    session_id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    target_result_id TEXT REFERENCES results(result_id) ON DELETE SET NULL,
+    label TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('active', 'paused', 'completed')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE reading_checkpoints (
+    checkpoint_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES reading_sessions(session_id)
+        ON DELETE CASCADE,
+    target_kind TEXT NOT NULL CHECK (
+        target_kind IN (
+            'result_id',
+            'proof_id',
+            'span_id',
+            'external_stop',
+            'unresolved_stop'
+        )
+    ),
+    target_id TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (
+        status IN ('queued', 'reviewed', 'blocked', 'skipped')
+    ),
+    summary TEXT NOT NULL,
+    evidence_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (session_id, target_kind, target_id)
+);
+CREATE TABLE reading_notes (
+    note_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES reading_sessions(session_id)
+        ON DELETE CASCADE,
+    target_kind TEXT CHECK (
+        target_kind IS NULL OR target_kind IN (
+            'result_id',
+            'proof_id',
+            'span_id',
+            'external_stop',
+            'unresolved_stop',
+            'session'
+        )
+    ),
+    target_id TEXT,
+    note_type TEXT NOT NULL CHECK (
+        note_type IN ('note', 'question', 'warning', 'decision')
+    ),
+    text TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX reading_sessions_paper_status
+    ON reading_sessions(paper_id, status, updated_at, session_id);
+CREATE INDEX reading_checkpoints_session
+    ON reading_checkpoints(session_id, updated_at, checkpoint_id);
+CREATE INDEX reading_notes_session
+    ON reading_notes(session_id, created_at, note_id);
+"""
+
+_READING_QUEUE_SCHEMA_SQL = """
+CREATE TABLE reading_queues (
+    queue_id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    target_result_id TEXT REFERENCES results(result_id) ON DELETE SET NULL,
+    label TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('active', 'archived')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE reading_queue_items (
+    item_id TEXT PRIMARY KEY,
+    queue_id TEXT NOT NULL REFERENCES reading_queues(queue_id)
+        ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    target_kind TEXT NOT NULL CHECK (
+        target_kind IN (
+            'result_id',
+            'proof_id',
+            'span_id',
+            'external_stop',
+            'unresolved_stop'
+        )
+    ),
+    target_id TEXT NOT NULL,
+    priority TEXT NOT NULL CHECK (
+        priority IN ('required', 'recommended', 'caution')
+    ),
+    reason TEXT NOT NULL,
+    evidence_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (queue_id, target_kind, target_id)
+);
+CREATE INDEX reading_queues_paper_status
+    ON reading_queues(paper_id, status, updated_at, queue_id);
+CREATE INDEX reading_queue_items_queue
+    ON reading_queue_items(queue_id, position, item_id);
+"""
+
+_REFERENCE_RESOLUTION_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS reference_resolutions (
+    resolution_id TEXT PRIMARY KEY,
+    source_paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    blocked_id TEXT NOT NULL,
+    target_kind TEXT NOT NULL CHECK (
+        target_kind IN ('arxiv', 'pdf', 'doi', 'url', 'metadata')
+    ),
+    target_json TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (
+        status IN ('resolved_imported', 'resolved_not_imported', 'failed_import')
+    ),
+    imported_paper_id TEXT REFERENCES papers(paper_id) ON DELETE SET NULL,
+    evidence_json TEXT NOT NULL,
+    review_json TEXT NOT NULL,
+    artifact_json TEXT NOT NULL,
+    warning_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (source_paper_id, blocked_id, target_kind, target_json)
+);
+CREATE INDEX IF NOT EXISTS reference_resolutions_source
+    ON reference_resolutions(source_paper_id, blocked_id, target_kind, resolution_id);
+"""
+
+_REFERENCE_SEARCH_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS reference_search_runs (
+    search_run_id TEXT PRIMARY KEY,
+    source_paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    blocked_id TEXT NOT NULL,
+    query_json TEXT NOT NULL,
+    provider_json TEXT NOT NULL,
+    boundary_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS reference_search_candidates (
+    candidate_id TEXT PRIMARY KEY,
+    search_run_id TEXT NOT NULL REFERENCES reference_search_runs(search_run_id)
+        ON DELETE CASCADE,
+    source_paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    blocked_id TEXT NOT NULL,
+    target_json TEXT NOT NULL,
+    score REAL NOT NULL,
+    confidence TEXT NOT NULL,
+    evidence_json TEXT NOT NULL,
+    provider_record_json TEXT NOT NULL,
+    warning_json TEXT NOT NULL,
+    rank INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS reference_search_runs_source
+    ON reference_search_runs(source_paper_id, blocked_id, created_at, search_run_id);
+CREATE INDEX IF NOT EXISTS reference_search_candidates_run
+    ON reference_search_candidates(search_run_id, rank, candidate_id);
+"""
+
+_SCHEMA_SQL = """
+CREATE TABLE workspace_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+""" + _PAPERS_TABLE_SQL + """;
+CREATE TABLE theorems (
+    global_id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    local_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    raw_kind TEXT NOT NULL,
+    display_kind TEXT NOT NULL,
+    normalized_kind TEXT NOT NULL,
+    title TEXT,
+    label TEXT,
+    content TEXT NOT NULL,
+    source_file TEXT,
+    position INTEGER NOT NULL,
+    UNIQUE (paper_id, local_id)
+);
+CREATE TABLE theorem_refs (
+    source_global_id TEXT NOT NULL REFERENCES theorems(global_id) ON DELETE CASCADE,
+    ref_label TEXT NOT NULL,
+    target_global_id TEXT REFERENCES theorems(global_id) ON DELETE CASCADE,
+    PRIMARY KEY (source_global_id, ref_label)
+);
+CREATE TABLE citation_evidence (
+    id INTEGER PRIMARY KEY,
+    source_paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
+    citation_key TEXT NOT NULL,
+    command TEXT NOT NULL,
+    source_file TEXT NOT NULL,
+    bib_file TEXT,
+    bib_entry_type TEXT,
+    cited_arxiv_id TEXT,
+    cited_version TEXT,
+    target_paper_id TEXT REFERENCES papers(paper_id) ON DELETE SET NULL,
+    resolution_status TEXT NOT NULL
+);
+CREATE INDEX theorems_paper_kind ON theorems(paper_id, normalized_kind);
+CREATE INDEX citations_source ON citation_evidence(source_paper_id);
+CREATE INDEX citations_target ON citation_evidence(target_paper_id);
+CREATE INDEX citations_arxiv ON citation_evidence(cited_arxiv_id);
+""" + _EVIDENCE_SCHEMA_SQL + _READING_SESSION_SCHEMA_SQL + _READING_QUEUE_SCHEMA_SQL + _REFERENCE_RESOLUTION_SCHEMA_SQL + _REFERENCE_SEARCH_SCHEMA_SQL + """
+INSERT INTO workspace_meta (key, value) VALUES ('schema_version', '7');
+"""
+
+
+class WorkspaceError(Exception):
+    """Base class for workspace persistence errors."""
+
+
+class WorkspaceSchemaError(WorkspaceError):
+    """Raised when a database does not use the supported workspace schema."""
+
+
+class WorkspacePathError(WorkspaceError, ValueError):
+    """Raised when the requested workspace path cannot be used as a file."""
+
+
+class DuplicateTheoremIdError(WorkspaceError):
+    """Raised when one paper contains the same local theorem ID twice."""
+
+
+def _synchronized(method):
+    """Serialize access to one workspace's shared SQLite connection."""
+
+    @wraps(method)
+    def synchronized(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return synchronized
+
+
+class Workspace(ReferenceExpansionMixin):
+    """A single SQLite-backed PaperGraph workspace."""
+
+    def __init__(self, path: Path, connection: sqlite3.Connection):
+        self.path = path
+        self._connection = connection
+        self._lock = RLock()
+
+    @classmethod
+    def open(cls, path: str | Path) -> Workspace:
+        """Open a supported workspace, initializing an empty database."""
+
+        resolved = Path(path).expanduser().resolve()
+        if resolved.is_dir():
+            raise WorkspacePathError(
+                f"Workspace path is a directory, not a database file: {resolved}"
+            )
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+
+        connection = sqlite3.connect(resolved, check_same_thread=False)
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            cls._initialize_or_validate_schema(connection)
+        except Exception:
+            connection.close()
+            raise
+        return cls(resolved, connection)
+
+    @staticmethod
+    def _initialize_or_validate_schema(connection: sqlite3.Connection) -> None:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        if not tables:
+            connection.executescript(_SCHEMA_SQL)
+            migrate_expansion(connection)
+            return
+        if "workspace_meta" not in tables:
+            raise WorkspaceSchemaError(
+                "Database has no PaperGraph workspace schema metadata"
+            )
+
+        row = connection.execute(
+            "SELECT value FROM workspace_meta WHERE key = 'schema_version'"
+        ).fetchone()
+        if row is None:
+            raise WorkspaceSchemaError("Workspace schema version is missing")
+        try:
+            schema_version = int(row[0])
+        except (TypeError, ValueError) as error:
+            raise WorkspaceSchemaError(
+                f"Invalid workspace schema version: {row[0]!r}"
+            ) from error
+        if schema_version == 2:
+            Workspace._migrate_v2_to_v3(connection)
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            schema_version = 3
+        if schema_version == 3:
+            Workspace._migrate_v3_to_v4(connection)
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            schema_version = 4
+        if schema_version == 4:
+            Workspace._migrate_v4_to_v5(connection)
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            schema_version = 5
+        if schema_version == 5:
+            Workspace._migrate_v5_to_v6(connection)
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            schema_version = 6
+        if schema_version == 6:
+            Workspace._migrate_v6_to_v7(connection)
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            schema_version = 7
+        if schema_version == 7:
+            migrate_expansion(connection)
+            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            schema_version = 8
+        if schema_version != SCHEMA_VERSION:
+            raise WorkspaceSchemaError(
+                f"Unsupported workspace schema version {schema_version}; "
+                f"this PaperGraph supports version {SCHEMA_VERSION}"
+            )
+        missing_tables = sorted((_REQUIRED_TABLES | EXPANSION_TABLES) - tables)
+        if missing_tables:
+            raise WorkspaceSchemaError(
+                "Workspace schema is missing required tables: "
+                + ", ".join(missing_tables)
+            )
+        from papergraph.reference_expansion_store import COLUMNS
+        for table, required_columns in {**_REQUIRED_TABLE_COLUMNS, **COLUMNS}.items():
+            columns = {
+                row[1]
+                for row in connection.execute(f"PRAGMA table_info({table})")
+            }
+            missing_columns = sorted(required_columns - columns)
+            if missing_columns:
+                raise WorkspaceSchemaError(
+                    f"Workspace schema is missing required {table} columns: "
+                    + ", ".join(missing_columns)
+                )
+
+    @staticmethod
+    def _migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
+        was_enforcing_foreign_keys = connection.execute(
+            "PRAGMA foreign_keys"
+        ).fetchone()[0]
+        connection.execute("PRAGMA foreign_keys = OFF")
+        try:
+            connection.execute("BEGIN")
+            connection.execute(_PAPERS_TABLE_SQL.replace("papers", "papers_new", 1))
+            connection.execute(
+                """
+                INSERT INTO papers_new (
+                    paper_id, source_type, source_ref, source_version, title,
+                    authors_json, main_file, imported_at, parser_version
+                )
+                SELECT
+                    paper_id, source_type, source_ref, source_version, title,
+                    authors_json, main_file, imported_at, parser_version
+                FROM papers
+                """
+            )
+            connection.execute("DROP TABLE papers")
+            connection.execute("ALTER TABLE papers_new RENAME TO papers")
+            _execute_sql_script(connection, _EVIDENCE_SCHEMA_SQL)
+            connection.execute(
+                "UPDATE workspace_meta SET value = ? WHERE key = 'schema_version'",
+                ("3",),
+            )
+            connection.execute("COMMIT")
+        except Exception:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
+        finally:
+            if was_enforcing_foreign_keys:
+                connection.execute("PRAGMA foreign_keys = ON")
+
+        violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise WorkspaceSchemaError(
+                "Workspace schema migration left foreign key violations"
+            )
+
+    @staticmethod
+    def _migrate_v3_to_v4(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN")
+            _execute_sql_script(connection, _READING_SESSION_SCHEMA_SQL)
+            connection.execute(
+                "UPDATE workspace_meta SET value = ? WHERE key = 'schema_version'",
+                ("4",),
+            )
+            connection.execute("COMMIT")
+        except Exception:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
+
+        violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise WorkspaceSchemaError(
+                "Workspace schema migration left foreign key violations"
+            )
+
+    @staticmethod
+    def _migrate_v4_to_v5(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN")
+            _execute_sql_script(connection, _READING_QUEUE_SCHEMA_SQL)
+            connection.execute(
+                "UPDATE workspace_meta SET value = ? WHERE key = 'schema_version'",
+                ("5",),
+            )
+            connection.execute("COMMIT")
+        except Exception:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
+
+        violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise WorkspaceSchemaError(
+                "Workspace schema migration left foreign key violations"
+            )
+
+    @staticmethod
+    def _migrate_v5_to_v6(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN")
+            _execute_sql_script(connection, _REFERENCE_RESOLUTION_SCHEMA_SQL)
+            connection.execute(
+                "UPDATE workspace_meta SET value = ? WHERE key = 'schema_version'",
+                ("6",),
+            )
+            connection.execute("COMMIT")
+        except Exception:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
+
+    @staticmethod
+    def _migrate_v6_to_v7(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN")
+            _execute_sql_script(connection, _REFERENCE_SEARCH_SCHEMA_SQL)
+            connection.execute(
+                "UPDATE workspace_meta SET value = ? WHERE key = 'schema_version'",
+                ("7",),
+            )
+            connection.execute("COMMIT")
+        except Exception:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
+
+        violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise WorkspaceSchemaError(
+                "Workspace schema migration left foreign key violations"
+            )
+
+    @_synchronized
+    def close(self) -> None:
+        """Close the underlying SQLite connection."""
+
+        self._connection.close()
+
+    @_synchronized
+    def import_project(
+        self,
+        paper_id: str,
+        source_type: str,
+        source_ref: str,
+        source_version: str | None,
+        project: LoadedProject,
+    ) -> WorkspaceImportResult:
+        """Atomically add or replace one parsed LaTeX project."""
+
+        normalized_paper_id = normalize_paper_id(paper_id)
+        if source_type not in {"local", "arxiv"}:
+            raise ValueError(f"Invalid source type: {source_type!r}")
+        expected_source_type = normalized_paper_id.split(":", 1)[0]
+        if source_type != expected_source_type:
+            raise ValueError(
+                f"source type {source_type!r} does not match "
+                f"paper id {normalized_paper_id!r}"
+            )
+
+        nodes = parse_project(project)
+        citations = build_citation_records(project)
+
+        seen_local_ids: set[str] = set()
+        global_ids: dict[str, str] = {}
+        for node in nodes:
+            if node.id in seen_local_ids:
+                raise DuplicateTheoremIdError(
+                    f"Duplicate theorem id in {normalized_paper_id}: {node.id}"
+                )
+            seen_local_ids.add(node.id)
+            global_ids[node.id] = global_theorem_id(
+                normalized_paper_id,
+                node.id,
+            )
+
+        labels = {
+            node.label: global_ids[node.id]
+            for node in nodes
+            if node.label is not None
+        }
+        evidence_document = latex_project_to_evidence_document(
+            normalized_paper_id,
+            source_type,
+            source_ref,
+            source_version,
+            project,
+        )
+        _validate_evidence_document(evidence_document, normalized_paper_id)
+        main_file = project.root_file.relative_to(project.project_root).as_posix()
+        imported_at = datetime.now(timezone.utc).isoformat()
+        authors_json = json.dumps(list(project.authors), ensure_ascii=False)
+
+        with self._connection:
+            self._check_expansion_import(normalized_paper_id)
+            self._connection.execute(
+                "DELETE FROM papers WHERE paper_id = ?",
+                (normalized_paper_id,),
+            )
+            self._connection.execute(
+                """
+                INSERT INTO papers (
+                    paper_id, source_type, source_ref, source_version, title,
+                    authors_json, main_file, imported_at, parser_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    normalized_paper_id,
+                    source_type,
+                    source_ref,
+                    source_version,
+                    project.title,
+                    authors_json,
+                    main_file,
+                    imported_at,
+                    _parser_version(),
+                ),
+            )
+            self._connection.executemany(
+                """
+                INSERT INTO theorems (
+                    global_id, paper_id, local_id, kind, raw_kind,
+                    display_kind, normalized_kind, title, label, content,
+                    source_file, position
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    (
+                        global_ids[node.id],
+                        normalized_paper_id,
+                        node.id,
+                        node.kind,
+                        node.raw_kind,
+                        node.display_kind,
+                        node.normalized_kind,
+                        node.title,
+                        node.label,
+                        node.content,
+                        node.source_file,
+                        node.position,
+                    )
+                    for node in nodes
+                ),
+            )
+            self._connection.executemany(
+                """
+                INSERT INTO theorem_refs (
+                    source_global_id, ref_label, target_global_id
+                ) VALUES (?, ?, ?)
+                """,
+                (
+                    (global_ids[node.id], reference, labels.get(reference))
+                    for node in nodes
+                    for reference in node.refs
+                ),
+            )
+            self._connection.executemany(
+                """
+                INSERT INTO citation_evidence (
+                    source_paper_id, citation_key, command, source_file,
+                    bib_file, bib_entry_type, cited_arxiv_id, cited_version,
+                    target_paper_id, resolution_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    (
+                        normalized_paper_id,
+                        citation.citation_key,
+                        citation.command,
+                        citation.source_file,
+                        citation.bib_file,
+                        citation.bib_entry_type,
+                        citation.cited_arxiv_id,
+                        citation.cited_version,
+                        None,
+                        citation.resolution_status,
+                    )
+                    for citation in citations
+                ),
+            )
+            _insert_evidence_document(self._connection, evidence_document)
+            self._connection.execute(
+                """
+                UPDATE citation_evidence
+                SET target_paper_id = (
+                    SELECT papers.paper_id
+                    FROM papers
+                    WHERE papers.paper_id =
+                          'arxiv:' || citation_evidence.cited_arxiv_id
+                )
+                """
+            )
+            unresolved_citation_count = self._connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM citation_evidence
+                WHERE source_paper_id = ?
+                  AND target_paper_id IS NULL
+                """,
+                (normalized_paper_id,),
+            ).fetchone()[0]
+
+        return WorkspaceImportResult(
+            paper_id=normalized_paper_id,
+            theorem_count=len(nodes),
+            citation_count=len(citations),
+            unresolved_citation_count=unresolved_citation_count,
+        )
+
+    @_synchronized
+    def import_pdf(
+        self,
+        path: str | Path,
+        paper_id: str,
+    ) -> WorkspaceImportResult:
+        """Atomically add or replace one born-digital PDF paper."""
+
+        normalized_paper_id = normalize_paper_id(paper_id)
+        if not normalized_paper_id.startswith("local:"):
+            raise ValueError("PDF paper ids must use the local: prefix in v0.5")
+
+        resolved = Path(path).expanduser().resolve()
+        source_ref = str(resolved)
+        spans = load_pdf_evidence_spans(resolved, normalized_paper_id)
+        document = build_pdf_evidence_document(
+            normalized_paper_id,
+            source_ref,
+            spans,
+        )
+        return self.import_evidence_document(
+            replace(document, main_file=resolved.name)
+        )
+
+    @_synchronized
+    def import_evidence_document(
+        self,
+        document: EvidenceDocument,
+    ) -> WorkspaceImportResult:
+        """Atomically add or replace one extracted evidence document."""
+
+        normalized_paper_id = normalize_paper_id(document.paper_id)
+        if document.source_type not in {"local", "arxiv", "pdf"}:
+            raise ValueError(f"Invalid source type: {document.source_type!r}")
+        if document.source_type == "pdf":
+            if normalized_paper_id.split(":", 1)[0] != "local":
+                raise ValueError("PDF evidence imports must use a local: paper id")
+        elif document.source_type != normalized_paper_id.split(":", 1)[0]:
+            raise ValueError(
+                f"source type {document.source_type!r} does not match "
+                f"paper id {normalized_paper_id!r}"
+            )
+
+        _validate_evidence_document(document, normalized_paper_id)
+
+        imported_at = datetime.now(timezone.utc).isoformat()
+        authors_json = json.dumps(list(document.authors), ensure_ascii=False)
+        unresolved_count = _unresolved_evidence_mention_count(document)
+
+        with self._connection:
+            self._check_expansion_import(normalized_paper_id)
+            self._connection.execute(
+                "DELETE FROM papers WHERE paper_id = ?",
+                (normalized_paper_id,),
+            )
+            self._connection.execute(
+                """
+                INSERT INTO papers (
+                    paper_id, source_type, source_ref, source_version, title,
+                    authors_json, main_file, imported_at, parser_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    normalized_paper_id,
+                    document.source_type,
+                    document.source_ref,
+                    document.source_version,
+                    document.title,
+                    authors_json,
+                    document.main_file,
+                    imported_at,
+                    _parser_version(),
+                ),
+            )
+
+            _insert_evidence_document(self._connection, document)
+
+        return WorkspaceImportResult(
+            paper_id=normalized_paper_id,
+            theorem_count=len(document.results),
+            citation_count=len(document.citation_mentions),
+            unresolved_citation_count=unresolved_count,
+            result_count=len(document.results),
+            proof_count=len(document.proofs),
+            bibliography_entry_count=len(document.bibliography_entries),
+            local_mention_count=len(document.local_result_mentions),
+            external_mention_count=len(document.external_result_mentions),
+            unresolved_count=unresolved_count,
+            warnings=document.warnings,
+        )
+
+    @_synchronized
+    def list_results(
+        self,
+        paper_id: str | None = None,
+        kind: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Return stored evidence results in stable order."""
+
+        if (
+            isinstance(limit, bool)
+            or not isinstance(limit, int)
+            or not 1 <= limit <= 100
+        ):
+            raise ValueError("Result limit must be an integer from 1 through 100")
+
+        conditions: list[str] = []
+        parameters: list[str | int] = []
+        if paper_id is not None:
+            conditions.append("results.paper_id = ?")
+            parameters.append(normalize_paper_id(paper_id))
+        if kind is not None:
+            conditions.append("(results.kind = ? OR results.normalized_kind = ?)")
+            parameters.extend([kind, kind])
+        parameters.append(limit)
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+        rows = self._connection.execute(
+            f"""
+            SELECT
+                results.result_id, results.paper_id, results.local_id,
+                results.kind, results.raw_kind, results.display_kind,
+                results.normalized_kind, results.label, results.visible_number,
+                results.title, results.statement, results.method,
+                results.confidence, papers.source_type
+            FROM results
+            JOIN papers ON papers.paper_id = results.paper_id
+            {where_clause}
+            ORDER BY results.paper_id, results.result_id
+            LIMIT ?
+            """,
+            parameters,
+        ).fetchall()
+        return [
+            {
+                **_result_from_row(row),
+                "source_type": row[13],
+                "first_location": self._first_result_location(row[0]),
+            }
+            for row in rows
+        ]
+
+    @_synchronized
+    def get_result(self, result_id: str) -> dict:
+        """Return one evidence result with source spans."""
+
+        row = self._connection.execute(
+            """
+            SELECT
+                result_id, paper_id, local_id, kind, raw_kind, display_kind,
+                normalized_kind, label, visible_number, title, statement,
+                method, confidence
+            FROM results
+            WHERE result_id = ?
+            """,
+            (result_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown result id: {result_id}")
+        return {
+            **_result_from_row(row),
+            "spans": self._source_spans_for_result(result_id),
+        }
+
+    @_synchronized
+    def get_result_proof(self, result_id: str) -> dict:
+        """Return known and inferred proof evidence for one result."""
+
+        self._ensure_result_exists(result_id)
+        proof = self._proof_for_result(result_id)
+        if proof is None:
+            return {
+                "known": {},
+                "inferred": [],
+                "unresolved": {"proof": "not_found"},
+                "warnings": ["No proof evidence was found for this result."],
+            }
+        return {
+            "known": {"proof": proof},
+            "inferred": [
+                {
+                    "basis": proof["association_basis"],
+                    "confidence": proof["association_confidence"],
+                    "method": proof["method"],
+                }
+            ],
+            "unresolved": {},
+            "warnings": [],
+        }
+
+    @_synchronized
+    def get_proof_dependencies(
+        self,
+        result_id: str,
+        recursive: bool = False,
+    ) -> dict:
+        """Return dependency evidence extracted from the associated proof."""
+
+        self._ensure_result_exists(result_id)
+        proof = self._proof_for_result(result_id)
+        if proof is None:
+            return {
+                "result_id": result_id,
+                "recursive": recursive,
+                "known": {
+                    "resolved_local_results": [],
+                    "resolved_external_results": [],
+                    "external_result_mentions": [],
+                },
+                "inferred": [],
+                "unresolved": {"proof": "not_found"},
+                "warnings": ["No proof evidence was found for this result."],
+            }
+
+        proof_ids = [proof["proof_id"]]
+        if recursive:
+            proof_ids.extend(self._recursive_dependency_proof_ids(result_id))
+
+        resolved_local_result_ids: list[str] = []
+        resolved_local_mentions_by_result: dict[str, list[dict]] = {}
+        unresolved_local = []
+        unresolved_citation = []
+        unresolved_external = []
+        resolved_external = []
+        known_external_mentions = []
+        for proof_id in proof_ids:
+            local_rows = self._connection.execute(
+                """
+                SELECT
+                    mention_id, paper_id, proof_id, raw_text, kind,
+                    visible_number, target_result_id, resolution_status,
+                    method, confidence
+                FROM local_result_mentions
+                WHERE proof_id = ?
+                ORDER BY mention_id
+                """,
+                (proof_id,),
+            ).fetchall()
+            for row in local_rows:
+                mention = _local_result_mention_from_row(row)
+                mention = self._with_evidence_trace(
+                    mention,
+                    mention["mention_id"],
+                    "local_result_mention",
+                )
+                if mention["target_result_id"] and _is_resolved(
+                    mention["resolution_status"]
+                ):
+                    if mention["target_result_id"] not in resolved_local_result_ids:
+                        resolved_local_result_ids.append(mention["target_result_id"])
+                    resolved_local_mentions_by_result.setdefault(
+                        mention["target_result_id"],
+                        [],
+                    ).append(mention)
+                else:
+                    unresolved_local.append(mention)
+
+            for row in self._connection.execute(
+                """
+                SELECT
+                    mention_id, paper_id, proof_id, raw_text, raw_key,
+                    entry_id, resolution_status, method, confidence
+                FROM citation_mentions
+                WHERE proof_id = ?
+                ORDER BY mention_id
+                """,
+                (proof_id,),
+            ):
+                mention = _citation_mention_from_row(row)
+                mention = self._with_evidence_trace(
+                    mention,
+                    mention["mention_id"],
+                    "citation_mention",
+                )
+                if not mention["entry_id"] or not _is_resolved(
+                    mention["resolution_status"]
+                ):
+                    unresolved_citation.append(mention)
+
+            for row in self._connection.execute(
+                """
+                SELECT
+                    mention_id, paper_id, proof_id, citation_mention_id,
+                    raw_text, external_kind, external_number, entry_id,
+                    target_paper_id, resolution_status, method, confidence
+                FROM external_result_mentions
+                WHERE proof_id = ?
+                ORDER BY mention_id
+                """,
+                (proof_id,),
+            ):
+                mention = _external_result_mention_from_row(row)
+                mention = self._with_evidence_trace(
+                    mention,
+                    mention["mention_id"],
+                    "external_result_mention",
+                )
+                if mention["target_paper_id"] and _is_resolved(
+                    mention["resolution_status"]
+                ):
+                    resolved_external.append(mention)
+                    known_external_mentions.append(mention)
+                elif _is_known_external_result_mention(mention):
+                    known_external_mentions.append(mention)
+                else:
+                    unresolved_external.append(mention)
+
+        warnings = []
+        if not resolved_local_result_ids and not known_external_mentions:
+            warnings.append(EVIDENCE_EMPTY_DEPENDENCY_WARNING)
+        return {
+            "result_id": result_id,
+            "recursive": recursive,
+            "known": {
+                "resolved_local_results": [
+                    {
+                        **self.get_result(resolved_id),
+                        "via_mentions": resolved_local_mentions_by_result[
+                            resolved_id
+                        ],
+                    }
+                    for resolved_id in resolved_local_result_ids
+                ],
+                "resolved_external_results": resolved_external,
+                "external_result_mentions": known_external_mentions,
+            },
+            "inferred": [
+                {
+                    "basis": proof["association_basis"],
+                    "confidence": proof["association_confidence"],
+                    "method": proof["method"],
+                }
+            ],
+            "unresolved": {
+                "local_result_mentions": unresolved_local,
+                "citation_mentions": unresolved_citation,
+                "external_result_mentions": unresolved_external,
+            },
+            "warnings": warnings,
+        }
+
+    @_synchronized
+    def get_external_result_mentions(self, result_id: str) -> list[dict]:
+        """Return external result mentions in a result's associated proof."""
+
+        self._ensure_result_exists(result_id)
+        proof = self._proof_for_result(result_id)
+        if proof is None:
+            return []
+        rows = self._connection.execute(
+            """
+            SELECT
+                mention_id, paper_id, proof_id, citation_mention_id,
+                raw_text, external_kind, external_number, entry_id,
+                target_paper_id, resolution_status, method, confidence
+            FROM external_result_mentions
+            WHERE proof_id = ?
+            ORDER BY mention_id
+            """,
+            (proof["proof_id"],),
+        ).fetchall()
+        return [
+            self._with_evidence_trace(
+                _external_result_mention_from_row(row),
+                row[0],
+                "external_result_mention",
+            )
+            for row in rows
+        ]
+
+    @_synchronized
+    def get_evidence(self, node_or_edge_id: str) -> dict:
+        """Return metadata and spans for a stored evidence node or edge."""
+
+        lookups = (
+            ("result", "results", "result_id", _result_from_row),
+            ("proof", "proofs", "proof_id", _proof_from_row),
+            (
+                "bibliography_entry",
+                "bibliography_entries",
+                "entry_id",
+                _bibliography_entry_from_row,
+            ),
+            (
+                "local_result_mention",
+                "local_result_mentions",
+                "mention_id",
+                _local_result_mention_from_row,
+            ),
+            (
+                "citation_mention",
+                "citation_mentions",
+                "mention_id",
+                _citation_mention_from_row,
+            ),
+            (
+                "external_result_mention",
+                "external_result_mentions",
+                "mention_id",
+                _external_result_mention_from_row,
+            ),
+            ("edge", "evidence_edges", "edge_id", _evidence_edge_from_row),
+        )
+        for evidence_type, table, key_column, serializer in lookups:
+            row = self._connection.execute(
+                f"SELECT * FROM {table} WHERE {key_column} = ?",
+                (node_or_edge_id,),
+            ).fetchone()
+            if row is not None:
+                metadata = serializer(row)
+                spans, span_trail = self._source_spans_and_trail_for_evidence(
+                    evidence_type,
+                    node_or_edge_id,
+                    metadata,
+                )
+                return {
+                    "id": node_or_edge_id,
+                    "type": evidence_type,
+                    "metadata": metadata,
+                    "spans": spans,
+                    "span_trail": span_trail,
+                }
+        raise KeyError(f"Unknown evidence id: {node_or_edge_id}")
+
+    @_synchronized
+    def get_source_slice(
+        self,
+        span_id: str | None = None,
+        result_id: str | None = None,
+        proof_id: str | None = None,
+        context: int = 1,
+    ) -> dict:
+        """Return a bounded source-text slice around a span, result, or proof."""
+
+        if (
+            isinstance(context, bool)
+            or not isinstance(context, int)
+            or not 0 <= context <= 5
+        ):
+            raise ValueError("context must be an integer from 0 through 5")
+
+        selectors = {
+            "span_id": span_id,
+            "result_id": result_id,
+            "proof_id": proof_id,
+        }
+        provided = [(kind, value) for kind, value in selectors.items() if value]
+        if len(provided) != 1:
+            raise ValueError(
+                "Exactly one source slice selector is required: "
+                "span_id, result_id, or proof_id"
+            )
+        selector_kind, selector_value = provided[0]
+        anchor_rows = self._source_slice_anchor_rows(selector_kind, selector_value)
+        if not anchor_rows:
+            raise KeyError(f"Unknown {selector_kind}: {selector_value}")
+
+        paper_id = anchor_rows[0]["paper_id"]
+        source_type = anchor_rows[0]["source_type"]
+        source_ref = anchor_rows[0]["source_ref"]
+        anchor_ids = {row["id"] for row in anchor_rows}
+        all_rows = self._source_slice_rows_for_source(
+            paper_id,
+            source_type,
+            source_ref,
+        )
+        anchor_positions = [
+            index for index, row in enumerate(all_rows) if row["id"] in anchor_ids
+        ]
+        start = max(min(anchor_positions) - context, 0)
+        end = min(max(anchor_positions) + context + 1, len(all_rows))
+        slices = []
+        for index, row in enumerate(all_rows[start:end]):
+            if row["id"] in anchor_ids:
+                role = "anchor"
+            elif index + start < min(anchor_positions):
+                role = "before"
+            else:
+                role = "after"
+            slices.append(_source_slice_from_row(row, role))
+
+        return {
+            "selector": {
+                "kind": selector_kind,
+                "value": selector_value,
+            },
+            "paper_id": paper_id,
+            "source_type": source_type,
+            "source_ref": source_ref,
+            "context": context,
+            "anchor_span_ids": [row["span_id"] for row in anchor_rows],
+            "slices": slices,
+            "bounded": True,
+            "warnings": [],
+        }
+
+    @_synchronized
+    def export_reading_bundle(self, paper_id: str) -> dict:
+        """Export a paper-level reading bridge bundle."""
+
+        paper = self.get_paper(paper_id)
+        results = [self.get_result(row["result_id"]) for row in self.list_results(
+            paper_id=paper["paper_id"],
+            limit=100,
+        )]
+        proofs = self._proofs_for_paper(paper["paper_id"])
+        dependency_index = {}
+        entities = []
+        reading_results = []
+        external_mentions = []
+        source_handles = []
+        warnings = []
+
+        for result in results:
+            result_handles = [
+                source_handle(
+                    "result_id",
+                    result["result_id"],
+                    result["paper_id"],
+                    "statement",
+                )
+            ]
+            proof_payload = self.get_result_proof(result["result_id"])
+            proof_methods = proof_methods_from_proof_payload(proof_payload)
+            dependencies = self.get_proof_dependencies(result["result_id"])
+            dependency_index[result["result_id"]] = dependencies
+            entities.append(
+                result_to_reading_entity(
+                    result,
+                    dependencies,
+                    result_handles,
+                    proof_methods,
+                )
+            )
+            reading_results.append(result_to_reading_result(result, result_handles))
+            external_mentions.extend(
+                self.get_external_result_mentions(result["result_id"])
+            )
+            source_handles.extend(result_handles)
+            for proof_method in proof_methods:
+                source_handles.extend(proof_method["source_handles"])
+            warnings.extend(proof_payload.get("warnings", []))
+            warnings.extend(dependencies.get("warnings", []))
+
+        return {
+            **base_bridge_payload(_parser_version()),
+            "paper": paper,
+            "uri_map": reading_uri_map(results),
+            "results": reading_results,
+            "proofs": proofs,
+            "entities": entities,
+            "dependency_index": dependency_index,
+            "external_mentions": external_mentions,
+            "source_handles": _dedupe_source_handles(source_handles),
+            "completeness_check": self._reading_completeness_check(
+                results,
+                dependency_index,
+            ),
+            "uncertain_log": self._reading_uncertain_log(dependency_index),
+            "interpretation_policy": interpretation_policy(),
+            "warnings": _dedupe_strings(warnings),
+        }
+
+    @_synchronized
+    def export_result_reading_context(self, result_id: str) -> dict:
+        """Export focused reading context for one result."""
+
+        result = self.get_result(result_id)
+        proof_payload = self.get_result_proof(result_id)
+        dependencies = self.get_proof_dependencies(result_id)
+        handles = [
+            source_handle(
+                "result_id",
+                result["result_id"],
+                result["paper_id"],
+                "statement",
+            )
+        ]
+        proof = proof_payload.get("known", {}).get("proof")
+        if proof:
+            handles.append(
+                source_handle(
+                    "proof_id",
+                    proof["proof_id"],
+                    proof["paper_id"],
+                    "proof",
+                )
+            )
+        return {
+            **base_bridge_payload(_parser_version()),
+            "result": result_to_reading_result(result, handles[:1]),
+            "proof": proof_payload,
+            "dependencies": dependencies,
+            "reading_path_preview": self.get_result_reading_path(
+                result_id,
+                recursive=True,
+            ),
+            "source_slice_handles": _dedupe_source_handles(handles),
+            "interpretation_prompts": interpretation_prompts(),
+            "warnings": _dedupe_strings(
+                [
+                    *proof_payload.get("warnings", []),
+                    *dependencies.get("warnings", []),
+                ]
+            ),
+        }
+
+    @_synchronized
+    def get_result_reading_path(
+        self,
+        result_id: str,
+        recursive: bool = True,
+    ) -> dict:
+        """Return deterministic top-down and bottom-up local reading paths."""
+
+        self._ensure_result_exists(result_id)
+        top_down = []
+        edges = []
+        external_stops = []
+        unresolved_stops = []
+        cycles = []
+        visited: set[str] = set()
+        active: set[str] = set()
+
+        def visit(current_id: str) -> None:
+            if current_id in active:
+                cycles.append(current_id)
+                return
+            if current_id in visited:
+                return
+            active.add(current_id)
+            visited.add(current_id)
+            top_down.append(self.get_result(current_id))
+            dependencies = self.get_proof_dependencies(current_id)
+            for dependency in dependencies["known"]["resolved_local_results"]:
+                target_id = dependency["result_id"]
+                edges.append(
+                    {
+                        "source_result_id": current_id,
+                        "target_result_id": target_id,
+                        "relation": "uses_local_result",
+                    }
+                )
+                if recursive:
+                    visit(target_id)
+            external_stops.extend(
+                dependencies["known"].get("external_result_mentions", [])
+            )
+            for key, mentions in dependencies.get("unresolved", {}).items():
+                if mentions:
+                    unresolved_stops.append(
+                        {
+                            "result_id": current_id,
+                            "kind": key,
+                            "mentions": mentions,
+                        }
+                    )
+            active.remove(current_id)
+
+        visit(result_id)
+        return {
+            **base_bridge_payload(_parser_version()),
+            "result_id": result_id,
+            "recursive": recursive,
+            "top_down": top_down,
+            "bottom_up": list(reversed(top_down)),
+            "edges": edges,
+            "external_stops": external_stops,
+            "unresolved_stops": unresolved_stops,
+            "cycles": cycles,
+            "warnings": [],
+        }
+
+    @_synchronized
+    def create_reading_queue(
+        self,
+        result_id: str,
+        label: str | None = None,
+        recursive: bool = True,
+    ) -> dict:
+        """Create a persistent reading queue for one stored result."""
+
+        result = self.get_result(result_id)
+        normalized_label = _clean_required_text(
+            label if label is not None else result_id,
+            "reading queue label",
+        )
+        timestamp = datetime.now(timezone.utc).isoformat()
+        queue_id = self._new_reading_queue_id(normalized_label, timestamp)
+        items = self._planned_reading_queue_items(result_id, recursive)
+
+        self._connection.execute(
+            """
+            INSERT INTO reading_queues (
+                queue_id, paper_id, target_result_id, label, status,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'active', ?, ?)
+            """,
+            (
+                queue_id,
+                result["paper_id"],
+                result_id,
+                normalized_label,
+                timestamp,
+                timestamp,
+            ),
+        )
+        for position, item in enumerate(items, start=1):
+            self._connection.execute(
+                """
+                INSERT INTO reading_queue_items (
+                    item_id, queue_id, position, target_kind, target_id,
+                    priority, reason, evidence_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    self._new_reading_queue_item_id(queue_id, position),
+                    queue_id,
+                    position,
+                    item["target_kind"],
+                    item["target_id"],
+                    item["priority"],
+                    item["reason"],
+                    _json_payload(item["evidence"], "reading queue item evidence"),
+                    timestamp,
+                ),
+            )
+        self._connection.commit()
+        return self._reading_queue_payload(queue_id)
+
+    @_synchronized
+    def list_reading_queues(
+        self,
+        paper_id: str | None = None,
+        status: str | None = None,
+    ) -> list[dict]:
+        """List reading queues ordered for resumption."""
+
+        conditions: list[str] = []
+        parameters: list[str] = []
+        if paper_id is not None:
+            normalized_paper_id = normalize_paper_id(paper_id)
+            self.get_paper(normalized_paper_id)
+            conditions.append("paper_id = ?")
+            parameters.append(normalized_paper_id)
+        if status is not None:
+            _validate_choice(status, _READING_QUEUE_STATUSES, "reading queue status")
+            conditions.append("status = ?")
+            parameters.append(status)
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        rows = self._connection.execute(
+            f"""
+            SELECT
+                queue_id, paper_id, target_result_id, label, status,
+                created_at, updated_at
+            FROM reading_queues
+            {where_clause}
+            ORDER BY updated_at DESC, queue_id DESC
+            """,
+            parameters,
+        ).fetchall()
+        return [self._reading_queue_payload_from_row(row) for row in rows]
+
+    @_synchronized
+    def get_reading_queue(self, queue_id: str) -> dict:
+        """Return one reading queue with deterministic item ordering."""
+
+        return {
+            "queue": self._reading_queue_payload(queue_id),
+            "items": self._reading_queue_items(queue_id),
+        }
+
+    @_synchronized
+    def apply_reading_queue_to_session(
+        self,
+        queue_id: str,
+        session_id: str,
+        status: str = "queued",
+    ) -> dict:
+        """Create session checkpoints from one reading queue."""
+
+        _validate_choice(status, _READING_CHECKPOINT_STATUSES, "reading checkpoint status")
+        queue = self._reading_queue_payload(queue_id)
+        session = self._reading_session_payload(session_id)
+        if queue["paper_id"] != session["paper_id"]:
+            raise ValueError(
+                f"Reading queue {queue_id!r} does not belong to the same paper "
+                f"as reading session {session_id!r}"
+            )
+
+        applied = []
+        for item in self._reading_queue_items(queue_id):
+            applied.append(
+                self.record_reading_checkpoint(
+                    session_id,
+                    item["target_kind"],
+                    item["target_id"],
+                    status,
+                    summary=item["reason"],
+                    evidence={
+                        "source": "reading_queue",
+                        "queue_id": queue_id,
+                        "item_id": item["item_id"],
+                        "priority": item["priority"],
+                        "reason": item["reason"],
+                        "item_evidence": item["evidence"],
+                    },
+                )
+            )
+        return {
+            "queue": self._reading_queue_payload(queue_id),
+            "session": self._reading_session_payload(session_id),
+            "applied": applied,
+        }
+
+    @_synchronized
+    def plan_external_imports_for_result(
+        self,
+        result_id: str,
+        recursive: bool = True,
+    ) -> dict:
+        """Plan external arXiv imports needed by one result's reading path."""
+
+        if not isinstance(recursive, bool):
+            raise ValueError("recursive must be a boolean")
+        result = self.get_result(result_id)
+        collector = _ExternalImportPlanCollector(self)
+        path = self.get_result_reading_path(result_id, recursive=recursive)
+
+        for mention in path["external_stops"]:
+            collector.add_external_mention(
+                mention["mention_id"],
+                "reading_path.external_stops",
+            )
+        for stop in path["unresolved_stops"]:
+            stop_result = self.get_result(stop["result_id"])
+            collector.add_blocked(
+                "missing_arxiv_id",
+                [
+                    {
+                        "kind": "unresolved_stop",
+                        "id": f"{stop['result_id']}:{stop['kind']}",
+                        "paper_id": stop_result["paper_id"],
+                        "result_id": stop["result_id"],
+                        "proof_id": None,
+                        "citation_key": None,
+                        "raw_text": stop["kind"],
+                        "source": "reading_path.unresolved_stops",
+                    }
+                ],
+            )
+
+        return collector.payload(
+            {
+                "kind": "result_id",
+                "value": result_id,
+                "paper_id": result["paper_id"],
+                "recursive": recursive,
+            }
+        )
+
+    @_synchronized
+    def plan_external_imports_for_queue(self, queue_id: str) -> dict:
+        """Plan external arXiv imports referenced by a saved reading queue."""
+
+        queue_payload = self._reading_queue_payload(queue_id)
+        collector = _ExternalImportPlanCollector(self)
+        for item in self._reading_queue_items(queue_id):
+            if item["target_kind"] == "external_stop":
+                collector.add_external_mention(
+                    item["target_id"],
+                    "reading_queue.external_stop",
+                )
+            elif item["target_kind"] == "unresolved_stop":
+                collector.add_blocked(
+                    "missing_arxiv_id",
+                    [
+                        {
+                            "kind": "unresolved_stop",
+                            "id": item["target_id"],
+                            "paper_id": queue_payload["paper_id"],
+                            "result_id": item["evidence"].get("result_id"),
+                            "proof_id": None,
+                            "citation_key": None,
+                            "raw_text": item["reason"],
+                            "source": "reading_queue.unresolved_stop",
+                        }
+                    ],
+                )
+
+        return collector.payload(
+            {
+                "kind": "queue_id",
+                "value": queue_id,
+                "paper_id": queue_payload["paper_id"],
+                "recursive": None,
+            }
+        )
+
+    @_synchronized
+    def plan_external_imports_for_paper(self, paper_id: str) -> dict:
+        """Plan external arXiv imports visible in one stored paper."""
+
+        normalized_paper_id = normalize_paper_id(paper_id)
+        self.get_paper(normalized_paper_id)
+        collector = _ExternalImportPlanCollector(self)
+
+        external_rows = self._connection.execute(
+            """
+            SELECT mention_id
+            FROM external_result_mentions
+            WHERE paper_id = ?
+            ORDER BY mention_id
+            """,
+            (normalized_paper_id,),
+        ).fetchall()
+        for row in external_rows:
+            collector.add_external_mention(row[0], "paper.external_result_mentions")
+
+        citation_rows = self._connection.execute(
+            """
+            SELECT mention_id
+            FROM citation_mentions
+            WHERE paper_id = ?
+            ORDER BY mention_id
+            """,
+            (normalized_paper_id,),
+        ).fetchall()
+        for row in citation_rows:
+            collector.add_citation_mention(row[0], "paper.citation_mentions")
+
+        # LaTeX citation records predate proof-span evidence. Preserve their
+        # source file/key provenance instead of dropping this existing evidence.
+        for citation in self.get_citations(normalized_paper_id):
+            evidence = _external_import_evidence(
+                "citation_record",
+                f"{normalized_paper_id}:cite:{citation['source_file']}:{citation['citation_key']}",
+                normalized_paper_id, None, None, citation["citation_key"],
+                "\\" + citation["command"] + "{" + citation["citation_key"] + "}",
+                "paper.citation_evidence",
+            )
+            evidence["source_file"] = citation["source_file"]
+            evidence["bib_file"] = citation["bib_file"]
+            if citation["cited_arxiv_id"]:
+                collector._add_candidate(citation["cited_arxiv_id"], citation["cited_version"], [evidence])
+            else:
+                collector.add_blocked("missing_arxiv_id", [evidence])
+
+        return collector.payload(
+            {
+                "kind": "paper_id",
+                "value": normalized_paper_id,
+                "paper_id": normalized_paper_id,
+                "recursive": None,
+            }
+        )
+
+    @_synchronized
+    def resolve_external_reference(
+        self,
+        paper_id: str,
+        blocked_id: str,
+        target: dict,
+        *,
+        import_target: bool = True,
+        artifact_dir: str | Path | None = None,
+    ) -> dict:
+        """Persist a user-confirmed target for one blocked external reference."""
+
+        normalized_paper_id = normalize_paper_id(paper_id)
+        self.get_paper(normalized_paper_id)
+        normalized_target = _normalize_reference_target(target)
+        blocked = _blocked_external_reference(
+            self.plan_external_imports_for_paper(normalized_paper_id),
+            blocked_id,
+        )
+        evidence = _dedupe_external_import_evidence(blocked["evidence"])
+        review = _external_import_candidate_review(evidence)
+        resolution_id = _reference_resolution_id(
+            normalized_paper_id,
+            blocked["blocked_id"],
+            normalized_target,
+        )
+        existing = self._reference_resolution_by_id(resolution_id)
+        if existing is not None:
+            return existing
+
+        timestamp = datetime.now(timezone.utc).isoformat()
+        status = "resolved_not_imported"
+        artifacts: list[dict] = []
+        warnings: list[str] = []
+        imported_paper_id = None
+        self._connection.execute(
+            """
+            INSERT INTO reference_resolutions (
+                resolution_id, source_paper_id, blocked_id, target_kind,
+                target_json, status, imported_paper_id, evidence_json,
+                review_json, artifact_json, warning_json, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                resolution_id,
+                normalized_paper_id,
+                blocked["blocked_id"],
+                normalized_target["kind"],
+                _canonical_json(normalized_target),
+                status,
+                imported_paper_id,
+                _canonical_json(evidence),
+                _canonical_json(review),
+                _canonical_json(artifacts),
+                _canonical_json(warnings),
+                timestamp,
+                timestamp,
+            ),
+        )
+        if import_target and normalized_target["kind"] in {"arxiv", "pdf"}:
+            try:
+                imported_paper_id = self._import_reference_target(normalized_target)
+                status = "resolved_imported"
+            except Exception as exc:
+                status = "failed_import"
+                warnings = [bounded_excerpt(str(exc), limit=240)]
+            self._update_reference_resolution_import(
+                resolution_id,
+                status,
+                imported_paper_id,
+                warnings,
+            )
+        else:
+            self._connection.commit()
+        return self._reference_resolution_by_id(resolution_id)
+
+    @_synchronized
+    def list_external_reference_resolutions(
+        self,
+        paper_id: str | None = None,
+    ) -> dict:
+        """List recorded external reference resolutions and selection provenance."""
+
+        parameters: tuple[str, ...]
+        where = ""
+        if paper_id is None:
+            parameters = ()
+        else:
+            normalized_paper_id = normalize_paper_id(paper_id)
+            self.get_paper(normalized_paper_id)
+            where = "WHERE source_paper_id = ?"
+            parameters = (normalized_paper_id,)
+        rows = self._connection.execute(
+            f"""
+            SELECT
+                resolution_id, source_paper_id, blocked_id, target_kind,
+                target_json, status, imported_paper_id, evidence_json,
+                review_json, artifact_json, warning_json, created_at, updated_at
+            FROM reference_resolutions
+            {where}
+            ORDER BY source_paper_id, blocked_id, target_kind, resolution_id
+            """,
+            parameters,
+        ).fetchall()
+        resolutions = [_reference_resolution_from_row(row) for row in rows]
+        return {
+            "resolution_schema_version": 1,
+            "scope": {"paper_id": normalize_paper_id(paper_id) if paper_id else None},
+            "resolutions": resolutions,
+            "summary": _reference_resolution_summary(resolutions),
+        }
+
+    def _reference_resolution_by_id(self, resolution_id: str) -> dict | None:
+        row = self._connection.execute(
+            """
+            SELECT
+                resolution_id, source_paper_id, blocked_id, target_kind,
+                target_json, status, imported_paper_id, evidence_json,
+                review_json, artifact_json, warning_json, created_at, updated_at
+            FROM reference_resolutions
+            WHERE resolution_id = ?
+            """,
+            (resolution_id,),
+        ).fetchone()
+        return _reference_resolution_from_row(row) if row else None
+
+    def _import_reference_target(self, target: dict) -> str:
+        if target["kind"] == "pdf":
+            path = Path(str(target["path"])).expanduser().resolve()
+            if not path.is_file():
+                raise ValueError(f"PDF target does not exist: {path}")
+            paper_id = str(
+                target.get("paper_id")
+                or f"local:{slug_fragment(str(path) + ':' + path.stem)}"
+            )
+            return self.import_pdf(path, paper_id).paper_id
+        if target["kind"] == "arxiv":
+            prepared = prepare_arxiv_project(str(target["arxiv_id"]), None, False)
+            paper_id, source_version = paper_id_from_arxiv(prepared.arxiv_id)
+            project = load_project(prepared.main_file)
+            result = self.import_project(
+                paper_id,
+                "arxiv",
+                paper_id.removeprefix("arxiv:"),
+                source_version,
+                project,
+            )
+            return result.paper_id
+        raise ValueError(f"Reference target is not importable: {target['kind']}")
+
+    def _update_reference_resolution_import(
+        self,
+        resolution_id: str,
+        status: str,
+        imported_paper_id: str | None,
+        warnings: list[str],
+    ) -> None:
+        self._connection.execute(
+            """
+            UPDATE reference_resolutions
+            SET status = ?,
+                imported_paper_id = ?,
+                warning_json = ?,
+                updated_at = ?
+            WHERE resolution_id = ?
+            """,
+            (
+                status,
+                imported_paper_id,
+                _canonical_json(warnings),
+                datetime.now(timezone.utc).isoformat(),
+                resolution_id,
+            ),
+        )
+        self._connection.commit()
+
+    @_synchronized
+    def search_external_reference(
+        self,
+        paper_id: str,
+        blocked_id: str,
+        *,
+        providers: list[str] | None = None,
+        max_candidates: int = 10,
+        refresh: bool = False,
+    ) -> dict:
+        """Search scholarly metadata providers for one blocked reference."""
+
+        if not isinstance(max_candidates, int) or max_candidates < 1:
+            raise ValueError("max_candidates must be a positive integer")
+        normalized_paper_id = normalize_paper_id(paper_id)
+        self.get_paper(normalized_paper_id)
+        blocked = _blocked_external_reference(
+            self.plan_external_imports_for_paper(normalized_paper_id),
+            blocked_id,
+        )
+        if not refresh:
+            cached = self._latest_reference_search(
+                normalized_paper_id,
+                blocked["blocked_id"],
+            )
+            if cached is not None:
+                return cached
+
+        query = build_reference_search_query(blocked)
+        provider_results = self._run_reference_search_providers(query, providers)
+        ranked = rank_reference_candidates(query, provider_results, max_candidates)
+        ordinal = self._reference_search_count(
+            normalized_paper_id,
+            blocked["blocked_id"],
+        ) + 1
+        run_id = search_run_id(normalized_paper_id, blocked["blocked_id"], query, ordinal)
+        timestamp = datetime.now(timezone.utc).isoformat()
+        self._connection.execute(
+            """
+            INSERT INTO reference_search_runs (
+                search_run_id, source_paper_id, blocked_id, query_json,
+                provider_json, boundary_json, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                normalized_paper_id,
+                blocked["blocked_id"],
+                _canonical_json(query),
+                _canonical_json(
+                    {
+                        "providers": providers,
+                        "max_candidates": max_candidates,
+                        "provider_warnings": ranked["provider_warnings"],
+                    }
+                ),
+                _canonical_json(ranked["boundaries"]),
+                timestamp,
+            ),
+        )
+        for index, candidate in enumerate(ranked["candidates"], start=1):
+            candidate_id = candidate_id_for(
+                normalized_paper_id,
+                blocked["blocked_id"],
+                candidate["target"],
+            )
+            # Candidate IDs identify immutable search snapshots, including refreshes.
+            candidate_id += ":" + run_id.rsplit(":", 1)[-1]
+            self._connection.execute(
+                """
+                INSERT INTO reference_search_candidates (
+                    candidate_id, search_run_id, source_paper_id, blocked_id,
+                    target_json, score, confidence, evidence_json,
+                    provider_record_json, warning_json, rank
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    candidate_id,
+                    run_id,
+                    normalized_paper_id,
+                    blocked["blocked_id"],
+                    _canonical_json(candidate["target"]),
+                    candidate["score"],
+                    candidate["confidence"],
+                    _canonical_json(candidate["evidence"]),
+                    _canonical_json(candidate["provider_records"]),
+                    _canonical_json(candidate["warnings"]),
+                    index,
+                ),
+            )
+        self._connection.commit()
+        return self._reference_search_by_id(run_id)
+
+    @_synchronized
+    def list_external_reference_searches(
+        self,
+        paper_id: str | None = None,
+        blocked_id: str | None = None,
+    ) -> dict:
+        """List persisted scholarly reference search runs."""
+
+        clauses = []
+        parameters: list[str] = []
+        normalized_paper_id = None
+        if paper_id is not None:
+            normalized_paper_id = normalize_paper_id(paper_id)
+            self.get_paper(normalized_paper_id)
+            clauses.append("source_paper_id = ?")
+            parameters.append(normalized_paper_id)
+        if blocked_id is not None:
+            clauses.append("blocked_id = ?")
+            parameters.append(blocked_id)
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = self._connection.execute(
+            f"""
+            SELECT search_run_id
+            FROM reference_search_runs
+            {where}
+            ORDER BY source_paper_id, blocked_id, created_at, search_run_id
+            """,
+            tuple(parameters),
+        ).fetchall()
+        searches = [self._reference_search_by_id(row[0]) for row in rows]
+        return {
+            "search_schema_version": 1,
+            "scope": {
+                "paper_id": normalized_paper_id,
+                "blocked_id": blocked_id,
+            },
+            "searches": searches,
+            "summary": {
+                "search_run_count": len(searches),
+                "candidate_count": sum(
+                    len(search.get("candidates", [])) for search in searches
+                ),
+                "ambiguous_candidate_count": sum(
+                    1
+                    for search in searches
+                    for candidate in search.get("candidates", [])
+                    if candidate.get("confidence") == "ambiguous"
+                ),
+                "boundary_count": sum(
+                    len(search.get("boundaries", [])) for search in searches
+                ),
+            },
+        }
+
+    @_synchronized
+    def resolve_external_reference_candidate(
+        self,
+        paper_id: str,
+        blocked_id: str,
+        candidate_id: str,
+        *,
+        import_target: bool = False,
+        artifact_dir: str | Path | None = None,
+        overwrite: bool = False,
+    ) -> dict:
+        """Apply a persisted search candidate through Reference Import Closure."""
+
+        normalized_paper_id = normalize_paper_id(paper_id)
+        self.get_paper(normalized_paper_id)
+        candidate = self._reference_search_candidate_by_id(candidate_id)
+        if candidate is None:
+            raise ValueError(f"Unknown reference candidate: {candidate_id}")
+        if (
+            candidate["source_paper_id"] != normalized_paper_id
+            or candidate["blocked_id"] != blocked_id
+        ):
+            raise ValueError("candidate does not belong to the requested blocker")
+        existing = self.list_external_reference_resolutions(normalized_paper_id)[
+            "resolutions"
+        ]
+        different_existing = [
+            item
+            for item in existing
+            if item["source"]["blocked_id"] == blocked_id
+            and item["target"] != candidate["target"]
+        ]
+        if different_existing and not overwrite:
+            raise ValueError(
+                "An existing resolution is recorded for this blocked reference; "
+                "pass overwrite=True to apply a different candidate."
+            )
+        if overwrite and different_existing:
+            self._delete_reference_resolutions(normalized_paper_id, blocked_id)
+        resolution = self.resolve_external_reference(
+            normalized_paper_id,
+            blocked_id,
+            candidate["target"],
+            import_target=import_target,
+            artifact_dir=artifact_dir,
+        )
+        return {
+            "candidate_resolution_schema_version": 1,
+            "candidate": candidate,
+            "resolution": resolution,
+        }
+
+    def _run_reference_search_providers(
+        self,
+        query: dict,
+        providers: list[str] | None,
+    ) -> list[dict]:
+        custom_provider = getattr(self, "reference_search_provider", None)
+        if custom_provider is not None:
+            return custom_provider(query)
+        selected = set(providers or [])
+        results = []
+        for provider in default_reference_search_providers():
+            if selected and provider.name not in selected:
+                continue
+            try:
+                results.append(provider.search(query))
+            except Exception as exc:
+                results.append(
+                    {
+                        "provider": provider.name,
+                        "records": [],
+                        "warnings": [bounded_excerpt(str(exc), limit=240)],
+                    }
+                )
+        return results
+
+    def _reference_search_count(self, paper_id: str, blocked_id: str) -> int:
+        row = self._connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM reference_search_runs
+            WHERE source_paper_id = ? AND blocked_id = ?
+            """,
+            (paper_id, blocked_id),
+        ).fetchone()
+        return int(row[0] if row else 0)
+
+    def _latest_reference_search(self, paper_id: str, blocked_id: str) -> dict | None:
+        row = self._connection.execute(
+            """
+            SELECT search_run_id
+            FROM reference_search_runs
+            WHERE source_paper_id = ? AND blocked_id = ?
+            ORDER BY created_at DESC, search_run_id DESC
+            LIMIT 1
+            """,
+            (paper_id, blocked_id),
+        ).fetchone()
+        return self._reference_search_by_id(row[0]) if row else None
+
+    def _reference_search_by_id(self, search_run_id: str) -> dict:
+        row = self._connection.execute(
+            """
+            SELECT
+                search_run_id, source_paper_id, blocked_id, query_json,
+                provider_json, boundary_json, created_at
+            FROM reference_search_runs
+            WHERE search_run_id = ?
+            """,
+            (search_run_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"Unknown reference search run: {search_run_id}")
+        candidate_rows = self._connection.execute(
+            """
+            SELECT
+                candidate_id, search_run_id, source_paper_id, blocked_id,
+                target_json, score, confidence, evidence_json,
+                provider_record_json, warning_json, rank
+            FROM reference_search_candidates
+            WHERE search_run_id = ?
+            ORDER BY rank, candidate_id
+            """,
+            (search_run_id,),
+        ).fetchall()
+        candidates = [_reference_search_candidate_from_row(item) for item in candidate_rows]
+        provider_payload = json.loads(row[4])
+        boundaries = json.loads(row[5])
+        return {
+            "search_schema_version": 1,
+            "search_run_id": row[0],
+            "source": {
+                "paper_id": row[1],
+                "blocked_id": row[2],
+            },
+            "query": json.loads(row[3]),
+            "providers": provider_payload.get("providers"),
+            "max_candidates": provider_payload.get("max_candidates", 10),
+            "provider_warnings": provider_payload.get("provider_warnings", []),
+            "boundaries": boundaries,
+            "candidates": candidates,
+            "summary": {
+                "candidate_count": len(candidates),
+                "strong_candidate_count": sum(
+                    1 for item in candidates if item["confidence"] == "strong"
+                ),
+                "ambiguous_candidate_count": sum(
+                    1 for item in candidates if item["confidence"] == "ambiguous"
+                ),
+                "boundary_count": len(boundaries),
+                "provider_warning_count": len(
+                    provider_payload.get("provider_warnings", [])
+                ),
+            },
+            "created_at": row[6],
+        }
+
+    def _reference_search_candidate_by_id(self, candidate_id: str) -> dict | None:
+        row = self._connection.execute(
+            """
+            SELECT
+                candidate_id, search_run_id, source_paper_id, blocked_id,
+                target_json, score, confidence, evidence_json,
+                provider_record_json, warning_json, rank
+            FROM reference_search_candidates
+            WHERE candidate_id = ?
+            """,
+            (candidate_id,),
+        ).fetchone()
+        return _reference_search_candidate_from_row(row) if row else None
+
+    def _delete_reference_resolutions(self, paper_id: str, blocked_id: str) -> None:
+        self._connection.execute(
+            """
+            DELETE FROM reference_resolutions
+            WHERE source_paper_id = ? AND blocked_id = ?
+            """,
+            (paper_id, blocked_id),
+        )
+        self._connection.commit()
+
+    @_synchronized
+    def get_paper_map(self, paper_id: str, max_candidates: int = 5) -> dict:
+        """Return an evidence-first first-load map for one stored paper."""
+
+        return build_paper_map(
+            self,
+            paper_id,
+            max_candidates=max_candidates,
+        )
+
+    @_synchronized
+    def export_paper_reading_report(
+        self,
+        paper_id: str,
+        max_candidates: int = 5,
+    ) -> dict:
+        """Export a deterministic Markdown reading report for one stored paper."""
+
+        return build_paper_reading_report(
+            self,
+            paper_id,
+            max_candidates=max_candidates,
+        )
+
+    @_synchronized
+    def export_cross_paper_reading_plan(
+        self,
+        paper_ids: list[str],
+        focus: str | None = None,
+        max_candidates_per_paper: int = 3,
+    ) -> dict:
+        """Export a deterministic Markdown reading plan for selected papers."""
+
+        return build_cross_paper_reading_plan(
+            self,
+            paper_ids,
+            focus=focus,
+            max_candidates_per_paper=max_candidates_per_paper,
+        )
+
+    @_synchronized
+    def plan_starter_project(
+        self,
+        workspace_path: str | Path,
+        artifact_dir: str | Path | None,
+        papers: list[dict],
+        project_title: str | None = None,
+        focus: str | None = None,
+        target_result_id: str | None = None,
+        create_queue: bool = True,
+        create_session: bool = True,
+        max_candidates: int = 5,
+        overwrite: bool = False,
+    ) -> dict:
+        """Plan a first reading project without writing artifacts."""
+
+        return plan_starter_project(
+            workspace_path=workspace_path,
+            artifact_dir=artifact_dir,
+            papers=papers,
+            project_title=project_title,
+            focus=focus,
+            target_result_id=target_result_id,
+            create_queue=create_queue,
+            create_session=create_session,
+            max_candidates=max_candidates,
+            overwrite=overwrite,
+        )
+
+    @_synchronized
+    def bootstrap_reading_project(
+        self,
+        workspace_path: str | Path,
+        artifact_dir: str | Path,
+        papers: list[dict],
+        project_title: str | None = None,
+        focus: str | None = None,
+        target_result_id: str | None = None,
+        create_queue: bool = True,
+        create_session: bool = True,
+        max_candidates: int = 5,
+        overwrite: bool = False,
+    ) -> dict:
+        """Create starter artifacts for a first reading project."""
+
+        return bootstrap_reading_project(
+            self,
+            workspace_path=workspace_path,
+            artifact_dir=artifact_dir,
+            papers=papers,
+            project_title=project_title,
+            focus=focus,
+            target_result_id=target_result_id,
+            create_queue=create_queue,
+            create_session=create_session,
+            max_candidates=max_candidates,
+            overwrite=overwrite,
+        )
+
+    @_synchronized
+    def counts(self) -> dict[str, int]:
+        """Return the total paper and theorem counts."""
+
+        paper_count = self._connection.execute(
+            "SELECT COUNT(*) FROM papers"
+        ).fetchone()[0]
+        theorem_count = self._connection.execute(
+            "SELECT COUNT(*) FROM theorems"
+        ).fetchone()[0]
+        return {"papers": paper_count, "theorems": theorem_count}
+
+    @_synchronized
+    def list_papers(self) -> list[dict]:
+        """Return stored papers and graph counts in stable paper-ID order."""
+
+        rows = self._connection.execute(
+            """
+            SELECT
+                papers.paper_id, papers.source_type, papers.source_ref,
+                papers.source_version, papers.title, papers.authors_json,
+                papers.main_file, papers.imported_at, papers.parser_version,
+                (SELECT COUNT(*) FROM theorems
+                 WHERE theorems.paper_id = papers.paper_id),
+                (SELECT COUNT(*) FROM citation_evidence
+                 WHERE citation_evidence.source_paper_id = papers.paper_id),
+                (SELECT COUNT(*) FROM citation_evidence
+                 WHERE citation_evidence.source_paper_id = papers.paper_id
+                   AND citation_evidence.target_paper_id IS NOT NULL),
+                (SELECT COUNT(*) FROM citation_evidence
+                 WHERE citation_evidence.target_paper_id = papers.paper_id),
+                (SELECT COUNT(*) FROM citation_evidence
+                 WHERE citation_evidence.source_paper_id = papers.paper_id
+                   AND citation_evidence.target_paper_id IS NULL)
+            FROM papers
+            ORDER BY papers.paper_id
+            """
+        ).fetchall()
+        return [_paper_from_row(row) for row in rows]
+
+    @_synchronized
+    def create_reading_session(
+        self,
+        paper_id: str,
+        label: str | None = None,
+        target_result_id: str | None = None,
+    ) -> dict:
+        """Create a persistent reading session for a stored paper."""
+
+        normalized_paper_id = normalize_paper_id(paper_id)
+        self.get_paper(normalized_paper_id)
+        normalized_label = _clean_required_text(
+            label if label is not None else target_result_id or normalized_paper_id,
+            "reading session label",
+        )
+
+        if target_result_id is not None:
+            target = self.get_result(target_result_id)
+            if target["paper_id"] != normalized_paper_id:
+                raise ValueError(
+                    f"Target result {target_result_id!r} does not belong to "
+                    f"paper {normalized_paper_id!r}"
+                )
+
+        timestamp = datetime.now(timezone.utc).isoformat()
+        session_id = self._new_reading_session_id(
+            normalized_label,
+            timestamp,
+        )
+        self._connection.execute(
+            """
+            INSERT INTO reading_sessions (
+                session_id, paper_id, target_result_id, label, status,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'active', ?, ?)
+            """,
+            (
+                session_id,
+                normalized_paper_id,
+                target_result_id,
+                normalized_label,
+                timestamp,
+                timestamp,
+            ),
+        )
+        self._connection.commit()
+        return self._reading_session_payload(session_id)
+
+    @_synchronized
+    def list_reading_sessions(
+        self,
+        paper_id: str | None = None,
+        status: str | None = None,
+    ) -> list[dict]:
+        """List reading sessions ordered for resumption."""
+
+        conditions: list[str] = []
+        parameters: list[str] = []
+        if paper_id is not None:
+            normalized_paper_id = normalize_paper_id(paper_id)
+            self.get_paper(normalized_paper_id)
+            conditions.append("paper_id = ?")
+            parameters.append(normalized_paper_id)
+        if status is not None:
+            _validate_choice(status, _READING_SESSION_STATUSES, "reading session status")
+            conditions.append("status = ?")
+            parameters.append(status)
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        rows = self._connection.execute(
+            f"""
+            SELECT
+                session_id, paper_id, target_result_id, label, status,
+                created_at, updated_at
+            FROM reading_sessions
+            {where_clause}
+            ORDER BY updated_at DESC, session_id DESC
+            """,
+            parameters,
+        ).fetchall()
+        return [self._reading_session_payload_from_row(row) for row in rows]
+
+    @_synchronized
+    def get_reading_session(self, session_id: str) -> dict:
+        """Return one reading session with checkpoints and notes."""
+
+        return {
+            "session": self._reading_session_payload(session_id),
+            "checkpoints": self._reading_checkpoints_for_session(session_id),
+            "notes": self._reading_notes_for_session(session_id),
+        }
+
+    @_synchronized
+    def record_reading_checkpoint(
+        self,
+        session_id: str,
+        target_kind: str,
+        target_id: str,
+        status: str,
+        summary: str = "",
+        evidence: dict | None = None,
+    ) -> dict:
+        """Create or update one reading checkpoint for a session target."""
+
+        self._reading_session_payload(session_id)
+        _validate_choice(status, _READING_CHECKPOINT_STATUSES, "reading checkpoint status")
+        _validate_choice(target_kind, _READING_TARGET_KINDS, "reading target kind")
+        cleaned_target_id = _clean_required_text(target_id, "target_id")
+        cleaned_summary = "" if summary is None else str(summary).strip()
+        evidence_json = _json_payload(evidence or {}, "checkpoint evidence")
+        self._validate_reading_target(target_kind, cleaned_target_id)
+
+        timestamp = datetime.now(timezone.utc).isoformat()
+        existing = self._connection.execute(
+            """
+            SELECT checkpoint_id, created_at
+            FROM reading_checkpoints
+            WHERE session_id = ? AND target_kind = ? AND target_id = ?
+            """,
+            (session_id, target_kind, cleaned_target_id),
+        ).fetchone()
+        if existing is None:
+            checkpoint_id = self._new_checkpoint_id(
+                session_id,
+                target_kind,
+                cleaned_target_id,
+            )
+            created_at = timestamp
+            self._connection.execute(
+                """
+                INSERT INTO reading_checkpoints (
+                    checkpoint_id, session_id, target_kind, target_id, status,
+                    summary, evidence_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    checkpoint_id,
+                    session_id,
+                    target_kind,
+                    cleaned_target_id,
+                    status,
+                    cleaned_summary,
+                    evidence_json,
+                    created_at,
+                    timestamp,
+                ),
+            )
+        else:
+            checkpoint_id = existing[0]
+            self._connection.execute(
+                """
+                UPDATE reading_checkpoints
+                SET status = ?, summary = ?, evidence_json = ?, updated_at = ?
+                WHERE checkpoint_id = ?
+                """,
+                (status, cleaned_summary, evidence_json, timestamp, checkpoint_id),
+            )
+
+        self._touch_reading_session(session_id, timestamp)
+        self._connection.commit()
+        return self._reading_checkpoint_payload(checkpoint_id)
+
+    @_synchronized
+    def add_reading_note(
+        self,
+        session_id: str,
+        text: str,
+        note_type: str = "note",
+        target_kind: str | None = None,
+        target_id: str | None = None,
+    ) -> dict:
+        """Add a note or question to a reading session."""
+
+        self._reading_session_payload(session_id)
+        _validate_choice(note_type, _READING_NOTE_TYPES, "reading note type")
+        cleaned_text = _clean_required_text(text, "reading note text")
+        if target_kind is None and target_id is not None:
+            raise ValueError("target_kind is required when target_id is provided")
+        if target_kind is not None:
+            _validate_choice(target_kind, _READING_NOTE_TARGET_KINDS, "reading note target kind")
+            cleaned_target_id = _clean_required_text(target_id, "target_id")
+            if target_kind != "session":
+                self._validate_reading_target(target_kind, cleaned_target_id)
+        else:
+            cleaned_target_id = None
+
+        timestamp = datetime.now(timezone.utc).isoformat()
+        note_id = self._new_note_id(session_id, timestamp)
+        self._connection.execute(
+            """
+            INSERT INTO reading_notes (
+                note_id, session_id, target_kind, target_id, note_type, text,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                note_id,
+                session_id,
+                target_kind,
+                cleaned_target_id,
+                note_type,
+                cleaned_text,
+                timestamp,
+            ),
+        )
+        self._touch_reading_session(session_id, timestamp)
+        self._connection.commit()
+        return self._reading_note_payload(note_id)
+
+    @_synchronized
+    def export_reading_session_summary(self, session_id: str) -> dict:
+        """Return a deterministic recovery summary for a reading session."""
+
+        session = self._reading_session_payload(session_id)
+        checkpoints = self._reading_checkpoints_for_session(session_id)
+        notes = self._reading_notes_for_session(session_id)
+        progress = {
+            "total_checkpoints": len(checkpoints),
+            "reviewed": 0,
+            "blocked": 0,
+            "queued": 0,
+            "skipped": 0,
+        }
+        for checkpoint in checkpoints:
+            progress[checkpoint["status"]] += 1
+
+        reviewed_targets = [
+            checkpoint for checkpoint in checkpoints if checkpoint["status"] == "reviewed"
+        ]
+        blocked_targets = [
+            checkpoint for checkpoint in checkpoints if checkpoint["status"] == "blocked"
+        ]
+        queued_targets = [
+            checkpoint for checkpoint in checkpoints if checkpoint["status"] == "queued"
+        ]
+        open_questions = [
+            note for note in notes if note["note_type"] == "question"
+        ]
+        next_actions = []
+        if blocked_targets:
+            next_actions.append("review_blocked_targets")
+        if queued_targets:
+            next_actions.append("continue_queued_targets")
+        if session["target_result_id"] and not any(
+            checkpoint["target_kind"] == "result_id"
+            and checkpoint["target_id"] == session["target_result_id"]
+            for checkpoint in checkpoints
+        ):
+            next_actions.append("review_target_result")
+        if open_questions:
+            next_actions.append("answer_or_retire_open_questions")
+
+        target_result = (
+            self.get_result(session["target_result_id"])
+            if session["target_result_id"]
+            else None
+        )
+        return {
+            "session": session,
+            "paper": self.get_paper(session["paper_id"]),
+            "target_result": target_result,
+            "progress": progress,
+            "reviewed_targets": reviewed_targets,
+            "blocked_targets": blocked_targets,
+            "open_questions": open_questions,
+            "latest_notes": list(reversed(notes[-5:])),
+            "next_actions": next_actions,
+            "source_policy": base_bridge_payload(_parser_version())["source_policy"],
+        }
+
+    def _new_reading_session_id(self, label: str, timestamp: str) -> str:
+        base = "session:" + _reading_session_slug(label)
+        compact_timestamp = (
+            timestamp.replace("-", "")
+            .replace(":", "")
+            .replace("+", "")
+            .replace(".", "")
+        )
+        candidate = f"{base}:{compact_timestamp[:14]}"
+        suffix = 2
+        while self._connection.execute(
+            "SELECT 1 FROM reading_sessions WHERE session_id = ?",
+            (candidate,),
+        ).fetchone():
+            candidate = f"{base}:{compact_timestamp[:14]}-{suffix}"
+            suffix += 1
+        return candidate
+
+    def _reading_session_payload(self, session_id: str) -> dict:
+        row = self._connection.execute(
+            """
+            SELECT
+                session_id, paper_id, target_result_id, label, status,
+                created_at, updated_at
+            FROM reading_sessions
+            WHERE session_id = ?
+            """,
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown reading session id: {session_id}")
+        return self._reading_session_payload_from_row(row)
+
+    def _reading_checkpoint_payload(self, checkpoint_id: str) -> dict:
+        row = self._connection.execute(
+            """
+            SELECT
+                checkpoint_id, session_id, target_kind, target_id, status,
+                summary, evidence_json, created_at, updated_at
+            FROM reading_checkpoints
+            WHERE checkpoint_id = ?
+            """,
+            (checkpoint_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown reading checkpoint id: {checkpoint_id}")
+        return _reading_checkpoint_from_row(row)
+
+    def _reading_note_payload(self, note_id: str) -> dict:
+        row = self._connection.execute(
+            """
+            SELECT
+                note_id, session_id, target_kind, target_id, note_type, text,
+                created_at
+            FROM reading_notes
+            WHERE note_id = ?
+            """,
+            (note_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown reading note id: {note_id}")
+        return _reading_note_from_row(row)
+
+    def _new_checkpoint_id(
+        self,
+        session_id: str,
+        target_kind: str,
+        target_id: str,
+    ) -> str:
+        return f"{session_id}::checkpoint:{target_kind}:{_reading_session_slug(target_id)}"
+
+    def _new_note_id(self, session_id: str, timestamp: str) -> str:
+        compact_timestamp = (
+            timestamp.replace("-", "")
+            .replace(":", "")
+            .replace("+", "")
+            .replace(".", "")
+        )
+        candidate = f"{session_id}::note:{compact_timestamp[:20]}"
+        suffix = 2
+        while self._connection.execute(
+            "SELECT 1 FROM reading_notes WHERE note_id = ?",
+            (candidate,),
+        ).fetchone():
+            candidate = f"{session_id}::note:{compact_timestamp[:20]}-{suffix}"
+            suffix += 1
+        return candidate
+
+    def _touch_reading_session(self, session_id: str, timestamp: str) -> None:
+        self._connection.execute(
+            "UPDATE reading_sessions SET updated_at = ? WHERE session_id = ?",
+            (timestamp, session_id),
+        )
+
+    def _validate_reading_target(self, target_kind: str, target_id: str) -> None:
+        if target_kind == "result_id":
+            self._ensure_result_exists(target_id)
+            return
+        if target_kind == "proof_id":
+            self._ensure_proof_exists(target_id)
+            return
+        if target_kind == "span_id":
+            self._ensure_source_span_exists(target_id)
+
+    def _reading_session_payload_from_row(self, row: tuple) -> dict:
+        session_id = row[0]
+        checkpoint_count = self._connection.execute(
+            "SELECT COUNT(*) FROM reading_checkpoints WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()[0]
+        note_count = self._connection.execute(
+            "SELECT COUNT(*) FROM reading_notes WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()[0]
+        return {
+            "session_id": session_id,
+            "paper_id": row[1],
+            "target_result_id": row[2],
+            "label": row[3],
+            "status": row[4],
+            "created_at": row[5],
+            "updated_at": row[6],
+            "counts": {
+                "checkpoints": checkpoint_count,
+                "notes": note_count,
+            },
+        }
+
+    def _reading_checkpoints_for_session(self, session_id: str) -> list[dict]:
+        self._reading_session_payload(session_id)
+        rows = self._connection.execute(
+            """
+            SELECT
+                checkpoint_id, session_id, target_kind, target_id, status,
+                summary, evidence_json, created_at, updated_at
+            FROM reading_checkpoints
+            WHERE session_id = ?
+            ORDER BY updated_at, checkpoint_id
+            """,
+            (session_id,),
+        ).fetchall()
+        return [_reading_checkpoint_from_row(row) for row in rows]
+
+    def _reading_notes_for_session(self, session_id: str) -> list[dict]:
+        self._reading_session_payload(session_id)
+        rows = self._connection.execute(
+            """
+            SELECT
+                note_id, session_id, target_kind, target_id, note_type, text,
+                created_at
+            FROM reading_notes
+            WHERE session_id = ?
+            ORDER BY created_at, note_id
+            """,
+            (session_id,),
+        ).fetchall()
+        return [_reading_note_from_row(row) for row in rows]
+
+    def _new_reading_queue_id(self, label: str, timestamp: str) -> str:
+        base = "queue:" + _reading_session_slug(label)
+        compact_timestamp = (
+            timestamp.replace("-", "")
+            .replace(":", "")
+            .replace("+", "")
+            .replace(".", "")
+        )
+        candidate = f"{base}:{compact_timestamp[:14]}"
+        suffix = 2
+        while self._connection.execute(
+            "SELECT 1 FROM reading_queues WHERE queue_id = ?",
+            (candidate,),
+        ).fetchone():
+            candidate = f"{base}:{compact_timestamp[:14]}-{suffix}"
+            suffix += 1
+        return candidate
+
+    def _new_reading_queue_item_id(self, queue_id: str, position: int) -> str:
+        return f"{queue_id}::item:{position}"
+
+    def _reading_queue_payload(self, queue_id: str) -> dict:
+        row = self._connection.execute(
+            """
+            SELECT
+                queue_id, paper_id, target_result_id, label, status,
+                created_at, updated_at
+            FROM reading_queues
+            WHERE queue_id = ?
+            """,
+            (queue_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown reading queue id: {queue_id}")
+        return self._reading_queue_payload_from_row(row)
+
+    def _reading_queue_payload_from_row(self, row: tuple) -> dict:
+        queue_id = row[0]
+        item_count = self._connection.execute(
+            "SELECT COUNT(*) FROM reading_queue_items WHERE queue_id = ?",
+            (queue_id,),
+        ).fetchone()[0]
+        return {
+            "queue_id": queue_id,
+            "paper_id": row[1],
+            "target_result_id": row[2],
+            "label": row[3],
+            "status": row[4],
+            "created_at": row[5],
+            "updated_at": row[6],
+            "counts": {"items": item_count},
+        }
+
+    def _reading_queue_items(self, queue_id: str) -> list[dict]:
+        self._reading_queue_payload(queue_id)
+        rows = self._connection.execute(
+            """
+            SELECT
+                item_id, queue_id, position, target_kind, target_id, priority,
+                reason, evidence_json, created_at
+            FROM reading_queue_items
+            WHERE queue_id = ?
+            ORDER BY position, item_id
+            """,
+            (queue_id,),
+        ).fetchall()
+        return [_reading_queue_item_from_row(row) for row in rows]
+
+    def _planned_reading_queue_items(
+        self,
+        result_id: str,
+        recursive: bool,
+    ) -> list[dict]:
+        path = self.get_result_reading_path(result_id, recursive=recursive)
+        planned: list[dict] = []
+        seen: set[tuple[str, str]] = set()
+
+        def add(
+            target_kind: str,
+            target_id: str,
+            priority: str,
+            reason: str,
+            evidence: dict,
+        ) -> None:
+            key = (target_kind, target_id)
+            if key in seen:
+                return
+            seen.add(key)
+            planned.append(
+                {
+                    "target_kind": target_kind,
+                    "target_id": target_id,
+                    "priority": priority,
+                    "reason": reason,
+                    "evidence": evidence,
+                }
+            )
+
+        add(
+            "result_id",
+            result_id,
+            "required",
+            "selected_result",
+            {
+                "source": "reading_path.result_id",
+                "result_id": result_id,
+                "recursive": recursive,
+            },
+        )
+        selected_proof = self._proof_for_result(result_id)
+        if selected_proof is not None:
+            add(
+                "proof_id",
+                selected_proof["proof_id"],
+                "required",
+                "selected_result_proof",
+                {
+                    "source": "result_proof",
+                    "result_id": result_id,
+                    "proof_id": selected_proof["proof_id"],
+                },
+            )
+
+        for dependency in path["top_down"]:
+            dependency_id = dependency["result_id"]
+            if dependency_id == result_id:
+                continue
+            add(
+                "result_id",
+                dependency_id,
+                "recommended",
+                "local_dependency_result",
+                {
+                    "source": "reading_path.top_down",
+                    "result_id": result_id,
+                    "dependency_result_id": dependency_id,
+                },
+            )
+            proof = self._proof_for_result(dependency_id)
+            if proof is not None:
+                add(
+                    "proof_id",
+                    proof["proof_id"],
+                    "recommended",
+                    "local_dependency_proof",
+                    {
+                        "source": "result_proof",
+                        "result_id": dependency_id,
+                        "proof_id": proof["proof_id"],
+                    },
+                )
+
+        for mention in path["external_stops"]:
+            add(
+                "external_stop",
+                mention["mention_id"],
+                "caution",
+                "external_dependency_stop",
+                {
+                    "source": "reading_path.external_stops",
+                    "mention_id": mention["mention_id"],
+                    "raw_text": mention.get("raw_text"),
+                    "resolution_status": mention.get("resolution_status"),
+                },
+            )
+
+        for stop in path["unresolved_stops"]:
+            stop_id = f"{stop['result_id']}:{stop['kind']}"
+            add(
+                "unresolved_stop",
+                stop_id,
+                "caution",
+                "unresolved_dependency_stop",
+                {
+                    "source": "reading_path.unresolved_stops",
+                    "result_id": stop["result_id"],
+                    "kind": stop["kind"],
+                    "mention_count": len(stop["mentions"]),
+                    "mentions": stop["mentions"],
+                },
+            )
+
+        return planned
+
+    @_synchronized
+    def get_paper(self, paper_id: str) -> dict:
+        """Return one stored paper with theorem-kind and citation counts."""
+
+        normalized_paper_id = normalize_paper_id(paper_id)
+        row = self._connection.execute(
+            """
+            SELECT
+                papers.paper_id, papers.source_type, papers.source_ref,
+                papers.source_version, papers.title, papers.authors_json,
+                papers.main_file, papers.imported_at, papers.parser_version,
+                (SELECT COUNT(*) FROM theorems
+                 WHERE theorems.paper_id = papers.paper_id),
+                (SELECT COUNT(*) FROM citation_evidence
+                 WHERE citation_evidence.source_paper_id = papers.paper_id),
+                (SELECT COUNT(*) FROM citation_evidence
+                 WHERE citation_evidence.source_paper_id = papers.paper_id
+                   AND citation_evidence.target_paper_id IS NOT NULL),
+                (SELECT COUNT(*) FROM citation_evidence
+                 WHERE citation_evidence.target_paper_id = papers.paper_id),
+                (SELECT COUNT(*) FROM citation_evidence
+                 WHERE citation_evidence.source_paper_id = papers.paper_id
+                   AND citation_evidence.target_paper_id IS NULL)
+            FROM papers
+            WHERE papers.paper_id = ?
+            """,
+            (normalized_paper_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown paper id: {normalized_paper_id}")
+
+        result = _paper_from_row(row)
+        result["kinds"] = {
+            kind: count
+            for kind, count in self._connection.execute(
+                """
+                SELECT normalized_kind, COUNT(*)
+                FROM theorems
+                WHERE paper_id = ?
+                GROUP BY normalized_kind
+                ORDER BY normalized_kind
+                """,
+                (normalized_paper_id,),
+            )
+        }
+        return result
+
+    @_synchronized
+    def search_theorems(
+        self,
+        query: str,
+        paper_id: str | None = None,
+        kind: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Find theorem titles and bodies by case-insensitive substring."""
+
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("Search query must not be empty")
+        if (
+            isinstance(limit, bool)
+            or not isinstance(limit, int)
+            or not 1 <= limit <= 100
+        ):
+            raise ValueError("Search limit must be an integer from 1 through 100")
+
+        conditions = [
+            "instr(lower(coalesce(title, '') || char(10) || content), "
+            "lower(?)) > 0"
+        ]
+        parameters: list[str | int] = [query.strip()]
+        if paper_id is not None:
+            conditions.append("paper_id = ?")
+            parameters.append(normalize_paper_id(paper_id))
+        if kind is not None:
+            conditions.append("kind = ?")
+            parameters.append(kind)
+        parameters.append(limit)
+
+        rows = self._connection.execute(
+            f"""
+            SELECT global_id, paper_id, local_id, kind, raw_kind,
+                   display_kind, normalized_kind, title, source_file,
+                   substr(content, 1, 240)
+            FROM theorems
+            WHERE {' AND '.join(conditions)}
+            ORDER BY paper_id, global_id
+            LIMIT ?
+            """,
+            parameters,
+        ).fetchall()
+        return [
+            {
+                "global_id": global_id,
+                "paper_id": stored_paper_id,
+                "local_id": local_id,
+                "kind": stored_kind,
+                "raw_kind": raw_kind,
+                "display_kind": display_kind,
+                "normalized_kind": normalized_kind,
+                "title": title,
+                "source_file": source_file,
+                "excerpt": excerpt,
+            }
+            for (
+                global_id,
+                stored_paper_id,
+                local_id,
+                stored_kind,
+                raw_kind,
+                display_kind,
+                normalized_kind,
+                title,
+                source_file,
+                excerpt,
+            ) in rows
+        ]
+
+    @_synchronized
+    def get_dependencies(
+        self,
+        global_id: str,
+        recursive: bool = False,
+    ) -> list[dict]:
+        """Return direct or recursively reachable stored theorem references."""
+
+        paper_id, local_id = split_global_theorem_id(global_id)
+        normalized_global_id = global_theorem_id(paper_id, local_id)
+        if self._connection.execute(
+            "SELECT 1 FROM theorems WHERE global_id = ?",
+            (normalized_global_id,),
+        ).fetchone() is None:
+            raise KeyError(f"Unknown theorem id: {normalized_global_id}")
+
+        adjacency: dict[str, list[str]] = {}
+        for source_global_id, target_global_id in self._connection.execute(
+            """
+            SELECT source_global_id, target_global_id
+            FROM theorem_refs
+            WHERE target_global_id IS NOT NULL
+            ORDER BY source_global_id, ref_label, target_global_id
+            """
+        ):
+            adjacency.setdefault(source_global_id, []).append(target_global_id)
+
+        if recursive:
+            dependency_ids: list[str] = []
+            visited: set[str] = set()
+
+            def visit(theorem_id: str) -> None:
+                for dependency_id in adjacency.get(theorem_id, ()):
+                    if dependency_id in visited:
+                        continue
+                    visited.add(dependency_id)
+                    dependency_ids.append(dependency_id)
+                    visit(dependency_id)
+
+            visit(normalized_global_id)
+        else:
+            dependency_ids = adjacency.get(normalized_global_id, [])
+
+        return [self._theorem_summary(item) for item in dependency_ids]
+
+    @_synchronized
+    def get_dependency_diagnostics(
+        self,
+        global_id: str,
+        recursive: bool = False,
+    ) -> dict:
+        """Explain how dependencies were extracted for a stored theorem."""
+
+        paper_id, local_id = split_global_theorem_id(global_id)
+        normalized_global_id = global_theorem_id(paper_id, local_id)
+        if self._connection.execute(
+            "SELECT 1 FROM theorems WHERE global_id = ?",
+            (normalized_global_id,),
+        ).fetchone() is None:
+            raise KeyError(f"Unknown theorem id: {normalized_global_id}")
+
+        rows = self._connection.execute(
+            """
+            SELECT ref_label, target_global_id
+            FROM theorem_refs
+            WHERE source_global_id = ?
+            ORDER BY ref_label
+            """,
+            (normalized_global_id,),
+        ).fetchall()
+        dependencies = self.get_dependencies(
+            normalized_global_id,
+            recursive=recursive,
+        )
+        dependency_ids = [
+            item["global_id"]
+            for item in dependencies
+        ]
+        warnings = []
+        if not dependency_ids:
+            warnings.append(EMPTY_DEPENDENCY_WARNING)
+        return {
+            "global_theorem_id": normalized_global_id,
+            "recursive": recursive,
+            "extraction_basis": DEPENDENCY_EXTRACTION_BASIS,
+            "referenced_labels": [row[0] for row in rows],
+            "resolved_labels": [row[0] for row in rows if row[1] is not None],
+            "unresolved_labels": [row[0] for row in rows if row[1] is None],
+            "dependency_ids": dependency_ids,
+            "warnings": warnings,
+        }
+
+    @_synchronized
+    def get_citations(
+        self,
+        paper_id: str,
+        direction: str = "outgoing",
+        include_unresolved: bool = True,
+    ) -> list[dict]:
+        """Return ordered incoming or outgoing citation evidence."""
+
+        if direction not in {"incoming", "outgoing"}:
+            raise ValueError("Citation direction must be 'incoming' or 'outgoing'")
+        normalized_paper_id = normalize_paper_id(paper_id)
+        if not self._paper_exists(normalized_paper_id):
+            raise KeyError(f"Unknown paper id: {normalized_paper_id}")
+
+        if direction == "incoming":
+            condition = "target_paper_id = ?"
+        else:
+            condition = "source_paper_id = ?"
+            if not include_unresolved:
+                condition += " AND target_paper_id IS NOT NULL"
+
+        rows = self._connection.execute(
+            f"""
+            SELECT source_paper_id, citation_key, command, source_file,
+                   bib_file, bib_entry_type, cited_arxiv_id, cited_version,
+                   target_paper_id, resolution_status
+            FROM citation_evidence
+            WHERE {condition}
+            ORDER BY source_paper_id, citation_key, source_file, command, id
+            """,
+            (normalized_paper_id,),
+        ).fetchall()
+        keys = (
+            "source_paper_id",
+            "citation_key",
+            "command",
+            "source_file",
+            "bib_file",
+            "bib_entry_type",
+            "cited_arxiv_id",
+            "cited_version",
+            "target_paper_id",
+            "resolution_status",
+        )
+        return [dict(zip(keys, row)) for row in rows]
+
+    @_synchronized
+    def _ensure_result_exists(self, result_id: str) -> None:
+        if self._connection.execute(
+            "SELECT 1 FROM results WHERE result_id = ?",
+            (result_id,),
+        ).fetchone() is None:
+            raise KeyError(f"Unknown result id: {result_id}")
+
+    @_synchronized
+    def _ensure_proof_exists(self, proof_id: str) -> None:
+        if self._connection.execute(
+            "SELECT 1 FROM proofs WHERE proof_id = ?",
+            (proof_id,),
+        ).fetchone() is None:
+            raise KeyError(f"Unknown proof id: {proof_id}")
+
+    @_synchronized
+    def _ensure_source_span_exists(self, span_id: str) -> None:
+        if self._connection.execute(
+            "SELECT 1 FROM source_spans WHERE span_id = ? OR CAST(id AS TEXT) = ?",
+            (span_id, span_id),
+        ).fetchone() is None:
+            raise KeyError(f"Unknown source span id: {span_id}")
+
+    @_synchronized
+    def _first_result_location(self, result_id: str) -> dict | None:
+        spans = self._source_spans_for_result(result_id)
+        if not spans:
+            return None
+        first = spans[0]
+        return {
+            "source_ref": first["source_ref"],
+            "page": first["page"],
+            "block_index": first["block_index"],
+            "start_offset": first["start_offset"],
+            "end_offset": first["end_offset"],
+            "bbox": first["bbox"],
+        }
+
+    @_synchronized
+    def _proof_for_result(self, result_id: str) -> dict | None:
+        row = self._connection.execute(
+            """
+            SELECT
+                proof_id, paper_id, result_id, text, association_basis,
+                association_confidence, method, confidence
+            FROM proofs
+            WHERE result_id = ?
+            ORDER BY proof_id
+            LIMIT 1
+            """,
+            (result_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        proof = _proof_from_row(row)
+        proof["spans"] = self._source_spans_for_proof(proof["proof_id"])
+        return proof
+
+    @_synchronized
+    def _proofs_for_paper(self, paper_id: str) -> list[dict]:
+        rows = self._connection.execute(
+            """
+            SELECT
+                proof_id, paper_id, result_id, text, association_basis,
+                association_confidence, method, confidence
+            FROM proofs
+            WHERE paper_id = ?
+            ORDER BY proof_id
+            """,
+            (paper_id,),
+        ).fetchall()
+        proofs = []
+        for row in rows:
+            proof = _proof_from_row(row)
+            proof["source_handles"] = [
+                source_handle("proof_id", proof["proof_id"], paper_id, "proof")
+            ]
+            proofs.append(proof)
+        return proofs
+
+    @_synchronized
+    def _reading_completeness_check(
+        self,
+        results: list[dict],
+        dependency_index: dict[str, dict],
+    ) -> dict:
+        dependency_integrity = []
+        locally_used = set()
+        external_deps = []
+        unresolved_count = 0
+        for result_id, dependencies in dependency_index.items():
+            for target in dependencies["known"]["resolved_local_results"]:
+                locally_used.add(target["result_id"])
+                dependency_integrity.append(
+                    {
+                        "edge": f"{result_id} -> {target['result_id']}",
+                        "status": "ok",
+                        "note": "resolved local result mention",
+                    }
+                )
+            for mention in dependencies["known"].get(
+                "external_result_mentions",
+                [],
+            ):
+                external_deps.append(
+                    {
+                        "label": mention["raw_text"],
+                        "ref": mention.get("entry_id"),
+                        "impact": "external proof dependency evidence",
+                    }
+                )
+            for key, mentions in dependencies.get("unresolved", {}).items():
+                unresolved_count += len(mentions) if isinstance(mentions, list) else 1
+                for mention in mentions if isinstance(mentions, list) else []:
+                    dependency_integrity.append(
+                        {
+                            "edge": f"{result_id} -> {mention.get('raw_text')}",
+                            "status": "missing",
+                            "note": mention.get("resolution_status", key),
+                        }
+                    )
+        result_ids = {result["result_id"] for result in results}
+        isolated = [
+            {
+                "label": result["result_id"],
+                "possible_reasons": ["not referenced by known local dependencies"],
+            }
+            for result in results
+            if result["result_id"] not in locally_used
+            and result["result_id"] in result_ids
+        ]
+        if external_deps or unresolved_count:
+            self_containment = "low" if unresolved_count else "medium"
+        else:
+            self_containment = "high"
+        return {
+            "dependency_integrity": dependency_integrity,
+            "self_containment": self_containment,
+            "external_deps": external_deps,
+            "isolated_results": isolated,
+            "circular_deps": [],
+            "summary": "requires_consumer_interpretation",
+        }
+
+    @_synchronized
+    def _reading_uncertain_log(
+        self,
+        dependency_index: dict[str, dict],
+    ) -> list[dict]:
+        uncertain = []
+        for result_id, dependencies in dependency_index.items():
+            for key, mentions in dependencies.get("unresolved", {}).items():
+                if not isinstance(mentions, list):
+                    continue
+                for mention in mentions:
+                    uncertain.append(
+                        {
+                            "location": result_id,
+                            "reason": mention.get("resolution_status", key),
+                            "severity": "HIGH",
+                        }
+                    )
+        return uncertain
+
+    @_synchronized
+    def _source_spans_for_result(self, result_id: str) -> list[dict]:
+        rows = self._connection.execute(
+            """
+            SELECT
+                source_spans.span_id, source_spans.paper_id,
+                source_spans.source_type, source_spans.source_ref,
+                source_spans.page, source_spans.block_index,
+                source_spans.start_offset, source_spans.end_offset,
+                source_spans.bbox_json, source_spans.text,
+                source_spans.method, source_spans.confidence
+            FROM result_source_spans
+            JOIN source_spans ON source_spans.id = result_source_spans.span_id
+            WHERE result_source_spans.result_id = ?
+            ORDER BY result_source_spans.position, source_spans.id
+            """,
+            (result_id,),
+        ).fetchall()
+        return [_source_span_from_row(row) for row in rows]
+
+    @_synchronized
+    def _source_spans_for_proof(self, proof_id: str) -> list[dict]:
+        rows = self._connection.execute(
+            """
+            SELECT
+                source_spans.span_id, source_spans.paper_id,
+                source_spans.source_type, source_spans.source_ref,
+                source_spans.page, source_spans.block_index,
+                source_spans.start_offset, source_spans.end_offset,
+                source_spans.bbox_json, source_spans.text,
+                source_spans.method, source_spans.confidence
+            FROM proof_source_spans
+            JOIN source_spans ON source_spans.id = proof_source_spans.span_id
+            WHERE proof_source_spans.proof_id = ?
+            ORDER BY proof_source_spans.position, source_spans.id
+            """,
+            (proof_id,),
+        ).fetchall()
+        return [_source_span_from_row(row) for row in rows]
+
+    @_synchronized
+    def _source_spans_for_edge(self, edge_id: str) -> list[dict]:
+        rows = self._connection.execute(
+            """
+            SELECT
+                source_spans.span_id, source_spans.paper_id,
+                source_spans.source_type, source_spans.source_ref,
+                source_spans.page, source_spans.block_index,
+                source_spans.start_offset, source_spans.end_offset,
+                source_spans.bbox_json, source_spans.text,
+                source_spans.method, source_spans.confidence
+            FROM evidence_edge_source_spans
+            JOIN source_spans ON source_spans.id = evidence_edge_source_spans.span_id
+            WHERE evidence_edge_source_spans.edge_id = ?
+            ORDER BY evidence_edge_source_spans.position, source_spans.id
+            """,
+            (edge_id,),
+        ).fetchall()
+        return [_source_span_from_row(row) for row in rows]
+
+    @_synchronized
+    def _source_spans_for_source_span_id(self, span_id: str) -> list[dict]:
+        rows = self._connection.execute(
+            """
+            SELECT
+                span_id, paper_id, source_type, source_ref, page,
+                block_index, start_offset, end_offset, bbox_json, text,
+                method, confidence
+            FROM source_spans
+            WHERE span_id = ?
+            ORDER BY paper_id, source_type, source_ref, page, block_index, id
+            """,
+            (span_id,),
+        ).fetchall()
+        return [_source_span_from_row(row) for row in rows]
+
+    @_synchronized
+    def _source_slice_anchor_rows(
+        self,
+        selector_kind: str,
+        selector_value: str,
+    ) -> list[dict]:
+        if selector_kind == "span_id":
+            rows = self._connection.execute(
+                """
+                SELECT
+                    id, span_id, paper_id, source_type, source_ref, page,
+                    block_index, start_offset, end_offset, bbox_json, text,
+                    method, confidence
+                FROM source_spans
+                WHERE span_id = ?
+                ORDER BY paper_id, source_type, source_ref, page, block_index, id
+                """,
+                (selector_value,),
+            ).fetchall()
+        elif selector_kind == "result_id":
+            self._ensure_result_exists(selector_value)
+            rows = self._connection.execute(
+                """
+                SELECT
+                    source_spans.id, source_spans.span_id,
+                    source_spans.paper_id, source_spans.source_type,
+                    source_spans.source_ref, source_spans.page,
+                    source_spans.block_index, source_spans.start_offset,
+                    source_spans.end_offset, source_spans.bbox_json,
+                    source_spans.text, source_spans.method,
+                    source_spans.confidence
+                FROM result_source_spans
+                JOIN source_spans ON source_spans.id = result_source_spans.span_id
+                WHERE result_source_spans.result_id = ?
+                ORDER BY result_source_spans.position, source_spans.id
+                """,
+                (selector_value,),
+            ).fetchall()
+        elif selector_kind == "proof_id":
+            rows = self._connection.execute(
+                """
+                SELECT
+                    source_spans.id, source_spans.span_id,
+                    source_spans.paper_id, source_spans.source_type,
+                    source_spans.source_ref, source_spans.page,
+                    source_spans.block_index, source_spans.start_offset,
+                    source_spans.end_offset, source_spans.bbox_json,
+                    source_spans.text, source_spans.method,
+                    source_spans.confidence
+                FROM proof_source_spans
+                JOIN source_spans ON source_spans.id = proof_source_spans.span_id
+                WHERE proof_source_spans.proof_id = ?
+                ORDER BY proof_source_spans.position, source_spans.id
+                """,
+                (selector_value,),
+            ).fetchall()
+        else:
+            raise ValueError(f"Invalid source slice selector: {selector_kind!r}")
+        return [_source_slice_record_from_row(row) for row in rows]
+
+    @_synchronized
+    def _source_slice_rows_for_source(
+        self,
+        paper_id: str,
+        source_type: str,
+        source_ref: str,
+    ) -> list[dict]:
+        rows = self._connection.execute(
+            """
+            SELECT
+                id, span_id, paper_id, source_type, source_ref, page,
+                block_index, start_offset, end_offset, bbox_json, text,
+                method, confidence
+            FROM source_spans
+            WHERE paper_id = ? AND source_type = ? AND source_ref = ?
+            ORDER BY page, block_index, id
+            """,
+            (paper_id, source_type, source_ref),
+        ).fetchall()
+        return [_source_slice_record_from_row(row) for row in rows]
+
+    @_synchronized
+    def _with_evidence_trace(
+        self,
+        metadata: dict,
+        evidence_id: str,
+        evidence_type: str,
+    ) -> dict:
+        spans, span_trail = self._source_spans_and_trail_for_evidence(
+            evidence_type,
+            evidence_id,
+            metadata,
+        )
+        return {
+            **metadata,
+            "evidence_id": evidence_id,
+            "spans": spans,
+            "span_trail": span_trail,
+        }
+
+    @_synchronized
+    def _source_spans_and_trail_for_evidence(
+        self,
+        evidence_type: str,
+        evidence_id: str,
+        metadata: dict,
+    ) -> tuple[list[dict], list[dict]]:
+        if evidence_type == "result":
+            return self._source_spans_for_result(evidence_id), []
+        if evidence_type == "proof":
+            return self._source_spans_for_proof(evidence_id), []
+        if evidence_type == "local_result_mention":
+            return self._source_spans_and_trail_for_parent_proof(
+                metadata["proof_id"],
+            )
+        if evidence_type == "citation_mention":
+            return self._source_spans_and_trail_for_parent_proof(
+                metadata["proof_id"],
+            )
+        if evidence_type == "external_result_mention":
+            if metadata["proof_id"]:
+                return self._source_spans_and_trail_for_parent_proof(
+                    metadata["proof_id"],
+                )
+            if metadata["citation_mention_id"]:
+                return self._source_spans_and_trail_for_citation_mention(
+                    metadata["citation_mention_id"],
+                    relation="parent_citation_mention",
+                )
+            return [], []
+        if evidence_type == "bibliography_entry":
+            return self._source_spans_and_trail_for_bibliography_entry(evidence_id)
+        if evidence_type == "edge":
+            return (
+                self._source_spans_for_edge(evidence_id),
+                self._span_trail_for_edge(metadata["evidence_ids"]),
+            )
+        return [], []
+
+    @_synchronized
+    def _source_spans_and_trail_for_parent_proof(
+        self,
+        proof_id: str | None,
+        prefix: list[dict] | None = None,
+    ) -> tuple[list[dict], list[dict]]:
+        span_trail = list(prefix or [])
+        if proof_id is None:
+            return [], span_trail
+        return (
+            self._source_spans_for_proof(proof_id),
+            [
+                *span_trail,
+                {
+                    "evidence_id": proof_id,
+                    "evidence_type": "proof",
+                    "relation": "parent_proof",
+                },
+            ],
+        )
+
+    @_synchronized
+    def _source_spans_and_trail_for_citation_mention(
+        self,
+        mention_id: str,
+        relation: str,
+    ) -> tuple[list[dict], list[dict]]:
+        row = self._connection.execute(
+            """
+            SELECT proof_id
+            FROM citation_mentions
+            WHERE mention_id = ?
+            """,
+            (mention_id,),
+        ).fetchone()
+        if row is None:
+            return [], []
+        return self._source_spans_and_trail_for_parent_proof(
+            row[0],
+            prefix=[
+                {
+                    "evidence_id": mention_id,
+                    "evidence_type": "citation_mention",
+                    "relation": relation,
+                }
+            ],
+        )
+
+    @_synchronized
+    def _source_spans_and_trail_for_bibliography_entry(
+        self,
+        entry_id: str,
+    ) -> tuple[list[dict], list[dict]]:
+        direct_spans = self._source_spans_for_source_span_id(entry_id)
+        if direct_spans:
+            return direct_spans, []
+
+        row = self._connection.execute(
+            """
+            SELECT mention_id, proof_id
+            FROM citation_mentions
+            WHERE entry_id = ? AND proof_id IS NOT NULL
+            ORDER BY mention_id
+            LIMIT 1
+            """,
+            (entry_id,),
+        ).fetchone()
+        if row is not None:
+            return self._source_spans_and_trail_for_parent_proof(
+                row[1],
+                prefix=[
+                    {
+                        "evidence_id": row[0],
+                        "evidence_type": "citation_mention",
+                        "relation": "referenced_by_citation_mention",
+                    }
+                ],
+            )
+
+        row = self._connection.execute(
+            """
+            SELECT mention_id, proof_id
+            FROM external_result_mentions
+            WHERE entry_id = ? AND proof_id IS NOT NULL
+            ORDER BY mention_id
+            LIMIT 1
+            """,
+            (entry_id,),
+        ).fetchone()
+        if row is not None:
+            return self._source_spans_and_trail_for_parent_proof(
+                row[1],
+                prefix=[
+                    {
+                        "evidence_id": row[0],
+                        "evidence_type": "external_result_mention",
+                        "relation": "referenced_by_external_result_mention",
+                    }
+                ],
+            )
+        return [], []
+
+    @_synchronized
+    def _span_trail_for_edge(self, evidence_ids: list[str]) -> list[dict]:
+        span_trail = []
+        for evidence_id in evidence_ids:
+            evidence = self._evidence_metadata_for_id(evidence_id)
+            if evidence is None:
+                continue
+            evidence_type, metadata = evidence
+            span_trail.append(
+                {
+                    "evidence_id": evidence_id,
+                    "evidence_type": evidence_type,
+                    "relation": "edge_evidence",
+                }
+            )
+            if evidence_type == "edge":
+                continue
+            _, inherited_trail = self._source_spans_and_trail_for_evidence(
+                evidence_type,
+                evidence_id,
+                metadata,
+            )
+            span_trail.extend(inherited_trail)
+        return _dedupe_span_trail(span_trail)
+
+    @_synchronized
+    def _evidence_metadata_for_id(self, evidence_id: str) -> tuple[str, dict] | None:
+        lookups = (
+            ("result", "results", "result_id", _result_from_row),
+            ("proof", "proofs", "proof_id", _proof_from_row),
+            (
+                "bibliography_entry",
+                "bibliography_entries",
+                "entry_id",
+                _bibliography_entry_from_row,
+            ),
+            (
+                "local_result_mention",
+                "local_result_mentions",
+                "mention_id",
+                _local_result_mention_from_row,
+            ),
+            (
+                "citation_mention",
+                "citation_mentions",
+                "mention_id",
+                _citation_mention_from_row,
+            ),
+            (
+                "external_result_mention",
+                "external_result_mentions",
+                "mention_id",
+                _external_result_mention_from_row,
+            ),
+            ("edge", "evidence_edges", "edge_id", _evidence_edge_from_row),
+        )
+        for evidence_type, table, key_column, serializer in lookups:
+            row = self._connection.execute(
+                f"SELECT * FROM {table} WHERE {key_column} = ?",
+                (evidence_id,),
+            ).fetchone()
+            if row is not None:
+                return evidence_type, serializer(row)
+        return None
+
+    @_synchronized
+    def _recursive_dependency_proof_ids(self, result_id: str) -> list[str]:
+        proof_ids: list[str] = []
+        visited_results = {result_id}
+        queue = [result_id]
+        while queue:
+            current_result_id = queue.pop(0)
+            resolved_status_placeholders = ", ".join(
+                "?" for _ in _RESOLVED_RESOLUTION_STATUSES
+            )
+            rows = self._connection.execute(
+                f"""
+                SELECT DISTINCT local_result_mentions.target_result_id
+                FROM proofs
+                JOIN local_result_mentions
+                  ON local_result_mentions.proof_id = proofs.proof_id
+                WHERE proofs.result_id = ?
+                  AND local_result_mentions.target_result_id IS NOT NULL
+                  AND local_result_mentions.resolution_status IN (
+                      {resolved_status_placeholders}
+                  )
+                ORDER BY local_result_mentions.target_result_id
+                """,
+                (current_result_id, *_RESOLVED_RESOLUTION_STATUSES),
+            ).fetchall()
+            for (target_result_id,) in rows:
+                if target_result_id in visited_results:
+                    continue
+                visited_results.add(target_result_id)
+                queue.append(target_result_id)
+                proof = self._proof_for_result(target_result_id)
+                if proof is not None:
+                    proof_ids.append(proof["proof_id"])
+        return proof_ids
+
+    @_synchronized
+    def _paper_exists(self, paper_id: str) -> bool:
+        return self._connection.execute(
+            "SELECT 1 FROM papers WHERE paper_id = ?",
+            (paper_id,),
+        ).fetchone() is not None
+
+    @_synchronized
+    def _theorem_summary(self, global_id: str) -> dict:
+        row = self._connection.execute(
+            """
+            SELECT global_id, paper_id, local_id, kind, raw_kind,
+                   display_kind, normalized_kind, title, label, source_file
+            FROM theorems
+            WHERE global_id = ?
+            """,
+            (global_id,),
+        ).fetchone()
+        assert row is not None
+        references = [
+            ref_label
+            for (ref_label,) in self._connection.execute(
+                """
+                SELECT ref_label
+                FROM theorem_refs
+                WHERE source_global_id = ?
+                ORDER BY ref_label
+                """,
+                (global_id,),
+            )
+        ]
+        return {
+            "global_id": row[0],
+            "paper_id": row[1],
+            "local_id": row[2],
+            "kind": row[3],
+            "raw_kind": row[4],
+            "display_kind": row[5],
+            "normalized_kind": row[6],
+            "title": row[7],
+            "label": row[8],
+            "source_file": row[9],
+            "refs": references,
+        }
+
+
+def _parser_version() -> str:
+    try:
+        return version("papergraph-mcp")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def _execute_sql_script(connection: sqlite3.Connection, script: str) -> None:
+    for statement in script.split(";"):
+        stripped = statement.strip()
+        if stripped:
+            connection.execute(stripped)
+
+
+def _insert_evidence_document(
+    connection: sqlite3.Connection,
+    document: EvidenceDocument,
+) -> None:
+    normalized_paper_id = normalize_paper_id(document.paper_id)
+
+    span_ids: dict[int, int] = {}
+    source_span_ids_by_span_id: dict[str, list[int]] = {}
+    for index, span in enumerate(document.spans):
+        cursor = connection.execute(
+            """
+            INSERT INTO source_spans (
+                span_id, paper_id, source_type, source_ref, page,
+                block_index, start_offset, end_offset, bbox_json, text,
+                method, confidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                span.span_id,
+                normalized_paper_id,
+                span.source_type,
+                span.source_ref,
+                span.page,
+                span.block_index,
+                span.start_offset,
+                span.end_offset,
+                json.dumps(list(span.bbox)) if span.bbox is not None else None,
+                span.text,
+                span.method,
+                span.confidence,
+            ),
+        )
+        span_ids[index] = int(cursor.lastrowid)
+        if span.span_id:
+            source_span_ids_by_span_id.setdefault(span.span_id, []).append(
+                span_ids[index]
+            )
+
+    connection.executemany(
+        """
+        INSERT INTO results (
+            result_id, paper_id, local_id, kind, raw_kind,
+            display_kind, normalized_kind, label, visible_number, title,
+            statement, method, confidence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            (
+                result.result_id,
+                normalized_paper_id,
+                result.local_id,
+                result.kind,
+                result.raw_kind,
+                result.display_kind,
+                result.normalized_kind,
+                result.label,
+                result.visible_number,
+                result.title,
+                result.statement,
+                result.method,
+                result.confidence,
+            )
+            for result in document.results
+        ),
+    )
+    result_source_span_ids: dict[str, list[int]] = {}
+    result_source_span_rows = []
+    for result in document.results:
+        linked_span_ids = [
+            span_ids[span_index] for span_index in result.span_indices
+        ]
+        result_source_span_ids[result.result_id] = linked_span_ids
+        result_source_span_rows.extend(
+            (result.result_id, span_id, position)
+            for position, span_id in enumerate(linked_span_ids)
+        )
+    connection.executemany(
+        """
+        INSERT INTO result_source_spans (result_id, span_id, position)
+        VALUES (?, ?, ?)
+        """,
+        result_source_span_rows,
+    )
+    connection.executemany(
+        """
+        INSERT INTO proofs (
+            proof_id, paper_id, result_id, text, association_basis,
+            association_confidence, method, confidence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            (
+                proof.proof_id,
+                normalized_paper_id,
+                proof.result_id,
+                proof.text,
+                proof.association_basis,
+                proof.association_confidence,
+                proof.method,
+                proof.confidence,
+            )
+            for proof in document.proofs
+        ),
+    )
+    proof_source_span_ids: dict[str, list[int]] = {}
+    proof_source_span_rows = []
+    for proof in document.proofs:
+        linked_span_ids = [
+            span_ids[span_index] for span_index in proof.span_indices
+        ]
+        proof_source_span_ids[proof.proof_id] = linked_span_ids
+        proof_source_span_rows.extend(
+            (proof.proof_id, span_id, position)
+            for position, span_id in enumerate(linked_span_ids)
+        )
+    connection.executemany(
+        """
+        INSERT INTO proof_source_spans (proof_id, span_id, position)
+        VALUES (?, ?, ?)
+        """,
+        proof_source_span_rows,
+    )
+    connection.executemany(
+        """
+        INSERT INTO bibliography_entries (
+            entry_id, paper_id, raw_label, raw_text, entry_type, title,
+            authors_json, year, arxiv_id, arxiv_version, doi, url,
+            method, confidence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            (
+                entry.entry_id,
+                normalized_paper_id,
+                entry.raw_label,
+                entry.raw_text,
+                entry.entry_type,
+                entry.title,
+                json.dumps(list(entry.authors), ensure_ascii=False),
+                entry.year,
+                entry.arxiv_id,
+                entry.arxiv_version,
+                entry.doi,
+                entry.url,
+                entry.method,
+                entry.confidence,
+            )
+            for entry in document.bibliography_entries
+        ),
+    )
+    connection.executemany(
+        """
+        INSERT INTO local_result_mentions (
+            mention_id, paper_id, proof_id, raw_text, kind,
+            visible_number, target_result_id, resolution_status,
+            method, confidence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            (
+                mention.mention_id,
+                normalized_paper_id,
+                mention.proof_id,
+                mention.raw_text,
+                mention.kind,
+                mention.visible_number,
+                mention.target_result_id,
+                mention.resolution_status,
+                mention.method,
+                mention.confidence,
+            )
+            for mention in document.local_result_mentions
+        ),
+    )
+    connection.executemany(
+        """
+        INSERT INTO citation_mentions (
+            mention_id, paper_id, proof_id, raw_text, raw_key,
+            entry_id, resolution_status, method, confidence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            (
+                mention.mention_id,
+                normalized_paper_id,
+                mention.proof_id,
+                mention.raw_text,
+                mention.raw_key,
+                mention.entry_id,
+                mention.resolution_status,
+                mention.method,
+                mention.confidence,
+            )
+            for mention in document.citation_mentions
+        ),
+    )
+    connection.executemany(
+        """
+        INSERT INTO external_result_mentions (
+            mention_id, paper_id, proof_id, citation_mention_id,
+            raw_text, external_kind, external_number, entry_id,
+            target_paper_id, resolution_status, method, confidence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            (
+                mention.mention_id,
+                normalized_paper_id,
+                mention.proof_id,
+                mention.citation_mention_id,
+                mention.raw_text,
+                mention.external_kind,
+                mention.external_number,
+                mention.entry_id,
+                mention.target_paper_id,
+                mention.resolution_status,
+                mention.method,
+                mention.confidence,
+            )
+            for mention in document.external_result_mentions
+        ),
+    )
+    connection.executemany(
+        """
+        INSERT INTO evidence_edges (
+            edge_id, paper_id, source_id, target_id, relation,
+            evidence_ids_json, method, confidence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            (
+                edge.edge_id,
+                normalized_paper_id,
+                edge.source_id,
+                edge.target_id,
+                edge.relation,
+                json.dumps(list(edge.evidence_ids), ensure_ascii=False),
+                edge.method,
+                edge.confidence,
+            )
+            for edge in document.edges
+        ),
+    )
+    source_span_ids_by_evidence_id = _source_span_ids_by_evidence_id(
+        document=document,
+        source_span_ids_by_span_id=source_span_ids_by_span_id,
+        result_source_span_ids=result_source_span_ids,
+        proof_source_span_ids=proof_source_span_ids,
+    )
+    edge_source_span_rows = []
+    for edge in document.edges:
+        seen_span_ids = set()
+        edge_position = 0
+        for evidence_id in edge.evidence_ids:
+            for span_id in source_span_ids_by_evidence_id.get(
+                evidence_id,
+                (),
+            ):
+                if span_id in seen_span_ids:
+                    continue
+                seen_span_ids.add(span_id)
+                edge_source_span_rows.append(
+                    (edge.edge_id, span_id, edge_position)
+                )
+                edge_position += 1
+    connection.executemany(
+        """
+        INSERT INTO evidence_edge_source_spans (
+            edge_id, span_id, position
+        ) VALUES (?, ?, ?)
+        """,
+        edge_source_span_rows,
+    )
+
+
+def _source_span_ids_by_evidence_id(
+    *,
+    document: EvidenceDocument,
+    source_span_ids_by_span_id: dict[str, list[int]],
+    result_source_span_ids: dict[str, list[int]],
+    proof_source_span_ids: dict[str, list[int]],
+) -> dict[str, list[int]]:
+    source_span_ids: dict[str, list[int]] = {}
+    source_span_ids.update(source_span_ids_by_span_id)
+    source_span_ids.update(result_source_span_ids)
+    source_span_ids.update(proof_source_span_ids)
+
+    for mention in document.local_result_mentions:
+        source_span_ids[mention.mention_id] = _copy_source_span_ids(
+            proof_source_span_ids.get(mention.proof_id or ""),
+        )
+
+    for mention in document.citation_mentions:
+        source_span_ids[mention.mention_id] = _copy_source_span_ids(
+            proof_source_span_ids.get(mention.proof_id or ""),
+        )
+
+    for mention in document.external_result_mentions:
+        inherited_span_ids = proof_source_span_ids.get(mention.proof_id or "")
+        if not inherited_span_ids and mention.citation_mention_id:
+            inherited_span_ids = source_span_ids.get(mention.citation_mention_id)
+        source_span_ids[mention.mention_id] = _copy_source_span_ids(
+            inherited_span_ids,
+        )
+
+    for entry in document.bibliography_entries:
+        source_span_ids.setdefault(entry.entry_id, [])
+
+    for mention in document.citation_mentions:
+        if mention.entry_id and not source_span_ids.get(mention.entry_id):
+            source_span_ids[mention.entry_id] = _copy_source_span_ids(
+                source_span_ids.get(mention.mention_id),
+            )
+
+    for mention in document.external_result_mentions:
+        if mention.entry_id and not source_span_ids.get(mention.entry_id):
+            source_span_ids[mention.entry_id] = _copy_source_span_ids(
+                source_span_ids.get(mention.mention_id),
+            )
+
+    return source_span_ids
+
+
+def _copy_source_span_ids(span_ids: list[int] | None) -> list[int]:
+    return list(span_ids or [])
+
+
+def _dedupe_span_trail(span_trail: list[dict]) -> list[dict]:
+    deduped = []
+    seen = set()
+    for item in span_trail:
+        key = (item["evidence_id"], item["evidence_type"], item["relation"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
+def _dedupe_source_handles(handles: list[dict]) -> list[dict]:
+    deduped = []
+    seen = set()
+    for handle in handles:
+        key = (handle["kind"], handle["value"], handle["paper_id"], handle["role"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(handle)
+    return deduped
+
+
+def _dedupe_strings(values: list[str]) -> list[str]:
+    deduped = []
+    seen = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
+
+
+def _validate_document_paper_ids(
+    document: EvidenceDocument,
+    normalized_paper_id: str,
+) -> None:
+    for item in (
+        *document.spans,
+        *document.results,
+        *document.proofs,
+        *document.bibliography_entries,
+        *document.local_result_mentions,
+        *document.citation_mentions,
+        *document.external_result_mentions,
+        *document.edges,
+    ):
+        if normalize_paper_id(item.paper_id) != normalized_paper_id:
+            raise ValueError(
+                f"Evidence item paper id {item.paper_id!r} does not match "
+                f"document paper id {normalized_paper_id!r}"
+            )
+
+
+def _validate_evidence_document(
+    document: EvidenceDocument,
+    normalized_paper_id: str,
+) -> None:
+    _validate_document_paper_ids(document, normalized_paper_id)
+    _validate_span_indices(
+        "result",
+        ((result.result_id, result.span_indices) for result in document.results),
+        len(document.spans),
+    )
+    _validate_span_indices(
+        "proof",
+        ((proof.proof_id, proof.span_indices) for proof in document.proofs),
+        len(document.spans),
+    )
+    _validate_evidence_traceability(document)
+
+
+def _validate_span_indices(
+    item_kind: str,
+    items: object,
+    span_count: int,
+) -> None:
+    for item_id, span_indices in items:
+        if not span_indices:
+            raise ValueError(
+                f"{item_kind} {item_id!r} must reference at least one source span"
+            )
+        for span_index in span_indices:
+            if not isinstance(span_index, int) or not 0 <= span_index < span_count:
+                raise ValueError(
+                    f"{item_kind} {item_id!r} references unknown span index "
+                    f"{span_index!r}"
+                )
+
+
+def _validate_evidence_traceability(document: EvidenceDocument) -> None:
+    span_ids = {
+        span.span_id
+        for span in document.spans
+        if span.span_id is not None
+    }
+    result_span_counts = {
+        result.result_id: len(result.span_indices)
+        for result in document.results
+    }
+    proof_span_counts = {
+        proof.proof_id: len(proof.span_indices)
+        for proof in document.proofs
+    }
+    bibliography_ids = {entry.entry_id for entry in document.bibliography_entries}
+    citation_mention_ids = {
+        mention.mention_id
+        for mention in document.citation_mentions
+    }
+
+    traceable_result_ids = {
+        result_id
+        for result_id, span_count in result_span_counts.items()
+        if span_count > 0
+    }
+    traceable_proof_ids = {
+        proof_id
+        for proof_id, span_count in proof_span_counts.items()
+        if span_count > 0
+    }
+    traceable_mention_ids: set[str] = set()
+    referenced_bibliography_ids: set[str] = set()
+
+    def require_traceable_parent_proof(mention_id: str, proof_id: str | None) -> None:
+        if proof_id is None:
+            raise ValueError(
+                f"mention {mention_id!r} is untraceable: missing parent proof"
+            )
+        if proof_id not in proof_span_counts:
+            raise ValueError(
+                f"mention {mention_id!r} is untraceable: unknown parent proof "
+                f"{proof_id!r}"
+            )
+        if proof_id not in traceable_proof_ids:
+            raise ValueError(
+                f"mention {mention_id!r} is untraceable: parent proof "
+                f"{proof_id!r} has no source spans"
+            )
+
+    for mention in document.local_result_mentions:
+        require_traceable_parent_proof(mention.mention_id, mention.proof_id)
+        traceable_mention_ids.add(mention.mention_id)
+
+    for mention in document.citation_mentions:
+        require_traceable_parent_proof(mention.mention_id, mention.proof_id)
+        traceable_mention_ids.add(mention.mention_id)
+        if mention.entry_id is not None:
+            if mention.entry_id not in bibliography_ids:
+                raise ValueError(
+                    f"mention {mention.mention_id!r} references unknown "
+                    f"bibliography entry {mention.entry_id!r}"
+                )
+            referenced_bibliography_ids.add(mention.entry_id)
+
+    for mention in document.external_result_mentions:
+        if mention.citation_mention_id is not None:
+            if mention.citation_mention_id not in citation_mention_ids:
+                raise ValueError(
+                    f"mention {mention.mention_id!r} references unknown citation "
+                    f"mention {mention.citation_mention_id!r}"
+                )
+        if mention.proof_id is not None:
+            require_traceable_parent_proof(mention.mention_id, mention.proof_id)
+        elif (
+            mention.citation_mention_id is None
+            or mention.citation_mention_id not in traceable_mention_ids
+        ):
+            raise ValueError(
+                f"mention {mention.mention_id!r} is untraceable: missing parent "
+                "proof or traceable citation mention"
+            )
+        traceable_mention_ids.add(mention.mention_id)
+        if mention.entry_id is not None:
+            if mention.entry_id not in bibliography_ids:
+                raise ValueError(
+                    f"mention {mention.mention_id!r} references unknown "
+                    f"bibliography entry {mention.entry_id!r}"
+                )
+            referenced_bibliography_ids.add(mention.entry_id)
+
+    traceable_bibliography_ids = set()
+    for entry in document.bibliography_entries:
+        if entry.entry_id in span_ids or entry.entry_id in referenced_bibliography_ids:
+            traceable_bibliography_ids.add(entry.entry_id)
+            continue
+        raise ValueError(
+            f"bibliography entry {entry.entry_id!r} is untraceable: no direct "
+            "source span, citation mention, or external result mention references it"
+        )
+
+    known_evidence_ids = {
+        *span_ids,
+        *result_span_counts.keys(),
+        *proof_span_counts.keys(),
+        *bibliography_ids,
+        *(mention.mention_id for mention in document.local_result_mentions),
+        *citation_mention_ids,
+        *(mention.mention_id for mention in document.external_result_mentions),
+    }
+    traceable_evidence_ids = {
+        *span_ids,
+        *traceable_result_ids,
+        *traceable_proof_ids,
+        *traceable_bibliography_ids,
+        *traceable_mention_ids,
+    }
+
+    for edge in document.edges:
+        if not edge.evidence_ids:
+            raise ValueError(f"edge {edge.edge_id!r} has no evidence_ids")
+        for evidence_id in edge.evidence_ids:
+            if evidence_id not in known_evidence_ids:
+                raise ValueError(
+                    f"edge {edge.edge_id!r} references unknown evidence id "
+                    f"{evidence_id!r}"
+                )
+            if evidence_id not in traceable_evidence_ids:
+                raise ValueError(
+                    f"edge {edge.edge_id!r} references untraceable evidence id "
+                    f"{evidence_id!r}"
+                )
+
+
+def _unresolved_evidence_mention_count(document: EvidenceDocument) -> int:
+    unresolved_local = sum(
+        1
+        for mention in document.local_result_mentions
+        if not mention.target_result_id or not _is_resolved(mention.resolution_status)
+    )
+    unresolved_citations = sum(
+        1
+        for mention in document.citation_mentions
+        if not mention.entry_id or not _is_resolved(mention.resolution_status)
+    )
+    unresolved_external = sum(
+        1
+        for mention in document.external_result_mentions
+        if not _is_known_external_result_mention(mention)
+    )
+    return unresolved_local + unresolved_citations + unresolved_external
+
+
+def _is_known_external_result_mention(mention) -> bool:
+    target_paper_id = _mention_value(mention, "target_paper_id")
+    entry_id = _mention_value(mention, "entry_id")
+    resolution_status = _mention_value(mention, "resolution_status")
+    return bool(
+        (target_paper_id or entry_id)
+        and _is_resolved(resolution_status)
+    )
+
+
+def _mention_value(mention, key: str):
+    if isinstance(mention, dict):
+        return mention[key]
+    return getattr(mention, key)
+
+
+def _is_resolved(resolution_status: str) -> bool:
+    return resolution_status in _RESOLVED_RESOLUTION_STATUSES
+
+
+def _clean_required_text(value: str | None, field_name: str) -> str:
+    if value is None:
+        raise ValueError(f"{field_name} is required")
+    cleaned = str(value).strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} cannot be empty")
+    return cleaned
+
+
+def _reading_session_slug(value: str) -> str:
+    return slug_fragment(value).replace(".", "-")
+
+
+def _json_payload(value: dict, field_name: str) -> str:
+    try:
+        return json.dumps(value, sort_keys=True)
+    except TypeError as error:
+        raise ValueError(f"{field_name} must be JSON-serializable") from error
+
+
+def _validate_choice(value: str, allowed: set[str], field_name: str) -> None:
+    if value not in allowed:
+        choices = ", ".join(sorted(allowed))
+        raise ValueError(f"Invalid {field_name}: {value!r}; expected one of {choices}")
+
+
+def _reading_checkpoint_from_row(row: tuple) -> dict:
+    return {
+        "checkpoint_id": row[0],
+        "session_id": row[1],
+        "target_kind": row[2],
+        "target_id": row[3],
+        "status": row[4],
+        "summary": row[5],
+        "evidence": json.loads(row[6]),
+        "created_at": row[7],
+        "updated_at": row[8],
+    }
+
+
+def _reading_note_from_row(row: tuple) -> dict:
+    return {
+        "note_id": row[0],
+        "session_id": row[1],
+        "target_kind": row[2],
+        "target_id": row[3],
+        "note_type": row[4],
+        "text": row[5],
+        "created_at": row[6],
+    }
+
+
+def _reading_queue_item_from_row(row: tuple) -> dict:
+    return {
+        "item_id": row[0],
+        "queue_id": row[1],
+        "position": row[2],
+        "target_kind": row[3],
+        "target_id": row[4],
+        "priority": row[5],
+        "reason": row[6],
+        "evidence": json.loads(row[7]),
+        "created_at": row[8],
+    }
+
+
+class _ExternalImportPlanCollector:
+    def __init__(self, workspace: Workspace):
+        self._workspace = workspace
+        self._candidates: dict[str, dict] = {}
+        self._blocked: dict[str, dict] = {}
+
+    def add_external_mention(self, mention_id: str, source: str) -> None:
+        mention = self._external_mention(mention_id)
+        evidence = [
+            _external_import_evidence(
+                "external_result_mention",
+                mention["mention_id"],
+                mention["paper_id"],
+                self._result_id_for_proof(mention["proof_id"]),
+                mention["proof_id"],
+                None,
+                mention["raw_text"],
+                source,
+            )
+        ]
+        arxiv_id = None
+        arxiv_version = None
+        if mention["citation_mention_id"]:
+            citation = self._citation_mention(mention["citation_mention_id"])
+            evidence.append(
+                _external_import_evidence(
+                    "citation_mention",
+                    citation["mention_id"],
+                    citation["paper_id"],
+                    self._result_id_for_proof(citation["proof_id"]),
+                    citation["proof_id"],
+                    citation["raw_key"],
+                    citation["raw_text"],
+                    "result.citation_mention",
+                )
+            )
+            if citation["entry_id"]:
+                entry = self._bibliography_entry(citation["entry_id"])
+                evidence.append(_bibliography_entry_evidence(entry, "result.bibliography_entry"))
+                arxiv_id = entry["arxiv_id"]
+                arxiv_version = entry["arxiv_version"]
+        if mention["entry_id"] and not arxiv_id:
+            entry = self._bibliography_entry(mention["entry_id"])
+            evidence.append(_bibliography_entry_evidence(entry, "result.bibliography_entry"))
+            arxiv_id = entry["arxiv_id"]
+            arxiv_version = entry["arxiv_version"]
+
+        if arxiv_id:
+            self._add_candidate(arxiv_id, arxiv_version, evidence)
+        else:
+            self.add_blocked("missing_arxiv_id", evidence)
+
+    def add_citation_mention(self, mention_id: str, source: str) -> None:
+        citation = self._citation_mention(mention_id)
+        evidence = [
+            _external_import_evidence(
+                "citation_mention",
+                citation["mention_id"],
+                citation["paper_id"],
+                self._result_id_for_proof(citation["proof_id"]),
+                citation["proof_id"],
+                citation["raw_key"],
+                citation["raw_text"],
+                source,
+            )
+        ]
+        if not citation["entry_id"]:
+            self.add_blocked("missing_arxiv_id", evidence)
+            return
+
+        entry = self._bibliography_entry(citation["entry_id"])
+        evidence.append(_bibliography_entry_evidence(entry, "paper.bibliography_entry"))
+        if entry["arxiv_id"]:
+            self._add_candidate(entry["arxiv_id"], entry["arxiv_version"], evidence)
+        else:
+            self.add_blocked("missing_arxiv_id", evidence)
+
+    def add_blocked(self, reason: str, evidence: list[dict]) -> None:
+        stable = "|".join(f"{item['kind']}:{item['id']}" for item in evidence)
+        blocked_id = f"external-import:blocked:{slug_fragment(stable)}"
+        existing = self._blocked.setdefault(
+            blocked_id,
+            {
+                "blocked_id": blocked_id,
+                "reason": reason,
+                "evidence": [],
+            },
+        )
+        existing["evidence"] = _dedupe_external_import_evidence(
+            [*existing["evidence"], *evidence]
+        )
+
+    def payload(self, scope: dict) -> dict:
+        candidates = [self._candidate_payload(candidate) for candidate in self._candidates.values()]
+        candidates.sort(
+            key=lambda candidate: (
+                0 if candidate["status"] == "import_candidate" else 1,
+                candidate["source"]["arxiv_id"],
+                candidate["candidate_id"],
+            )
+        )
+        blocked = list(self._blocked.values())
+        blocked.sort(key=lambda item: (item["reason"], item["blocked_id"]))
+        for item in blocked:
+            item["evidence"] = _dedupe_external_import_evidence(item["evidence"])
+        return {
+            "plan_schema_version": 1,
+            "scope": scope,
+            "candidates": candidates,
+            "blocked": blocked,
+            "summary": {
+                "candidate_count": len(candidates),
+                "import_candidate_count": sum(
+                    1 for candidate in candidates if candidate["status"] == "import_candidate"
+                ),
+                "already_imported_count": sum(
+                    1 for candidate in candidates if candidate["status"] == "already_imported"
+                ),
+                "blocked_count": len(blocked),
+            },
+            "warnings": _dedupe_strings(
+                warning
+                for candidate in candidates
+                for warning in candidate.get("warnings", [])
+            ),
+        }
+
+    def _add_candidate(
+        self,
+        arxiv_id: str,
+        arxiv_version: str | None,
+        evidence: list[dict],
+    ) -> None:
+        candidate_id = f"external-import:arxiv:{arxiv_id}"
+        candidate = self._candidates.setdefault(
+            arxiv_id,
+            {
+                "candidate_id": candidate_id,
+                "arxiv_id": arxiv_id,
+                "versions": set(),
+                "evidence": [],
+            },
+        )
+        if arxiv_version:
+            candidate["versions"].add(arxiv_version)
+        candidate["evidence"] = _dedupe_external_import_evidence(
+            [*candidate["evidence"], *evidence]
+        )
+
+    def _candidate_payload(self, candidate: dict) -> dict:
+        arxiv_id = candidate["arxiv_id"]
+        versions = sorted(candidate["versions"])
+        status = (
+            "already_imported"
+            if self._workspace._paper_exists(f"arxiv:{arxiv_id}")
+            else "import_candidate"
+        )
+        warnings = ["conflicting_versions"] if len(versions) > 1 else []
+        evidence = _dedupe_external_import_evidence(candidate["evidence"])
+        return {
+            "candidate_id": candidate["candidate_id"],
+            "status": status,
+            "source": {
+                "type": "arxiv",
+                "arxiv_id": arxiv_id,
+                "arxiv_version": versions[-1] if versions else None,
+                "recommended_paper_id": f"arxiv:{arxiv_id}",
+            },
+            "evidence": evidence,
+            "review": _external_import_candidate_review(evidence),
+            "counts": {
+                "external_mentions": sum(
+                    1 for item in evidence if item["kind"] == "external_result_mention"
+                ),
+                "citation_mentions": sum(
+                    1 for item in evidence if item["kind"] == "citation_mention"
+                ),
+                "bibliography_entries": sum(
+                    1 for item in evidence if item["kind"] == "bibliography_entry"
+                ),
+            },
+            "warnings": warnings,
+        }
+
+    def _external_mention(self, mention_id: str) -> dict:
+        row = self._workspace._connection.execute(
+            """
+            SELECT
+                mention_id, paper_id, proof_id, citation_mention_id,
+                raw_text, external_kind, external_number, entry_id,
+                target_paper_id, resolution_status, method, confidence
+            FROM external_result_mentions
+            WHERE mention_id = ?
+            """,
+            (mention_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown external result mention id: {mention_id}")
+        return _external_result_mention_from_row(row)
+
+    def _citation_mention(self, mention_id: str) -> dict:
+        row = self._workspace._connection.execute(
+            """
+            SELECT
+                mention_id, paper_id, proof_id, raw_text, raw_key, entry_id,
+                resolution_status, method, confidence
+            FROM citation_mentions
+            WHERE mention_id = ?
+            """,
+            (mention_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown citation mention id: {mention_id}")
+        return _citation_mention_from_row(row)
+
+    def _bibliography_entry(self, entry_id: str) -> dict:
+        row = self._workspace._connection.execute(
+            """
+            SELECT
+                entry_id, paper_id, raw_label, raw_text, entry_type, title,
+                authors_json, year, arxiv_id, arxiv_version, doi, url,
+                method, confidence
+            FROM bibliography_entries
+            WHERE entry_id = ?
+            """,
+            (entry_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown bibliography entry id: {entry_id}")
+        return _bibliography_entry_from_row(row)
+
+    def _result_id_for_proof(self, proof_id: str | None) -> str | None:
+        if proof_id is None:
+            return None
+        row = self._workspace._connection.execute(
+            "SELECT result_id FROM proofs WHERE proof_id = ?",
+            (proof_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+
+def _external_import_evidence(
+    kind: str,
+    evidence_id: str,
+    paper_id: str,
+    result_id: str | None,
+    proof_id: str | None,
+    citation_key: str | None,
+    raw_text: str | None,
+    source: str,
+) -> dict:
+    return {
+        "kind": kind,
+        "id": evidence_id,
+        "paper_id": paper_id,
+        "result_id": result_id,
+        "proof_id": proof_id,
+        "citation_key": citation_key,
+        "raw_text": raw_text,
+        "source": source,
+    }
+
+
+def _bibliography_entry_evidence(entry: dict, source: str) -> dict:
+    return _external_import_evidence(
+        "bibliography_entry",
+        entry["entry_id"],
+        entry["paper_id"],
+        None,
+        None,
+        entry["raw_label"],
+        entry["raw_text"],
+        source,
+    )
+
+
+def _external_import_candidate_review(evidence: list[dict]) -> dict:
+    local_result_ids = _sorted_present_values(evidence, "result_id")
+    proof_ids = _sorted_present_values(evidence, "proof_id")
+    citation_keys = _sorted_present_values(evidence, "citation_key")
+    raw_texts = _bounded_raw_texts(evidence)
+    summary_parts = [
+        (
+            f"Needed by {len(local_result_ids)} local result"
+            f"{'' if len(local_result_ids) == 1 else 's'}"
+            f" through {len(proof_ids)} proof"
+            f"{'' if len(proof_ids) == 1 else 's'}"
+        )
+    ]
+    if citation_keys:
+        summary_parts.append(f"citation keys: {', '.join(citation_keys)}")
+    if raw_texts:
+        summary_parts.append(f"cited result evidence: {'; '.join(raw_texts)}")
+    return {
+        "local_result_ids": local_result_ids,
+        "proof_ids": proof_ids,
+        "citation_keys": citation_keys,
+        "raw_texts": raw_texts,
+        "evidence_summary": "; ".join(summary_parts),
+    }
+
+
+def _sorted_present_values(items: list[dict], key: str) -> list[str]:
+    return sorted(
+        {
+            str(item[key])
+            for item in items
+            if item.get(key) not in (None, "")
+        }
+    )
+
+
+def _bounded_raw_texts(items: list[dict], limit: int = 5) -> list[str]:
+    texts = []
+    seen = set()
+    for item in items:
+        if item.get("kind") == "bibliography_entry":
+            continue
+        raw_text = item.get("raw_text")
+        if not raw_text:
+            continue
+        text = bounded_excerpt(str(raw_text), limit=160)
+        if text in seen:
+            continue
+        seen.add(text)
+        texts.append(text)
+        if len(texts) >= limit:
+            break
+    return texts
+
+
+def _dedupe_external_import_evidence(items: list[dict]) -> list[dict]:
+    deduped = {
+        (item["kind"], item["id"], item["source"]): item
+        for item in items
+    }
+    return [
+        deduped[key]
+        for key in sorted(deduped, key=lambda value: (value[0], value[1], value[2]))
+    ]
+
+
+def _blocked_external_reference(plan: dict, blocked_id: str) -> dict:
+    for item in plan.get("blocked", []):
+        if item.get("blocked_id") == blocked_id:
+            return item
+    raise ValueError(f"Unknown blocked external reference: {blocked_id}")
+
+
+def _normalize_reference_target(target: dict) -> dict:
+    if not isinstance(target, dict):
+        raise ValueError("target must be an object")
+    kind = str(target.get("kind") or "").strip().lower()
+    if kind not in {"arxiv", "pdf", "doi", "url", "metadata"}:
+        raise ValueError(
+            "target kind must be one of: arxiv, pdf, doi, url, metadata"
+        )
+    normalized: dict[str, object] = {"kind": kind}
+    if kind == "doi":
+        doi = _required_text(target, "doi")
+        normalized["doi"] = doi
+    elif kind == "url":
+        url = _required_text(target, "url")
+        normalized["url"] = url
+    elif kind == "metadata":
+        for field in ("title", "year", "venue"):
+            value = _optional_text(target, field)
+            if value is not None:
+                normalized[field] = value
+        authors = _normalize_authors(target.get("authors"))
+        if authors:
+            normalized["authors"] = authors
+        if set(normalized) == {"kind"}:
+            raise ValueError(
+                "metadata target requires title, authors, year, or venue"
+            )
+    elif kind == "arxiv":
+        normalized["arxiv_id"] = _required_text(target, "arxiv_id")
+        arxiv_version = _optional_text(target, "arxiv_version")
+        if arxiv_version is not None:
+            normalized["arxiv_version"] = arxiv_version
+    elif kind == "pdf":
+        normalized["path"] = _required_text(target, "path")
+        paper_id = _optional_text(target, "paper_id")
+        if paper_id is not None:
+            normalized["paper_id"] = normalize_paper_id(paper_id)
+
+    for field in ("title", "year", "venue"):
+        value = _optional_text(target, field)
+        if value is not None and field not in normalized:
+            normalized[field] = value
+    authors = _normalize_authors(target.get("authors"))
+    if authors and "authors" not in normalized:
+        normalized["authors"] = authors
+    return normalized
+
+
+def _required_text(target: dict, field: str) -> str:
+    value = _optional_text(target, field)
+    if value is None:
+        raise ValueError(f"{field} is required for reference target")
+    return value
+
+
+def _optional_text(target: dict, field: str) -> str | None:
+    value = target.get(field)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _normalize_authors(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, list):
+        values = value
+    else:
+        raise ValueError("authors must be a string or list of strings")
+    authors = []
+    for item in values:
+        text = str(item).strip()
+        if text:
+            authors.append(text)
+    return authors
+
+
+def _reference_resolution_id(
+    source_paper_id: str,
+    blocked_id: str,
+    target: dict,
+) -> str:
+    stable = "|".join(
+        [
+            source_paper_id,
+            blocked_id,
+            str(target["kind"]),
+            _canonical_json(target),
+        ]
+    )
+    return f"reference-resolution:{slug_fragment(stable)}"
+
+
+def _canonical_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, ensure_ascii=False)
+
+
+def _reference_resolution_from_row(row: tuple) -> dict:
+    target = json.loads(row[4])
+    status = row[5]
+    imported_paper_id = row[6]
+    evidence = json.loads(row[7])
+    review = json.loads(row[8])
+    artifacts = json.loads(row[9])
+    warnings = json.loads(row[10])
+    return {
+        "resolution_schema_version": 1,
+        "resolution_id": row[0],
+        "source": {
+            "paper_id": row[1],
+            "blocked_id": row[2],
+            "evidence": evidence,
+            "review": review,
+        },
+        "target": target,
+        "status": status,
+        "import": _reference_import_payload(status, imported_paper_id, target),
+        "artifacts": artifacts,
+        "warnings": warnings,
+        "created_at": row[11],
+        "updated_at": row[12],
+    }
+
+
+def _reference_import_payload(
+    status: str,
+    imported_paper_id: str | None,
+    target: dict,
+) -> dict:
+    if status == "resolved_imported":
+        return {
+            "attempted": True,
+            "paper_id": imported_paper_id,
+            "reason": None,
+        }
+    if status == "failed_import":
+        return {
+            "attempted": True,
+            "paper_id": imported_paper_id,
+            "reason": "import_failed",
+        }
+    return {
+        "attempted": False,
+        "paper_id": None,
+        "reason": "target_not_importable_without_local_source",
+    }
+
+
+def _reference_resolution_summary(resolutions: list[dict]) -> dict:
+    return {
+        "total_count": len(resolutions),
+        "resolved_imported_count": sum(
+            1 for item in resolutions if item["status"] == "resolved_imported"
+        ),
+        "resolved_not_imported_count": sum(
+            1 for item in resolutions if item["status"] == "resolved_not_imported"
+        ),
+        "failed_import_count": sum(
+            1 for item in resolutions if item["status"] == "failed_import"
+        ),
+    }
+
+
+def _reference_search_candidate_from_row(row: tuple) -> dict:
+    return {
+        "candidate_schema_version": 1,
+        "candidate_id": row[0],
+        "search_run_id": row[1],
+        "source_paper_id": row[2],
+        "blocked_id": row[3],
+        "target": json.loads(row[4]),
+        "score": row[5],
+        "confidence": row[6],
+        "evidence": json.loads(row[7]),
+        "provider_records": json.loads(row[8]),
+        "warnings": json.loads(row[9]),
+        "rank": row[10],
+    }
+
+
+def _paper_from_row(row: tuple) -> dict:
+    return {
+        "paper_id": row[0],
+        "source_type": row[1],
+        "source_ref": row[2],
+        "source_version": row[3],
+        "title": row[4],
+        "authors": json.loads(row[5]),
+        "main_file": row[6],
+        "imported_at": row[7],
+        "parser_version": row[8],
+        "theorem_count": row[9],
+        "citation_count": row[10],
+        "outgoing_citation_count": row[11],
+        "incoming_citation_count": row[12],
+        "unresolved_citation_count": row[13],
+    }
+
+
+def _source_span_from_row(row: tuple) -> dict:
+    bbox = json.loads(row[8]) if row[8] is not None else None
+    span = SourceSpanEvidence(
+        span_id=row[0],
+        paper_id=row[1],
+        source_type=row[2],
+        source_ref=row[3],
+        page=row[4],
+        block_index=row[5],
+        start_offset=row[6],
+        end_offset=row[7],
+        bbox=tuple(bbox) if bbox is not None else None,
+        text=row[9],
+        method=row[10],
+        confidence=row[11],
+    )
+    return source_span_payload(span)
+
+
+def _source_slice_record_from_row(row: tuple) -> dict:
+    return {
+        "id": row[0],
+        "span_id": row[1],
+        "paper_id": row[2],
+        "source_type": row[3],
+        "source_ref": row[4],
+        "page": row[5],
+        "block_index": row[6],
+        "start_offset": row[7],
+        "end_offset": row[8],
+        "bbox": json.loads(row[9]) if row[9] is not None else None,
+        "text": row[10],
+        "method": row[11],
+        "confidence": row[12],
+    }
+
+
+def _source_slice_from_row(row: dict, role: str) -> dict:
+    return {
+        "span_id": row["span_id"],
+        "page": row["page"],
+        "block_index": row["block_index"],
+        "start_offset": row["start_offset"],
+        "end_offset": row["end_offset"],
+        "bbox": row["bbox"],
+        "role": role,
+        "text": row["text"],
+        "method": row["method"],
+        "confidence": row["confidence"],
+    }
+
+
+def _result_from_row(row: tuple) -> dict:
+    return {
+        "result_id": row[0],
+        "paper_id": row[1],
+        "local_id": row[2],
+        "kind": row[3],
+        "raw_kind": row[4],
+        "display_kind": row[5],
+        "normalized_kind": row[6],
+        "label": row[7],
+        "visible_number": row[8],
+        "title": row[9],
+        "statement": row[10],
+        "method": row[11],
+        "confidence": row[12],
+    }
+
+
+def _proof_from_row(row: tuple) -> dict:
+    return {
+        "proof_id": row[0],
+        "paper_id": row[1],
+        "result_id": row[2],
+        "text": row[3],
+        "association_basis": row[4],
+        "association_confidence": row[5],
+        "method": row[6],
+        "confidence": row[7],
+    }
+
+
+def _bibliography_entry_from_row(row: tuple) -> dict:
+    return {
+        "entry_id": row[0],
+        "paper_id": row[1],
+        "raw_label": row[2],
+        "raw_text": row[3],
+        "entry_type": row[4],
+        "title": row[5],
+        "authors": json.loads(row[6]),
+        "year": row[7],
+        "arxiv_id": row[8],
+        "arxiv_version": row[9],
+        "doi": row[10],
+        "url": row[11],
+        "method": row[12],
+        "confidence": row[13],
+    }
+
+
+def _local_result_mention_from_row(row: tuple) -> dict:
+    return {
+        "mention_id": row[0],
+        "paper_id": row[1],
+        "proof_id": row[2],
+        "raw_text": row[3],
+        "kind": row[4],
+        "visible_number": row[5],
+        "target_result_id": row[6],
+        "resolution_status": row[7],
+        "method": row[8],
+        "confidence": row[9],
+    }
+
+
+def _citation_mention_from_row(row: tuple) -> dict:
+    return {
+        "mention_id": row[0],
+        "paper_id": row[1],
+        "proof_id": row[2],
+        "raw_text": row[3],
+        "raw_key": row[4],
+        "entry_id": row[5],
+        "resolution_status": row[6],
+        "method": row[7],
+        "confidence": row[8],
+    }
+
+
+def _external_result_mention_from_row(row: tuple) -> dict:
+    return {
+        "mention_id": row[0],
+        "paper_id": row[1],
+        "proof_id": row[2],
+        "citation_mention_id": row[3],
+        "raw_text": row[4],
+        "external_kind": row[5],
+        "external_number": row[6],
+        "entry_id": row[7],
+        "target_paper_id": row[8],
+        "resolution_status": row[9],
+        "method": row[10],
+        "confidence": row[11],
+    }
+
+
+def _evidence_edge_from_row(row: tuple) -> dict:
+    return {
+        "edge_id": row[0],
+        "paper_id": row[1],
+        "source_id": row[2],
+        "target_id": row[3],
+        "relation": row[4],
+        "evidence_ids": json.loads(row[5]),
+        "method": row[6],
+        "confidence": row[7],
+    }

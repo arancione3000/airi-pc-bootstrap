@@ -1,0 +1,119 @@
+{
+  "name": "paperproof",
+  "displayName": "Paperproof",
+  "description": "Lean therorem proving interface which feels like pen-and-paper proofs",
+  "version": "3.0.0",
+  "publisher": "paperproof",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Paper-Proof/paperproof"
+  },
+  "engines": {
+    "vscode": "^1.78.0"
+  },
+  "categories": [
+    "Visualization",
+    "Education"
+  ],
+  "keywords": [
+    "paperproof",
+    "paper",
+    "proof",
+    "lean",
+    "lean4"
+  ],
+  "activationEvents": [
+    "onLanguage:lean4"
+  ],
+  "icon": "images/paper.png",
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "paperproof.toggle",
+        "title": "Paperproof: Toggle",
+        "icon": {
+          "dark": "./images/paper.png",
+          "light": "./images/paper.png"
+        }
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "paperproof.toggle",
+          "when": "editorLangId == lean4 || activeWebviewPanelId == 'lean4_infoview' || activeWebviewPanelId == 'lean4_abbreviationview' || activeWebviewPanelId == 'lean4_loogleview' || activeWebviewPanelId == 'lean4_manualview' || activeWebviewPanelId == 'paperproof'",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Paperproof",
+      "properties": {
+        "paperproof.environment": {
+          "type": "string",
+          "default": "production",
+          "enum": [
+            "production",
+            "development"
+          ]
+        },
+        "paperproof.areHypsHighlighted": {
+          "type": "boolean",
+          "default": false,
+          "description": "In all hypothesis and goal nodes, marks referenced hypothesis names"
+        },
+        "paperproof.isSingleTacticMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Switch between a proof-tree mode and a single-tactic mode"
+        },
+        "paperproof.isHiddenGoalNames": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hide goal names"
+        },
+        "paperproof.isGreenHypotheses": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use green color for hypotheses"
+        },
+        "paperproof.isFollowingCursor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Scroll to the tactic under the cursor whenever it is out of view"
+        },
+        "paperproof.isUnlimitedWidth": {
+          "type": "boolean",
+          "default": false,
+          "description": "Let goals, tactics and hypotheses grow as wide as their content"
+        },
+    "paperproof.fontSize": {
+          "type": "number",
+          "default": 13,
+          "description": "Font size for goals and hypotheses"
+        }
+      }
+    },
+    "icon": "./images/paper.png"
+  },
+  "scripts": {
+    "vscode:prepublish": "yarn run build-app && yarn run build-extension",
+    "build-app": "cd ../app; node esbuild.prod.js",
+    "build-extension": "node esbuild.js"
+  },
+  "devDependencies": {
+    "@types/node": "16.x",
+    "@types/vscode": "^1.78.0",
+    "@typescript-eslint/eslint-plugin": "^5.59.1",
+    "@typescript-eslint/parser": "^5.59.1",
+    "eslint": "^8.39.0",
+    "typescript": "^5.0.4"
+  },
+  "dependencies": {
+    "esbuild": "^0.19.11",
+    "node-fetch": "^3.3.1",
+    "vscode-languageserver-protocol": "^3.17.3"
+  },
+  "license": "MIT"
+}

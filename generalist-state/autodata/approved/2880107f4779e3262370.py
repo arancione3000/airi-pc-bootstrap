@@ -1,0 +1,1955 @@
+import argparse
+import json
+import sqlite3
+from collections.abc import Sequence
+from functools import wraps
+from importlib.metadata import version as distribution_version
+from pathlib import Path
+from threading import RLock
+
+from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
+
+from papergraph.arxiv import (
+    ArxivImportError,
+    ArxivProject,
+    prepare_arxiv_project,
+    validate_arxiv_input as validate_arxiv_input_result,
+    validate_arxiv_request as validate_arxiv_request_result,
+)
+from papergraph.diagnostics import environment_diagnostics
+from papergraph.graph import PaperGraph
+from papergraph.identity import paper_id_from_arxiv
+from papergraph.loader import load_latex_project
+from papergraph.parser import parse_latex
+from papergraph.pdf import PdfExtractionError
+from papergraph.project import load_project
+from papergraph.workspace import SCHEMA_VERSION, Workspace, WorkspaceError
+from papergraph.reference_expansion_api import (
+    COMMANDS as EXPANSION_COMMANDS, add_cli as add_expansion_cli,
+    register_tools as register_expansion_tools, run_cli as run_expansion_cli,
+)
+
+
+mcp = MCPServer("PaperGraph MCP")
+
+
+_current_graph: PaperGraph | None = None
+_current_path: Path | None = None
+_current_workspace: Workspace | None = None
+_workspace_state_lock = RLock()
+
+_WORKSPACE_TOOL_ERRORS = (
+    WorkspaceError,
+    PdfExtractionError,
+    sqlite3.DatabaseError,
+    OSError,
+    ValueError,
+    KeyError,
+)
+_ARXIV_WORKSPACE_TOOL_ERRORS = (ArxivImportError, *_WORKSPACE_TOOL_ERRORS)
+
+
+def _serialized_workspace_tool(function):
+    """Keep active-workspace access and replacement in one critical section."""
+
+    @wraps(function)
+    def serialized(*args, **kwargs):
+        with _workspace_state_lock:
+            return function(*args, **kwargs)
+
+    return serialized
+
+
+def _reset_server_state() -> None:
+    """Reset process state, closing any active workspace connection."""
+
+    global _current_graph
+    global _current_path
+    global _current_workspace
+
+    with _workspace_state_lock:
+        if _current_workspace is not None:
+            _current_workspace.close()
+        _current_workspace = None
+        _current_graph = None
+        _current_path = None
+
+
+def require_graph() -> PaperGraph:
+    if _current_graph is None:
+        raise ToolError(
+            "No paper is loaded. "
+            "Call load_paper(path) or load_arxiv_paper(arxiv_id) first."
+        )
+
+    return _current_graph
+
+
+def require_workspace() -> Workspace:
+    with _workspace_state_lock:
+        if _current_workspace is None:
+            raise ToolError(
+                "No workspace is open. Call open_workspace(path) first."
+            )
+
+        return _current_workspace
+
+
+@mcp.tool()
+def get_environment_diagnostics() -> dict:
+    """Return PaperGraph version and reproducible launch diagnostics."""
+
+    return environment_diagnostics()
+
+
+@mcp.tool()
+def validate_arxiv_input(
+    text_id: str | None = None,
+    url: str | None = None,
+) -> dict:
+    """Normalize arXiv ID and URL inputs and return the safe next action."""
+
+    return validate_arxiv_input_result(text_id=text_id, url=url)
+
+
+@mcp.tool()
+def validate_arxiv_request(input: str) -> dict:
+    """Validate a raw user arXiv request and return the safe next action."""
+
+    return validate_arxiv_request_result(input)
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def open_workspace(path: str) -> dict:
+    """Open or initialize a persistent multi-paper workspace."""
+
+    global _current_workspace
+
+    try:
+        replacement = Workspace.open(path)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+    previous = _current_workspace
+    _current_workspace = replacement
+    if previous is not None:
+        previous.close()
+
+    return {
+        "path": str(replacement.path),
+        "schema_version": SCHEMA_VERSION,
+        **replacement.counts(),
+    }
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_add_local_paper(path: str, paper_id: str) -> dict:
+    """Add or replace a local LaTeX project in the active workspace."""
+
+    workspace = require_workspace()
+    paper_path = Path(path).expanduser().resolve()
+    try:
+        project = load_project(paper_path)
+        result = workspace.import_project(
+            paper_id,
+            "local",
+            str(paper_path),
+            None,
+            project,
+        )
+        return workspace.get_paper(result.paper_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_add_arxiv_paper(
+    arxiv_id: str,
+    main_file: str | None = None,
+    refresh: bool = False,
+) -> dict:
+    """Add or replace an arXiv LaTeX project in the active workspace."""
+
+    workspace = require_workspace()
+    try:
+        prepared = prepare_arxiv_project(arxiv_id, main_file, refresh)
+        paper_id, source_version = paper_id_from_arxiv(prepared.arxiv_id)
+        project = load_project(prepared.main_file)
+        result = workspace.import_project(
+            paper_id,
+            "arxiv",
+            paper_id.removeprefix("arxiv:"),
+            source_version,
+            project,
+        )
+        return workspace.get_paper(result.paper_id)
+    except _ARXIV_WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_add_pdf_paper(path: str, paper_id: str) -> dict:
+    """Add or replace a born-digital PDF paper in the active workspace."""
+
+    workspace = require_workspace()
+    try:
+        result = workspace.import_pdf(path, paper_id)
+        return {
+            **workspace.get_paper(result.paper_id),
+            **result.evidence_import_summary(),
+        }
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_list_papers() -> list[dict]:
+    """List all papers stored in the active workspace."""
+
+    try:
+        return require_workspace().list_papers()
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_paper(paper_id: str) -> dict:
+    """Return metadata and counts for one stored paper."""
+
+    try:
+        return require_workspace().get_paper(paper_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_search_theorems(
+    query: str,
+    paper_id: str | None = None,
+    kind: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """Search theorem titles and bodies across the active workspace."""
+
+    try:
+        return require_workspace().search_theorems(
+            query,
+            paper_id=paper_id,
+            kind=kind,
+            limit=limit,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_dependencies(
+    global_theorem_id: str,
+    recursive: bool = False,
+) -> list[dict]:
+    """Return dependencies of a globally identified stored theorem."""
+
+    try:
+        return require_workspace().get_dependencies(
+            global_theorem_id,
+            recursive=recursive,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_dependency_diagnostics(
+    global_theorem_id: str,
+    recursive: bool = False,
+) -> dict:
+    """Explain how workspace dependencies were extracted for one theorem."""
+
+    try:
+        return require_workspace().get_dependency_diagnostics(
+            global_theorem_id,
+            recursive=recursive,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_citations(
+    paper_id: str,
+    direction: str = "outgoing",
+    include_unresolved: bool = True,
+) -> list[dict]:
+    """Return incoming or outgoing citation evidence for a stored paper."""
+
+    try:
+        return require_workspace().get_citations(
+            paper_id,
+            direction=direction,
+            include_unresolved=include_unresolved,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_list_results(
+    paper_id: str | None = None,
+    kind: str | None = None,
+    limit: int = 50,
+) -> list[dict]:
+    """List stored evidence results across the active workspace."""
+
+    try:
+        return require_workspace().list_results(
+            paper_id=paper_id,
+            kind=kind,
+            limit=limit,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_result(result_id: str) -> dict:
+    """Return one stored evidence result with source spans."""
+
+    try:
+        return require_workspace().get_result(result_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_result_proof(result_id: str) -> dict:
+    """Return proof evidence for one stored evidence result."""
+
+    try:
+        return require_workspace().get_result_proof(result_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_proof_dependencies(
+    result_id: str,
+    recursive: bool = False,
+) -> dict:
+    """Return proof dependency evidence for one stored evidence result."""
+
+    try:
+        return require_workspace().get_proof_dependencies(
+            result_id,
+            recursive=recursive,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_external_result_mentions(result_id: str) -> list[dict]:
+    """Return external result mentions from a result's proof evidence."""
+
+    try:
+        return require_workspace().get_external_result_mentions(result_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_evidence(node_or_edge_id: str) -> dict:
+    """Return metadata and source spans for one evidence node or edge."""
+
+    try:
+        evidence = require_workspace().get_evidence(node_or_edge_id)
+        return {
+            "node_or_edge_id": node_or_edge_id,
+            **evidence,
+        }
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_export_reading_bundle(paper_id: str) -> dict:
+    """Export a paper-level evidence bundle for paper-reading consumers."""
+
+    try:
+        return require_workspace().export_reading_bundle(paper_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_export_result_reading_context(result_id: str) -> dict:
+    """Export focused evidence context for reading one result's proof."""
+
+    try:
+        return require_workspace().export_result_reading_context(result_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_source_slice(
+    span_id: str | None = None,
+    result_id: str | None = None,
+    proof_id: str | None = None,
+    context: int = 1,
+) -> dict:
+    """Return bounded source text around one span, result, or proof."""
+
+    try:
+        return require_workspace().get_source_slice(
+            span_id=span_id,
+            result_id=result_id,
+            proof_id=proof_id,
+            context=context,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_result_reading_path(
+    result_id: str,
+    recursive: bool = True,
+) -> dict:
+    """Return deterministic local reading paths for one result."""
+
+    try:
+        return require_workspace().get_result_reading_path(
+            result_id,
+            recursive=recursive,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_create_reading_session(
+    paper_id: str,
+    label: str | None = None,
+    target_result_id: str | None = None,
+) -> dict:
+    """Create a persistent reading session in the active workspace."""
+
+    try:
+        return require_workspace().create_reading_session(
+            paper_id,
+            label=label,
+            target_result_id=target_result_id,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_list_reading_sessions(
+    paper_id: str | None = None,
+    status: str | None = None,
+) -> list[dict]:
+    """List persistent reading sessions in the active workspace."""
+
+    try:
+        return require_workspace().list_reading_sessions(
+            paper_id=paper_id,
+            status=status,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_reading_session(session_id: str) -> dict:
+    """Return one persistent reading session with checkpoints and notes."""
+
+    try:
+        return require_workspace().get_reading_session(session_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_record_reading_checkpoint(
+    session_id: str,
+    target_kind: str,
+    target_id: str,
+    status: str,
+    summary: str = "",
+    evidence: dict | None = None,
+) -> dict:
+    """Create or update a reading checkpoint in the active workspace."""
+
+    try:
+        return require_workspace().record_reading_checkpoint(
+            session_id,
+            target_kind,
+            target_id,
+            status,
+            summary=summary,
+            evidence=evidence,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_add_reading_note(
+    session_id: str,
+    text: str,
+    note_type: str = "note",
+    target_kind: str | None = None,
+    target_id: str | None = None,
+) -> dict:
+    """Add a note or question to a reading session."""
+
+    try:
+        return require_workspace().add_reading_note(
+            session_id,
+            text,
+            note_type=note_type,
+            target_kind=target_kind,
+            target_id=target_id,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_export_reading_session_summary(session_id: str) -> dict:
+    """Export a deterministic recovery summary for a reading session."""
+
+    try:
+        return require_workspace().export_reading_session_summary(session_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_create_reading_queue(
+    result_id: str,
+    label: str | None = None,
+    recursive: bool = True,
+) -> dict:
+    """Create a persistent reading queue for one stored result."""
+
+    try:
+        return require_workspace().create_reading_queue(
+            result_id,
+            label=label,
+            recursive=recursive,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_list_reading_queues(
+    paper_id: str | None = None,
+    status: str | None = None,
+) -> list[dict]:
+    """List persistent reading queues in the active workspace."""
+
+    try:
+        return require_workspace().list_reading_queues(
+            paper_id=paper_id,
+            status=status,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_reading_queue(queue_id: str) -> dict:
+    """Return one persistent reading queue with ordered items."""
+
+    try:
+        return require_workspace().get_reading_queue(queue_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_apply_reading_queue_to_session(
+    queue_id: str,
+    session_id: str,
+    status: str = "queued",
+) -> dict:
+    """Apply reading queue items as checkpoints in a reading session."""
+
+    try:
+        return require_workspace().apply_reading_queue_to_session(
+            queue_id,
+            session_id,
+            status=status,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_plan_external_imports_for_result(
+    result_id: str,
+    recursive: bool = True,
+) -> dict:
+    """Plan external arXiv imports for one result's reading path."""
+
+    try:
+        return require_workspace().plan_external_imports_for_result(
+            result_id,
+            recursive=recursive,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_plan_external_imports_for_queue(queue_id: str) -> dict:
+    """Plan external arXiv imports referenced by one reading queue."""
+
+    try:
+        return require_workspace().plan_external_imports_for_queue(queue_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_plan_external_imports_for_paper(paper_id: str) -> dict:
+    """Plan external arXiv imports visible in one stored paper."""
+
+    try:
+        return require_workspace().plan_external_imports_for_paper(paper_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_resolve_external_reference(
+    paper_id: str,
+    blocked_id: str,
+    target: dict,
+    import_target: bool = True,
+    artifact_dir: str | None = None,
+) -> dict:
+    """Resolve a blocked external reference to a user-confirmed target."""
+
+    try:
+        return require_workspace().resolve_external_reference(
+            paper_id,
+            blocked_id,
+            target,
+            import_target=import_target,
+            artifact_dir=artifact_dir,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_list_external_reference_resolutions(
+    paper_id: str | None = None,
+) -> dict:
+    """List recorded external reference resolutions and selection provenance."""
+
+    try:
+        return require_workspace().list_external_reference_resolutions(paper_id)
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_search_external_reference(
+    paper_id: str,
+    blocked_id: str,
+    providers: list[str] | None = None,
+    max_candidates: int = 10,
+    refresh: bool = False,
+) -> dict:
+    """Search scholarly metadata providers for a blocked external reference."""
+
+    try:
+        return require_workspace().search_external_reference(
+            paper_id,
+            blocked_id,
+            providers=providers,
+            max_candidates=max_candidates,
+            refresh=refresh,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_list_external_reference_searches(
+    paper_id: str | None = None,
+    blocked_id: str | None = None,
+) -> dict:
+    """List scholarly reference search runs and candidates."""
+
+    try:
+        return require_workspace().list_external_reference_searches(
+            paper_id,
+            blocked_id,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_resolve_external_reference_candidate(
+    paper_id: str,
+    blocked_id: str,
+    candidate_id: str,
+    import_target: bool = False,
+    artifact_dir: str | None = None,
+    overwrite: bool = False,
+) -> dict:
+    """Apply a searched candidate as an explicit reference resolution."""
+
+    try:
+        return require_workspace().resolve_external_reference_candidate(
+            paper_id,
+            blocked_id,
+            candidate_id,
+            import_target=import_target,
+            artifact_dir=artifact_dir,
+            overwrite=overwrite,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_get_paper_map(
+    paper_id: str,
+    max_candidates: int = 5,
+) -> dict:
+    """Return an evidence-first first-load map for one stored paper."""
+
+    try:
+        return require_workspace().get_paper_map(
+            paper_id,
+            max_candidates=max_candidates,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_export_paper_reading_report(
+    paper_id: str,
+    max_candidates: int = 5,
+) -> dict:
+    """Export a deterministic Markdown reading report for one stored paper."""
+
+    try:
+        return require_workspace().export_paper_reading_report(
+            paper_id,
+            max_candidates=max_candidates,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_export_cross_paper_reading_plan(
+    paper_ids: list[str],
+    focus: str | None = None,
+    max_candidates_per_paper: int = 3,
+) -> dict:
+    """Export a deterministic Markdown reading plan for selected papers."""
+
+    try:
+        return require_workspace().export_cross_paper_reading_plan(
+            paper_ids,
+            focus=focus,
+            max_candidates_per_paper=max_candidates_per_paper,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_plan_starter_project(
+    workspace_path: str,
+    artifact_dir: str | None,
+    papers: list[dict],
+    project_title: str | None = None,
+    focus: str | None = None,
+    target_result_id: str | None = None,
+    create_queue: bool = True,
+    create_session: bool = True,
+    max_candidates: int = 5,
+) -> dict:
+    """Plan a Workspace Starter run without writing files."""
+
+    try:
+        workspace = Workspace.open(workspace_path)
+        try:
+            return workspace.plan_starter_project(
+                workspace_path=workspace_path,
+                artifact_dir=artifact_dir,
+                papers=papers,
+                project_title=project_title,
+                focus=focus,
+                target_result_id=target_result_id,
+                create_queue=create_queue,
+                create_session=create_session,
+                max_candidates=max_candidates,
+            )
+        finally:
+            workspace.close()
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+@_serialized_workspace_tool
+def workspace_bootstrap_reading_project(
+    workspace_path: str,
+    artifact_dir: str,
+    papers: list[dict],
+    project_title: str | None = None,
+    focus: str | None = None,
+    target_result_id: str | None = None,
+    create_queue: bool = True,
+    create_session: bool = True,
+    max_candidates: int = 5,
+) -> dict:
+    """Create starter artifacts for a first reading project."""
+
+    global _current_workspace
+
+    try:
+        replacement = Workspace.open(workspace_path)
+        payload = replacement.bootstrap_reading_project(
+            workspace_path=workspace_path,
+            artifact_dir=artifact_dir,
+            papers=papers,
+            project_title=project_title,
+            focus=focus,
+            target_result_id=target_result_id,
+            create_queue=create_queue,
+            create_session=create_session,
+            max_candidates=max_candidates,
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        raise ToolError(str(exc)) from exc
+
+    previous = _current_workspace
+    _current_workspace = replacement
+    if previous is not None:
+        previous.close()
+    return payload
+
+
+@mcp.tool()
+def load_paper(path: str) -> dict:
+    """Load a local LaTeX paper and build its theorem graph."""
+
+    global _current_graph
+    global _current_path
+
+    paper_path = Path(path).expanduser().resolve()
+
+    if not paper_path.exists():
+        raise ToolError(
+            f"File does not exist: {paper_path}"
+        )
+
+    if not paper_path.is_file():
+        raise ToolError(
+            f"Path is not a file: {paper_path}"
+        )
+
+    if paper_path.suffix.lower() != ".tex":
+        raise ToolError(
+            "PaperGraph only accepts a .tex root file."
+        )
+
+    try:
+        text = load_latex_project(paper_path)
+    except (OSError, ValueError) as exc:
+        raise ToolError(str(exc)) from exc
+
+    nodes = parse_latex(text)
+
+    _current_graph = PaperGraph(nodes)
+    _current_path = paper_path
+
+    kinds: dict[str, int] = {}
+
+    for node in nodes:
+        kinds[node.kind] = (
+            kinds.get(node.kind, 0) + 1
+        )
+
+    return {
+        "path": str(paper_path),
+        "nodes": len(nodes),
+        "kinds": kinds,
+    }
+
+
+def _load_prepared_arxiv_project(project: ArxivProject) -> dict:
+    global _current_graph
+    global _current_path
+
+    try:
+        text = load_latex_project(project.main_file)
+    except (OSError, ValueError) as exc:
+        raise ToolError(str(exc)) from exc
+
+    nodes = parse_latex(text)
+    graph = PaperGraph(nodes)
+
+    kinds: dict[str, int] = {}
+    for node in nodes:
+        kinds[node.kind] = kinds.get(node.kind, 0) + 1
+
+    _current_graph = graph
+    _current_path = project.main_file
+
+    return {
+        "arxiv_id": project.arxiv_id,
+        "path": str(project.main_file),
+        "cached": project.cached,
+        "nodes": len(nodes),
+        "kinds": kinds,
+    }
+
+
+@mcp.tool()
+def load_arxiv_paper(
+    arxiv_id: str,
+    main_file: str | None = None,
+    refresh: bool = False,
+) -> dict:
+    """Download an arXiv source project and build its theorem graph."""
+
+    try:
+        project = prepare_arxiv_project(
+            arxiv_id,
+            main_file,
+            refresh,
+        )
+    except ArxivImportError as exc:
+        raise ToolError(str(exc)) from exc
+
+    return _load_prepared_arxiv_project(project)
+
+
+@mcp.tool()
+def load_arxiv_request(
+    input: str,
+    main_file: str | None = None,
+    refresh: bool = False,
+) -> dict:
+    """Validate a raw arXiv request, then load it only if unambiguous."""
+
+    validation = validate_arxiv_request_result(input)
+    if validation["action"] != "safe_to_load" or validation["selected_id"] is None:
+        raise ToolError(validation["message"])
+
+    try:
+        project = prepare_arxiv_project(
+            validation["selected_id"],
+            main_file,
+            refresh,
+        )
+    except ArxivImportError as exc:
+        raise ToolError(str(exc)) from exc
+
+    result = _load_prepared_arxiv_project(project)
+    result["validation"] = validation
+    return result
+
+
+@mcp.tool()
+def list_theorems(
+    kind: str | None = None,
+) -> list[dict]:
+    """List theorem-like environments in the currently loaded paper."""
+
+    graph = require_graph()
+
+    nodes = graph.nodes
+
+    if kind is not None:
+        nodes = [
+            node
+            for node in nodes
+            if node.kind == kind
+        ]
+
+    return [
+        node.summary()
+        for node in nodes
+    ]
+
+
+@mcp.tool()
+def get_theorem(
+    theorem_id: str,
+) -> dict:
+    """Return the full text and metadata for one theorem-like node."""
+
+    graph = require_graph()
+
+    try:
+        node = graph.get(theorem_id)
+    except KeyError as exc:
+        raise ToolError(str(exc)) from exc
+
+    return node.full()
+
+
+@mcp.tool()
+def get_dependencies(
+    theorem_id: str,
+    recursive: bool = False,
+) -> list[dict]:
+    """Return theorem-like nodes referenced by the given theorem."""
+
+    graph = require_graph()
+
+    try:
+        nodes = graph.dependencies(
+            theorem_id,
+            recursive=recursive,
+        )
+    except KeyError as exc:
+        raise ToolError(str(exc)) from exc
+
+    return [
+        node.summary()
+        for node in nodes
+    ]
+
+
+@mcp.tool()
+def get_dependency_diagnostics(
+    theorem_id: str,
+    recursive: bool = False,
+) -> dict:
+    """Explain how dependencies were extracted for one theorem-like node."""
+
+    graph = require_graph()
+
+    try:
+        return graph.dependency_diagnostics(
+            theorem_id,
+            recursive=recursive,
+        )
+    except KeyError as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+def where_used(
+    theorem_id: str,
+) -> list[dict]:
+    """Return theorem-like nodes that reference the given theorem."""
+
+    graph = require_graph()
+
+    try:
+        nodes = graph.where_used(
+            theorem_id
+        )
+    except KeyError as exc:
+        raise ToolError(str(exc)) from exc
+
+    return [
+        node.summary()
+        for node in nodes
+    ]
+
+
+def _print_json(payload: dict) -> None:
+    print(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def _run_workspace_cli_command(command: str, workspace_path: str, callback) -> None:
+    workspace = None
+    try:
+        workspace = Workspace.open(workspace_path)
+        _print_json(callback(workspace))
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        _print_json(
+            {
+                "status": "error",
+                "action": "inspect_error",
+                "command": command,
+                "message": str(exc),
+            }
+        )
+        raise SystemExit(1) from exc
+    finally:
+        if workspace is not None:
+            workspace.close()
+
+
+def _reference_target_from_cli(args) -> dict:
+    selected = [
+        name
+        for name, value in (
+            ("arxiv", args.arxiv),
+            ("pdf", args.pdf),
+            ("doi", args.doi),
+            ("url", args.url),
+        )
+        if value
+    ]
+    if not selected and (args.title or args.author or args.year or args.venue):
+        selected.append("metadata")
+    if len(selected) != 1:
+        raise ValueError(
+            "Exactly one reference target must be supplied: --arxiv, --pdf, "
+            "--doi, --url, or metadata fields."
+        )
+    target_kind = selected[0]
+    target: dict[str, object] = {"kind": target_kind}
+    if target_kind == "arxiv":
+        target["arxiv_id"] = args.arxiv
+    elif target_kind == "pdf":
+        if "=" in args.pdf:
+            path, paper_id = args.pdf.split("=", 1)
+            target["path"] = path
+            target["paper_id"] = paper_id
+        else:
+            target["path"] = args.pdf
+    elif target_kind == "doi":
+        target["doi"] = args.doi
+    elif target_kind == "url":
+        target["url"] = args.url
+    if args.title:
+        target["title"] = args.title
+    if args.author:
+        target["authors"] = args.author
+    if args.year:
+        target["year"] = args.year
+    if args.venue:
+        target["venue"] = args.venue
+    return target
+
+
+def _run_reading_report_cli_command(
+    command: str,
+    workspace_path: str,
+    paper_id: str,
+    max_candidates: int,
+    output: str | None,
+) -> None:
+    workspace = None
+    try:
+        workspace = Workspace.open(workspace_path)
+        report = workspace.export_paper_reading_report(
+            paper_id,
+            max_candidates=max_candidates,
+        )
+        markdown = report["markdown"]
+        if output is None:
+            print(markdown, end="")
+            return
+
+        output_path = Path(output)
+        parent = output_path.parent
+        if parent != Path("") and not parent.exists():
+            raise ValueError(f"Parent directory does not exist: {parent}")
+        if output_path.exists() and output_path.is_dir():
+            raise ValueError(f"Output path is a directory: {output_path}")
+        output_path.write_text(markdown, encoding="utf-8")
+        _print_json(
+            {
+                "status": "written",
+                "command": command,
+                "paper_id": report["paper_id"],
+                "format": report["format"],
+                "output": str(output_path),
+                "bytes": len(output_path.read_bytes()),
+                "report_schema_version": report["report_schema_version"],
+            }
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        _print_json(
+            {
+                "status": "error",
+                "action": "inspect_error",
+                "command": command,
+                "message": str(exc),
+            }
+        )
+        raise SystemExit(1) from exc
+    finally:
+        if workspace is not None:
+            workspace.close()
+
+
+def _run_cross_paper_reading_plan_cli_command(
+    command: str,
+    workspace_path: str,
+    paper_ids: list[str],
+    focus: str | None,
+    max_candidates_per_paper: int,
+    output: str | None,
+) -> None:
+    workspace = None
+    try:
+        workspace = Workspace.open(workspace_path)
+        plan = workspace.export_cross_paper_reading_plan(
+            paper_ids,
+            focus=focus,
+            max_candidates_per_paper=max_candidates_per_paper,
+        )
+        markdown = plan["markdown"]
+        if output is None:
+            print(markdown, end="")
+            return
+
+        output_path = Path(output)
+        parent = output_path.parent
+        if parent != Path("") and not parent.exists():
+            raise ValueError(f"Parent directory does not exist: {parent}")
+        if output_path.exists() and output_path.is_dir():
+            raise ValueError(f"Output path is a directory: {output_path}")
+        output_path.write_text(markdown, encoding="utf-8")
+        _print_json(
+            {
+                "status": "written",
+                "command": command,
+                "paper_ids": plan["paper_ids"],
+                "format": plan["format"],
+                "output": str(output_path),
+                "bytes": len(output_path.read_bytes()),
+                "plan_schema_version": plan["plan_schema_version"],
+            }
+        )
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        _print_json(
+            {
+                "status": "error",
+                "action": "inspect_error",
+                "command": command,
+                "message": str(exc),
+            }
+        )
+        raise SystemExit(1) from exc
+    finally:
+        if workspace is not None:
+            workspace.close()
+
+
+def _parse_json_argument(raw_json: str) -> dict:
+    try:
+        payload = json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"--evidence-json must be valid JSON: {exc.msg}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("--evidence-json must decode to a JSON object")
+    return payload
+
+
+def _parse_starter_papers(
+    arxiv_inputs: list[str] | None,
+    tex_inputs: list[str] | None,
+    pdf_inputs: list[str] | None,
+) -> list[dict]:
+    papers: list[dict] = []
+    for raw in arxiv_inputs or []:
+        papers.append({"kind": "arxiv", "input": raw})
+    for raw in tex_inputs or []:
+        path, paper_id = _parse_path_paper_id(raw, "--tex")
+        papers.append({"kind": "local_tex", "path": path, "paper_id": paper_id})
+    for raw in pdf_inputs or []:
+        path, paper_id = _parse_path_paper_id(raw, "--pdf")
+        papers.append({"kind": "pdf", "path": path, "paper_id": paper_id})
+    return papers
+
+
+def _parse_path_paper_id(raw: str, option_name: str) -> tuple[str, str]:
+    if "=" not in raw:
+        raise ValueError(f"{option_name} expects PATH=PAPER_ID")
+    path, paper_id = raw.split("=", 1)
+    if not path.strip() or not paper_id.strip():
+        raise ValueError(f"{option_name} expects PATH=PAPER_ID")
+    return path.strip(), paper_id.strip()
+
+
+def _run_starter_cli_command(command: str, args) -> None:
+    workspace = None
+    try:
+        papers = _parse_starter_papers(args.arxiv, args.tex, args.pdf)
+        workspace = Workspace.open(args.workspace)
+        if command == "plan-starter-project":
+            _print_json(
+                workspace.plan_starter_project(
+                    workspace_path=args.workspace,
+                    artifact_dir=args.artifact_dir,
+                    papers=papers,
+                    project_title=args.project_title,
+                    focus=args.focus,
+                    target_result_id=args.target_result_id,
+                    create_queue=not args.no_queue,
+                    create_session=not args.no_session,
+                    max_candidates=args.max_candidates,
+                    overwrite=args.overwrite,
+                )
+            )
+            return
+        payload = workspace.bootstrap_reading_project(
+            workspace_path=args.workspace,
+            artifact_dir=args.artifact_dir,
+            papers=papers,
+            project_title=args.project_title,
+            focus=args.focus,
+            target_result_id=args.target_result_id,
+            create_queue=not args.no_queue,
+            create_session=not args.no_session,
+            max_candidates=args.max_candidates,
+            overwrite=args.overwrite,
+        )
+        _print_json({"command": command, **payload})
+    except _WORKSPACE_TOOL_ERRORS as exc:
+        _print_json(
+            {
+                "status": "error",
+                "action": "inspect_error",
+                "command": command,
+                "message": str(exc),
+            }
+        )
+        raise SystemExit(1) from exc
+    finally:
+        if workspace is not None:
+            workspace.close()
+
+
+register_expansion_tools(mcp, require_workspace, _serialized_workspace_tool)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        prog="papergraph-mcp",
+        description="Expose LaTeX theorem dependency graphs through MCP.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {distribution_version('papergraph-mcp')}",
+    )
+    subparsers = parser.add_subparsers(dest="command")
+    add_expansion_cli(subparsers)
+    subparsers.add_parser(
+        "doctor",
+        help="Print PaperGraph environment diagnostics as JSON.",
+    )
+    validate_parser = subparsers.add_parser(
+        "validate-arxiv",
+        help="Validate arXiv ID and URL inputs before loading a paper.",
+    )
+    validate_parser.add_argument("--id", dest="text_id")
+    validate_parser.add_argument("--url")
+    validate_request_parser = subparsers.add_parser(
+        "validate-arxiv-request",
+        help="Validate a raw arXiv request before loading a paper.",
+    )
+    validate_request_parser.add_argument("input")
+    load_request_parser = subparsers.add_parser(
+        "load-arxiv-request",
+        help="Validate and load a raw arXiv request as JSON.",
+    )
+    load_request_parser.add_argument("input")
+    load_request_parser.add_argument("--main-file")
+    load_request_parser.add_argument("--refresh", action="store_true")
+    plan_starter_parser = subparsers.add_parser(
+        "plan-starter-project",
+        help="Plan a Workspace Starter reading project without writing artifacts.",
+    )
+    bootstrap_starter_parser = subparsers.add_parser(
+        "bootstrap-reading-project",
+        help="Create Workspace Starter reading project artifacts.",
+    )
+    for starter_parser in (plan_starter_parser, bootstrap_starter_parser):
+        starter_parser.add_argument("--workspace", required=True)
+        starter_parser.add_argument("--artifact-dir", required=True)
+        starter_parser.add_argument("--project-title")
+        starter_parser.add_argument("--focus")
+        starter_parser.add_argument("--target-result-id")
+        starter_parser.add_argument("--max-candidates", type=int, default=5)
+        starter_parser.add_argument("--arxiv", action="append")
+        starter_parser.add_argument("--tex", action="append")
+        starter_parser.add_argument("--pdf", action="append")
+        starter_parser.add_argument("--no-queue", action="store_true")
+        starter_parser.add_argument("--no-session", action="store_true")
+        starter_parser.add_argument("--overwrite", action="store_true")
+    export_bundle_parser = subparsers.add_parser(
+        "export-reading-bundle",
+        help="Export a paper-level Reading Bridge bundle from a workspace.",
+    )
+    export_bundle_parser.add_argument("--workspace", required=True)
+    export_bundle_parser.add_argument("--paper-id", required=True)
+    export_context_parser = subparsers.add_parser(
+        "export-result-reading-context",
+        help="Export focused Reading Bridge context for one result.",
+    )
+    export_context_parser.add_argument("--workspace", required=True)
+    export_context_parser.add_argument("--result-id", required=True)
+    source_slice_parser = subparsers.add_parser(
+        "get-source-slice",
+        help="Export bounded source text around a span, result, or proof.",
+    )
+    source_slice_parser.add_argument("--workspace", required=True)
+    source_slice_parser.add_argument("--span-id")
+    source_slice_parser.add_argument("--result-id")
+    source_slice_parser.add_argument("--proof-id")
+    source_slice_parser.add_argument("--context", type=int, default=1)
+    reading_path_parser = subparsers.add_parser(
+        "get-result-reading-path",
+        help="Export top-down and bottom-up local reading paths for one result.",
+    )
+    reading_path_parser.add_argument("--workspace", required=True)
+    reading_path_parser.add_argument("--result-id", required=True)
+    reading_path_parser.add_argument(
+        "--direct",
+        action="store_true",
+        help="Return only direct dependencies instead of recursive traversal.",
+    )
+    create_session_parser = subparsers.add_parser(
+        "create-reading-session",
+        help="Create a persistent reading session in a workspace.",
+    )
+    create_session_parser.add_argument("--workspace", required=True)
+    create_session_parser.add_argument("--paper-id", required=True)
+    create_session_parser.add_argument("--label")
+    create_session_parser.add_argument("--target-result-id")
+    list_sessions_parser = subparsers.add_parser(
+        "list-reading-sessions",
+        help="List persistent reading sessions in a workspace.",
+    )
+    list_sessions_parser.add_argument("--workspace", required=True)
+    list_sessions_parser.add_argument("--paper-id")
+    list_sessions_parser.add_argument("--status")
+    get_session_parser = subparsers.add_parser(
+        "get-reading-session",
+        help="Return one reading session with checkpoints and notes.",
+    )
+    get_session_parser.add_argument("--workspace", required=True)
+    get_session_parser.add_argument("--session-id", required=True)
+    checkpoint_parser = subparsers.add_parser(
+        "record-reading-checkpoint",
+        help="Create or update a reading checkpoint.",
+    )
+    checkpoint_parser.add_argument("--workspace", required=True)
+    checkpoint_parser.add_argument("--session-id", required=True)
+    checkpoint_parser.add_argument("--target-kind", required=True)
+    checkpoint_parser.add_argument("--target-id", required=True)
+    checkpoint_parser.add_argument("--status", required=True)
+    checkpoint_parser.add_argument("--summary", default="")
+    checkpoint_parser.add_argument("--evidence-json", default="{}")
+    note_parser = subparsers.add_parser(
+        "add-reading-note",
+        help="Add a note or question to a reading session.",
+    )
+    note_parser.add_argument("--workspace", required=True)
+    note_parser.add_argument("--session-id", required=True)
+    note_parser.add_argument("--text", required=True)
+    note_parser.add_argument("--note-type", default="note")
+    note_parser.add_argument("--target-kind")
+    note_parser.add_argument("--target-id")
+    session_summary_parser = subparsers.add_parser(
+        "export-reading-session-summary",
+        help="Export a reading-session recovery summary.",
+    )
+    session_summary_parser.add_argument("--workspace", required=True)
+    session_summary_parser.add_argument("--session-id", required=True)
+    create_queue_parser = subparsers.add_parser(
+        "create-reading-queue",
+        help="Create a persistent reading queue for one result.",
+    )
+    create_queue_parser.add_argument("--workspace", required=True)
+    create_queue_parser.add_argument("--result-id", required=True)
+    create_queue_parser.add_argument("--label")
+    create_queue_parser.add_argument(
+        "--direct",
+        action="store_true",
+        help="Queue only direct local dependencies instead of recursive traversal.",
+    )
+    list_queues_parser = subparsers.add_parser(
+        "list-reading-queues",
+        help="List persistent reading queues in a workspace.",
+    )
+    list_queues_parser.add_argument("--workspace", required=True)
+    list_queues_parser.add_argument("--paper-id")
+    list_queues_parser.add_argument("--status")
+    get_queue_parser = subparsers.add_parser(
+        "get-reading-queue",
+        help="Return one reading queue with ordered items.",
+    )
+    get_queue_parser.add_argument("--workspace", required=True)
+    get_queue_parser.add_argument("--queue-id", required=True)
+    apply_queue_parser = subparsers.add_parser(
+        "apply-reading-queue-to-session",
+        help="Apply queue items as reading session checkpoints.",
+    )
+    apply_queue_parser.add_argument("--workspace", required=True)
+    apply_queue_parser.add_argument("--queue-id", required=True)
+    apply_queue_parser.add_argument("--session-id", required=True)
+    apply_queue_parser.add_argument("--status", default="queued")
+    result_import_plan_parser = subparsers.add_parser(
+        "plan-external-imports-for-result",
+        help="Plan external arXiv imports for one result.",
+    )
+    result_import_plan_parser.add_argument("--workspace", required=True)
+    result_import_plan_parser.add_argument("--result-id", required=True)
+    result_import_plan_parser.add_argument(
+        "--direct",
+        action="store_true",
+        help="Plan only direct dependencies instead of recursive traversal.",
+    )
+    queue_import_plan_parser = subparsers.add_parser(
+        "plan-external-imports-for-queue",
+        help="Plan external arXiv imports referenced by one reading queue.",
+    )
+    queue_import_plan_parser.add_argument("--workspace", required=True)
+    queue_import_plan_parser.add_argument("--queue-id", required=True)
+    paper_import_plan_parser = subparsers.add_parser(
+        "plan-external-imports-for-paper",
+        help="Plan external arXiv imports visible in one stored paper.",
+    )
+    paper_import_plan_parser.add_argument("--workspace", required=True)
+    paper_import_plan_parser.add_argument("--paper-id", required=True)
+    resolve_reference_parser = subparsers.add_parser(
+        "resolve-external-reference",
+        help="Resolve one blocked external reference to a user-confirmed target.",
+    )
+    resolve_reference_parser.add_argument("--workspace", required=True)
+    resolve_reference_parser.add_argument("--paper-id", required=True)
+    resolve_reference_parser.add_argument("--blocked-id", required=True)
+    resolve_reference_parser.add_argument("--arxiv")
+    resolve_reference_parser.add_argument("--pdf")
+    resolve_reference_parser.add_argument("--doi")
+    resolve_reference_parser.add_argument("--url")
+    resolve_reference_parser.add_argument("--title")
+    resolve_reference_parser.add_argument("--author", action="append")
+    resolve_reference_parser.add_argument("--year")
+    resolve_reference_parser.add_argument("--venue")
+    resolve_reference_parser.add_argument("--no-import", action="store_true")
+    resolve_reference_parser.add_argument("--artifact-dir")
+    list_reference_resolutions_parser = subparsers.add_parser(
+        "list-external-reference-resolutions",
+        help="List recorded external reference resolutions and selection provenance.",
+    )
+    list_reference_resolutions_parser.add_argument("--workspace", required=True)
+    list_reference_resolutions_parser.add_argument("--paper-id")
+    search_reference_parser = subparsers.add_parser(
+        "search-external-reference",
+        help="Search scholarly metadata providers for a blocked reference.",
+    )
+    search_reference_parser.add_argument("--workspace", required=True)
+    search_reference_parser.add_argument("--paper-id", required=True)
+    search_reference_parser.add_argument("--blocked-id", required=True)
+    search_reference_parser.add_argument("--provider", action="append")
+    search_reference_parser.add_argument("--max-candidates", type=int, default=10)
+    search_reference_parser.add_argument("--refresh", action="store_true")
+    list_reference_searches_parser = subparsers.add_parser(
+        "list-external-reference-searches",
+        help="List scholarly reference search runs and candidates.",
+    )
+    list_reference_searches_parser.add_argument("--workspace", required=True)
+    list_reference_searches_parser.add_argument("--paper-id")
+    list_reference_searches_parser.add_argument("--blocked-id")
+    resolve_reference_candidate_parser = subparsers.add_parser(
+        "resolve-external-reference-candidate",
+        help="Apply a searched candidate as an explicit reference resolution.",
+    )
+    resolve_reference_candidate_parser.add_argument("--workspace", required=True)
+    resolve_reference_candidate_parser.add_argument("--paper-id", required=True)
+    resolve_reference_candidate_parser.add_argument("--blocked-id", required=True)
+    resolve_reference_candidate_parser.add_argument("--candidate-id", required=True)
+    resolve_reference_candidate_parser.add_argument("--import-target", action="store_true")
+    resolve_reference_candidate_parser.add_argument("--artifact-dir")
+    resolve_reference_candidate_parser.add_argument("--overwrite", action="store_true")
+    paper_map_parser = subparsers.add_parser(
+        "get-paper-map",
+        help="Return an evidence-first first-load map for one stored paper.",
+    )
+    paper_map_parser.add_argument("--workspace", required=True)
+    paper_map_parser.add_argument("--paper-id", required=True)
+    paper_map_parser.add_argument("--max-candidates", type=int, default=5)
+    reading_report_parser = subparsers.add_parser(
+        "export-paper-reading-report",
+        help="Export a deterministic Markdown reading report for one stored paper.",
+    )
+    reading_report_parser.add_argument("--workspace", required=True)
+    reading_report_parser.add_argument("--paper-id", required=True)
+    reading_report_parser.add_argument("--max-candidates", type=int, default=5)
+    reading_report_parser.add_argument("--output")
+    cross_paper_plan_parser = subparsers.add_parser(
+        "export-cross-paper-reading-plan",
+        help="Export a deterministic Markdown reading plan for selected papers.",
+    )
+    cross_paper_plan_parser.add_argument("--workspace", required=True)
+    cross_paper_plan_parser.add_argument(
+        "--paper-id",
+        action="append",
+        required=True,
+    )
+    cross_paper_plan_parser.add_argument("--focus")
+    cross_paper_plan_parser.add_argument(
+        "--max-candidates-per-paper",
+        type=int,
+        default=3,
+    )
+    cross_paper_plan_parser.add_argument("--output")
+
+    args = parser.parse_args(argv)
+    if args.command in EXPANSION_COMMANDS:
+        run_expansion_cli(args, Workspace)
+        return
+    if args.command == "doctor":
+        _print_json(environment_diagnostics())
+        return
+    if args.command == "validate-arxiv":
+        _print_json(
+            validate_arxiv_input_result(
+                text_id=args.text_id,
+                url=args.url,
+            )
+        )
+        return
+    if args.command == "validate-arxiv-request":
+        _print_json(validate_arxiv_request_result(args.input))
+        return
+    if args.command == "load-arxiv-request":
+        validation = validate_arxiv_request_result(args.input)
+        if validation["action"] != "safe_to_load" or validation["selected_id"] is None:
+            _print_json(validation)
+            raise SystemExit(1)
+        try:
+            _print_json(
+                load_arxiv_request(
+                    args.input,
+                    main_file=args.main_file,
+                    refresh=args.refresh,
+                )
+            )
+        except ToolError as exc:
+            _print_json(
+                {
+                    "status": "error",
+                    "action": "inspect_error",
+                    "selected_id": validation["selected_id"],
+                    "message": str(exc),
+                    "validation": validation,
+                }
+            )
+            raise SystemExit(1) from exc
+        return
+    if args.command in {"plan-starter-project", "bootstrap-reading-project"}:
+        _run_starter_cli_command(args.command, args)
+        return
+    if args.command == "export-reading-bundle":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.export_reading_bundle(args.paper_id),
+        )
+        return
+    if args.command == "export-result-reading-context":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.export_result_reading_context(args.result_id),
+        )
+        return
+    if args.command == "get-source-slice":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.get_source_slice(
+                span_id=args.span_id,
+                result_id=args.result_id,
+                proof_id=args.proof_id,
+                context=args.context,
+            ),
+        )
+        return
+    if args.command == "get-result-reading-path":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.get_result_reading_path(
+                args.result_id,
+                recursive=not args.direct,
+            ),
+        )
+        return
+    if args.command == "create-reading-session":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.create_reading_session(
+                args.paper_id,
+                label=args.label,
+                target_result_id=args.target_result_id,
+            ),
+        )
+        return
+    if args.command == "list-reading-sessions":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.list_reading_sessions(
+                paper_id=args.paper_id,
+                status=args.status,
+            ),
+        )
+        return
+    if args.command == "get-reading-session":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.get_reading_session(args.session_id),
+        )
+        return
+    if args.command == "record-reading-checkpoint":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.record_reading_checkpoint(
+                args.session_id,
+                args.target_kind,
+                args.target_id,
+                args.status,
+                summary=args.summary,
+                evidence=_parse_json_argument(args.evidence_json),
+            ),
+        )
+        return
+    if args.command == "add-reading-note":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.add_reading_note(
+                args.session_id,
+                args.text,
+                note_type=args.note_type,
+                target_kind=args.target_kind,
+                target_id=args.target_id,
+            ),
+        )
+        return
+    if args.command == "export-reading-session-summary":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.export_reading_session_summary(
+                args.session_id,
+            ),
+        )
+        return
+    if args.command == "create-reading-queue":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.create_reading_queue(
+                args.result_id,
+                label=args.label,
+                recursive=not args.direct,
+            ),
+        )
+        return
+    if args.command == "list-reading-queues":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.list_reading_queues(
+                paper_id=args.paper_id,
+                status=args.status,
+            ),
+        )
+        return
+    if args.command == "get-reading-queue":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.get_reading_queue(args.queue_id),
+        )
+        return
+    if args.command == "apply-reading-queue-to-session":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.apply_reading_queue_to_session(
+                args.queue_id,
+                args.session_id,
+                status=args.status,
+            ),
+        )
+        return
+    if args.command == "plan-external-imports-for-result":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.plan_external_imports_for_result(
+                args.result_id,
+                recursive=not args.direct,
+            ),
+        )
+        return
+    if args.command == "plan-external-imports-for-queue":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.plan_external_imports_for_queue(
+                args.queue_id,
+            ),
+        )
+        return
+    if args.command == "plan-external-imports-for-paper":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.plan_external_imports_for_paper(
+                args.paper_id,
+            ),
+        )
+        return
+    if args.command == "resolve-external-reference":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.resolve_external_reference(
+                args.paper_id,
+                args.blocked_id,
+                _reference_target_from_cli(args),
+                import_target=not args.no_import,
+                artifact_dir=args.artifact_dir,
+            ),
+        )
+        return
+    if args.command == "list-external-reference-resolutions":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.list_external_reference_resolutions(
+                args.paper_id,
+            ),
+        )
+        return
+    if args.command == "search-external-reference":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.search_external_reference(
+                args.paper_id,
+                args.blocked_id,
+                providers=args.provider,
+                max_candidates=args.max_candidates,
+                refresh=args.refresh,
+            ),
+        )
+        return
+    if args.command == "list-external-reference-searches":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.list_external_reference_searches(
+                args.paper_id,
+                args.blocked_id,
+            ),
+        )
+        return
+    if args.command == "resolve-external-reference-candidate":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.resolve_external_reference_candidate(
+                args.paper_id,
+                args.blocked_id,
+                args.candidate_id,
+                import_target=args.import_target,
+                artifact_dir=args.artifact_dir,
+                overwrite=args.overwrite,
+            ),
+        )
+        return
+    if args.command == "get-paper-map":
+        _run_workspace_cli_command(
+            args.command,
+            args.workspace,
+            lambda workspace: workspace.get_paper_map(
+                args.paper_id,
+                max_candidates=args.max_candidates,
+            ),
+        )
+        return
+    if args.command == "export-paper-reading-report":
+        _run_reading_report_cli_command(
+            args.command,
+            args.workspace,
+            args.paper_id,
+            args.max_candidates,
+            args.output,
+        )
+        return
+    if args.command == "export-cross-paper-reading-plan":
+        _run_cross_paper_reading_plan_cli_command(
+            args.command,
+            args.workspace,
+            args.paper_id,
+            args.focus,
+            args.max_candidates_per_paper,
+            args.output,
+        )
+        return
+    mcp.run()
+
+
+if __name__ == "__main__":
+    main()
