@@ -623,6 +623,30 @@ def _load_stage_source(
     return runtime, metadata
 
 
+def _capacity_budget_multiplier(
+    kind: str,
+    *,
+    candidate_parameters: int,
+    current_parameters: int,
+) -> float:
+    candidate = max(1, int(candidate_parameters))
+    current = max(1, int(current_parameters))
+    normalized_kind = str(kind or "")
+    is_capacity_probe = (
+        normalized_kind.startswith("progressive_scale")
+        or normalized_kind == "architecture_capacity_scale"
+        or normalized_kind == "architecture_capacity_plus_structure"
+        or (
+            current >= 10_000
+            and candidate >= int(current * 1.35)
+        )
+    )
+    if not is_capacity_probe:
+        return 1.0
+    ratio = max(1.0, candidate / float(current))
+    return float(min(2.25, max(1.25, math.sqrt(ratio))))
+
+
 def run_candidate(
     plan_path: str | Path,
     state_dir: str | Path,
@@ -716,24 +740,22 @@ def run_candidate(
     effective_steps = requested_steps
     effective_pretrain_steps = requested_pretrain_steps
     scale_budget_multiplier = 1.0
-    if str(row.get("kind") or "").startswith("progressive_scale"):
-        current_scale_params = int(
-            (plan.get("progressive_scaling") or {}).get("current_parameters")
-            or (plan.get("champion_report") or {}).get("parameters")
-            or 1
-        )
-        candidate_scale_params = int(
-            row.get("estimated_parameters")
-            or estimate_parameter_count(genome.model_config(tokenizer.vocab_size))
-        )
-        ratio = max(
-            1.0,
-            candidate_scale_params / max(1.0, float(current_scale_params)),
-        )
-        scale_budget_multiplier = min(
-            1.75,
-            max(1.25, math.sqrt(ratio)),
-        )
+    candidate_kind = str(row.get("kind") or "")
+    current_scale_params = int(
+        (plan.get("progressive_scaling") or {}).get("current_parameters")
+        or (plan.get("champion_report") or {}).get("parameters")
+        or 1
+    )
+    candidate_scale_params = int(
+        row.get("estimated_parameters")
+        or estimate_parameter_count(genome.model_config(tokenizer.vocab_size))
+    )
+    scale_budget_multiplier = _capacity_budget_multiplier(
+        candidate_kind,
+        candidate_parameters=candidate_scale_params,
+        current_parameters=current_scale_params,
+    )
+    if scale_budget_multiplier > 1.0:
         effective_steps = max(
             requested_steps,
             int(math.ceil(requested_steps * scale_budget_multiplier)),

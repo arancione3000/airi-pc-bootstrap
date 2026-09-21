@@ -343,7 +343,7 @@ def _export_checkpoint(
         dynamic_axes={"input_ids": {1: "sequence"}},
         opset_version=18,
         do_constant_folding=True,
-        dynamo=False,
+        dynamo=True,
     )
     onnx_model = onnx.load(str(model_path))
     onnx.checker.check_model(onnx_model)
@@ -352,17 +352,25 @@ def _export_checkpoint(
         str(model_path),
         providers=["CPUExecutionProvider"],
     )
-    with torch.no_grad():
-        torch_logits = wrapper(sample).detach().cpu().numpy()
-    ort_logits = session.run(
-        ["logits"],
-        {"input_ids": sample.cpu().numpy().astype(np.int64)},
-    )[0]
-    max_abs_error = float(np.max(np.abs(torch_logits - ort_logits)))
-    if not np.isfinite(max_abs_error) or max_abs_error > 5e-4:
-        raise RuntimeError(
-            f"ONNX validation mismatch for {slot_name}: max_abs_error={max_abs_error}"
-        )
+    dynamic_probe = torch.tensor(
+        [[BOS, USER, 10, 11, ASSISTANT]],
+        dtype=torch.long,
+    )
+    max_abs_error = 0.0
+    for probe in (sample, dynamic_probe):
+        with torch.no_grad():
+            torch_logits = wrapper(probe).detach().cpu().numpy()
+        ort_logits = session.run(
+            ["logits"],
+            {"input_ids": probe.cpu().numpy().astype(np.int64)},
+        )[0]
+        error = float(np.max(np.abs(torch_logits - ort_logits)))
+        max_abs_error = max(max_abs_error, error)
+        if not np.isfinite(error) or error > 5e-4:
+            raise RuntimeError(
+                f"ONNX validation mismatch for {slot_name}: "
+                f"sequence={int(probe.shape[1])} max_abs_error={error}"
+            )
 
     config_path = output_dir / "config.json"
     _write_json(config_path, runtime.config.to_dict())

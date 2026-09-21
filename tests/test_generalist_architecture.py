@@ -8,10 +8,14 @@ import pytest
 from generalist_lm.architecture_ir import ArchitectureSpec
 from generalist_lm.architecture_mutations import (
     next_parameter_tier,
+    next_parameter_tiers,
     proposal_set,
     structural_mutations,
 )
-from generalist_lm.architecture_search import prioritize_architecture_proposals
+from generalist_lm.architecture_search import (
+    _negative_architecture_memory,
+    prioritize_architecture_proposals,
+)
 from generalist_lm.data_quality import assess_text
 from generalist_lm.evolution import GeneralistGenome
 from generalist_lm.internet_quarantine import (
@@ -21,6 +25,7 @@ from generalist_lm.internet_quarantine import (
 from generalist_lm.meta_controller import decide_next_action
 from generalist_lm.generalist_swarm import (
     GENERALIST_SWARM_VERSION,
+    _capacity_budget_multiplier,
     select_survivors,
 )
 
@@ -77,6 +82,78 @@ def test_parameter_ladder_reaches_multi_million_scale():
     assert next_parameter_tier(7_000_000) is None
 
 
+def test_parameter_ladder_exposes_multiple_future_tiers():
+    assert next_parameter_tiers(115_328, limit=2) == [250_000, 500_000]
+    assert next_parameter_tiers(500_000, limit=3) == [
+        1_250_000,
+        3_000_000,
+        7_000_000,
+    ]
+
+
+def test_capacity_probes_receive_more_training_budget():
+    assert _capacity_budget_multiplier(
+        "architecture_control",
+        candidate_parameters=115_000,
+        current_parameters=115_000,
+    ) == 1.0
+    assert _capacity_budget_multiplier(
+        "continual",
+        candidate_parameters=115_000,
+        current_parameters=1,
+    ) == 1.0
+    scaled = _capacity_budget_multiplier(
+        "architecture_capacity_plus_structure",
+        candidate_parameters=240_000,
+        current_parameters=115_000,
+    )
+    assert 1.4 < scaled < 1.5
+    assert _capacity_budget_multiplier(
+        "architecture_capacity_scale",
+        candidate_parameters=7_000_000,
+        current_parameters=115_000,
+    ) == 2.25
+
+
+def test_negative_memory_blocks_same_parent_failures_only(tmp_path: Path):
+    research = tmp_path / "architecture-research"
+    research.mkdir()
+    (research / "last-plan.json").write_text(
+        json.dumps({
+            "architecture_parent": {"fingerprint": "parent-fp"},
+        }),
+        encoding="utf-8",
+    )
+    (research / "leaderboard.json").write_text(
+        json.dumps({
+            "entries": [
+                {
+                    "fingerprint": "failed-fp",
+                    "all_seed_eligible": False,
+                },
+                {
+                    "fingerprint": "eligible-fp",
+                    "all_seed_eligible": True,
+                },
+            ],
+        }),
+        encoding="utf-8",
+    )
+    rejected, report = _negative_architecture_memory(
+        tmp_path,
+        parent_fingerprint="parent-fp",
+    )
+    assert rejected == {"failed-fp"}
+    assert report["count"] == 1
+
+    rejected_other, report_other = _negative_architecture_memory(
+        tmp_path,
+        parent_fingerprint="different-parent",
+    )
+    assert rejected_other == set()
+    assert report_other["count"] == 0
+
+
 def test_capacity_proposals_cannot_be_crowded_out_by_micro_mutations():
     parent = ArchitectureSpec(
         architecture_id="tiny-parent",
@@ -110,6 +187,10 @@ def test_capacity_proposals_cannot_be_crowded_out_by_micro_mutations():
         ordered[index]["parameter_estimate"] > parent.parameter_estimate()
         for index in capacity_positions
     )
+    assert len({
+        ordered[index]["parameter_estimate"]
+        for index in capacity_positions
+    }) >= 2
 
 
 def test_safe_capacity_probe_is_preserved_by_successive_halving(tmp_path: Path):
