@@ -249,6 +249,10 @@ def progressive_scale_candidate(
         )
     ]
     heads = min(valid_heads, key=lambda value: abs(value - champion.n_heads))
+    scale_learning_rate = max(
+        5e-4,
+        min(float(champion.learning_rate) * 0.25, 1e-3),
+    )
     payload = {
         **champion.to_dict(),
         "generation": champion.generation + 1,
@@ -257,6 +261,7 @@ def progressive_scale_candidate(
         "n_heads": heads,
         "n_layers": layers,
         "d_ff": ff,
+        "learning_rate": scale_learning_rate,
     }
     raw = json.dumps(
         {
@@ -266,6 +271,7 @@ def progressive_scale_candidate(
             "heads": heads,
             "layers": layers,
             "ff": ff,
+            "learning_rate": scale_learning_rate,
         },
         sort_keys=True,
     ).encode("utf-8")
