@@ -258,7 +258,10 @@ def _candidate_queries(signals: Iterable[str] | None) -> list[str]:
     if "coding_gap" in signal_set:
         queries.append("algorithms license:mit")
     if "language_gap" in signal_set:
-        queries.append("italian corpus license:mit")
+        queries.extend([
+            "natural language corpus license:mit",
+            "italian corpus license:mit",
+        ])
     queries.extend([
         "text corpus license:mit",
         "educational corpus license:apache-2.0",
