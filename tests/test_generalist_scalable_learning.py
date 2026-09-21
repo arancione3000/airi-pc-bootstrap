@@ -765,3 +765,84 @@ def test_generalist_data_growth_skips_oversized_repository_tree(tmp_path: Path):
         and row["reason"] == "metadata_tree:ValueError"
         for row in result["rejected"]
     )
+
+
+
+def test_generalist_cumulative_stage_source_is_identity_bound(tmp_path: Path):
+    pytest.importorskip("torch")
+    import json
+
+    from generalist_lm.evolution import GeneralistGenome
+    from generalist_lm.generalist_swarm import _load_stage_source
+    from generalist_lm.model import GeneralistLMConfig
+    from generalist_lm.runtime import GeneralistRuntime
+
+    genome = GeneralistGenome(
+        generation=3,
+        parent_id="parent",
+        genome_id="candidate-cumulative",
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        retrieval_adapter=False,
+        symbolic_adapter=False,
+        code_adapter=False,
+        data_adapter=False,
+        reasoning_depth=1,
+    ).validate()
+    runtime = GeneralistRuntime.fresh(
+        GeneralistLMConfig(
+            vocab_size=264,
+            context_length=64,
+            d_model=32,
+            n_heads=4,
+            n_layers=1,
+            d_ff=64,
+            dropout=0.0,
+        ).validate()
+    )
+    checkpoint = tmp_path / "checkpoint"
+    runtime.save_checkpoint(
+        checkpoint,
+        metadata={
+            "role": "free_speed_candidate",
+            "candidate_id": genome.genome_id,
+            "cycle": 70,
+            "stage": 1,
+            "cumulative_steps": 3,
+            "production_qualified": False,
+        },
+    )
+
+    loaded, metadata = _load_stage_source(
+        checkpoint,
+        genome=genome,
+        cycle=70,
+        stage=2,
+    )
+    assert loaded.config.to_dict() == runtime.config.to_dict()
+    assert metadata["cumulative_steps"] == 3
+
+    with pytest.raises(ValueError, match="previous stage"):
+        _load_stage_source(
+            checkpoint,
+            genome=genome,
+            cycle=70,
+            stage=3,
+        )
+
+    wrong = GeneralistGenome(
+        **{
+            **genome.to_dict(),
+            "genome_id": "different-candidate",
+        }
+    ).validate()
+    with pytest.raises(ValueError, match="candidate mismatch"):
+        _load_stage_source(
+            checkpoint,
+            genome=wrong,
+            cycle=70,
+            stage=2,
+        )
