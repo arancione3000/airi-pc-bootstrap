@@ -365,8 +365,8 @@ def progressive_scale_candidate(
 def progressive_scale_target(
     current_parameters: int,
     *,
-    tiers: tuple[int, ...] = (250_000, 500_000, 1_000_000, 2_000_000),
-    max_parameters: int = 2_000_000,
+    tiers: tuple[int, ...] = (250_000, 500_000, 1_250_000, 3_000_000, 7_000_000),
+    max_parameters: int = 7_000_000,
 ) -> int | None:
     current = max(0, int(current_parameters))
     cap = max(current, int(max_parameters))
@@ -386,6 +386,12 @@ def evolution_cost(genome: GeneralistGenome) -> dict[str, Any]:
         "norm_type": cfg.norm_type,
         "position_encoding": cfg.position_encoding,
         "ff_variant": cfg.ff_variant,
+        "attention_type": cfg.attention_type,
+        "n_kv_heads": cfg.n_kv_heads,
+        "local_attention_window": cfg.local_attention_window,
+        "local_attention_every": cfg.local_attention_every,
+        "norm_placement": cfg.norm_placement,
+        "tie_embeddings": cfg.tie_embeddings,
     }
 
 
