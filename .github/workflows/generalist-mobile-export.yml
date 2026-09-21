@@ -6,11 +6,15 @@ on:
     branches: [main]
     paths:
       - 'computer/generalist_lm/mobile_export.py'
+      - 'computer/generalist_lm/model.py'
+      - 'computer/generalist_lm/architecture_*.py'
       - 'computer/generalist_lm/generalist_swarm.py'
       - '.github/workflows/generalist-mobile-export.yml'
   pull_request:
     paths:
       - 'computer/generalist_lm/mobile_export.py'
+      - 'computer/generalist_lm/model.py'
+      - 'computer/generalist_lm/architecture_*.py'
       - 'computer/generalist_lm/generalist_swarm.py'
       - '.github/workflows/generalist-mobile-export.yml'
   workflow_run:
@@ -46,6 +50,68 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --disable-pip-version-check 'numpy>=2,<3' 'onnx>=1.17,<2' 'onnxruntime>=1.22,<2'
+
+      - name: Synthetic evolved-architecture ONNX smoke
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import numpy as np
+          import onnxruntime as ort
+          import torch
+
+          from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
+
+          cfg = GeneralistLMConfig(
+              vocab_size=384,
+              context_length=64,
+              d_model=64,
+              n_heads=4,
+              n_layers=2,
+              d_ff=128,
+              tokenizer_version="bpe-v1",
+              norm_type="rmsnorm",
+              norm_placement="post",
+              position_encoding="rope",
+              ff_variant="swiglu",
+              attention_type="gqa",
+              n_kv_heads=2,
+              local_attention_window=24,
+              local_attention_every=2,
+              tie_embeddings=False,
+          ).validate()
+          model = CausalTransformerLM(cfg).eval()
+
+          class NextToken(torch.nn.Module):
+              def __init__(self, inner):
+                  super().__init__()
+                  self.inner = inner
+
+              def forward(self, input_ids):
+                  return self.inner(input_ids, use_cache=False)["logits"][:, -1, :]
+
+          wrapper = NextToken(model).eval()
+          sample = torch.tensor([[1, 4, 5, 6]], dtype=torch.long)
+          path = "/tmp/airi-evolved-smoke.onnx"
+          torch.onnx.export(
+              wrapper,
+              (sample,),
+              path,
+              input_names=["input_ids"],
+              output_names=["logits"],
+              dynamic_axes={"input_ids": {1: "sequence"}},
+              opset_version=18,
+          )
+          with torch.no_grad():
+              reference = wrapper(sample).cpu().numpy()
+          session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+          actual = session.run(
+              None,
+              {"input_ids": sample.cpu().numpy().astype(np.int64)},
+          )[0]
+          error = float(np.max(np.abs(reference - actual)))
+          assert np.isfinite(error) and error <= 5e-4, error
+          print({"AIRI_EVOLVED_ONNX": "PASS", "max_abs_error": error})
+          PY
 
       - name: Restore latest persistent Generalist state
         env:
