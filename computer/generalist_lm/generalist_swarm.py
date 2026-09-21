@@ -716,22 +716,29 @@ def run_candidate(
     effective_steps = requested_steps
     effective_pretrain_steps = requested_pretrain_steps
     scale_budget_multiplier = 1.0
-    if str(row.get("kind") or "").startswith("progressive_scale"):
-        current_scale_params = int(
-            (plan.get("progressive_scaling") or {}).get("current_parameters")
-            or (plan.get("champion_report") or {}).get("parameters")
-            or 1
-        )
-        candidate_scale_params = int(
-            row.get("estimated_parameters")
-            or estimate_parameter_count(genome.model_config(tokenizer.vocab_size))
-        )
+    candidate_kind = str(row.get("kind") or "")
+    current_scale_params = int(
+        (plan.get("progressive_scaling") or {}).get("current_parameters")
+        or (plan.get("champion_report") or {}).get("parameters")
+        or 1
+    )
+    candidate_scale_params = int(
+        row.get("estimated_parameters")
+        or estimate_parameter_count(genome.model_config(tokenizer.vocab_size))
+    )
+    is_capacity_probe = (
+        candidate_kind.startswith("progressive_scale")
+        or candidate_kind == "architecture_capacity_scale"
+        or candidate_kind == "architecture_capacity_plus_structure"
+        or candidate_scale_params >= int(current_scale_params * 1.35)
+    )
+    if is_capacity_probe:
         ratio = max(
             1.0,
             candidate_scale_params / max(1.0, float(current_scale_params)),
         )
         scale_budget_multiplier = min(
-            1.75,
+            2.25,
             max(1.25, math.sqrt(ratio)),
         )
         effective_steps = max(
