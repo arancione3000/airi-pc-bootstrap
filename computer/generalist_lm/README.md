@@ -155,11 +155,13 @@ Each research cycle performs:
 1. one planner restores the exact research champion, MATHESIS signals,
    curriculum memory and persistent auto-data state;
 2. eight candidate genomes run concurrently on standard GitHub CPU runners;
-3. a reducer removes catastrophic held-out regressions and keeps four;
-4. the four survivors receive a larger training/pretraining budget;
-5. a second reducer keeps two finalists;
-6. both finalists run a 20-step SFT budget plus causal pretraining on two
-   independent seeds;
+3. a reducer removes catastrophic held-out regressions and keeps up to four;
+4. survivors continue from their Stage-1 checkpoint, adding five steps to reach
+   an 8-step cumulative budget instead of restarting from the champion;
+5. a second reducer keeps up to two finalists;
+6. finalists continue from their Stage-2 checkpoint, adding twelve steps to
+   reach a 20-step cumulative budget; two independent final continuations are
+   evaluated from the same verified survivor checkpoint;
 7. an external reducer reloads the winning checkpoint and recomputes protected
    validation/canary metrics before research promotion;
 8. the ordinary digest-bound production qualification remains a separate,
@@ -203,10 +205,12 @@ approved external documents are content-deduplicated before causal pretraining.
 
 ### Runner efficiency
 
-The Free-Speed workflow uses dependency caching through `setup-python` and
-keeps the expensive candidate stages parallel (8 -> 4 -> 2). Standard
-production qualification and state persistence occur only once in the final
-reducer.
+The Free-Speed workflow uses dependency caching through `setup-python`,
+runs on the minimum five-minute schedule supported by GitHub Actions, and keeps
+the expensive candidate stages parallel (8 -> 4 -> 2). Successive-halving
+budgets are cumulative (3 -> 8 -> 20), so surviving models do not repeat
+already-completed optimization. Standard production qualification and state
+persistence occur only once in the final reducer.
 
 ## Qualification v2 and immutable governance
 
