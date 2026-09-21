@@ -1196,6 +1196,7 @@ def finalize_swarm(
     airi_pc_lab_report = {
         "version": str(lab_snapshot.get("version") or "airi-pc-lab-v1"),
         "mode": str(lab_snapshot.get("mode") or "read_only_sandbox"),
+        "snapshot": lab_snapshot,
         "learning": lab_plan.get("learning") or {},
         "champion": run_airi_pc_lab_probe(champion_runtime, lab_snapshot),
     }
