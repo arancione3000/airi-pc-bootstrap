@@ -87,7 +87,8 @@ class ArchitectureSpec:
 
     def canonical_payload(self) -> dict[str, Any]:
         raw = self.to_dict()
-        raw.pop("architecture_id", None)
+        for key in ("architecture_id", "generation", "parent_id"):
+            raw.pop(key, None)
         return raw
 
     def fingerprint(self) -> str:
