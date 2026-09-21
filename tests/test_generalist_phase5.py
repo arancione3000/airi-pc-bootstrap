@@ -12,6 +12,7 @@ from generalist_lm.bootstrap_data import (
     _oasst_conversations,
     _parse_oasst,
 )
+from generalist_lm.bootstrap_training import _effective_bootstrap_target
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
 from generalist_lm.phase5_diagnostics import (
     PHASE5_PROBES,
@@ -22,6 +23,13 @@ from generalist_lm.phase5_diagnostics import (
 from generalist_lm.runtime import GeneralistRuntime
 from generalist_lm.tokenizer import ByteTokenizer
 
+
+
+
+def test_phase5_cumulative_target_never_shrinks_on_maintenance_run():
+    assert _effective_bootstrap_target(1_000_000, {"target_tokens": 5_000_000}) == 5_000_000
+    assert _effective_bootstrap_target(20_000_000, {"target_tokens": 5_000_000}) == 20_000_000
+    assert _effective_bootstrap_target(1_000_000, {}) == 1_000_000
 
 def test_phase5_holdout_suite_is_explicit_and_protected():
     assert len(PHASE5_PROBES) == 7
