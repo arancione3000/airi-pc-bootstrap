@@ -62,6 +62,7 @@ def _request_json(
     token: str | None = None,
     opener: Callable[..., Any] | None = None,
     timeout: float = 20.0,
+    max_bytes: int = 4_000_000,
 ) -> Any:
     parsed = urlparse(url)
     if parsed.scheme != "https" or parsed.hostname != "api.github.com":
@@ -79,9 +80,12 @@ def _request_json(
         final = urlparse(handle.geturl())
         if final.scheme != "https" or final.hostname != "api.github.com":
             raise PermissionError("GitHub API redirected to unapproved host")
-        raw = handle.read(4_000_001)
-        if len(raw) > 4_000_000:
-            raise ValueError("GitHub metadata response exceeded budget")
+        limit = max(64_000, min(int(max_bytes), 16_000_000))
+        raw = handle.read(limit + 1)
+        if len(raw) > limit:
+            raise ValueError(
+                f"GitHub metadata response exceeded budget:{limit}"
+            )
         return json.loads(raw.decode("utf-8"))
     finally:
         handle.close()
@@ -181,9 +185,10 @@ def _search_repositories(
 ) -> list[dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
     for query in queries:
+        bounded_query = f"{query} size:<200000"
         url = (
             "https://api.github.com/search/repositories?"
-            f"q={quote_plus(query)}&sort=updated&order=desc&per_page={max(1, min(per_query, 10))}"
+            f"q={quote_plus(bounded_query)}&sort=updated&order=desc&per_page={max(1, min(per_query, 10))}"
         )
         payload = _request_json(url, token=token, opener=opener)
         for item in payload.get("items", []):
@@ -272,11 +277,18 @@ def grow_generalist_data(
         if not full_name or "/" not in full_name:
             continue
 
-        details = _request_json(
-            f"https://api.github.com/repos/{full_name}",
-            token=token,
-            opener=opener,
-        )
+        try:
+            details = _request_json(
+                f"https://api.github.com/repos/{full_name}",
+                token=token,
+                opener=opener,
+            )
+        except Exception as exc:
+            rejected.append({
+                "repo": full_name,
+                "reason": f"metadata_repo:{type(exc).__name__}",
+            })
+            continue
         license_obj = details.get("license") if isinstance(details, dict) else None
         spdx = (
             str(license_obj.get("spdx_id") or "")
@@ -288,11 +300,18 @@ def grow_generalist_data(
             continue
 
         branch = str(details.get("default_branch") or "main")
-        branch_info = _request_json(
-            f"https://api.github.com/repos/{full_name}/branches/{quote_plus(branch)}",
-            token=token,
-            opener=opener,
-        )
+        try:
+            branch_info = _request_json(
+                f"https://api.github.com/repos/{full_name}/branches/{quote_plus(branch)}",
+                token=token,
+                opener=opener,
+            )
+        except Exception as exc:
+            rejected.append({
+                "repo": full_name,
+                "reason": f"metadata_branch:{type(exc).__name__}",
+            })
+            continue
         commit = str(
             ((branch_info.get("commit") or {}).get("sha"))
             if isinstance(branch_info, dict)
@@ -302,11 +321,25 @@ def grow_generalist_data(
             rejected.append({"repo": full_name, "reason": "unresolved_immutable_commit"})
             continue
 
-        tree = _request_json(
-            f"https://api.github.com/repos/{full_name}/git/trees/{commit}?recursive=1",
-            token=token,
-            opener=opener,
-        )
+        try:
+            tree = _request_json(
+                f"https://api.github.com/repos/{full_name}/git/trees/{commit}?recursive=1",
+                token=token,
+                opener=opener,
+                max_bytes=16_000_000,
+            )
+        except Exception as exc:
+            rejected.append({
+                "repo": full_name,
+                "reason": f"metadata_tree:{type(exc).__name__}",
+            })
+            continue
+        if bool(tree.get("truncated")):
+            rejected.append({
+                "repo": full_name,
+                "reason": "metadata_tree:truncated",
+            })
+            continue
         entries = [
             row for row in tree.get("tree", [])
             if isinstance(row, dict)
