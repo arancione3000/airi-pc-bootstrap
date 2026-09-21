@@ -41,7 +41,6 @@ data class AppUiState(
     val selectedTab: AppTab = AppTab.CHAT,
     val liveEvolution: LiveEvolutionSnapshot? = null,
     val liveError: String? = null,
-    val pov: PovState = PovState(),
     val lastInferenceTrace: InferenceTrace? = null,
     val loadedModelId: String = "",
     val messages: List<ChatLine> = emptyList(),
@@ -55,7 +54,6 @@ data class AppUiState(
 class GeneralistController(context: Context) : Closeable {
     private val repository = BundleRepository(context)
     private val liveRepository = LiveEvolutionRepository()
-    private val povClient = AiriPovClient()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val refreshMutex = Mutex()
     private val engineMutex = Mutex()
@@ -71,12 +69,6 @@ class GeneralistController(context: Context) : Closeable {
         started = true
         scope.launch { refresh() }
         scope.launch { refreshLiveInternal() }
-        povClient.start()
-        scope.launch {
-            povClient.state.collect { pov ->
-                _state.value = _state.value.copy(pov = pov)
-            }
-        }
         scope.launch {
             while (isActive) {
                 delay(120_000L)
@@ -245,7 +237,6 @@ class GeneralistController(context: Context) : Closeable {
         if (slot == "research") "Latest Research" else "Champion"
 
     override fun close() {
-        povClient.stop()
         scope.cancel()
         runBlocking {
             engineMutex.withLock {
@@ -356,7 +347,6 @@ private fun AiriGeneralistApp(
                         onSelectSlot = onSelectSlot,
                     )
                     AppTab.AIRI_PC -> AiriPcLabScreen(state = state)
-                    AppTab.POV -> PovScreen(state = state.pov)
                 }
             }
         }
