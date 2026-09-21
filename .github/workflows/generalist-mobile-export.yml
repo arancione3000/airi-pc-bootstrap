@@ -25,7 +25,10 @@ permissions:
   contents: write
 
 concurrency:
-  group: airi-generalist-mobile-export
+  # Pull-request validation must not be cancelled by autonomous H24 exports.
+  # Publication runs still collapse to the newest state, while each PR keeps
+  # its own stable verification lock.
+  group: airi-generalist-mobile-export-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'publish' }}
   cancel-in-progress: true
 
 jobs:
