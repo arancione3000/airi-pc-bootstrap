@@ -516,10 +516,30 @@ def parameter_count(model) -> int:
     return sum(int(p.numel()) for p in model.parameters() if p.requires_grad)
 
 
+def _attention_projection_terms(config: GeneralistLMConfig) -> tuple[int, int]:
+    cfg = config.validate()
+    d = int(cfg.d_model)
+    if cfg.attention_type == "mha":
+        # QKV + output projection.
+        return 4 * d * d, 4 * d
+    kv_dim = int(cfg.n_kv_heads or cfg.n_heads) * (d // int(cfg.n_heads))
+    # Q + K + V + output.
+    weights = 2 * d * d + 2 * d * kv_dim
+    biases = 2 * d + 2 * kv_dim
+    return int(weights), int(biases)
+
+
 def estimate_flops_per_token(config: GeneralistLMConfig) -> int:
     cfg = config.validate()
     ff_multiplier = 3 if cfg.ff_variant == "swiglu" else 2
-    return int(cfg.n_layers * (4 * cfg.d_model * cfg.d_model + ff_multiplier * cfg.d_model * cfg.d_ff))
+    attention_weights, _attention_biases = _attention_projection_terms(cfg)
+    return int(
+        cfg.n_layers
+        * (
+            attention_weights
+            + ff_multiplier * cfg.d_model * cfg.d_ff
+        )
+    )
 
 
 def estimate_parameter_count(config: GeneralistLMConfig) -> int:
@@ -528,12 +548,17 @@ def estimate_parameter_count(config: GeneralistLMConfig) -> int:
     ff = cfg.d_ff
     position_params = cfg.context_length * d if cfg.position_encoding == "learned" else 0
     embeddings = cfg.vocab_size * d + position_params
+    if not cfg.tie_embeddings:
+        embeddings += cfg.vocab_size * d
     ff_multiplier = 3 if cfg.ff_variant == "swiglu" else 2
     norm_params = 4 * d if cfg.norm_type == "layernorm" else 2 * d
-    per_layer = 4 * d * d + ff_multiplier * d * ff + norm_params
+    attention_weights, attention_bias = _attention_projection_terms(cfg)
+    per_layer = attention_weights + ff_multiplier * d * ff + norm_params
     if cfg.bias:
-        qkv_out_bias = 4 * d
         ff_bias = (2 * ff + d) if cfg.ff_variant == "swiglu" else (ff + d)
-        per_layer += qkv_out_bias + ff_bias
-    final_norm = 2 * d if cfg.norm_type == "layernorm" else d
+        per_layer += attention_bias + ff_bias
+    if cfg.norm_placement == "post":
+        final_norm = 0
+    else:
+        final_norm = 2 * d if cfg.norm_type == "layernorm" else d
     return int(embeddings + cfg.n_layers * per_layer + final_norm)
