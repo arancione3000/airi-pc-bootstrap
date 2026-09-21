@@ -343,7 +343,7 @@ def _export_checkpoint(
         dynamic_axes={"input_ids": {1: "sequence"}},
         opset_version=18,
         do_constant_folding=True,
-        dynamo=False,
+        dynamo=True,
     )
     onnx_model = onnx.load(str(model_path))
     onnx.checker.check_model(onnx_model)
