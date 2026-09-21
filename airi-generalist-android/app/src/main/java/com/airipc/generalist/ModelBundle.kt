@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
@@ -15,6 +16,13 @@ private const val MOBILE_BRANCH = "generalist-mobile"
 private const val RAW_BASE =
     "https://raw.githubusercontent.com/$REPO/$MOBILE_BRANCH"
 private const val MANIFEST_URL = "$RAW_BASE/manifest.json"
+
+internal fun cacheBustedUrl(url: String, version: String): String =
+    url.toHttpUrl()
+        .newBuilder()
+        .addQueryParameter("airi_v", version)
+        .build()
+        .toString()
 
 data class BundleFileInfo(
     val sha256: String,
@@ -77,17 +85,32 @@ class BundleRepository(context: Context) {
         .build()
 
     suspend fun fetchManifest(): ManifestFetch = withContext(Dispatchers.IO) {
+        val cached = if (cachedManifest.isFile) {
+            runCatching { parseManifest(cachedManifest.readText()) }.getOrNull()
+        } else {
+            null
+        }
         try {
-            val text = getBytes(MANIFEST_URL).toString(Charsets.UTF_8)
+            val text = getBytes(
+                MANIFEST_URL,
+                cacheKey = System.currentTimeMillis().toString(),
+            ).toString(Charsets.UTF_8)
             val manifest = parseManifest(text)
+
+            // Never roll back to an older published cycle if a CDN edge serves
+            // a stale branch object.
+            if (cached != null && manifest.cycle < cached.cycle) {
+                return@withContext ManifestFetch(cached, false)
+            }
+
             val tmp = File(root, "manifest.json.tmp")
             tmp.writeText(text)
             if (cachedManifest.exists()) cachedManifest.delete()
             check(tmp.renameTo(cachedManifest))
             ManifestFetch(manifest, true)
         } catch (network: Exception) {
-            if (!cachedManifest.isFile) throw network
-            ManifestFetch(parseManifest(cachedManifest.readText()), false)
+            if (cached == null) throw network
+            ManifestFetch(cached, false)
         }
     }
 
@@ -99,7 +122,10 @@ class BundleRepository(context: Context) {
         for ((name, info) in slot.files) {
             val target = File(directory, name)
             if (!target.isFile || sha256(target) != info.sha256) {
-                val bytes = getBytes("$RAW_BASE/${slot.path}/$name")
+                val bytes = getBytes(
+                    "$RAW_BASE/${slot.path}/$name",
+                    cacheKey = info.sha256,
+                )
                 val tmp = File(directory, "$name.tmp")
                 tmp.writeBytes(bytes)
                 check(sha256(tmp) == info.sha256) {
@@ -128,14 +154,21 @@ class BundleRepository(context: Context) {
         InstalledBundle(slot, directory, model, config, tokenizer)
     }
 
-    private fun getBytes(url: String): ByteArray {
+    private fun getBytes(url: String, cacheKey: String? = null): ByteArray {
+        val resolved = if (cacheKey.isNullOrBlank()) {
+            url
+        } else {
+            cacheBustedUrl(url, cacheKey)
+        }
         val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", "AIRI-Generalist-Lab/1.0")
+            .url(resolved)
+            .header("User-Agent", "AIRI-Generalist-Lab/1.3.1")
+            .header("Cache-Control", "no-cache, no-store, max-age=0")
+            .header("Pragma", "no-cache")
             .build()
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("HTTP ${response.code}: $url")
-            return response.body?.bytes() ?: error("Risposta vuota: $url")
+            if (!response.isSuccessful) error("HTTP ${response.code}: $resolved")
+            return response.body?.bytes() ?: error("Risposta vuota: $resolved")
         }
     }
 
