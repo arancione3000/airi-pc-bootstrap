@@ -1079,7 +1079,9 @@ def finalize_swarm(
             "training_overlap": sorted(rotating_prompts & replay_prompts),
         },
         "grounded_pretraining": {
-            "steps": 4,
+            "adaptive_budget": True,
+            "max_steps_per_stage": 24,
+            "domain_balanced_sampling": True,
             "corpus": {
                 "enabled": True,
                 "automatic_data_growth": bool(
@@ -1102,6 +1104,14 @@ def finalize_swarm(
             "progressive_scaling_max_parameters": 2_000_000,
             "scale_probe_retention": "reserve one safe scale survivor through reductions",
             "scale_budget_adaptive": True,
+            "adaptive_pretraining_budget": {
+                "enabled": True,
+                "max_steps_per_stage": 24,
+            },
+            "domain_balanced_pretraining": True,
+            "language_gap_routing": True,
+            "autoregressive_similarity_ranking": True,
+            "inherited_sft_lr_cap": 0.001,
             "weight_inheritance": "layout-aware Net2Grow + identity residual depth expansion",
             "automatic_data_growth": "permissive SPDX + immutable commit + quarantine + hash + quality filter",
             "continual_learning": {
