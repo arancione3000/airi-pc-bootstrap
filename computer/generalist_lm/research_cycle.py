@@ -899,6 +899,25 @@ def _transfer_compatible_weights(
         ),
     }
 
+def _pretraining_domain_weights(
+    domain_weights: dict[str, float] | None,
+) -> dict[str, float]:
+    """Map held-out task weakness onto grounded pretraining domains."""
+    source = dict(domain_weights or {})
+    mapping = {
+        "language": "general",
+        "coding": "code",
+        "data": "data",
+        "reasoning": "reasoning",
+    }
+    out: dict[str, float] = {}
+    for task_domain, corpus_domain in mapping.items():
+        value = source.get(task_domain)
+        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+            out[corpus_domain] = max(0.05, float(value))
+    return out
+
+
 def _train_genome(
     genome: GeneralistGenome,
     *,
@@ -947,6 +966,7 @@ def _train_genome(
             weight_decay=0.01,
             seed=seed + 101,
             device=device,
+            domain_weights=_pretraining_domain_weights(domain_weights),
         )
     else:
         pretraining = {
@@ -955,6 +975,11 @@ def _train_genome(
             "reason": "grounded pretraining disabled or corpus empty",
             "steps": 0,
         }
+    sft_learning_rate = (
+        float(genome.learning_rate)
+        if source_model is None
+        else min(float(genome.learning_rate), 1e-3)
+    )
     report = train_sft(
         model,
         tokenizer,
@@ -968,7 +993,7 @@ def _train_genome(
         ],
         steps=steps,
         batch_size=4,
-        learning_rate=genome.learning_rate,
+        learning_rate=sft_learning_rate,
         weight_decay=0.0,
         seed=seed,
         device=device,
