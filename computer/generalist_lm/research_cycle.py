@@ -401,11 +401,39 @@ def _domain_balanced_rows(rows: list[ResearchRow]) -> list[ResearchRow]:
     return balanced
 
 
+def adaptive_domain_weights(report: dict[str, Any] | None) -> dict[str, float]:
+    """Turn held-out weakness into bounded replay weights.
+
+    The best domain remains at weight 1.0; weaker domains receive up to 3x
+    replay. This is deliberately derived from held-out loss only and cannot
+    lower any validation/promotion gate.
+    """
+    if not isinstance(report, dict):
+        return {}
+    domains = report.get("domain_nll_per_byte") or report.get("domain_loss") or {}
+    clean = {
+        str(domain): float(value)
+        for domain, value in domains.items()
+        if isinstance(value, (int, float)) and math.isfinite(float(value))
+    }
+    if not clean:
+        return {}
+    best = min(clean.values())
+    worst = max(clean.values())
+    span = max(1e-9, worst - best)
+    return {
+        domain: 1.0 + 2.0 * ((value - best) / span)
+        for domain, value in clean.items()
+    }
+
+
 def _training_rows_for_genome(
     genome: GeneralistGenome,
     replay_rows: list[ResearchRow] | None = None,
+    *,
+    domain_weights: dict[str, float] | None = None,
 ) -> list[ResearchRow]:
-    """Turn strategy genes into domain-balanced curriculum weighting."""
+    """Turn strategy genes and measured weakness into replay weighting."""
     base = _domain_balanced_rows(list(train_rows()) + list(replay_rows or []))
     extra: list[ResearchRow] = []
     if genome.code_adapter:
@@ -418,7 +446,15 @@ def _training_rows_for_genome(
         extra.extend(row for row in base if row.domain == "reasoning")
     for _ in range(max(0, int(genome.reasoning_depth) - 1)):
         extra.extend(row for row in base if row.domain == "reasoning")
-    return base + extra
+
+    weighted: list[ResearchRow] = []
+    for domain, weight in sorted((domain_weights or {}).items()):
+        repeats = max(0, min(2, int(math.floor(max(1.0, float(weight)))) - 1))
+        if repeats:
+            rows = [row for row in base if row.domain == domain]
+            for _ in range(repeats):
+                weighted.extend(rows)
+    return base + extra + weighted
 
 
 def _tokenizer_training_texts(
@@ -507,14 +543,40 @@ def _transfer_compatible_weights(
     )
     vocab_names = {"token_embedding.weight", "lm_head.weight"}
 
+    partial_tensors: list[str] = []
     for name, tensor in target.items():
         old = source.get(name)
-        if old is None or tuple(old.shape) != tuple(tensor.shape):
+        if old is None:
             continue
         if name in vocab_names and not tokenizer_identical:
             continue
-        copied[name] = old.detach().to(device=tensor.device, dtype=tensor.dtype).clone()
-        copied_params += int(tensor.numel())
+        if tuple(old.shape) == tuple(tensor.shape):
+            copied[name] = old.detach().to(
+                device=tensor.device,
+                dtype=tensor.dtype,
+            ).clone()
+            copied_params += int(tensor.numel())
+            continue
+
+        # Progressive scaling may enlarge width/FFN while keeping the same
+        # semantic tensor. Preserve the overlapping prefix rather than
+        # discarding all learned structure. Shrinking or rank changes remain
+        # fail-closed because they can silently destroy representations.
+        if (
+            name not in vocab_names
+            and old.ndim == tensor.ndim
+            and 1 <= old.ndim <= 2
+            and all(int(new) >= int(previous) for previous, new in zip(old.shape, tensor.shape))
+        ):
+            migrated = tensor.detach().clone()
+            slices = tuple(slice(0, int(size)) for size in old.shape)
+            migrated[slices] = old.detach().to(
+                device=migrated.device,
+                dtype=migrated.dtype,
+            )
+            copied[name] = migrated
+            copied_params += int(old.numel())
+            partial_tensors.append(name)
 
     shared_token_rows = 0
     derived_bpe_rows = 0
@@ -589,10 +651,14 @@ def _transfer_compatible_weights(
         "shared_token_rows": shared_token_rows,
         "derived_bpe_rows": derived_bpe_rows,
         "vocabulary_migrated": bool(shared_token_rows or derived_bpe_rows),
+        "partial_prefix_tensors": sorted(partial_tensors),
+        "partial_prefix_parameters": sum(
+            int(source[name].numel()) for name in partial_tensors
+        ),
         "policy": (
-            "exact name and exact shape only"
+            "exact tensors plus safe prefix inheritance for expansions"
             if tokenizer_identical
-            else "exact name/shape tensors plus deterministic byte-compatible vocabulary migration"
+            else "exact/prefix-compatible tensors plus deterministic byte-compatible vocabulary migration"
         ),
     }
 
@@ -603,6 +669,7 @@ def _train_genome(
     seed: int,
     device: str,
     replay_rows: list[ResearchRow] | None = None,
+    domain_weights: dict[str, float] | None = None,
     source_model=None,
     source_tokenizer=None,
     tokenizer=None,
@@ -654,7 +721,14 @@ def _train_genome(
     report = train_sft(
         model,
         tokenizer,
-        [row.sft() for row in _training_rows_for_genome(genome, replay_rows)],
+        [
+            row.sft()
+            for row in _training_rows_for_genome(
+                genome,
+                replay_rows,
+                domain_weights=domain_weights,
+            )
+        ],
         steps=steps,
         batch_size=4,
         learning_rate=genome.learning_rate,
