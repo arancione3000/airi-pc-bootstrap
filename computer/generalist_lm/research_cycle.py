@@ -1035,6 +1035,7 @@ def _continue_champion(
     precision: str = "fp32",
     pretrain_documents: list[CorpusDocument] | None = None,
     pretrain_steps: int = 0,
+    domain_weights: dict[str, float] | None = None,
 ) -> tuple[GeneralistGenome, GeneralistRuntime, dict[str, Any]]:
     """Fine-tune a copy of the current champion with full replay.
 
@@ -1056,6 +1057,7 @@ def _continue_champion(
             weight_decay=0.01,
             seed=seed + 101,
             device=device,
+            domain_weights=_pretraining_domain_weights(domain_weights),
         )
     else:
         pretraining = {
@@ -1067,10 +1069,17 @@ def _continue_champion(
     report = train_sft(
         model,
         tokenizer,
-        [row.sft() for row in _training_rows_for_genome(genome, replay_rows)],
+        [
+            row.sft()
+            for row in _training_rows_for_genome(
+                genome,
+                replay_rows,
+                domain_weights=domain_weights,
+            )
+        ],
         steps=steps,
         batch_size=4,
-        learning_rate=genome.learning_rate,
+        learning_rate=min(float(genome.learning_rate), 1e-3),
         weight_decay=0.0,
         seed=seed,
         device=device,
@@ -1203,6 +1212,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         signals.append("tokenizer_efficiency_gap")
     signals = list(dict.fromkeys(signals))
 
+    domain_weights = adaptive_domain_weights(champion_report)
     curriculum_memory = CurriculumMemory(root, max_rows=curriculum_max_rows)
     curriculum_report = curriculum_memory.expand(cycle, signals=signals)
     replay_rows = curriculum_memory.rows()
@@ -1228,6 +1238,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         precision=precision,
         pretrain_documents=corpus_documents,
         pretrain_steps=pretrain_steps,
+        domain_weights=domain_weights,
     )
     continual_report["canary_cycle"] = cycle
     continual_report["canary"] = _grouped_validation(
@@ -1284,6 +1295,7 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             seed=_genome_training_seed(genome),
             device=device,
             replay_rows=replay_rows,
+            domain_weights=domain_weights,
             source_model=champion_runtime.model,
             source_tokenizer=champion_runtime.tokenizer,
             tokenizer=candidate_tokenizer,
@@ -1334,6 +1346,9 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         "signals": signals,
         "mathesis": mathesis,
         "curriculum_memory": curriculum_report,
+        "adaptive_curriculum": {
+            "domain_weights": domain_weights,
+        },
         "grounded_pretraining": {
             "steps": pretrain_steps,
             "corpus": corpus_manifest,
