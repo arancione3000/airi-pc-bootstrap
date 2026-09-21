@@ -1,13 +1,14 @@
 {
   "bad_eval_count": 0,
   "base_champion_model_sha256": "af9ff3d8fbc921b1b144fb8df982808b58ef1c3c69dcc06f2b160fc3d7a084c0",
-  "best_validation_loss": 3.2044273217519126,
+  "best_validation_loss": 3.20124344031016,
   "completed_rungs": [
-    1000000
+    1000000,
+    5000000
   ],
   "curriculum_replay_rows": {
-    "D_simple_prompt_response": 244,
-    "E_simple_multiturn_chat": 358,
+    "D_simple_prompt_response": 952,
+    "E_simple_multiturn_chat": 900,
     "F_airi_pc_lab_tool_use": 62,
     "persistent_replay": 790
   },
@@ -19,33 +20,34 @@
     "E_simple_multiturn_chat",
     "F_airi_pc_lab_tool_use"
   ],
-  "curriculum_stage": "C_causal_next_sentence",
+  "curriculum_stage": "D_to_F_supervised_replay",
   "early_stopped": false,
-  "last_train_loss": 3.2162978649139404,
-  "last_validation_loss": 3.2044273217519126,
-  "learning_rate": 3.1357314720656435e-05,
+  "last_train_loss": 3.1421127319335938,
+  "last_validation_loss": 3.20124344031016,
+  "learning_rate": 3.000010058777283e-05,
   "optimizer_reset_after_sft": true,
-  "rung_complete": false,
+  "rung_complete": true,
   "schema": 1,
   "sft_completed_rungs": [
-    1000000
+    1000000,
+    5000000
   ],
   "sft_report": {
-    "best_step_loss": 1.7386378049850464,
+    "best_step_loss": 2.9447855949401855,
     "effective_batch_size": 8,
-    "final_loss": 3.4885997772216797,
+    "final_loss": 3.445840835571289,
     "gradient_accumulation_steps": 1,
-    "initial_loss": 3.9253740310668945,
+    "initial_loss": 3.635855197906494,
     "learning_rate": 0.0001,
-    "loss_improvement": 0.43677425384521484,
+    "loss_improvement": 0.19001436233520508,
     "micro_batch_size": 8,
     "ok": true,
     "precision": "fp32",
     "steps": 160
   },
-  "steps": 1177,
+  "steps": 1231,
   "target_tokens": 5000000,
-  "tokens_processed": 4782704,
-  "updated_at_unix": 1790018835,
+  "tokens_processed": 5002160,
+  "updated_at_unix": 1790019047,
   "version": "phase5-language-bootstrap-v1"
 }
