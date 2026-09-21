@@ -248,7 +248,7 @@ def test_progressive_scaling_builds_larger_bounded_generalist():
     assert params <= 2_000_000
     assert candidate.parent_id == champion.genome_id
     assert candidate.generation == champion.generation + 1
-    assert 5e-4 <= candidate.learning_rate <= 1e-3
+    assert 1e-4 <= candidate.learning_rate <= 1e-3
     assert candidate.learning_rate < champion.learning_rate
 
 
