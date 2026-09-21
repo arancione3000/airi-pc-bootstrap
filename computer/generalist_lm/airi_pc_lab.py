@@ -368,10 +368,130 @@ def run_airi_pc_lab_probe(runtime, snapshot: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def summarize_lab_learning(rows: list[ResearchRow]) -> dict[str, Any]:
+def _experience_row(probe: dict[str, Any]) -> ResearchRow | None:
+    if not probe.get("ok") or not probe.get("tool_call_valid"):
+        return None
+    tool = str(probe.get("tool") or "").strip()
+    arguments = probe.get("arguments")
+    result = probe.get("tool_result")
+    if not tool or not isinstance(arguments, dict) or not isinstance(result, dict):
+        return None
+    user = "Use one AIRI-PC Lab tool and report only the verified sandbox result."
+    call = (
+        "<tool_call>"
+        + _json({"name": tool, "arguments": arguments})
+        + "</tool_call>"
+    )
+    verified = _json(result)
+    return ResearchRow(
+        "tools",
+        [
+            {"role": "user", "content": user},
+            {"role": "assistant", "content": call},
+            {"role": "tool", "content": verified},
+            {
+                "role": "assistant",
+                "content": "Verified AIRI-PC Lab result: " + verified,
+            },
+        ],
+    )
+
+
+def record_verified_lab_experience(
+    state_dir: str | Path,
+    probe: dict[str, Any],
+    *,
+    cycle: int,
+    source: str,
+) -> dict[str, Any]:
+    root = Path(state_dir).expanduser().resolve()
+    path = root / "airi-pc-lab-experiences.jsonl"
+    row = _experience_row(probe)
+    if row is None:
+        return {"stored": False, "reason": "probe_not_verified"}
+
+    payload = {
+        "version": LAB_VERSION,
+        "cycle": int(cycle),
+        "source": str(source),
+        "domain": row.domain,
+        "messages": row.messages,
+    }
+    raw = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    import hashlib
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+    payload["id"] = digest
+
+    existing_ids: set[str] = set()
+    if path.is_file():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                old = json.loads(line)
+            except Exception:
+                continue
+            if isinstance(old, dict) and old.get("id"):
+                existing_ids.add(str(old["id"]))
+    if digest in existing_ids:
+        return {"stored": False, "reason": "duplicate", "id": digest}
+
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n"
+        )
+    return {"stored": True, "id": digest}
+
+
+def load_verified_lab_experiences(
+    state_dir: str | Path,
+    *,
+    max_rows: int = 32,
+) -> list[ResearchRow]:
+    path = Path(state_dir).expanduser().resolve() / "airi-pc-lab-experiences.jsonl"
+    if not path.is_file():
+        return []
+    out: list[ResearchRow] = []
+    for line in path.read_text(encoding="utf-8").splitlines()[-max(1, int(max_rows)):]:
+        try:
+            payload = json.loads(line)
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        messages = payload.get("messages")
+        if payload.get("domain") != "tools" or not isinstance(messages, list):
+            continue
+        clean: list[dict[str, str]] = []
+        valid = True
+        for message in messages:
+            if not isinstance(message, dict):
+                valid = False
+                break
+            role = str(message.get("role") or "")
+            content = message.get("content")
+            if role not in {"system", "user", "assistant", "tool"} or not isinstance(content, str):
+                valid = False
+                break
+            clean.append({"role": role, "content": content})
+        if not valid or not clean or clean[-1]["role"] != "assistant":
+            continue
+        out.append(ResearchRow("tools", clean))
+    return out
+
+
+def summarize_lab_learning(
+    rows: list[ResearchRow],
+    *,
+    verified_experience_rows: int = 0,
+) -> dict[str, Any]:
     counts = Counter(row.domain for row in rows)
     return {
         "version": LAB_VERSION,
         "training_rows": len(rows),
         "domains": dict(sorted(counts.items())),
+        "verified_experience_rows": int(verified_experience_rows),
     }
