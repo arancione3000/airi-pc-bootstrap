@@ -92,6 +92,71 @@ fun LiveEvolutionScreen(
             }
         }
 
+        state.liveEvolution?.bootstrap?.let { bootstrap ->
+            item {
+                SectionCard("Phase 5 · Language bootstrap") {
+                    val run = state.liveEvolution.bootstrapRun
+                    Text(
+                        if (run != null) {
+                            "workflow #${run.runNumber} · ${run.status}" +
+                                (run.conclusion?.let { " · $it" } ?: "")
+                        } else {
+                            "checkpoint persistente"
+                        },
+                        fontWeight = FontWeight.Bold,
+                    )
+                    LinearProgressIndicator(
+                        progress = { bootstrap.progressFraction.toFloat() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        "${bootstrap.tokensProcessed} / ${bootstrap.targetTokens} token processati",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "step ${bootstrap.steps} · LR ${bootstrap.learningRate?.let { format6(it) } ?: "n/d"} · " +
+                            "val loss ${bootstrap.lastValidationLoss?.let { format6(it) } ?: "n/d"}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "best val ${bootstrap.bestValidationLoss?.let { format6(it) } ?: "n/d"} · " +
+                            "checkpoint bootstrap-data/candidate",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text("Dataset: ${bootstrap.sourceIds.joinToString(" · ")}")
+                    Text(
+                        "English ${bootstrap.englishTokens} tok · Italiano ${bootstrap.italianTokens} tok",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    val requestedDomains = listOf(
+                        "general", "coding", "reasoning", "data", "structured", "tools", "dialogue", "language"
+                    )
+                    Text(
+                        requestedDomains.joinToString(" · ") { domain ->
+                            "$domain=${bootstrap.domainTokens[domain] ?: 0L}"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "Tokenizer ${bootstrap.tokenizerVersion} · vocab ${bootstrap.tokenizerVocabSize}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (bootstrap.earlyStopped) {
+                        Text(
+                            "Early stop attivato dai dati di validazione.",
+                            color = MaterialTheme.colorScheme.secondary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Text(
+                        "Nessuna ETA inventata: qui sono mostrati solo progressi e misure osservate.",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+        }
+
         if (manifest != null && evolution != null) {
             item {
                 SectionCard("Cosa sta cercando di migliorare") {
