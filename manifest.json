@@ -1,7 +1,472 @@
 {
-  "cycle": 86,
+  "airi_pc_lab": {
+    "champion": {
+      "error": "ValueError:model output is not a valid tool-call JSON object",
+      "mode": "read_only_sandbox",
+      "ok": false,
+      "tool_call_valid": false,
+      "version": "airi-pc-lab-v1"
+    },
+    "learning": {
+      "domains": {
+        "coding": 8,
+        "tools": 2
+      },
+      "training_rows": 10,
+      "verified_experience_rows": 0,
+      "version": "airi-pc-lab-v1"
+    },
+    "mode": "read_only_sandbox",
+    "research": {
+      "error": "ValueError:model output is not a valid tool-call JSON object",
+      "mode": "read_only_sandbox",
+      "ok": false,
+      "tool_call_valid": false,
+      "version": "airi-pc-lab-v1"
+    },
+    "snapshot": {
+      "capabilities": [
+        "list_capabilities",
+        "inspect_module",
+        "describe_task_flow"
+      ],
+      "denied_capabilities": [
+        "shell",
+        "network",
+        "filesystem_write",
+        "credentials",
+        "phone_control",
+        "production_promotion"
+      ],
+      "mode": "read_only_sandbox",
+      "modules": [
+        {
+          "doc": "",
+          "name": "task_engine",
+          "path": "computer/control_plane/task_engine.py",
+          "symbols": [
+            {
+              "doc": "",
+              "kind": "class",
+              "name": "TaskEngine"
+            }
+          ]
+        },
+        {
+          "doc": "",
+          "name": "experience",
+          "path": "computer/control_plane/experience.py",
+          "symbols": [
+            {
+              "doc": "",
+              "kind": "class",
+              "name": "ExperienceStore"
+            }
+          ]
+        },
+        {
+          "doc": "",
+          "name": "judge",
+          "path": "computer/control_plane/judge.py",
+          "symbols": [
+            {
+              "doc": "Independent fail-closed verifier executed against an isolated copy. The implementation loop cannot pass merely by asserting success: Judge runs explicit checks in a throw-away sandbox and emits a content-addressed attestation. Test/build commands may mutate the sandbox but never the live workspace.",
+              "kind": "class",
+              "name": "TrustedJudge"
+            }
+          ]
+        },
+        {
+          "doc": "",
+          "name": "verification_engine",
+          "path": "computer/control_plane/verification_engine.py",
+          "symbols": [
+            {
+              "doc": "",
+              "kind": "class",
+              "name": "VerificationEngine"
+            }
+          ]
+        },
+        {
+          "doc": "",
+          "name": "model_router",
+          "path": "computer/control_plane/model_router.py",
+          "symbols": [
+            {
+              "doc": "Route to a qualified local generalist model only when explicitly enabled.",
+              "kind": "class",
+              "name": "ModelRouter"
+            }
+          ]
+        },
+        {
+          "doc": "",
+          "name": "mcp_tasks",
+          "path": "computer/control_plane/mcp_tasks.py",
+          "symbols": [
+            {
+              "doc": "Durable implementation of the MCP Tasks extension. Task records survive process restarts. A task still marked ``working`` can be resumed lazily on the next tasks/get call. Listeners receive complete public task snapshots so subscriptions/listen can emit notifications/tasks.",
+              "kind": "class",
+              "name": "MCPTaskStore"
+            }
+          ]
+        },
+        {
+          "doc": "",
+          "name": "generalist_agent_bridge",
+          "path": "computer/control_plane/generalist_agent_bridge.py",
+          "symbols": [
+            {
+              "doc": "",
+              "kind": "function",
+              "name": "tool_specs"
+            },
+            {
+              "doc": "",
+              "kind": "function",
+              "name": "execute_readonly_tool"
+            },
+            {
+              "doc": "",
+              "kind": "function",
+              "name": "run_generalist_agent"
+            }
+          ]
+        },
+        {
+          "doc": "",
+          "name": "local_agent",
+          "path": "computer/control_plane/local_agent.py",
+          "symbols": [
+            {
+              "doc": "",
+              "kind": "function",
+              "name": "ask_local_model"
+            },
+            {
+              "doc": "",
+              "kind": "function",
+              "name": "ask_local_model_changes"
+            },
+            {
+              "doc": "",
+              "kind": "function",
+              "name": "apply_patch"
+            },
+            {
+              "doc": "",
+              "kind": "function",
+              "name": "run_tests"
+            },
+            {
+              "doc": "",
+              "kind": "function",
+              "name": "autonomous_cycle"
+            },
+            {
+              "doc": "",
+              "kind": "function",
+              "name": "provider_status"
+            }
+          ]
+        }
+      ],
+      "version": "airi-pc-lab-v1"
+    },
+    "version": "airi-pc-lab-v1"
+  },
+  "cycle": 87,
+  "evolution": {
+    "curriculum_memory": {
+      "added": 10,
+      "cycle": 87,
+      "domains": {
+        "coding": 94,
+        "data": 167,
+        "language": 101,
+        "reasoning": 174,
+        "structured": 87,
+        "tools": 87
+      },
+      "max_rows": 4000,
+      "ok": true,
+      "stored": 710,
+      "validation_overlap": []
+    },
+    "data_growth": {
+      "added_bytes": 0,
+      "added_files": 0,
+      "desired_domains": [
+        "reasoning",
+        "data",
+        "language-it",
+        "general",
+        "code"
+      ],
+      "domain_bytes": {
+        "code": 7210611,
+        "data": 14314555,
+        "general": 4203121,
+        "reasoning": 39544
+      },
+      "domain_files": {
+        "code": 501,
+        "data": 292,
+        "general": 387,
+        "reasoning": 8
+      },
+      "queries": [],
+      "rejection_counts": {
+        "persistent_repo_cap": 13,
+        "secret_like_content": 10
+      },
+      "repositories_used": 0,
+      "top_repositories": [
+        {
+          "bytes": 3449479,
+          "domains": {
+            "code": 4,
+            "data": 30,
+            "general": 1
+          },
+          "files": 35,
+          "repo": "mathllm/MATH-V"
+        },
+        {
+          "bytes": 2475820,
+          "domains": {
+            "code": 17,
+            "data": 19,
+            "general": 12
+          },
+          "files": 48,
+          "repo": "OpenBioLink/ThoughtSource"
+        },
+        {
+          "bytes": 1968739,
+          "domains": {
+            "code": 14,
+            "data": 20,
+            "general": 14
+          },
+          "files": 48,
+          "repo": "Intrafere/MOTO-Autonomous-ASI"
+        },
+        {
+          "bytes": 1905204,
+          "domains": {
+            "data": 13,
+            "general": 3,
+            "reasoning": 1
+          },
+          "files": 17,
+          "repo": "radi-cho/botbots"
+        },
+        {
+          "bytes": 1707633,
+          "domains": {
+            "code": 20,
+            "data": 17,
+            "general": 11
+          },
+          "files": 48,
+          "repo": "idiap/atco2-corpus"
+        },
+        {
+          "bytes": 1633509,
+          "domains": {
+            "code": 13,
+            "data": 30,
+            "general": 5
+          },
+          "files": 48,
+          "repo": "openbrewerydb/openbrewerydb"
+        },
+        {
+          "bytes": 1540184,
+          "domains": {
+            "code": 3,
+            "data": 44,
+            "general": 1
+          },
+          "files": 48,
+          "repo": "rodolformelo/DEMoS-italian-corpus-analysis"
+        },
+        {
+          "bytes": 1378953,
+          "domains": {
+            "code": 11,
+            "general": 4
+          },
+          "files": 15,
+          "repo": "hendrycks/math"
+        },
+        {
+          "bytes": 1168692,
+          "domains": {
+            "code": 19,
+            "data": 4,
+            "general": 21,
+            "reasoning": 4
+          },
+          "files": 48,
+          "repo": "lotchuazzz-crypto/papergraph-mcp"
+        },
+        {
+          "bytes": 972429,
+          "domains": {
+            "code": 22,
+            "data": 3,
+            "general": 23
+          },
+          "files": 48,
+          "repo": "xid32/SoundMind"
+        },
+        {
+          "bytes": 922995,
+          "domains": {
+            "code": 4,
+            "data": 6,
+            "general": 1
+          },
+          "files": 11,
+          "repo": "nuhil/bangladesh-geocode"
+        },
+        {
+          "bytes": 610981,
+          "domains": {
+            "data": 5,
+            "general": 8
+          },
+          "files": 13,
+          "repo": "yohasebe/wp2txt"
+        }
+      ],
+      "total_bytes": 25767831,
+      "total_files": 1188,
+      "version": "generalist-data-growth-v3"
+    },
+    "domain_weights": {
+      "coding": 1.581488366999585,
+      "data": 2.369967102462194,
+      "language": 3.0,
+      "reasoning": 2.235179145322497,
+      "structured": 1.091704699231064,
+      "tools": 1.0
+    },
+    "latest_research": {
+      "all_seed_eligible": false,
+      "any_seed_eligible": false,
+      "candidate_id": "generalist-3-5-8e6f3f1c",
+      "cycle": 87,
+      "external_pretrained": false,
+      "kind": "architecture",
+      "language_bridge_rows": 32,
+      "mean_generation_accuracy": 0.0,
+      "mean_generation_nonempty_rate": 0.9166666666666667,
+      "mean_generation_similarity": 0.21624411155966133,
+      "mean_nll_per_byte": 1.781854670302673,
+      "parameters": 115328,
+      "research_only": true,
+      "score": 36.186505272676655,
+      "stage": 3,
+      "tokenizer_vocab_size": 384,
+      "worst_domain_regression": 0.6585205623081754
+    },
+    "plateau": {
+      "generation_exact_accuracy": 0.0,
+      "history_rows": 8,
+      "plateau": true,
+      "same_champion_cycles": 8,
+      "scale_probe": true,
+      "score_span": 3.5712495030492093,
+      "under_initial_tier": true
+    },
+    "policy": {
+      "adaptive_curriculum": true,
+      "adaptive_pretraining_budget": {
+        "enabled": true,
+        "max_steps_per_stage": 24
+      },
+      "architecture_weight_transfer": {
+        "byte_to_bpe_embedding_migration": true,
+        "enabled": true,
+        "exact_name_and_shape": true,
+        "identity_residual_depth_expansion": true,
+        "layout_aware_net2grow": true
+      },
+      "automatic_data_growth": "permissive SPDX + immutable commit + quarantine + hash + quality filter",
+      "autoregressive_similarity_ranking": true,
+      "candidate_can_self_promote": false,
+      "continual_learning": {
+        "curriculum_max_rows": 4000,
+        "domain_balanced_base_replay": true,
+        "enabled": true,
+        "full_replay": true,
+        "gradient_accumulation_steps": 1,
+        "precision": "fp32"
+      },
+      "domain_balanced_pretraining": true,
+      "external_pretrained": false,
+      "external_reducer": true,
+      "inherited_sft_lr_cap": 0.001,
+      "language_gap_routing": true,
+      "latest_research_checkpoint_isolated": true,
+      "parallel_swarm": "8->4->2",
+      "production_qualification_separate": true,
+      "progressive_scaling_max_parameters": 2000000,
+      "research_only": true,
+      "rotating_canary": {
+        "domains": 6,
+        "enabled": true,
+        "training_excluded": true
+      },
+      "scale_budget_adaptive": true,
+      "scale_probe_retention": "reserve one safe scale survivor through reductions",
+      "tokenizer_research": {
+        "allowed": [
+          "byte-v1",
+          "bpe-v1"
+        ],
+        "bpe_vocab_max": 1024,
+        "comparison_metric": "nll_per_byte",
+        "growth_per_probe": 128,
+        "progressive_refresh": "single bounded language probe",
+        "protected_eval_rows_excluded_from_tokenizer_training": true,
+        "refresh_max_bytes": 256000
+      },
+      "weight_inheritance": "layout-aware Net2Grow + identity residual depth expansion"
+    },
+    "progressive_scaling": {
+      "candidate_count": 1,
+      "candidate_generated": true,
+      "current_parameters": 115328,
+      "maximum_scale_budget_multiplier": 1.75,
+      "minimum_scale_budget_multiplier": 1.25,
+      "strategies": [
+        "progressive_scale"
+      ],
+      "target_parameters": 250000,
+      "tiers": [
+        250000,
+        500000,
+        1000000,
+        2000000
+      ]
+    },
+    "progressive_tokenizer": {},
+    "signals": [
+      "language_gap",
+      "data_gap",
+      "reasoning_gap",
+      "symbolic_reasoning_signal",
+      "research_curriculum_signal",
+      "deep_symbolic_signal"
+    ]
+  },
   "generalist_version": "airi-generalist-free-speed-v4",
-  "generated_at": 1790002697,
+  "generated_at": 1790005388,
   "promoted_this_cycle": false,
   "promotion_reason": "no finalist passed every independent research gate",
   "schema": 1,
@@ -9,7 +474,7 @@
     "champion": {
       "all_seed_eligible": true,
       "context_length": 128,
-      "cycle": 86,
+      "cycle": 87,
       "files": {
         "config.json": {
           "bytes": 270,
@@ -33,31 +498,231 @@
       "generation_similarity": 0.18469332364660263,
       "id": "generalist-2-0-57f3721a",
       "name": "champion",
-      "nll_per_byte": 1.8816252702437106,
-      "onnx_max_abs_error": 1.430511474609375e-06,
+      "neural": {
+        "architecture": {
+          "context_length": 128,
+          "d_ff": 128,
+          "d_model": 64,
+          "ff_variant": "swiglu",
+          "head_dim": 16,
+          "n_heads": 4,
+          "n_layers": 2,
+          "norm_type": "layernorm",
+          "position_encoding": "learned",
+          "tied_embedding_lm_head": true,
+          "type": "decoder_only_causal_transformer",
+          "vocab_size": 384
+        },
+        "components": [
+          {
+            "id": "embedding",
+            "label": "Embedding",
+            "max_abs_weight": 0.2352016121149063,
+            "mean_abs_weight": 0.08146044611930847,
+            "parameters": 24576,
+            "rms_weight": 0.09769787854802192
+          },
+          {
+            "id": "position_embedding",
+            "label": "Position Embedding",
+            "max_abs_weight": 0.1408221423625946,
+            "mean_abs_weight": 0.027717091143131256,
+            "parameters": 8192,
+            "rms_weight": 0.03520658981844743
+          },
+          {
+            "id": "layer_0_attention",
+            "label": "Layer 0 Attention",
+            "max_abs_weight": 0.1364440768957138,
+            "mean_abs_weight": 0.02396095870062709,
+            "parameters": 16384,
+            "rms_weight": 0.030335086685812578
+          },
+          {
+            "id": "layer_0_norm",
+            "label": "Layer 0 Norm",
+            "max_abs_weight": 1.1252257823944092,
+            "mean_abs_weight": 0.511349284555763,
+            "parameters": 256,
+            "rms_weight": 0.7110854243983075
+          },
+          {
+            "id": "layer_0_ffn",
+            "label": "Layer 0 Ffn",
+            "max_abs_weight": 0.18006658554077148,
+            "mean_abs_weight": 0.03401487196485201,
+            "parameters": 24576,
+            "rms_weight": 0.042411997026614835
+          },
+          {
+            "id": "layer_1_attention",
+            "label": "Layer 1 Attention",
+            "max_abs_weight": 0.14151355624198914,
+            "mean_abs_weight": 0.024569383822381496,
+            "parameters": 16384,
+            "rms_weight": 0.03091783282211833
+          },
+          {
+            "id": "layer_1_norm",
+            "label": "Layer 1 Norm",
+            "max_abs_weight": 1.0416266918182373,
+            "mean_abs_weight": 0.4998234179802239,
+            "parameters": 256,
+            "rms_weight": 0.6891168074188811
+          },
+          {
+            "id": "layer_1_ffn",
+            "label": "Layer 1 Ffn",
+            "max_abs_weight": 0.1498902291059494,
+            "mean_abs_weight": 0.028826590006550152,
+            "parameters": 24576,
+            "rms_weight": 0.03606964617101268
+          },
+          {
+            "id": "final_norm",
+            "label": "Final Norm",
+            "max_abs_weight": 1.1979912519454956,
+            "mean_abs_weight": 0.6576062217354774,
+            "parameters": 128,
+            "rms_weight": 0.8394082170991488
+          }
+        ],
+        "connections": [
+          {
+            "from": "embedding",
+            "kind": "residual_flow",
+            "to": "position_embedding"
+          },
+          {
+            "from": "position_embedding",
+            "kind": "residual_flow",
+            "to": "layer_0_attention"
+          },
+          {
+            "from": "layer_0_attention",
+            "kind": "residual_flow",
+            "to": "layer_0_norm"
+          },
+          {
+            "from": "layer_0_norm",
+            "kind": "residual_flow",
+            "to": "layer_0_ffn"
+          },
+          {
+            "from": "layer_0_ffn",
+            "kind": "residual_flow",
+            "to": "layer_1_attention"
+          },
+          {
+            "from": "layer_1_attention",
+            "kind": "residual_flow",
+            "to": "layer_1_norm"
+          },
+          {
+            "from": "layer_1_norm",
+            "kind": "residual_flow",
+            "to": "layer_1_ffn"
+          },
+          {
+            "from": "layer_1_ffn",
+            "kind": "residual_flow",
+            "to": "final_norm"
+          }
+        ],
+        "heads": [
+          {
+            "head": 0,
+            "layer": 0,
+            "max_abs_weight": 0.13608510792255402,
+            "mean_abs_weight": 0.025500604882836342,
+            "parameters": 3072,
+            "rms_weight": 0.032166026532649994
+          },
+          {
+            "head": 1,
+            "layer": 0,
+            "max_abs_weight": 0.1364440768957138,
+            "mean_abs_weight": 0.024278515949845314,
+            "parameters": 3072,
+            "rms_weight": 0.03081079199910164
+          },
+          {
+            "head": 2,
+            "layer": 0,
+            "max_abs_weight": 0.10939045250415802,
+            "mean_abs_weight": 0.024038532748818398,
+            "parameters": 3072,
+            "rms_weight": 0.029946375638246536
+          },
+          {
+            "head": 3,
+            "layer": 0,
+            "max_abs_weight": 0.11839597672224045,
+            "mean_abs_weight": 0.02543315477669239,
+            "parameters": 3072,
+            "rms_weight": 0.032581876963377
+          },
+          {
+            "head": 0,
+            "layer": 1,
+            "max_abs_weight": 0.11913395673036575,
+            "mean_abs_weight": 0.026155121624469757,
+            "parameters": 3072,
+            "rms_weight": 0.032763827592134476
+          },
+          {
+            "head": 1,
+            "layer": 1,
+            "max_abs_weight": 0.0986587181687355,
+            "mean_abs_weight": 0.024065805599093437,
+            "parameters": 3072,
+            "rms_weight": 0.03018440306186676
+          },
+          {
+            "head": 2,
+            "layer": 1,
+            "max_abs_weight": 0.14151355624198914,
+            "mean_abs_weight": 0.02646651305258274,
+            "parameters": 3072,
+            "rms_weight": 0.03366565331816673
+          },
+          {
+            "head": 3,
+            "layer": 1,
+            "max_abs_weight": 0.10939116775989532,
+            "mean_abs_weight": 0.025266289710998535,
+            "parameters": 3072,
+            "rms_weight": 0.031476013362407684
+          }
+        ],
+        "kind": "aggregated_checkpoint_weights",
+        "note": "This is a truthful aggregate view of checkpoint weights and model topology, not a claim to display every biological-style neuron."
+      },
+      "nll_per_byte": 1.8816254237912735,
+      "onnx_max_abs_error": 1.9073486328125e-06,
       "parameters": 115328,
       "path": "champion",
       "research_only": false,
-      "score": 34.702523156129686,
+      "score": 34.70252130699776,
       "tokenizer_version": "bpe-v1",
       "tokenizer_vocab_size": 384
     },
     "research": {
       "all_seed_eligible": false,
       "context_length": 128,
-      "cycle": 86,
+      "cycle": 87,
       "files": {
         "config.json": {
-          "bytes": 270,
-          "sha256": "b9f3739808531bc1b1474deb9d7dc14f75e2a90cb166b025e768e8a8a6514250"
+          "bytes": 271,
+          "sha256": "1b00b91db1c490b85f45f31b29b54799ba382d054dc757293669965b22d3e632"
         },
         "metadata.json": {
           "bytes": 376,
-          "sha256": "31362c3d565b5a8f2a873793a84bae8b47133349f8ae6f2629cc2a2fed23ae65"
+          "sha256": "a2555d1dcbd8704c730d3dcb97ad31cc9570a91d4512d4f90609e8902ee8431b"
         },
         "model.onnx": {
-          "bytes": 768523,
-          "sha256": "951990e44103d9d625fdf90c86e917f8059ee6ab0f5817fda582e65caac6da47"
+          "bytes": 589665,
+          "sha256": "f2e6f7a495b63f84033864f2eabf9942e15e4b00254cb10d616c5fa24c5187e4"
         },
         "tokenizer.json": {
           "bytes": 4183,
@@ -66,18 +731,218 @@
       },
       "generation_exact_accuracy": 0.0,
       "generation_nonempty_rate": 0.9166666666666667,
-      "generation_similarity": 0.20427527555187128,
-      "id": "generalist-3-2-b0195abc",
+      "generation_similarity": 0.21624411155966133,
+      "id": "generalist-3-5-8e6f3f1c",
       "name": "research",
-      "nll_per_byte": 1.795384360259434,
-      "onnx_max_abs_error": 1.080334186553955e-06,
-      "parameters": 156544,
+      "neural": {
+        "architecture": {
+          "context_length": 128,
+          "d_ff": 128,
+          "d_model": 64,
+          "ff_variant": "swiglu",
+          "head_dim": 16,
+          "n_heads": 4,
+          "n_layers": 2,
+          "norm_type": "layernorm",
+          "position_encoding": "learned",
+          "tied_embedding_lm_head": true,
+          "type": "decoder_only_causal_transformer",
+          "vocab_size": 384
+        },
+        "components": [
+          {
+            "id": "embedding",
+            "label": "Embedding",
+            "max_abs_weight": 0.2706288993358612,
+            "mean_abs_weight": 0.08674166599909465,
+            "parameters": 24576,
+            "rms_weight": 0.10578797737378079
+          },
+          {
+            "id": "position_embedding",
+            "label": "Position Embedding",
+            "max_abs_weight": 0.14417096972465515,
+            "mean_abs_weight": 0.028337638825178146,
+            "parameters": 8192,
+            "rms_weight": 0.03598262529719956
+          },
+          {
+            "id": "layer_0_attention",
+            "label": "Layer 0 Attention",
+            "max_abs_weight": 0.13819928467273712,
+            "mean_abs_weight": 0.02469513099640608,
+            "parameters": 16384,
+            "rms_weight": 0.031297543706888205
+          },
+          {
+            "id": "layer_0_norm",
+            "label": "Layer 0 Norm",
+            "max_abs_weight": 1.1506452560424805,
+            "mean_abs_weight": 0.5120623474940658,
+            "parameters": 256,
+            "rms_weight": 0.7117308608439349
+          },
+          {
+            "id": "layer_0_ffn",
+            "label": "Layer 0 Ffn",
+            "max_abs_weight": 0.1949353814125061,
+            "mean_abs_weight": 0.03504296888907751,
+            "parameters": 24576,
+            "rms_weight": 0.04371269392073234
+          },
+          {
+            "id": "layer_1_attention",
+            "label": "Layer 1 Attention",
+            "max_abs_weight": 0.13839083909988403,
+            "mean_abs_weight": 0.02487751981243491,
+            "parameters": 16384,
+            "rms_weight": 0.031415043659978284
+          },
+          {
+            "id": "layer_1_norm",
+            "label": "Layer 1 Norm",
+            "max_abs_weight": 1.0503088235855103,
+            "mean_abs_weight": 0.4980813078582287,
+            "parameters": 256,
+            "rms_weight": 0.6872546167281962
+          },
+          {
+            "id": "layer_1_ffn",
+            "label": "Layer 1 Ffn",
+            "max_abs_weight": 0.16537533700466156,
+            "mean_abs_weight": 0.029579890271027882,
+            "parameters": 24576,
+            "rms_weight": 0.03701667071021808
+          },
+          {
+            "id": "final_norm",
+            "label": "Final Norm",
+            "max_abs_weight": 1.1981033086776733,
+            "mean_abs_weight": 0.659755527973175,
+            "parameters": 128,
+            "rms_weight": 0.8412282858902597
+          }
+        ],
+        "connections": [
+          {
+            "from": "embedding",
+            "kind": "residual_flow",
+            "to": "position_embedding"
+          },
+          {
+            "from": "position_embedding",
+            "kind": "residual_flow",
+            "to": "layer_0_attention"
+          },
+          {
+            "from": "layer_0_attention",
+            "kind": "residual_flow",
+            "to": "layer_0_norm"
+          },
+          {
+            "from": "layer_0_norm",
+            "kind": "residual_flow",
+            "to": "layer_0_ffn"
+          },
+          {
+            "from": "layer_0_ffn",
+            "kind": "residual_flow",
+            "to": "layer_1_attention"
+          },
+          {
+            "from": "layer_1_attention",
+            "kind": "residual_flow",
+            "to": "layer_1_norm"
+          },
+          {
+            "from": "layer_1_norm",
+            "kind": "residual_flow",
+            "to": "layer_1_ffn"
+          },
+          {
+            "from": "layer_1_ffn",
+            "kind": "residual_flow",
+            "to": "final_norm"
+          }
+        ],
+        "heads": [
+          {
+            "head": 0,
+            "layer": 0,
+            "max_abs_weight": 0.13771285116672516,
+            "mean_abs_weight": 0.026169225573539734,
+            "parameters": 3072,
+            "rms_weight": 0.03299184516072273
+          },
+          {
+            "head": 1,
+            "layer": 0,
+            "max_abs_weight": 0.13819928467273712,
+            "mean_abs_weight": 0.024937182664871216,
+            "parameters": 3072,
+            "rms_weight": 0.03169378265738487
+          },
+          {
+            "head": 2,
+            "layer": 0,
+            "max_abs_weight": 0.102462038397789,
+            "mean_abs_weight": 0.0251573845744133,
+            "parameters": 3072,
+            "rms_weight": 0.031374432146549225
+          },
+          {
+            "head": 3,
+            "layer": 0,
+            "max_abs_weight": 0.1264590471982956,
+            "mean_abs_weight": 0.026394737884402275,
+            "parameters": 3072,
+            "rms_weight": 0.03385711833834648
+          },
+          {
+            "head": 0,
+            "layer": 1,
+            "max_abs_weight": 0.11572340875864029,
+            "mean_abs_weight": 0.026853419840335846,
+            "parameters": 3072,
+            "rms_weight": 0.03375859931111336
+          },
+          {
+            "head": 1,
+            "layer": 1,
+            "max_abs_weight": 0.11117079108953476,
+            "mean_abs_weight": 0.0241349246352911,
+            "parameters": 3072,
+            "rms_weight": 0.03046826645731926
+          },
+          {
+            "head": 2,
+            "layer": 1,
+            "max_abs_weight": 0.13839083909988403,
+            "mean_abs_weight": 0.026597557589411736,
+            "parameters": 3072,
+            "rms_weight": 0.033835895359516144
+          },
+          {
+            "head": 3,
+            "layer": 1,
+            "max_abs_weight": 0.11975440382957458,
+            "mean_abs_weight": 0.025916561484336853,
+            "parameters": 3072,
+            "rms_weight": 0.0324571430683136
+          }
+        ],
+        "kind": "aggregated_checkpoint_weights",
+        "note": "This is a truthful aggregate view of checkpoint weights and model topology, not a claim to display every biological-style neuron."
+      },
+      "nll_per_byte": 1.781854670302673,
+      "onnx_max_abs_error": 9.5367431640625e-07,
+      "parameters": 115328,
       "path": "research",
       "research_only": true,
-      "score": 35.86876644100571,
+      "score": 36.186505272676655,
       "tokenizer_version": "bpe-v1",
       "tokenizer_vocab_size": 384
     }
   },
-  "state_sha": "0cfb6cf1f3e18fc4a8a8392fafb3aeca934f71eb"
+  "state_sha": "247632aee926ff5add8c9899d5d1e63e6d7fd246"
 }
