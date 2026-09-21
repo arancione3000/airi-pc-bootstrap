@@ -449,7 +449,9 @@ def _domain_regression(
     for domain, old_value in old.items():
         if domain in new:
             values.append(float(new[domain]) - float(old_value))
-    return max(values) if values else float("inf")
+    # Missing comparable held-out domains must remain fail-closed, but the
+    # persisted swarm report is strict JSON and must never emit Infinity.
+    return max(values) if values else 1_000_000.0
 
 
 def _load_stage_source(
