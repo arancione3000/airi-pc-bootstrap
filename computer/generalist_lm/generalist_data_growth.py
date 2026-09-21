@@ -12,7 +12,7 @@ from urllib.parse import quote, quote_plus, urlparse
 from urllib.request import Request, urlopen
 
 
-GENERALIST_DATA_GROWTH_VERSION = "generalist-data-growth-v1"
+GENERALIST_DATA_GROWTH_VERSION = "generalist-data-growth-v2"
 
 PERMISSIVE_SPDX = {
     "MIT",
@@ -153,27 +153,114 @@ def _domain_for(path: str) -> str:
     lower = path.lower()
     if suffix in _CODE_SUFFIXES:
         return "code"
-    if any(token in lower for token in ("math", "theorem", "algebra", "proof")):
-        return "math"
+    if (
+        suffix in {".csv", ".json", ".jsonl", ".sql"}
+        or any(token in lower for token in ("dataset", "data/", "tables/", "records/"))
+    ):
+        return "data"
+    if any(
+        token in lower
+        for token in ("math", "theorem", "algebra", "proof", "reasoning", "logic")
+    ):
+        return "reasoning"
     if any(token in lower for token in ("italian", "italiano", "/it/", "_it.")):
         return "language-it"
     return "general"
 
 
+def _low_value_path(path: str) -> bool:
+    lower = "/" + path.replace("\\", "/").lower().lstrip("/")
+    name = Path(path).name.lower()
+    if any(
+        token in lower
+        for token in (
+            "/node_modules/", "/vendor/", "/dist/", "/build/",
+            "/coverage/", "/quotes/", "/snapshots/", "/fixtures/",
+        )
+    ):
+        return True
+    return name in {
+        "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+        "poetry.lock", "cargo.lock",
+    }
+
+
+def _desired_domains(signals: Iterable[str] | None) -> list[str]:
+    signal_set = {str(row).lower() for row in (signals or ())}
+    domains: list[str] = []
+    if "reasoning_gap" in signal_set or "symbolic_reasoning_signal" in signal_set:
+        domains.append("reasoning")
+    if "data_gap" in signal_set:
+        domains.append("data")
+    if "coding_gap" in signal_set:
+        domains.append("code")
+    if "language_gap" in signal_set:
+        domains.append("language-it")
+    domains.extend(["general", "code", "data", "reasoning"])
+    return list(dict.fromkeys(domains))
+
+
+def _rank_entries(
+    entries: Iterable[dict[str, Any]],
+    desired_domains: Iterable[str],
+) -> list[dict[str, Any]]:
+    preferred_suffixes = {
+        ".txt", ".md", ".rst", ".py", ".js", ".ts", ".java",
+        ".c", ".cpp", ".rs", ".go", ".sql", ".csv", ".jsonl",
+    }
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for entry in entries:
+        domain = _domain_for(str(entry.get("path") or ""))
+        buckets.setdefault(domain, []).append(entry)
+    for rows in buckets.values():
+        rows.sort(
+            key=lambda row: (
+                0
+                if Path(str(row.get("path") or "")).suffix.lower()
+                in preferred_suffixes
+                else 1,
+                -min(int(row.get("size", 0) or 0), 512_000),
+                str(row.get("path") or ""),
+            )
+        )
+
+    order = list(dict.fromkeys([*desired_domains, *sorted(buckets)]))
+    ranked: list[dict[str, Any]] = []
+    while any(buckets.get(domain) for domain in order):
+        for domain in order:
+            rows = buckets.get(domain) or []
+            if rows:
+                ranked.append(rows.pop(0))
+    return ranked
+
+
 def _candidate_queries(signals: Iterable[str] | None) -> list[str]:
     signal_set = {str(row).lower() for row in (signals or ())}
-    queries = [
-        "text corpus dataset",
-        "public domain text corpus",
-        "permissive code dataset",
-    ]
-    if "coding_gap" in signal_set:
-        queries.insert(0, "code corpus dataset")
+    queries: list[str] = []
     if "reasoning_gap" in signal_set or "symbolic_reasoning_signal" in signal_set:
-        queries.insert(0, "math reasoning dataset text")
+        queries.extend([
+            "mathematics proofs textbook corpus",
+            "logic reasoning educational text dataset",
+        ])
+    if "data_gap" in signal_set:
+        queries.extend([
+            "structured data csv json dataset examples",
+            "data analysis examples csv json",
+        ])
+    if "coding_gap" in signal_set:
+        queries.extend([
+            "programming algorithms examples source code",
+            "code corpus permissive algorithms",
+        ])
     if "language_gap" in signal_set:
-        queries.insert(0, "english italian text corpus")
-    return list(dict.fromkeys(queries))[:5]
+        queries.append("italian public domain text corpus")
+    queries.extend([
+        "public domain books plain text corpus",
+        "educational text corpus permissive license",
+        "programming algorithms examples source code",
+        "structured data csv json dataset examples",
+    ])
+    return list(dict.fromkeys(queries))[:8]
 
 
 def _search_repositories(
@@ -185,7 +272,7 @@ def _search_repositories(
 ) -> list[dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
     for query in queries:
-        bounded_query = f"{query} size:<200000"
+        bounded_query = f"{query} size:<500000 fork:false archived:false"
         url = (
             "https://api.github.com/search/repositories?"
             f"q={quote_plus(bounded_query)}&sort=updated&order=desc&per_page={max(1, min(per_query, 10))}"
@@ -205,11 +292,13 @@ def grow_generalist_data(
     *,
     signals: Iterable[str] | None = None,
     github_token: str | None = None,
-    max_new_bytes: int = 2_000_000,
+    max_new_bytes: int = 8_000_000,
     max_total_bytes: int = 50_000_000,
-    max_files_per_repo: int = 16,
-    max_repositories: int = 6,
-    max_file_bytes: int = 256_000,
+    max_files_per_repo: int = 24,
+    max_repositories: int = 12,
+    max_file_bytes: int = 512_000,
+    max_total_files_per_repo: int = 48,
+    max_total_bytes_per_repo: int = 8_000_000,
     opener=None,
 ) -> dict[str, Any]:
     """Grow a persistent permissively licensed corpus without model weights.
@@ -237,6 +326,19 @@ def grow_generalist_data(
         for row in manifest.get("files", [])
         if isinstance(row, dict) and row.get("sha256")
     }
+    existing_sources = {
+        (str(row.get("repo")), str(row.get("commit")), str(row.get("path")))
+        for row in existing.values()
+    }
+    repo_file_counts: dict[str, int] = {}
+    repo_byte_counts: dict[str, int] = {}
+    for row in existing.values():
+        repo_name = str(row.get("repo") or "")
+        repo_file_counts[repo_name] = repo_file_counts.get(repo_name, 0) + 1
+        repo_byte_counts[repo_name] = (
+            repo_byte_counts.get(repo_name, 0)
+            + int(row.get("bytes", 0) or 0)
+        )
     current_bytes = sum(
         int(row.get("bytes", 0) or 0)
         for row in existing.values()
@@ -261,7 +363,7 @@ def grow_generalist_data(
     repositories = _search_repositories(
         _candidate_queries(signals),
         token=token,
-        per_query=4,
+        per_query=8,
         opener=opener,
     )
 
@@ -275,6 +377,15 @@ def grow_generalist_data(
             break
         full_name = str(item.get("full_name") or "")
         if not full_name or "/" not in full_name:
+            continue
+        if (
+            repo_file_counts.get(full_name, 0) >= max(1, int(max_total_files_per_repo))
+            or repo_byte_counts.get(full_name, 0) >= max(1, int(max_total_bytes_per_repo))
+        ):
+            rejected.append({
+                "repo": full_name,
+                "reason": "persistent_repo_cap",
+            })
             continue
 
         try:
@@ -345,20 +456,34 @@ def grow_generalist_data(
             if isinstance(row, dict)
             and row.get("type") == "blob"
             and Path(str(row.get("path") or "")).suffix.lower() in _ALLOWED_SUFFIXES
-            and 128 <= int(row.get("size", 0) or 0) <= max_file_bytes
+            and 512 <= int(row.get("size", 0) or 0) <= max_file_bytes
+            and not _low_value_path(str(row.get("path") or ""))
         ]
-        entries.sort(key=lambda row: (int(row.get("size", 0) or 0), str(row.get("path") or "")))
+        entries = _rank_entries(entries, _desired_domains(signals))
         accepted_repo = 0
+        accepted_repo_bytes = 0
 
         for entry in entries:
             if accepted_repo >= max(1, int(max_files_per_repo)):
                 break
+            if (
+                repo_file_counts.get(full_name, 0) + accepted_repo
+                >= max(1, int(max_total_files_per_repo))
+            ):
+                break
             if bytes_added >= cycle_cap:
                 break
             path = str(entry.get("path") or "")
+            if (full_name, commit.lower(), path) in existing_sources:
+                continue
             remaining = cycle_cap - bytes_added
-            budget = min(max_file_bytes, remaining)
-            if budget < 128:
+            repo_remaining = (
+                max(1, int(max_total_bytes_per_repo))
+                - repo_byte_counts.get(full_name, 0)
+                - accepted_repo_bytes
+            )
+            budget = min(max_file_bytes, remaining, repo_remaining)
+            if budget < 512:
                 break
             raw_path = quote(path, safe="/")
             raw_url = f"https://raw.githubusercontent.com/{full_name}/{commit}/{raw_path}"
@@ -406,6 +531,7 @@ def grow_generalist_data(
             added.append(record)
             bytes_added += len(raw)
             accepted_repo += 1
+            accepted_repo_bytes += len(raw)
 
         if accepted_repo:
             repos_used += 1
@@ -433,6 +559,15 @@ def grow_generalist_data(
     )
     tmp.replace(manifest_path)
 
+    domain_files: dict[str, int] = {}
+    domain_bytes: dict[str, int] = {}
+    for row in all_rows:
+        domain = str(row.get("domain") or "general")
+        domain_files[domain] = domain_files.get(domain, 0) + 1
+        domain_bytes[domain] = (
+            domain_bytes.get(domain, 0) + int(row.get("bytes", 0) or 0)
+        )
+
     return {
         "ok": True,
         "version": GENERALIST_DATA_GROWTH_VERSION,
@@ -441,6 +576,9 @@ def grow_generalist_data(
         "total_files": len(all_rows),
         "total_bytes": sum(int(row.get("bytes", 0) or 0) for row in all_rows),
         "repositories_used": repos_used,
+        "domain_files": domain_files,
+        "domain_bytes": domain_bytes,
+        "desired_domains": _desired_domains(signals),
         "rejected": rejected[:100],
         "manifest": str(manifest_path),
         "approved_dir": str(approved),
@@ -462,7 +600,7 @@ def main() -> int:
         state,
         signals=signals,
         github_token=os.environ.get("GITHUB_TOKEN"),
-        max_new_bytes=int(os.environ.get("AIRI_GENERALIST_DATA_MAX_NEW_BYTES", "2000000")),
+        max_new_bytes=int(os.environ.get("AIRI_GENERALIST_DATA_MAX_NEW_BYTES", "8000000")),
         max_total_bytes=int(os.environ.get("AIRI_GENERALIST_DATA_MAX_TOTAL_BYTES", "50000000")),
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
