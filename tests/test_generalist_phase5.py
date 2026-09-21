@@ -104,6 +104,7 @@ def test_degeneration_gate_rejects_repeated_token_collapse():
 
 
 def test_phase5_diagnostics_run_on_real_local_generalist_model():
+    pytest.importorskip("torch")
     cfg = GeneralistLMConfig(
         vocab_size=264,
         context_length=96,
@@ -144,7 +145,7 @@ def test_phase5_diagnostics_run_on_real_local_generalist_model():
 
 
 def test_sampling_controls_preserve_raw_greedy_default():
-    import torch
+    torch = pytest.importorskip("torch")
 
     cfg = GeneralistLMConfig(
         vocab_size=264,
