@@ -1011,6 +1011,66 @@ def finalize_swarm(
         if row.get("all_seed_eligible")
     ]
 
+    # Persist the best Stage-3 research checkpoint independently from the
+    # production champion. This is explicitly research-only: the Android lab
+    # can inspect cycle-to-cycle progress without bypassing promotion gates.
+    latest_research_summary = None
+    if scanned:
+        research_ranked = sorted(
+            scanned,
+            key=lambda pair: (
+                -float(pair[1].get("mean_generation_accuracy", 0.0)),
+                -float(pair[1].get("mean_generation_similarity", 0.0)),
+                -float(pair[1].get("mean_generation_nonempty_rate", 0.0)),
+                float(pair[1].get("worst_domain_regression", float("inf"))),
+                float(pair[1].get("mean_nll_per_byte", float("inf"))),
+                int(pair[1].get("parameters", 1 << 60)),
+            ),
+        )
+        research_result_path, research_row = research_ranked[0]
+        research_checkpoint = (
+            research_result_path.parent
+            / str(research_row.get("checkpoint_dir") or "best-checkpoint")
+        )
+        if research_checkpoint.is_dir():
+            latest_root = root / "latest-research"
+            shutil.rmtree(latest_root, ignore_errors=True)
+            shutil.copytree(research_checkpoint, latest_root)
+            latest_research_summary = {
+                "candidate_id": str(research_row.get("candidate_id") or ""),
+                "kind": research_row.get("kind"),
+                "cycle": int(plan["cycle"]),
+                "stage": int(research_row.get("stage", 0) or 0),
+                "parameters": int(research_row.get("parameters", 0) or 0),
+                "score": float(research_row.get("score", 0.0) or 0.0),
+                "mean_nll_per_byte": float(
+                    research_row.get("mean_nll_per_byte", 0.0) or 0.0
+                ),
+                "mean_generation_accuracy": float(
+                    research_row.get("mean_generation_accuracy", 0.0) or 0.0
+                ),
+                "mean_generation_similarity": float(
+                    research_row.get("mean_generation_similarity", 0.0) or 0.0
+                ),
+                "mean_generation_nonempty_rate": float(
+                    research_row.get("mean_generation_nonempty_rate", 0.0) or 0.0
+                ),
+                "worst_domain_regression": float(
+                    research_row.get("worst_domain_regression", 0.0) or 0.0
+                ),
+                "all_seed_eligible": bool(research_row.get("all_seed_eligible")),
+                "any_seed_eligible": bool(research_row.get("any_seed_eligible")),
+                "tokenizer_vocab_size": int(
+                    research_row.get("tokenizer_vocab_size", 0) or 0
+                ),
+                "language_bridge_rows": int(
+                    research_row.get("language_bridge_rows", 0) or 0
+                ),
+                "external_pretrained": False,
+                "research_only": True,
+            }
+            _atomic_json(latest_root / "research-summary.json", latest_research_summary)
+
     promoted = False
     winner_summary = None
     reason = "no finalist passed every independent research gate"
@@ -1112,6 +1172,7 @@ def finalize_swarm(
         "promoted": promoted,
         "promotion_reason": reason,
         "winner": winner_summary,
+        "latest_research": latest_research_summary,
         "champion": champion_genome.to_dict(),
         "champion_report": champion_report,
         "signals": plan.get("signals") or [],
@@ -1142,6 +1203,7 @@ def finalize_swarm(
         "trials": [row for _path, row in scanned],
         "policy": {
             "research_only": True,
+            "latest_research_checkpoint_isolated": True,
             "parallel_swarm": "8->4->2",
             "candidate_can_self_promote": False,
             "external_reducer": True,
