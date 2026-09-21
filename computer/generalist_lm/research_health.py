@@ -100,7 +100,19 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
     )
 
     try:
-        memory = CurriculumMemory(root)
+        configured_memory_cap = 1200
+        if isinstance(status, dict):
+            try:
+                configured_memory_cap = int(
+                    (
+                        (status.get("policy") or {})
+                        .get("continual_learning", {})
+                        .get("curriculum_max_rows", configured_memory_cap)
+                    )
+                )
+            except Exception:
+                configured_memory_cap = 1200
+        memory = CurriculumMemory(root, max_rows=configured_memory_cap)
         memory_manifest = memory.manifest()
         check(
             "curriculum_memory:bounded",
