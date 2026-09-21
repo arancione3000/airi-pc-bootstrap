@@ -16,6 +16,8 @@ _ALLOWED_NORMS = {"layernorm", "rmsnorm"}
 _ALLOWED_POSITIONS = {"learned", "sinusoidal", "rope"}
 _ALLOWED_FF = {"swiglu", "gelu"}
 _ALLOWED_TOKENIZERS = {"byte-v1", "bpe-v1"}
+_ALLOWED_ATTENTION = {"mha", "gqa"}
+_ALLOWED_NORM_PLACEMENT = {"pre", "post"}
 
 
 @dataclass
@@ -32,6 +34,12 @@ class GeneralistLMConfig:
     norm_type: str = "layernorm"
     position_encoding: str = "learned"
     ff_variant: str = "swiglu"
+    attention_type: str = "mha"
+    n_kv_heads: int | None = None
+    local_attention_window: int = 0
+    local_attention_every: int = 0
+    norm_placement: str = "pre"
+    tie_embeddings: bool = True
 
     def validate(self) -> "GeneralistLMConfig":
         self.vocab_size = max(16, int(self.vocab_size))
@@ -53,6 +61,28 @@ class GeneralistLMConfig:
             raise ValueError("RoPE requires an even attention head dimension")
         if self.ff_variant not in _ALLOWED_FF:
             raise ValueError("unsupported ff_variant")
+        if self.attention_type not in _ALLOWED_ATTENTION:
+            raise ValueError("unsupported attention_type")
+        if self.norm_placement not in _ALLOWED_NORM_PLACEMENT:
+            raise ValueError("unsupported norm_placement")
+        if self.attention_type == "mha":
+            self.n_kv_heads = self.n_heads
+        else:
+            requested = self.n_kv_heads
+            if requested is None:
+                requested = max(1, self.n_heads // 2)
+            self.n_kv_heads = max(1, min(self.n_heads, int(requested)))
+            if self.n_heads % self.n_kv_heads:
+                raise ValueError("n_heads must be divisible by n_kv_heads for GQA")
+        self.local_attention_window = max(
+            0,
+            min(self.context_length, int(self.local_attention_window)),
+        )
+        self.local_attention_every = max(
+            0,
+            min(self.n_layers, int(self.local_attention_every)),
+        )
+        self.tie_embeddings = bool(self.tie_embeddings)
         return self
 
     def to_dict(self) -> dict[str, Any]:
@@ -86,13 +116,41 @@ class CausalTransformerLM:
             return nn.LayerNorm(config.d_model)
 
         class CausalSelfAttention(nn.Module):
-            def __init__(self):
+            def __init__(self, layer_index: int):
                 super().__init__()
                 self.n_heads = config.n_heads
+                self.n_kv_heads = int(config.n_kv_heads or config.n_heads)
                 self.head_dim = config.d_model // config.n_heads
-                self.qkv = nn.Linear(config.d_model, 3 * config.d_model, bias=config.bias)
+                self.group_size = self.n_heads // self.n_kv_heads
+                self.layer_index = int(layer_index)
+                if config.attention_type == "mha":
+                    # Keep the legacy parameter names exactly so old checkpoints load.
+                    self.qkv = nn.Linear(config.d_model, 3 * config.d_model, bias=config.bias)
+                    self.q_proj = self.k_proj = self.v_proj = None
+                else:
+                    self.qkv = None
+                    self.q_proj = nn.Linear(
+                        config.d_model,
+                        self.n_heads * self.head_dim,
+                        bias=config.bias,
+                    )
+                    self.k_proj = nn.Linear(
+                        config.d_model,
+                        self.n_kv_heads * self.head_dim,
+                        bias=config.bias,
+                    )
+                    self.v_proj = nn.Linear(
+                        config.d_model,
+                        self.n_kv_heads * self.head_dim,
+                        bias=config.bias,
+                    )
                 self.out = nn.Linear(config.d_model, config.d_model, bias=config.bias)
                 self.dropout = config.dropout
+                every = int(config.local_attention_every)
+                self.local_window = 0
+                if int(config.local_attention_window) > 0:
+                    if every <= 0 or ((self.layer_index + 1) % every) != 0:
+                        self.local_window = int(config.local_attention_window)
                 if config.position_encoding == "rope":
                     inv_freq = 1.0 / (
                         10000.0
@@ -129,8 +187,34 @@ class CausalTransformerLM:
 
             def forward(self, x, *, past_key_value=None, use_cache: bool = False):
                 bsz, seqlen, width = x.shape
-                qkv = self.qkv(x).view(bsz, seqlen, 3, self.n_heads, self.head_dim)
-                q, k, v = qkv.unbind(dim=2)
+                if self.qkv is not None:
+                    qkv = self.qkv(x).view(
+                        bsz,
+                        seqlen,
+                        3,
+                        self.n_heads,
+                        self.head_dim,
+                    )
+                    q, k, v = qkv.unbind(dim=2)
+                else:
+                    q = self.q_proj(x).view(
+                        bsz,
+                        seqlen,
+                        self.n_heads,
+                        self.head_dim,
+                    )
+                    k = self.k_proj(x).view(
+                        bsz,
+                        seqlen,
+                        self.n_kv_heads,
+                        self.head_dim,
+                    )
+                    v = self.v_proj(x).view(
+                        bsz,
+                        seqlen,
+                        self.n_kv_heads,
+                        self.head_dim,
+                    )
                 q = q.transpose(1, 2)
                 k = k.transpose(1, 2)
                 v = v.transpose(1, 2)
@@ -138,7 +222,7 @@ class CausalTransformerLM:
                 past_len = 0
                 if past_key_value is not None:
                     past_k, past_v = past_key_value
-                    if past_k.shape[:2] != (bsz, self.n_heads) or past_v.shape != past_k.shape:
+                    if past_k.shape[:2] != (bsz, self.n_kv_heads) or past_v.shape != past_k.shape:
                         raise ValueError("invalid attention KV cache shape")
                     if past_k.shape[-1] != self.head_dim:
                         raise ValueError("invalid attention KV cache head dimension")
@@ -153,8 +237,16 @@ class CausalTransformerLM:
                     k = torch.cat([past_k, k], dim=-2)
                     v = torch.cat([past_v, v], dim=-2)
 
-                total_len = int(k.shape[-2])
-                if past_len == 0:
+                present = (k, v) if use_cache else None
+                if self.n_kv_heads != self.n_heads:
+                    k_attn = k.repeat_interleave(self.group_size, dim=1)
+                    v_attn = v.repeat_interleave(self.group_size, dim=1)
+                else:
+                    k_attn = k
+                    v_attn = v
+
+                total_len = int(k_attn.shape[-2])
+                if past_len == 0 and self.local_window <= 0:
                     attn_mask = None
                     is_causal = True
                 else:
@@ -165,16 +257,18 @@ class CausalTransformerLM:
                     )[:, None]
                     key_positions = torch.arange(total_len, device=x.device)[None, :]
                     attn_mask = key_positions <= query_positions
+                    if self.local_window > 0:
+                        earliest = query_positions - self.local_window + 1
+                        attn_mask = attn_mask & (key_positions >= earliest)
                     is_causal = False
 
                 y = F.scaled_dot_product_attention(
-                    q, k, v,
+                    q, k_attn, v_attn,
                     attn_mask=attn_mask,
                     dropout_p=self.dropout if self.training else 0.0,
                     is_causal=is_causal,
                 )
                 y = y.transpose(1, 2).contiguous().view(bsz, seqlen, width)
-                present = (k, v) if use_cache else None
                 return self.out(y), present
 
         class SwiGLU(nn.Module):
@@ -197,22 +291,32 @@ class CausalTransformerLM:
                 return self.down(F.gelu(self.up(x)))
 
         class Block(nn.Module):
-            def __init__(self):
+            def __init__(self, layer_index: int):
                 super().__init__()
                 self.attn_norm = norm()
                 self.ff_norm = norm()
-                self.attn = CausalSelfAttention()
+                self.attn = CausalSelfAttention(layer_index)
                 self.ff = SwiGLU() if config.ff_variant == "swiglu" else GeluFF()
                 self.drop = nn.Dropout(config.dropout)
 
             def forward(self, x, *, past_key_value=None, use_cache: bool = False):
+                if config.norm_placement == "pre":
+                    attn_out, present = self.attn(
+                        self.attn_norm(x),
+                        past_key_value=past_key_value,
+                        use_cache=use_cache,
+                    )
+                    x = x + self.drop(attn_out)
+                    x = x + self.drop(self.ff(self.ff_norm(x)))
+                    return x, present
+
                 attn_out, present = self.attn(
-                    self.attn_norm(x),
+                    x,
                     past_key_value=past_key_value,
                     use_cache=use_cache,
                 )
-                x = x + self.drop(attn_out)
-                x = x + self.drop(self.ff(self.ff_norm(x)))
+                x = self.attn_norm(x + self.drop(attn_out))
+                x = self.ff_norm(x + self.drop(self.ff(x)))
                 return x, present
 
         class DecoderOnlyLM(nn.Module):
@@ -242,10 +346,16 @@ class CausalTransformerLM:
                         torch.zeros(config.context_length, config.d_model),
                         persistent=False,
                     )
-                self.blocks = nn.ModuleList([Block() for _ in range(config.n_layers)])
-                self.final_norm = norm()
+                self.blocks = nn.ModuleList([
+                    Block(layer_index)
+                    for layer_index in range(config.n_layers)
+                ])
+                self.final_norm = (
+                    norm() if config.norm_placement == "pre" else nn.Identity()
+                )
                 self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
-                self.lm_head.weight = self.token_embedding.weight
+                if config.tie_embeddings:
+                    self.lm_head.weight = self.token_embedding.weight
                 self.apply(self._init_weights)
 
             @staticmethod
