@@ -138,6 +138,7 @@ def evaluate_lattice_migration_readiness(
     history_path: str | Path,
     champion: dict[str, Any],
     *,
+    additional_history: Iterable[dict[str, Any]] | None = None,
     min_winning_cycles: int = 3,
     min_seed_wins: int = 6,
     min_total_seeds: int = 6,
@@ -155,8 +156,13 @@ def evaluate_lattice_migration_readiness(
     if not genome_id:
         raise ValueError("Lattice migration gate requires champion genome_id")
 
+    history = _history_rows(history_path)
+    history.extend(
+        row for row in (additional_history or ())
+        if isinstance(row, dict)
+    )
     evidence = _candidate_evidence_for_genome(
-        _history_rows(history_path),
+        history,
         genome_id,
     )
     checks = {
