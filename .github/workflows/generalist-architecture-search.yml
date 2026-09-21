@@ -115,9 +115,11 @@ jobs:
           run_search="$(jq -r '.run_search' "${BUNDLE}/plan.json")"
           matrix="$(jq -c '.matrix' "${BUNDLE}/plan.json")"
           cycle="$(jq -r '.cycle' "${BUNDLE}/plan.json")"
-          echo "run_search=${run_search}" >> "${GITHUB_OUTPUT}"
-          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
-          echo "cycle=${cycle}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "run_search=${run_search}"
+            echo "matrix=${matrix}"
+            echo "cycle=${cycle}"
+          } >> "${GITHUB_OUTPUT}"
 
       - uses: actions/upload-artifact@v4
         with:
