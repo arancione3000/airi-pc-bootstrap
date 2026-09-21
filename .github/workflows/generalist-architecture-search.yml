@@ -21,7 +21,7 @@ permissions:
 
 concurrency:
   group: airi-generalist-architecture-search
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   plan:
