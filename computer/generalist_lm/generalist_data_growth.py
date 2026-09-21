@@ -368,11 +368,14 @@ def grow_generalist_data(
             "total_files": len(existing),
             "total_bytes": current_bytes,
             "reason": "persistent corpus budget reached",
+            "queries": _candidate_queries(signals),
+            "desired_domains": _desired_domains(signals),
         }
 
     token = github_token or os.environ.get("GITHUB_TOKEN")
+    queries = _candidate_queries(signals)
     repositories = _search_repositories(
-        _candidate_queries(signals),
+        queries,
         token=token,
         per_query=8,
         opener=opener,
@@ -590,6 +593,7 @@ def grow_generalist_data(
         "domain_files": domain_files,
         "domain_bytes": domain_bytes,
         "desired_domains": _desired_domains(signals),
+        "queries": queries,
         "rejected": rejected[:100],
         "manifest": str(manifest_path),
         "approved_dir": str(approved),

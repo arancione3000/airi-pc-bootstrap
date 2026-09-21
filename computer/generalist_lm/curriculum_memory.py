@@ -227,14 +227,27 @@ class CurriculumMemory:
             out.append(row)
         return out
 
-    def expand(self, cycle: int, *, signals: list[str] | None = None) -> dict[str, Any]:
+    def expand(
+        self,
+        cycle: int,
+        *,
+        signals: list[str] | None = None,
+        extra_rows: list[ResearchRow] | None = None,
+    ) -> dict[str, Any]:
         raw = self._load_raw()
         current = self.rows()
         existing = {_row_id(row) for row in current}
         protected = _prompt_set(validation_rows())
         added: list[ResearchRow] = []
 
-        for row in _mechanical_rows(cycle, list(signals or [])):
+        generated_rows = [
+            *_mechanical_rows(cycle, list(signals or [])),
+            *list(extra_rows or []),
+        ]
+        for row in generated_rows:
+            if row.domain not in DOMAINS:
+                raise ValueError(f"unsupported extra curriculum domain: {row.domain!r}")
+            row.sft()
             if row.messages[0]["content"] in protected:
                 continue
             rid = _row_id(row)
@@ -267,6 +280,7 @@ class CurriculumMemory:
             "domains": dict(sorted(counts.items())),
             "max_rows": self.max_rows,
             "validation_overlap": sorted(_prompt_set(current) & protected),
+            "extra_rows_considered": len(list(extra_rows or [])),
         }
 
     def manifest(self) -> dict[str, Any]:

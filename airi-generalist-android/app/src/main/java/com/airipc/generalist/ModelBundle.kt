@@ -37,6 +37,7 @@ data class ModelSlot(
     val contextLength: Int,
     val researchOnly: Boolean,
     val allSeedEligible: Boolean,
+    val neural: NeuralDiagnostics?,
     val files: Map<String, BundleFileInfo>,
 )
 
@@ -48,6 +49,8 @@ data class MobileManifest(
     val generalistVersion: String,
     val promotedThisCycle: Boolean,
     val promotionReason: String,
+    val evolution: EvolutionSummary,
+    val airiPcLab: AiriPcLabReport,
     val slots: Map<String, ModelSlot>,
 )
 
@@ -181,6 +184,7 @@ class BundleRepository(context: Context) {
                 contextLength = raw.optInt("context_length", 128),
                 researchOnly = raw.optBoolean("research_only", name != "champion"),
                 allSeedEligible = raw.optBoolean("all_seed_eligible", name == "champion"),
+                neural = parseNeuralDiagnostics(raw.optJSONObject("neural")),
                 files = files,
             )
         }
@@ -192,6 +196,8 @@ class BundleRepository(context: Context) {
             generalistVersion = root.optString("generalist_version"),
             promotedThisCycle = root.optBoolean("promoted_this_cycle", false),
             promotionReason = root.optString("promotion_reason"),
+            evolution = parseEvolutionSummary(root.optJSONObject("evolution")),
+            airiPcLab = parseAiriPcLabReport(root.optJSONObject("airi_pc_lab")),
             slots = slots,
         )
     }

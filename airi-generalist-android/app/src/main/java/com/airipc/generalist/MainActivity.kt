@@ -38,6 +38,10 @@ data class ChatLine(
 data class AppUiState(
     val manifest: MobileManifest? = null,
     val selectedSlot: String = "champion",
+    val selectedTab: AppTab = AppTab.CHAT,
+    val liveEvolution: LiveEvolutionSnapshot? = null,
+    val liveError: String? = null,
+    val lastInferenceTrace: InferenceTrace? = null,
     val loadedModelId: String = "",
     val messages: List<ChatLine> = emptyList(),
     val loadingModel: Boolean = true,
@@ -49,6 +53,7 @@ data class AppUiState(
 
 class GeneralistController(context: Context) : Closeable {
     private val repository = BundleRepository(context)
+    private val liveRepository = LiveEvolutionRepository()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val refreshMutex = Mutex()
     private val engineMutex = Mutex()
@@ -63,16 +68,31 @@ class GeneralistController(context: Context) : Closeable {
         if (started) return
         started = true
         scope.launch { refresh() }
+        scope.launch { refreshLiveInternal() }
         scope.launch {
             while (isActive) {
                 delay(120_000L)
                 refresh(silent = true)
             }
         }
+        scope.launch {
+            while (isActive) {
+                delay(300_000L)
+                refreshLiveInternal()
+            }
+        }
     }
 
     fun refresh(silent: Boolean = false) {
         scope.launch { refreshInternal(silent) }
+    }
+
+    fun selectTab(tab: AppTab) {
+        _state.value = _state.value.copy(selectedTab = tab)
+    }
+
+    fun refreshLive() {
+        scope.launch { refreshLiveInternal() }
     }
 
     fun selectSlot(slot: String) {
@@ -109,7 +129,7 @@ class GeneralistController(context: Context) : Closeable {
             val modelId = _state.value.loadedModelId
             val startedAt = SystemClock.elapsedRealtime()
             try {
-                val output = engineMutex.withLock {
+                val trace = engineMutex.withLock {
                     val active = engine ?: error("Modello non caricato")
                     withContext(Dispatchers.Default) {
                         active.chat(history, maxNewTokens = 64)
@@ -118,16 +138,17 @@ class GeneralistController(context: Context) : Closeable {
                 val elapsed = SystemClock.elapsedRealtime() - startedAt
                 Log.i(
                     "AiriGeneralistLab",
-                    "AIRI_GENERALIST_INFERENCE=PASS model=$modelId chars=${output.length} elapsed_ms=$elapsed",
+                    "AIRI_GENERALIST_INFERENCE=PASS model=$modelId chars=${trace.text.length} elapsed_ms=$elapsed",
                 )
                 _state.value = _state.value.copy(
                     messages = _state.value.messages + ChatLine(
                         role = "assistant",
-                        content = output,
+                        content = trace.text,
                         modelId = modelId,
                         elapsedMs = elapsed,
                     ),
                     generating = false,
+                    lastInferenceTrace = trace,
                 )
             } catch (exc: Exception) {
                 _state.value = _state.value.copy(
@@ -198,6 +219,20 @@ class GeneralistController(context: Context) : Closeable {
         }
     }
 
+    private suspend fun refreshLiveInternal() {
+        try {
+            val live = liveRepository.fetch()
+            _state.value = _state.value.copy(
+                liveEvolution = live,
+                liveError = null,
+            )
+        } catch (exc: Exception) {
+            _state.value = _state.value.copy(
+                liveError = "Live GitHub: ${exc.message}",
+            )
+        }
+    }
+
     private fun labelFor(slot: String) =
         if (slot == "research") "Latest Research" else "Champion"
 
@@ -218,12 +253,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         controller = GeneralistController(applicationContext)
+        ModelUpdateWorker.schedule(applicationContext)
         setContent {
             val state by controller.state.collectAsState()
             LaunchedEffect(Unit) { controller.start() }
             AiriGeneralistApp(
                 state = state,
                 onRefresh = { controller.refresh() },
+                onRefreshLive = controller::refreshLive,
+                onSelectTab = controller::selectTab,
                 onSelectSlot = controller::selectSlot,
                 onClear = controller::clearChat,
                 onSend = controller::send,
@@ -241,6 +279,8 @@ class MainActivity : ComponentActivity() {
 private fun AiriGeneralistApp(
     state: AppUiState,
     onRefresh: () -> Unit,
+    onRefreshLive: () -> Unit,
+    onSelectTab: (AppTab) -> Unit,
     onSelectSlot: (String) -> Unit,
     onClear: () -> Unit,
     onSend: (String) -> Unit,
@@ -274,21 +314,40 @@ private fun AiriGeneralistApp(
                     }
                 }
             },
+            bottomBar = {
+                GeneralistBottomBar(
+                    selected = state.selectedTab,
+                    onSelect = onSelectTab,
+                )
+            },
         ) { padding ->
-            Column(
+            Box(
                 modifier = Modifier
                     .padding(padding)
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
                     .padding(12.dp),
             ) {
-                ModelPanel(state, onSelectSlot, onClear)
-                Spacer(Modifier.height(10.dp))
-                ChatPanel(
-                    state = state,
-                    onSend = onSend,
-                    modifier = Modifier.weight(1f),
-                )
+                when (state.selectedTab) {
+                    AppTab.CHAT -> Column(Modifier.fillMaxSize()) {
+                        ModelPanel(state, onSelectSlot, onClear)
+                        Spacer(Modifier.height(10.dp))
+                        ChatPanel(
+                            state = state,
+                            onSend = onSend,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    AppTab.LIVE -> LiveEvolutionScreen(
+                        state = state,
+                        onRefreshLive = onRefreshLive,
+                    )
+                    AppTab.NEURAL -> NeuralScreen(
+                        state = state,
+                        onSelectSlot = onSelectSlot,
+                    )
+                    AppTab.AIRI_PC -> AiriPcLabScreen(state = state)
+                }
             }
         }
     }
