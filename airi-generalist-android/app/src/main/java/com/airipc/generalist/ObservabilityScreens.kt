@@ -21,7 +21,6 @@ enum class AppTab(val label: String) {
     LIVE("Live"),
     NEURAL("Neural"),
     AIRI_PC("Airi-PC"),
-    POV("POV"),
 }
 
 @Composable
@@ -41,7 +40,6 @@ fun GeneralistBottomBar(
                             AppTab.LIVE -> "◉"
                             AppTab.NEURAL -> "◎"
                             AppTab.AIRI_PC -> "▣"
-                            AppTab.POV -> "▰"
                         },
                         fontSize = 18.sp,
                     )
