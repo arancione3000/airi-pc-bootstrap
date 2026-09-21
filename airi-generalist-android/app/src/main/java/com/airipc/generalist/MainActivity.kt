@@ -65,7 +65,10 @@ data class AppUiState(
     val messages: List<ChatLine> = emptyList(),
     val loadingModel: Boolean = true,
     val generating: Boolean = false,
+    val refreshingAll: Boolean = false,
     val freshFromNetwork: Boolean = true,
+    val modelBehindState: Boolean = false,
+    val lastRefreshCompletedAtMs: Long = 0L,
     val status: String = "Connessione al bundle mobile…",
     val error: String? = null,
 )
@@ -86,24 +89,17 @@ class GeneralistController(context: Context) : Closeable {
     fun start() {
         if (started) return
         started = true
-        scope.launch { refresh() }
-        scope.launch { refreshLiveInternal() }
-        scope.launch {
-            while (isActive) {
-                delay(120_000L)
-                refresh(silent = true)
-            }
-        }
+        scope.launch { refreshAllInternal(silent = false) }
         scope.launch {
             while (isActive) {
                 delay(300_000L)
-                refreshLiveInternal()
+                refreshAllInternal(silent = true)
             }
         }
     }
 
     fun refresh(silent: Boolean = false) {
-        scope.launch { refreshInternal(silent) }
+        scope.launch { refreshAllInternal(silent) }
     }
 
     fun selectTab(tab: AppTab) {
@@ -111,7 +107,7 @@ class GeneralistController(context: Context) : Closeable {
     }
 
     fun refreshLive() {
-        scope.launch { refreshLiveInternal() }
+        scope.launch { refreshAllInternal(silent = false) }
     }
 
     fun selectSlot(slot: String) {
@@ -122,7 +118,7 @@ class GeneralistController(context: Context) : Closeable {
             error = null,
             status = "Carico ${labelFor(slot)}…",
         )
-        scope.launch { refreshInternal(silent = false) }
+        scope.launch { refreshAllInternal(silent = false) }
     }
 
     fun clearChat() {
@@ -167,8 +163,14 @@ class GeneralistController(context: Context) : Closeable {
         _state.value = _state.value.copy(comparing = true, comparison = null, error = null)
         scope.launch {
             try {
-                val championBundle = repository.ensureBundle(championSlot)
-                val researchBundle = repository.ensureBundle(researchSlot)
+                val championBundle = repository.ensureBundle(
+                    championSlot,
+                    manifest.mobileRevision,
+                )
+                val researchBundle = repository.ensureBundle(
+                    researchSlot,
+                    manifest.mobileRevision,
+                )
 
                 val championStarted = SystemClock.elapsedRealtime()
                 val championTrace = withContext(Dispatchers.Default) {
@@ -267,77 +269,114 @@ class GeneralistController(context: Context) : Closeable {
         }
     }
 
-    private suspend fun refreshInternal(silent: Boolean) {
+    private suspend fun refreshAllInternal(silent: Boolean) {
         refreshMutex.withLock {
             if (!silent) {
                 _state.value = _state.value.copy(
+                    refreshingAll = true,
                     loadingModel = true,
                     error = null,
-                    status = "Controllo aggiornamenti su GitHub…",
+                    liveError = null,
+                    status = "Sincronizzo AI, training e modello…",
                 )
             }
+
+            var liveSnapshot: LiveEvolutionSnapshot? = null
+            var liveFailure: Exception? = null
             try {
-                val fetched = repository.fetchManifest()
-                var slotName = _state.value.selectedSlot
-                if (!fetched.manifest.slots.containsKey(slotName)) {
-                    slotName = "champion"
-                }
-                val slot = fetched.manifest.slots[slotName]
-                    ?: error("Bundle champion non disponibile")
-                val key = slot.files["model.onnx"]?.sha256
-                    ?: error("Hash modello mancante")
+                coroutineScope {
+                    val liveDeferred = async(Dispatchers.IO) {
+                        liveRepository.fetch()
+                    }
+                    val fetched = repository.fetchManifest()
+                    try {
+                        liveSnapshot = liveDeferred.await()
+                    } catch (exc: Exception) {
+                        liveFailure = exc
+                    }
 
-                if (key != engineKey) {
-                    if (!silent) {
-                        _state.value = _state.value.copy(
-                            status = "Scarico ${labelFor(slotName)} ciclo ${fetched.manifest.cycle}…"
+                    var slotName = _state.value.selectedSlot
+                    if (!fetched.manifest.slots.containsKey(slotName)) {
+                        slotName = "champion"
+                    }
+                    val slot = fetched.manifest.slots[slotName]
+                        ?: error("Bundle champion non disponibile")
+                    val key = slot.files["model.onnx"]?.sha256
+                        ?: error("Hash modello mancante")
+
+                    if (key != engineKey) {
+                        if (!silent) {
+                            _state.value = _state.value.copy(
+                                status = "Scarico ${labelFor(slotName)} ciclo ${fetched.manifest.cycle}…",
+                            )
+                        }
+                        val installed = repository.ensureBundle(
+                            slot,
+                            fetched.mobileRevision,
                         )
+                        val replacement = withContext(Dispatchers.Default) {
+                            AiriOnnxEngine(installed)
+                        }
+                        engineMutex.withLock {
+                            engine?.close()
+                            engine = replacement
+                            engineKey = key
+                        }
                     }
-                    val installed = repository.ensureBundle(slot)
-                    val replacement = withContext(Dispatchers.Default) {
-                        AiriOnnxEngine(installed)
-                    }
-                    engineMutex.withLock {
-                        engine?.close()
-                        engine = replacement
-                        engineKey = key
-                    }
-                }
 
-                _state.value = _state.value.copy(
-                    manifest = fetched.manifest,
-                    selectedSlot = slotName,
-                    loadedModelId = slot.id,
-                    loadingModel = false,
-                    freshFromNetwork = fetched.freshFromNetwork,
-                    status = if (fetched.freshFromNetwork) {
-                        "${labelFor(slotName)} pronto · ciclo ${fetched.manifest.cycle}"
-                    } else {
-                        "${labelFor(slotName)} pronto · cache offline"
-                    },
-                    error = null,
-                )
+                    val effectiveLive = liveSnapshot ?: _state.value.liveEvolution
+                    val modelBehind = effectiveLive != null &&
+                        fetched.manifest.stateSha.isNotBlank() &&
+                        effectiveLive.stateRevision.isNotBlank() &&
+                        fetched.manifest.stateSha != effectiveLive.stateRevision
+
+                    val statusText = when {
+                        !fetched.freshFromNetwork ->
+                            "${labelFor(slotName)} pronto · cache offline"
+                        modelBehind ->
+                            "AI aggiornata · modello mobile in sincronizzazione"
+                        else ->
+                            "${labelFor(slotName)} sincronizzato · ciclo ${fetched.manifest.cycle}"
+                    }
+
+                    _state.value = _state.value.copy(
+                        manifest = fetched.manifest,
+                        liveEvolution = effectiveLive,
+                        selectedSlot = slotName,
+                        loadedModelId = slot.id,
+                        loadingModel = false,
+                        refreshingAll = false,
+                        freshFromNetwork = fetched.freshFromNetwork,
+                        modelBehindState = modelBehind,
+                        lastRefreshCompletedAtMs = System.currentTimeMillis(),
+                        status = statusText,
+                        error = null,
+                        liveError = liveFailure?.let { "Live GitHub: ${it.message}" },
+                    )
+
+                    Log.i(
+                        "AiriGeneralistLab",
+                        "AIRI_GENERALIST_REFRESH=PASS " +
+                            "mobile_revision=${fetched.mobileRevision.take(12)} " +
+                            "mobile_state=${fetched.manifest.stateSha.take(12)} " +
+                            "live_state=${effectiveLive?.stateRevision?.take(12).orEmpty()} " +
+                            "model_behind=$modelBehind",
+                    )
+                }
             } catch (exc: Exception) {
                 _state.value = _state.value.copy(
                     loadingModel = false,
-                    error = "Aggiornamento modello fallito: ${exc.message}",
-                    status = if (engine != null) "Uso il modello già installato" else "Modello non disponibile",
+                    refreshingAll = false,
+                    liveEvolution = liveSnapshot ?: _state.value.liveEvolution,
+                    liveError = liveFailure?.let { "Live GitHub: ${it.message}" },
+                    error = "Aggiornamento fallito: ${exc.message}",
+                    status = if (engine != null) {
+                        "Uso il modello già installato"
+                    } else {
+                        "Modello non disponibile"
+                    },
                 )
             }
-        }
-    }
-
-    private suspend fun refreshLiveInternal() {
-        try {
-            val live = liveRepository.fetch()
-            _state.value = _state.value.copy(
-                liveEvolution = live,
-                liveError = null,
-            )
-        } catch (exc: Exception) {
-            _state.value = _state.value.copy(
-                liveError = "Live GitHub: ${exc.message}",
-            )
         }
     }
 
@@ -428,8 +467,20 @@ private fun AiriGeneralistApp(
                             Text("AIRI Generalist Lab", fontWeight = FontWeight.Bold, fontSize = 20.sp)
                             Text(state.status, style = MaterialTheme.typography.bodySmall)
                         }
-                        TextButton(onClick = onRefresh, enabled = !state.loadingModel) {
-                            Text("Aggiorna")
+                        TextButton(
+                            onClick = onRefresh,
+                            enabled = !state.refreshingAll && !state.generating,
+                        ) {
+                            if (state.refreshingAll) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text("Sincronizzo…")
+                            } else {
+                                Text("Aggiorna")
+                            }
                         }
                     }
                 }
@@ -535,6 +586,14 @@ private fun ModelPanel(
                 }
             }
 
+            if (state.modelBehindState && manifest != null) {
+                Text(
+                    "L'AI ha un checkpoint più recente del modello ONNX: " +
+                        "la chat si aggiornerà appena l'export mobile verificato è pronto.",
+                    color = MaterialTheme.colorScheme.secondary,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             if (!state.freshFromNetwork && manifest != null) {
                 Text(
                     "Offline: sto usando il manifest salvato sul telefono.",
