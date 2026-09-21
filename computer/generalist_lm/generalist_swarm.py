@@ -881,7 +881,7 @@ def finalize_swarm(
             "external_pretrained": False,
             "adaptive_curriculum": True,
             "progressive_scaling_max_parameters": 2_000_000,
-            "weight_inheritance": "exact + safe expansion prefixes",
+            "weight_inheritance": "layout-aware Net2Grow + identity residual depth expansion",
             "automatic_data_growth": "permissive SPDX + immutable commit + quarantine + hash + quality filter",
             "continual_learning": {
                 "enabled": True,
@@ -905,7 +905,8 @@ def finalize_swarm(
             "architecture_weight_transfer": {
                 "enabled": True,
                 "exact_name_and_shape": True,
-                "safe_prefix_expansion": True,
+                "layout_aware_net2grow": True,
+                "identity_residual_depth_expansion": True,
                 "byte_to_bpe_embedding_migration": True,
             },
         },
