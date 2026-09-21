@@ -482,6 +482,10 @@ def run_segment(
                 "sft_replay": True,
             },
         )
+        # SFT used a separate optimizer and materially changed the weights.
+        # Do not reuse stale Adam moments on the next causal-pretraining rung.
+        optimizer_path.unlink(missing_ok=True)
+        progress["optimizer_reset_after_sft"] = True
 
     if rung_complete:
         after = evaluate_phase5_language(runtime)
