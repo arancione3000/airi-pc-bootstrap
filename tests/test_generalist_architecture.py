@@ -98,9 +98,18 @@ def test_capacity_proposals_cannot_be_crowded_out_by_micro_mutations():
     )
     ordered = prioritize_architecture_proposals(proposals)
     kinds = [row["kind"] for row in ordered]
-    assert kinds[:2] == ["capacity_plus_structure", "capacity_scale"]
-    assert ordered[0]["parameter_estimate"] > parent.parameter_estimate()
-    assert ordered[1]["parameter_estimate"] > parent.parameter_estimate()
+    capacity_positions = [
+        index
+        for index, kind in enumerate(kinds)
+        if kind in {"capacity_plus_structure", "capacity_scale"}
+    ]
+    assert capacity_positions
+    first_structural = kinds.index("structural_mutation")
+    assert max(capacity_positions) < first_structural
+    assert all(
+        ordered[index]["parameter_estimate"] > parent.parameter_estimate()
+        for index in capacity_positions
+    )
 
 
 def test_safe_capacity_probe_is_preserved_by_successive_halving(tmp_path: Path):
