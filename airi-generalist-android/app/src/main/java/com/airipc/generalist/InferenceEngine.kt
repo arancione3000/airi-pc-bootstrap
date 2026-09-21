@@ -34,7 +34,7 @@ class AiriOnnxEngine(bundle: InstalledBundle) : Closeable {
         val allIds = prompt.toMutableList()
         val generated = mutableListOf<Int>()
 
-        repeat(maxNewTokens.coerceIn(1, 192)) {
+        for (step in 0 until maxNewTokens.coerceIn(1, 192)) {
             val context = allIds.takeLast(contextLength)
             val raw = LongArray(context.size) { context[it].toLong() }
             val shape = longArrayOf(1L, context.size.toLong())
@@ -47,10 +47,9 @@ class AiriOnnxEngine(bundle: InstalledBundle) : Closeable {
                     argmax(extractLogits(result[0].value))
                 }
             }
-            if (next == EOS) return@repeat
+            if (next == EOS) break
             allIds += next
             generated += next
-            if (next == EOS) return@repeat
         }
         return tokenizer.decode(generated)
     }
