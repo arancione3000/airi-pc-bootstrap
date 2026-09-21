@@ -97,6 +97,11 @@ def test_capacity_probes_receive_more_training_budget():
         candidate_parameters=115_000,
         current_parameters=115_000,
     ) == 1.0
+    assert _capacity_budget_multiplier(
+        "continual",
+        candidate_parameters=115_000,
+        current_parameters=1,
+    ) == 1.0
     scaled = _capacity_budget_multiplier(
         "architecture_capacity_plus_structure",
         candidate_parameters=240_000,
