@@ -88,17 +88,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: |
-            set -eu
-            APK="$(find "$GITHUB_WORKSPACE/emulator-apk" -name '*.apk' -type f | head -n1)"
-            adb install -r "$APK"
-            adb shell am start -W -n com.airipc.generalist/.MainActivity
-            sleep 6
-            PID="$(adb shell pidof com.airipc.generalist | tr -d '\r')"
-            test -n "$PID"
-            mkdir -p "$RUNNER_TEMP/airi-generalist-android-smoke"
-            adb exec-out screencap -p > "$RUNNER_TEMP/airi-generalist-android-smoke/home.png"
-            echo "AIRI_GENERALIST_ANDROID_SMOKE=PASS pid=$PID"
+          script: bash "$GITHUB_WORKSPACE/scripts/airi_generalist_android_emulator_test.sh"
 
       - uses: actions/upload-artifact@v4
         if: always()
