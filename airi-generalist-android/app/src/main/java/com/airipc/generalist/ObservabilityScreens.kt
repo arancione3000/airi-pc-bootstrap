@@ -366,6 +366,17 @@ fun AiriPcLabScreen(state: AppUiState) {
                         "Training verificato: ${report.trainingRows} righe · ${report.trainingDomains}",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    Text(
+                        "Esperienze verificate riusate: ${report.verifiedExperienceRows}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (report.championExperienceStored || report.researchExperienceStored) {
+                        Text(
+                            "Nuova esperienza salvata in questo ciclo ✅",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     Spacer(Modifier.height(6.dp))
                     Text("Consentito", fontWeight = FontWeight.SemiBold)
                     Text(report.capabilities.joinToString(" · "))
