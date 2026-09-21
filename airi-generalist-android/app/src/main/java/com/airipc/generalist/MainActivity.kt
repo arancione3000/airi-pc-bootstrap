@@ -1,0 +1,455 @@
+package com.airipc.generalist
+
+import android.content.Context
+import android.os.Bundle
+import android.os.SystemClock
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.io.Closeable
+import java.util.Locale
+
+data class ChatLine(
+    val role: String,
+    val content: String,
+    val modelId: String = "",
+    val elapsedMs: Long = 0L,
+)
+
+data class AppUiState(
+    val manifest: MobileManifest? = null,
+    val selectedSlot: String = "champion",
+    val loadedModelId: String = "",
+    val messages: List<ChatLine> = emptyList(),
+    val loadingModel: Boolean = true,
+    val generating: Boolean = false,
+    val freshFromNetwork: Boolean = true,
+    val status: String = "Connessione al bundle mobile…",
+    val error: String? = null,
+)
+
+class GeneralistController(context: Context) : Closeable {
+    private val repository = BundleRepository(context)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val refreshMutex = Mutex()
+    private val engineMutex = Mutex()
+    private var engine: AiriOnnxEngine? = null
+    private var engineKey: String = ""
+    private var started = false
+
+    private val _state = MutableStateFlow(AppUiState())
+    val state: StateFlow<AppUiState> = _state
+
+    fun start() {
+        if (started) return
+        started = true
+        scope.launch { refresh() }
+        scope.launch {
+            while (isActive) {
+                delay(120_000L)
+                refresh(silent = true)
+            }
+        }
+    }
+
+    fun refresh(silent: Boolean = false) {
+        scope.launch { refreshInternal(silent) }
+    }
+
+    fun selectSlot(slot: String) {
+        if (slot == _state.value.selectedSlot) return
+        _state.value = _state.value.copy(
+            selectedSlot = slot,
+            loadingModel = true,
+            error = null,
+            status = "Carico ${labelFor(slot)}…",
+        )
+        scope.launch { refreshInternal(silent = false) }
+    }
+
+    fun clearChat() {
+        _state.value = _state.value.copy(messages = emptyList())
+    }
+
+    fun send(text: String) {
+        val content = text.trim()
+        if (content.isEmpty() || _state.value.generating || engine == null) return
+
+        val userLine = ChatLine("user", content)
+        _state.value = _state.value.copy(
+            messages = _state.value.messages + userLine,
+            generating = true,
+            error = null,
+        )
+
+        scope.launch {
+            val history = _state.value.messages
+                .filter { it.role == "user" || (it.role == "assistant" && it.content.isNotEmpty()) }
+                .takeLast(10)
+                .map { ChatMessage(it.role, it.content) }
+            val modelId = _state.value.loadedModelId
+            val startedAt = SystemClock.elapsedRealtime()
+            try {
+                val output = engineMutex.withLock {
+                    val active = engine ?: error("Modello non caricato")
+                    withContext(Dispatchers.Default) {
+                        active.chat(history, maxNewTokens = 64)
+                    }
+                }
+                val elapsed = SystemClock.elapsedRealtime() - startedAt
+                _state.value = _state.value.copy(
+                    messages = _state.value.messages + ChatLine(
+                        role = "assistant",
+                        content = output,
+                        modelId = modelId,
+                        elapsedMs = elapsed,
+                    ),
+                    generating = false,
+                )
+            } catch (exc: Exception) {
+                _state.value = _state.value.copy(
+                    generating = false,
+                    error = "Inferenza fallita: ${exc.message}",
+                )
+            }
+        }
+    }
+
+    private suspend fun refreshInternal(silent: Boolean) {
+        refreshMutex.withLock {
+            if (!silent) {
+                _state.value = _state.value.copy(
+                    loadingModel = true,
+                    error = null,
+                    status = "Controllo aggiornamenti su GitHub…",
+                )
+            }
+            try {
+                val fetched = repository.fetchManifest()
+                var slotName = _state.value.selectedSlot
+                if (!fetched.manifest.slots.containsKey(slotName)) {
+                    slotName = "champion"
+                }
+                val slot = fetched.manifest.slots[slotName]
+                    ?: error("Bundle champion non disponibile")
+                val key = slot.files["model.onnx"]?.sha256
+                    ?: error("Hash modello mancante")
+
+                if (key != engineKey) {
+                    if (!silent) {
+                        _state.value = _state.value.copy(
+                            status = "Scarico ${labelFor(slotName)} ciclo ${fetched.manifest.cycle}…"
+                        )
+                    }
+                    val installed = repository.ensureBundle(slot)
+                    val replacement = withContext(Dispatchers.Default) {
+                        AiriOnnxEngine(installed)
+                    }
+                    engineMutex.withLock {
+                        engine?.close()
+                        engine = replacement
+                        engineKey = key
+                    }
+                }
+
+                _state.value = _state.value.copy(
+                    manifest = fetched.manifest,
+                    selectedSlot = slotName,
+                    loadedModelId = slot.id,
+                    loadingModel = false,
+                    freshFromNetwork = fetched.freshFromNetwork,
+                    status = if (fetched.freshFromNetwork) {
+                        "${labelFor(slotName)} pronto · ciclo ${fetched.manifest.cycle}"
+                    } else {
+                        "${labelFor(slotName)} pronto · cache offline"
+                    },
+                    error = null,
+                )
+            } catch (exc: Exception) {
+                _state.value = _state.value.copy(
+                    loadingModel = false,
+                    error = "Aggiornamento modello fallito: ${exc.message}",
+                    status = if (engine != null) "Uso il modello già installato" else "Modello non disponibile",
+                )
+            }
+        }
+    }
+
+    private fun labelFor(slot: String) =
+        if (slot == "research") "Latest Research" else "Champion"
+
+    override fun close() {
+        scope.cancel()
+        runBlocking {
+            engineMutex.withLock {
+                engine?.close()
+                engine = null
+            }
+        }
+    }
+}
+
+class MainActivity : ComponentActivity() {
+    private lateinit var controller: GeneralistController
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        controller = GeneralistController(applicationContext)
+        setContent {
+            val state by controller.state.collectAsState()
+            LaunchedEffect(Unit) { controller.start() }
+            AiriGeneralistApp(
+                state = state,
+                onRefresh = { controller.refresh() },
+                onSelectSlot = controller::selectSlot,
+                onClear = controller::clearChat,
+                onSend = controller::send,
+            )
+        }
+    }
+
+    override fun onDestroy() {
+        controller.close()
+        super.onDestroy()
+    }
+}
+
+@Composable
+private fun AiriGeneralistApp(
+    state: AppUiState,
+    onRefresh: () -> Unit,
+    onSelectSlot: (String) -> Unit,
+    onClear: () -> Unit,
+    onSend: (String) -> Unit,
+) {
+    val scheme = lightColorScheme(
+        primary = Color(0xFFE86F17),
+        secondary = Color(0xFF8A4F22),
+        surface = Color(0xFFFFFBF7),
+        background = Color(0xFFFFF7F0),
+    )
+    MaterialTheme(colorScheme = scheme) {
+        Scaffold(
+            topBar = {
+                Surface(shadowElevation = 2.dp) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("AIRI Generalist Lab", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                            Text(state.status, style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(onClick = onRefresh, enabled = !state.loadingModel) {
+                            Text("Aggiorna")
+                        }
+                    }
+                }
+            },
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(12.dp),
+            ) {
+                ModelPanel(state, onSelectSlot, onClear)
+                Spacer(Modifier.height(10.dp))
+                ChatPanel(
+                    state = state,
+                    onSend = onSend,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelPanel(
+    state: AppUiState,
+    onSelectSlot: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    val manifest = state.manifest
+    val selected = manifest?.slots?.get(state.selectedSlot)
+    Card {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FilterChip(
+                    selected = state.selectedSlot == "champion",
+                    onClick = { onSelectSlot("champion") },
+                    label = { Text("Champion") },
+                    enabled = manifest?.slots?.containsKey("champion") != false,
+                )
+                Spacer(Modifier.width(8.dp))
+                FilterChip(
+                    selected = state.selectedSlot == "research",
+                    onClick = { onSelectSlot("research") },
+                    label = { Text("Latest Research") },
+                    enabled = manifest?.slots?.containsKey("research") == true,
+                )
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onClear) { Text("Pulisci chat") }
+            }
+
+            if (selected != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    selected.id,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "ciclo ${manifest.cycle} · ${selected.parameters} param · BPE ${selected.tokenizerVocabSize} · ctx ${selected.contextLength}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "NLL ${fmt(selected.nllPerByte)} · similarity ${fmt(selected.generationSimilarity)} · exact ${fmt(selected.generationExactAccuracy)}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (selected.researchOnly) {
+                    Text(
+                        "Research-only: non ha superato tutti i gate di promozione.",
+                        color = MaterialTheme.colorScheme.secondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            if (!state.freshFromNetwork && manifest != null) {
+                Text(
+                    "Offline: sto usando il manifest salvato sul telefono.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            state.error?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatPanel(
+    state: AppUiState,
+    onSend: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var draft by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    LaunchedEffect(state.messages.size, state.generating) {
+        val count = state.messages.size + if (state.generating) 1 else 0
+        if (count > 0) listState.animateScrollToItem(count - 1)
+    }
+
+    Column(modifier) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            itemsIndexed(state.messages) { _, message ->
+                MessageBubble(message)
+            }
+            if (state.generating) {
+                item {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            tonalElevation = 1.dp,
+                        ) {
+                            Text("Sta generando…", Modifier.padding(12.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                modifier = Modifier.weight(1f),
+                minLines = 1,
+                maxLines = 4,
+                placeholder = { Text("Scrivi al modello…") },
+                enabled = !state.loadingModel && !state.generating && state.loadedModelId.isNotBlank(),
+            )
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = {
+                    val text = draft
+                    draft = ""
+                    onSend(text)
+                },
+                enabled = draft.isNotBlank() &&
+                    !state.loadingModel &&
+                    !state.generating &&
+                    state.loadedModelId.isNotBlank(),
+            ) {
+                Text("Invia")
+            }
+        }
+    }
+}
+
+@Composable
+private fun MessageBubble(message: ChatLine) {
+    val isUser = message.role == "user"
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = if (isUser) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+            tonalElevation = if (isUser) 0.dp else 1.dp,
+            modifier = Modifier.fillMaxWidth(0.88f),
+        ) {
+            Column(Modifier.padding(12.dp)) {
+                Text(
+                    if (message.content.isEmpty()) "∅  (output vuoto)" else message.content,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                if (!isUser && message.modelId.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${message.modelId.take(28)} · ${message.elapsedMs} ms",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun fmt(value: Double): String =
+    String.format(Locale.US, "%.4f", value)

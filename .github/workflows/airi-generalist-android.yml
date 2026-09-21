@@ -1,0 +1,128 @@
+name: AIRI Generalist Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'airi-generalist-android/**'
+      - '.github/workflows/airi-generalist-android.yml'
+  pull_request:
+    paths:
+      - 'airi-generalist-android/**'
+      - '.github/workflows/airi-generalist-android.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: airi-generalist-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK packages
+        run: |
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Check ONNX Runtime Android dependency
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors --retry-delay 3             --max-time 30             https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.30.0/onnxruntime-android-1.30.0.pom             --output /dev/null
+
+      - name: Unit tests and installable APK
+        working-directory: airi-generalist-android
+        run: |
+          gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AIRI-Generalist-Lab-Android
+          path: airi-generalist-android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+  emulator-smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: AIRI-Generalist-Lab-Android
+          path: emulator-apk
+
+      - name: Enable KVM access
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Launch app in Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash "$GITHUB_WORKSPACE/scripts/airi_generalist_android_emulator_test.sh"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: AIRI-Generalist-Lab-Android-Smoke
+          path: ${{ runner.temp }}/airi-generalist-android-smoke/
+          if-no-files-found: warn
+
+  publish-release:
+    needs: [build, emulator-smoke]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: AIRI-Generalist-Lab-Android
+          path: release-apk
+
+      - name: Publish installable APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="$(awk -F'"' '/^[[:space:]]*versionName = "/ {print $2; exit}' airi-generalist-android/app/build.gradle.kts)"
+          test -n "$VERSION"
+          TAG="airi-generalist-android-v$VERSION"
+          APK="$(find release-apk -name '*.apk' -type f | head -n1)"
+          OUT="AIRI-Generalist-Lab-v$VERSION.apk"
+          cp "$APK" "$OUT"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$OUT" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "$OUT"               --repo "$GITHUB_REPOSITORY"               --target "$GITHUB_SHA"               --title "AIRI Generalist Lab v$VERSION"               --notes "Android lab for locally chatting with the continuously exported AIRI Generalist Champion or isolated Latest Research finalist."
+          fi
