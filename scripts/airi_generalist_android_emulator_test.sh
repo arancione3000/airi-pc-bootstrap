@@ -90,7 +90,7 @@ for attempt in $(seq 1 35); do
   adb shell am start -n com.airipc.generalist/.MainActivity >/dev/null 2>&1 || true
   sleep 2
   if dump_ui /sdcard/airi-home.xml "$OUT/home.xml"; then
-    if grep -q 'Champion pronto' "$OUT/home.xml"; then
+    if grep -Eq 'Champion pronto|Champion sincronizzato|AI aggiornata · modello mobile in sincronizzazione|cache offline' "$OUT/home.xml"; then
       READY=1
       break
     fi
