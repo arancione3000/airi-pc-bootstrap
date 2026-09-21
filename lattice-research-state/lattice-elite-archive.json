@@ -244,6 +244,68 @@
       "worst_margin": -0.24634689092636108
     },
     {
+      "active_parameters": 29455.0,
+      "all_seed_wins": false,
+      "candidate_id": "lattice-2-37be191324b0",
+      "cycle": 8,
+      "genome": {
+        "config": {
+          "active_experts": 1,
+          "architecture_version": "airi-lattice-v0",
+          "context_length": 64,
+          "d_expert": 64,
+          "d_model": 32,
+          "deep_write_power": 1.6,
+          "dropout": 0.0,
+          "init_std": 0.02,
+          "lattice_mix": 0.2,
+          "local_recurrence": true,
+          "max_reasoning_steps": 2,
+          "memory_bands": 3,
+          "memory_decay_max": 0.995,
+          "memory_decay_min": 0.25,
+          "n_cells": 1,
+          "n_experts": 4,
+          "predictive_error_memory": false,
+          "rms_eps": 1e-06,
+          "surprise_power": 1.5,
+          "surprise_threshold": 0.25,
+          "tie_embeddings": true,
+          "tokenizer_version": "byte-v1",
+          "vocab_size": 264
+        },
+        "generation": 2,
+        "genome_id": "lattice-2-37be191324b0",
+        "learning_rate": 0.002,
+        "min_learning_rate": 0.0002,
+        "parent_id": "lattice-1-6a6cefdecf5c",
+        "weight_decay": 0.05
+      },
+      "mean_baseline_loss": 5.055108070373535,
+      "mean_loss": 5.194387257099152,
+      "mean_margin": -0.13927918672561646,
+      "mutation": {
+        "changes": {
+          "d_expert": 64
+        },
+        "family": "experts",
+        "mathesis_tags": [
+          "reasoning",
+          "efficiency"
+        ],
+        "name": "experts-grow-width",
+        "rationale": "evolve specialist and recurrent-reasoner capacity per active token"
+      },
+      "mutation_family": "experts",
+      "seed_count": 2,
+      "seed_wins": 0,
+      "stage": 3,
+      "state_bytes": 384.0,
+      "train_seconds": 3.243036394999997,
+      "win_fraction": 0.0,
+      "worst_margin": -0.23427528142929077
+    },
+    {
       "active_parameters": 22840.0,
       "all_seed_wins": false,
       "candidate_id": "lattice-2-329849b939db",
@@ -303,10 +365,72 @@
       "train_seconds": 3.319737012499999,
       "win_fraction": 0.0,
       "worst_margin": -0.20802825689315796
+    },
+    {
+      "active_parameters": 27919.0,
+      "all_seed_wins": false,
+      "candidate_id": "lattice-2-a29ffce9aaf8",
+      "cycle": 8,
+      "genome": {
+        "config": {
+          "active_experts": 1,
+          "architecture_version": "airi-lattice-v0",
+          "context_length": 64,
+          "d_expert": 48,
+          "d_model": 32,
+          "deep_write_power": 1.6,
+          "dropout": 0.0,
+          "init_std": 0.02,
+          "lattice_mix": 0.2,
+          "local_recurrence": true,
+          "max_reasoning_steps": 2,
+          "memory_bands": 3,
+          "memory_decay_max": 0.995,
+          "memory_decay_min": 0.25,
+          "n_cells": 1,
+          "n_experts": 4,
+          "predictive_error_memory": true,
+          "rms_eps": 1e-06,
+          "surprise_power": 1.5,
+          "surprise_threshold": 0.25,
+          "tie_embeddings": true,
+          "tokenizer_version": "byte-v1",
+          "vocab_size": 264
+        },
+        "generation": 2,
+        "genome_id": "lattice-2-a29ffce9aaf8",
+        "learning_rate": 0.002,
+        "min_learning_rate": 0.0002,
+        "parent_id": "lattice-1-6a6cefdecf5c",
+        "weight_decay": 0.05
+      },
+      "mean_baseline_loss": 5.073840975761414,
+      "mean_loss": 5.297339916229248,
+      "mean_margin": -0.22349894046783447,
+      "mutation": {
+        "changes": {
+          "predictive_error_memory": true
+        },
+        "family": "prediction",
+        "mathesis_tags": [
+          "reasoning",
+          "efficiency"
+        ],
+        "name": "prediction-enable-error-memory",
+        "rationale": "store learned latent prediction errors instead of only raw novelty"
+      },
+      "mutation_family": "prediction",
+      "seed_count": 2,
+      "seed_wins": 0,
+      "stage": 3,
+      "state_bytes": 384.0,
+      "train_seconds": 2.7378781765000006,
+      "win_fraction": 0.0,
+      "worst_margin": -0.26164937019348145
     }
   ],
   "summary": {
-    "count": 5,
+    "count": 7,
     "near_winners": 0,
     "pareto_count": 3
   },
