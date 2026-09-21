@@ -89,6 +89,15 @@ class ArchitectureSpec:
         raw = self.to_dict()
         for key in ("architecture_id", "generation", "parent_id"):
             raw.pop(key, None)
+        # Normalize semantically equivalent encodings before hashing.  MHA has
+        # one KV head set per query head; GQA without an explicit value means
+        # the bounded factory policy of half the query heads.
+        if raw.get("attention_type") == "mha":
+            raw["n_kv_heads"] = int(raw["n_heads"])
+        elif raw.get("n_kv_heads") is None:
+            raw["n_kv_heads"] = max(1, int(raw["n_heads"]) // 2)
+        if int(raw.get("local_attention_window", 0) or 0) == 0:
+            raw["local_attention_every"] = 0
         return raw
 
     def fingerprint(self) -> str:
