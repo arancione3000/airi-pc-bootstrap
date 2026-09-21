@@ -54,3 +54,12 @@ internal class GitHubSnapshotClient(
         }
     }
 }
+
+
+internal fun isModelBehindState(
+    mobileStateSha: String,
+    liveStateRevision: String?,
+): Boolean =
+    mobileStateSha.isNotBlank() &&
+        !liveStateRevision.isNullOrBlank() &&
+        mobileStateSha != liveStateRevision
