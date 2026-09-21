@@ -1,0 +1,68 @@
+name: AIRI Generalist Phase 5 Checkpoint Audit
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'computer/generalist_lm/bootstrap_training.py'
+      - 'computer/generalist_lm/bootstrap_audit.py'
+      - '.github/workflows/generalist-bootstrap.yml'
+      - '.github/workflows/generalist-bootstrap-audit.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: airi-generalist-phase5-audit-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'manual' }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: computer
+      STATE_REPO: /tmp/airi-phase5-audit-state
+      STATE_DIR: /tmp/airi-phase5-audit-state/generalist-state
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: computer/mathesis/requirements.txt
+
+      - name: Install CPU audit runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Restore immutable Phase 5 checkpoint state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf "${STATE_REPO}"
+          git clone --quiet --branch generalist-state --single-branch \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "${STATE_REPO}"
+          test -f "${STATE_DIR}/bootstrap-data/best/model.pt"
+          test -f "${STATE_DIR}/bootstrap-data/candidate/model.pt"
+
+      - name: Compare causal-best and post-SFT generation
+        run: |
+          set -euo pipefail
+          python -m generalist_lm.bootstrap_audit \
+            --state-dir "${STATE_DIR}" \
+            --output /tmp/phase5-checkpoint-audit.json \
+            | tee /tmp/phase5-checkpoint-audit.stdout.json
+          jq -e '.training_data_used == false and .held_out_suite_used_for_diagnosis_only == true' \
+            /tmp/phase5-checkpoint-audit.json
+
+      - name: Upload checkpoint audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: AIRI-Phase5-Checkpoint-Audit-${{ github.run_number }}
+          path: /tmp/phase5-checkpoint-audit.json
+          if-no-files-found: error
+          retention-days: 14
