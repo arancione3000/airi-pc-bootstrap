@@ -1404,3 +1404,86 @@ def test_generalist_phase4_bpe_extension_preserves_existing_token_ids():
     for token_id in range(source.vocab_size):
         if token_id >= 8:
             assert extended.token_bytes(token_id) == source.token_bytes(token_id)
+
+
+def test_airi_pc_lab_snapshot_and_curriculum_are_read_only():
+    from pathlib import Path
+
+    from generalist_lm.airi_pc_lab import (
+        build_airi_pc_lab_rows,
+        execute_lab_tool,
+        lab_tools,
+        snapshot_airi_pc_lab,
+    )
+    from generalist_lm.tool_protocol import ToolCall
+
+    repo_root = Path(__file__).resolve().parents[1]
+    snapshot = snapshot_airi_pc_lab(repo_root)
+
+    assert snapshot["version"] == "airi-pc-lab-v1"
+    assert snapshot["mode"] == "read_only_sandbox"
+    assert snapshot["modules"]
+    assert "filesystem_write" in snapshot["denied_capabilities"]
+    assert "phone_control" in snapshot["denied_capabilities"]
+    assert "production_promotion" in snapshot["denied_capabilities"]
+
+    tools = lab_tools(snapshot)
+    assert set(tools) == {
+        "lab_list_capabilities",
+        "lab_inspect_module",
+        "lab_describe_task_flow",
+    }
+    rows = build_airi_pc_lab_rows(snapshot, max_rows=8)
+    assert rows
+    assert all(row.domain in {"tools", "coding"} for row in rows)
+    assert all(row.messages[-1]["role"] == "assistant" for row in rows)
+    assert all("shell" not in str(row.messages[-1]).lower() for row in rows)
+
+    result = execute_lab_tool(
+        snapshot,
+        ToolCall(name="lab_list_capabilities", arguments={}),
+    )
+    assert result["mode"] == "read_only_sandbox"
+
+
+def test_airi_pc_lab_rejects_non_allowlisted_module_and_tool():
+    from pathlib import Path
+    import pytest
+
+    from generalist_lm.airi_pc_lab import execute_lab_tool, snapshot_airi_pc_lab
+    from generalist_lm.tool_protocol import ToolCall
+
+    repo_root = Path(__file__).resolve().parents[1]
+    snapshot = snapshot_airi_pc_lab(repo_root)
+
+    with pytest.raises(PermissionError):
+        execute_lab_tool(
+            snapshot,
+            ToolCall(
+                name="lab_inspect_module",
+                arguments={"module": "../../secrets"},
+            ),
+        )
+
+    with pytest.raises(PermissionError):
+        execute_lab_tool(
+            snapshot,
+            ToolCall(name="shell", arguments={"command": "whoami"}),
+        )
+
+
+def test_curriculum_memory_accepts_verified_extra_lab_rows(tmp_path):
+    from pathlib import Path
+
+    from generalist_lm.airi_pc_lab import build_airi_pc_lab_rows, snapshot_airi_pc_lab
+    from generalist_lm.curriculum_memory import CurriculumMemory
+
+    repo_root = Path(__file__).resolve().parents[1]
+    rows = build_airi_pc_lab_rows(snapshot_airi_pc_lab(repo_root), max_rows=4)
+    memory = CurriculumMemory(tmp_path, max_rows=120)
+    report = memory.expand(7, signals=["language_gap"], extra_rows=rows)
+
+    assert report["extra_rows_considered"] == len(rows)
+    stored = memory.rows()
+    prompts = [row.messages[1]["content"] if len(row.messages) > 1 else "" for row in stored]
+    assert any("AIRI-PC Lab" in prompt for prompt in prompts)
