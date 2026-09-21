@@ -11,6 +11,7 @@ import time
 from typing import Any, Iterable, Sequence
 
 from .corpus import repository_corpus
+from .curriculum import DOMAINS, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
 from .evolution import (
     GeneralistGenome,
@@ -221,10 +222,7 @@ def prepare_swarm(
     champion_report = _grouped_validation(
         champion_runtime.model,
         champion_runtime.tokenizer,
-        __import__(
-            "generalist_lm.curriculum",
-            fromlist=["validation_rows"],
-        ).validation_rows(),
+        validation_rows(),
         device="cpu",
     )
     champion_report["parameters"] = parameter_count(champion_runtime.model)
@@ -810,7 +808,6 @@ def finalize_swarm(
     if loaded is None:
         raise RuntimeError("Generalist swarm lost champion state during finalization")
     champion_genome, champion_runtime = loaded
-    from .curriculum import validation_rows
     champion_report = _grouped_validation(
         champion_runtime.model,
         champion_runtime.tokenizer,
@@ -822,6 +819,26 @@ def finalize_swarm(
         champion_report,
         champion_report["parameters"],
     )
+    cycle = int(plan["cycle"])
+    rotating = canary_rows(cycle)
+    champion_report["canary_cycle"] = cycle
+    champion_report["canary"] = _grouped_validation(
+        champion_runtime.model,
+        champion_runtime.tokenizer,
+        rotating,
+        device="cpu",
+    )
+    replay_rows = CurriculumMemory(root, max_rows=20_000).rows()
+    replay_prompts = {
+        str(row.messages[0].get("content", ""))
+        for row in replay_rows
+        if row.messages
+    }
+    rotating_prompts = {
+        str(row.messages[0].get("content", ""))
+        for row in rotating
+        if row.messages
+    }
 
     status = {
         "ok": True,
@@ -838,11 +855,26 @@ def finalize_swarm(
         "adaptive_curriculum": {
             "domain_weights": plan.get("domain_weights") or {},
         },
+        "rotating_canary": {
+            "cycle": cycle,
+            "domains": [row.domain for row in rotating],
+            "training_overlap": sorted(rotating_prompts & replay_prompts),
+        },
+        "grounded_pretraining": {
+            "steps": 4,
+            "corpus": {
+                "enabled": True,
+                "automatic_data_growth": bool(
+                    (plan.get("data_growth") or {}).get("ok")
+                ),
+            },
+        },
         "automatic_data_growth": plan.get("data_growth"),
         "progressive_scaling": plan.get("progressive_scaling"),
         "plateau": plan.get("plateau"),
         "trials": [row for _path, row in scanned],
         "policy": {
+            "research_only": True,
             "parallel_swarm": "8->4->2",
             "candidate_can_self_promote": False,
             "external_reducer": True,
@@ -852,6 +884,31 @@ def finalize_swarm(
             "progressive_scaling_max_parameters": 2_000_000,
             "weight_inheritance": "exact + safe expansion prefixes",
             "automatic_data_growth": "permissive SPDX + immutable commit + quarantine + hash + quality filter",
+            "continual_learning": {
+                "enabled": True,
+                "full_replay": True,
+                "domain_balanced_base_replay": True,
+                "curriculum_max_rows": 4000,
+                "gradient_accumulation_steps": 1,
+                "precision": "fp32",
+            },
+            "tokenizer_research": {
+                "allowed": ["byte-v1", "bpe-v1"],
+                "comparison_metric": "nll_per_byte",
+                "protected_eval_rows_excluded_from_tokenizer_training": True,
+                "bpe_vocab_size": 512,
+            },
+            "rotating_canary": {
+                "enabled": True,
+                "training_excluded": True,
+                "domains": len(DOMAINS),
+            },
+            "architecture_weight_transfer": {
+                "enabled": True,
+                "exact_name_and_shape": True,
+                "safe_prefix_expansion": True,
+                "byte_to_bpe_embedding_migration": True,
+            },
         },
         "updated_at": time.time(),
     }
