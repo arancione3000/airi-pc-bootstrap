@@ -8,8 +8,10 @@ import pytest
 from generalist_lm.architecture_ir import ArchitectureSpec
 from generalist_lm.architecture_mutations import (
     next_parameter_tier,
+    proposal_set,
     structural_mutations,
 )
+from generalist_lm.architecture_search import prioritize_architecture_proposals
 from generalist_lm.data_quality import assess_text
 from generalist_lm.evolution import GeneralistGenome
 from generalist_lm.internet_quarantine import (
@@ -17,6 +19,10 @@ from generalist_lm.internet_quarantine import (
     quarantine_records,
 )
 from generalist_lm.meta_controller import decide_next_action
+from generalist_lm.generalist_swarm import (
+    GENERALIST_SWARM_VERSION,
+    select_survivors,
+)
 
 
 def test_architecture_ir_roundtrips_current_genome():
@@ -69,6 +75,115 @@ def test_parameter_ladder_reaches_multi_million_scale():
     assert next_parameter_tier(1_250_000) == 3_000_000
     assert next_parameter_tier(3_000_000) == 7_000_000
     assert next_parameter_tier(7_000_000) is None
+
+
+def test_capacity_proposals_cannot_be_crowded_out_by_micro_mutations():
+    parent = ArchitectureSpec(
+        architecture_id="tiny-parent",
+        generation=2,
+        parent_id=None,
+        context_length=128,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=128,
+        tokenizer_version="bpe-v1",
+        target_vocab_size=384,
+    ).validate()
+    proposals = proposal_set(
+        parent,
+        signals=["language_collapse"],
+        parameter_cap=7_000_000,
+        max_candidates=16,
+    )
+    ordered = prioritize_architecture_proposals(proposals)
+    kinds = [row["kind"] for row in ordered]
+    capacity_positions = [
+        index
+        for index, kind in enumerate(kinds)
+        if kind in {"capacity_plus_structure", "capacity_scale"}
+    ]
+    assert capacity_positions
+    first_structural = kinds.index("structural_mutation")
+    assert max(capacity_positions) < first_structural
+    assert all(
+        ordered[index]["parameter_estimate"] > parent.parameter_estimate()
+        for index in capacity_positions
+    )
+
+
+def test_safe_capacity_probe_is_preserved_by_successive_halving(tmp_path: Path):
+    rows = [
+        {
+            "version": GENERALIST_SWARM_VERSION,
+            "ok": True,
+            "candidate_index": 0,
+            "candidate_id": "control",
+            "kind": "architecture_control",
+            "stage": 1,
+            "worst_domain_regression": 0.02,
+            "any_generation_pathological_repetition": False,
+            "any_seed_eligible": True,
+            "mean_generation_accuracy": 0.2,
+            "mean_generation_similarity": 0.4,
+            "mean_generation_nonempty_rate": 1.0,
+            "mean_generation_repetition_rate": 0.2,
+            "mean_nll_per_byte": 1.6,
+            "parameters": 115_000,
+            "score": 20.0,
+        },
+        {
+            "version": GENERALIST_SWARM_VERSION,
+            "ok": True,
+            "candidate_index": 1,
+            "candidate_id": "micro",
+            "kind": "architecture_structural_mutation",
+            "stage": 1,
+            "worst_domain_regression": 0.03,
+            "any_generation_pathological_repetition": False,
+            "any_seed_eligible": True,
+            "mean_generation_accuracy": 0.18,
+            "mean_generation_similarity": 0.38,
+            "mean_generation_nonempty_rate": 1.0,
+            "mean_generation_repetition_rate": 0.21,
+            "mean_nll_per_byte": 1.7,
+            "parameters": 106_000,
+            "score": 19.0,
+        },
+        {
+            "version": GENERALIST_SWARM_VERSION,
+            "ok": True,
+            "candidate_index": 2,
+            "candidate_id": "capacity",
+            "kind": "architecture_capacity_plus_structure",
+            "stage": 1,
+            "worst_domain_regression": 0.10,
+            "any_generation_pathological_repetition": False,
+            "any_seed_eligible": False,
+            "mean_generation_accuracy": 0.05,
+            "mean_generation_similarity": 0.12,
+            "mean_generation_nonempty_rate": 0.8,
+            "mean_generation_repetition_rate": 0.35,
+            "mean_nll_per_byte": 2.1,
+            "parameters": 240_000,
+            "score": 10.0,
+        },
+    ]
+    paths = []
+    for row in rows:
+        path = tmp_path / f"{row['candidate_index']}.json"
+        path.write_text(json.dumps(row), encoding="utf-8")
+        paths.append(path)
+
+    result = select_survivors(
+        paths,
+        tmp_path / "selection.json",
+        survivors=2,
+    )
+    selected = {row["candidate_id"] for row in result["selected"]}
+    assert "control" in selected
+    assert "capacity" in selected
+    assert result["protected_progressive_scale"] is True
 
 
 def test_quality_filter_rejects_repetition_without_external_llm():

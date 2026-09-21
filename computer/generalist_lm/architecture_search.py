@@ -56,6 +56,31 @@ def _phase5_signals(state_dir: Path) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+def prioritize_architecture_proposals(
+    proposals: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Reserve scarce population slots for capacity experiments.
+
+    The meta-controller may decide that the current champion is under-capacity.
+    In that situation Architecture Search must not fill every slot with cheap
+    same-size mutations and silently omit the requested scale experiment.
+    Sorting is stable within each proposal class so the existing weakness-
+    directed structural order is preserved.
+    """
+    priority = {
+        "capacity_plus_structure": 0,
+        "capacity_scale": 1,
+        "structural_mutation": 2,
+    }
+    return sorted(
+        [dict(row) for row in proposals],
+        key=lambda row: (
+            priority.get(str(row.get("kind") or ""), 9),
+            int(row.get("parameter_estimate", 1 << 60) or (1 << 60)),
+        ),
+    )
+
+
 def prepare_architecture_search(
     state_dir: str | Path,
     output_path: str | Path,
@@ -173,7 +198,8 @@ def prepare_architecture_search(
     })
 
     seen = {parent.fingerprint()}
-    for proposal in verified_proposals:
+    ordered_proposals = prioritize_architecture_proposals(verified_proposals)
+    for proposal in ordered_proposals:
         spec = ArchitectureSpec.from_dict(dict(proposal["architecture"]))
         if spec.fingerprint() in seen:
             continue
@@ -224,6 +250,7 @@ def prepare_architecture_search(
         },
         "architecture_policy": {
             "same_budget_control_required": True,
+            "capacity_slots_reserved": True,
             "static_verifier_required": True,
             "external_pretrained_weights": False,
             "arbitrary_generated_python": False,
