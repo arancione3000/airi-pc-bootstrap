@@ -998,19 +998,28 @@ def select_survivors(
     safe.sort(key=rank_key)
     survivor_count = max(1, int(survivors))
     selected = safe[:survivor_count]
+    def is_capacity_probe(row: dict[str, Any]) -> bool:
+        kind = str(row.get("kind") or "")
+        return (
+            kind.startswith("progressive_scale")
+            or kind == "architecture_capacity_scale"
+            or kind == "architecture_capacity_plus_structure"
+        )
+
     progressive_rows = [
         row for row in safe
-        if str(row.get("kind") or "").startswith("progressive_scale")
+        if is_capacity_probe(row)
     ]
     protected_progressive_scale = False
     if (
         survivor_count >= 2
         and progressive_rows
-        and not any(
-            str(row.get("kind") or "").startswith("progressive_scale")
-            for row in selected
-        )
+        and not any(is_capacity_probe(row) for row in selected)
     ):
+        # Only candidates that already survived the safety filter are eligible
+        # for protected exploration.  This reserves one slot for the capacity
+        # hypothesis without bypassing repetition/domain-regression checks.
+        progressive_rows.sort(key=rank_key)
         selected[-1] = progressive_rows[0]
         selected.sort(key=rank_key)
         protected_progressive_scale = True
