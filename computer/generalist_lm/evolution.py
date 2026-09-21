@@ -34,6 +34,12 @@ class GeneralistGenome:
     norm_type: str = "layernorm"
     position_encoding: str = "learned"
     ff_variant: str = "swiglu"
+    attention_type: str = "mha"
+    n_kv_heads: int | None = None
+    local_attention_window: int = 0
+    local_attention_every: int = 0
+    norm_placement: str = "pre"
+    tie_embeddings: bool = True
 
     def validate(self) -> "GeneralistGenome":
         if self.tokenizer_version not in _ALLOWED_TOKENIZERS:
@@ -64,6 +70,18 @@ class GeneralistGenome:
             raise ValueError("RoPE requires an even attention head dimension")
         if self.ff_variant not in {"swiglu", "gelu"}:
             raise ValueError("unauthorized ff_variant")
+        if self.attention_type not in {"mha", "gqa"}:
+            raise ValueError("unauthorized attention_type")
+        if self.norm_placement not in {"pre", "post"}:
+            raise ValueError("unauthorized norm_placement")
+        if self.attention_type == "gqa":
+            kv = self.n_kv_heads if self.n_kv_heads is not None else max(1, self.n_heads // 2)
+            if not (1 <= int(kv) <= self.n_heads and self.n_heads % int(kv) == 0):
+                raise ValueError("invalid GQA kv-head count")
+        if not (0 <= self.local_attention_window <= self.context_length):
+            raise ValueError("local attention window outside context")
+        if not (0 <= self.local_attention_every <= self.n_layers):
+            raise ValueError("local attention cadence outside depth")
         return self
 
     def to_dict(self) -> dict[str, Any]:
@@ -83,6 +101,12 @@ class GeneralistGenome:
             norm_type=self.norm_type,
             position_encoding=self.position_encoding,
             ff_variant=self.ff_variant,
+            attention_type=self.attention_type,
+            n_kv_heads=self.n_kv_heads,
+            local_attention_window=self.local_attention_window,
+            local_attention_every=self.local_attention_every,
+            norm_placement=self.norm_placement,
+            tie_embeddings=self.tie_embeddings,
         ).validate()
 
 
@@ -117,6 +141,26 @@ def generate_challengers(
         {"reasoning_depth": min(16, champion.reasoning_depth + 1)},
         {"d_model": max(32, champion.d_model - 32), "d_ff": max(champion.d_model, champion.d_ff - 64)},
         {"dropout": min(0.5, champion.dropout + 0.05)},
+        {
+            "attention_type": "gqa" if champion.attention_type == "mha" else "mha",
+            "n_kv_heads": (
+                max(1, champion.n_heads // 2)
+                if champion.attention_type == "mha"
+                else champion.n_heads
+            ),
+        },
+        {
+            "local_attention_window": (
+                max(32, min(champion.context_length, champion.context_length // 2))
+                if champion.local_attention_window == 0
+                else 0
+            ),
+            "local_attention_every": (
+                2 if champion.local_attention_window == 0 and champion.n_layers >= 2 else 0
+            ),
+        },
+        {"norm_placement": "post" if champion.norm_placement == "pre" else "pre"},
+        {"tie_embeddings": not champion.tie_embeddings},
     ]
     if variants:
         shift = int(exploration_offset) % len(variants)
@@ -135,6 +179,23 @@ def generate_challengers(
         directed.append({"retrieval_adapter": True})
     if "symbolic_reasoning_signal" in signals:
         directed.append({"symbolic_adapter": True, "reasoning_depth": min(16, champion.reasoning_depth + 1)})
+    if "language_collapse" in signals or "autoregressive_collapse" in signals:
+        directed.extend([
+            {
+                "norm_type": "rmsnorm",
+                "position_encoding": "rope",
+                "attention_type": "gqa",
+                "n_kv_heads": max(1, champion.n_heads // 2),
+                "norm_placement": "pre",
+            },
+            {
+                "local_attention_window": max(
+                    32,
+                    min(champion.context_length, champion.context_length // 2),
+                ),
+                "local_attention_every": 2 if champion.n_layers >= 2 else 0,
+            },
+        ])
     variants = directed + variants
 
     out: list[GeneralistGenome] = []
@@ -230,6 +291,12 @@ def progressive_scale_candidate(
                         norm_type=champion.norm_type,
                         position_encoding=champion.position_encoding,
                         ff_variant=champion.ff_variant,
+                        attention_type=champion.attention_type,
+                        n_kv_heads=champion.n_kv_heads,
+                        local_attention_window=champion.local_attention_window,
+                        local_attention_every=champion.local_attention_every,
+                        norm_placement=champion.norm_placement,
+                        tie_embeddings=champion.tie_embeddings,
                     ).validate()
                 except Exception:
                     continue
