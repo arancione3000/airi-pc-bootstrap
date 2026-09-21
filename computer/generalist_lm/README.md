@@ -116,14 +116,21 @@ Research validation now includes a real generation probe: one held-out item per 
 
 Architecture challengers no longer discard all accumulated knowledge by default.
 Before fine-tuning, the research loop copies every champion state tensor whose
-name and shape exactly match the challenger. When progressive scaling only
-expands a one- or two-dimensional tensor, AIRI also copies the learned
-overlapping prefix and leaves only the newly added rows/columns randomly
-initialized. Token embeddings receive the same width-expansion treatment, and
-byte-to-BPE migration keeps its deterministic byte-derived initialization.
-Shrinking tensors, rank changes and incompatible tokenizer migrations remain
-fail-closed. The transfer report records exact and partial inheritance
-separately.
+name and shape exactly match the challenger. Progressive same-width growth uses
+a layout-aware **Net2Grow** transfer instead of a raw tensor prefix: SwiGLU
+gate/value halves are mapped into the corresponding larger halves, newly added
+FFN capacity starts with zero contribution, and newly inserted Transformer
+blocks have zero attention/FFN output projections so each new residual block is
+an identity at initialization. This preserves the champion function while the
+new capacity begins learning.
+
+Context-row growth retains learned positions and initializes only new positions
+neutrally. Width growth may retain compatible embedding coordinates but is not
+claimed function-preserving because normalization spans the hidden width.
+Byte-to-BPE migration keeps its deterministic byte-derived initialization.
+Shrinking tensors, concatenated-layout mismatches and incompatible tokenizer
+migrations remain fail-closed. The transfer report records exact, structured
+growth and identity-initialized tensors separately.
 
 The bounded architecture DSL can now explore learned absolute positions,
 sinusoidal positions, and RoPE (rotary positional embeddings). RoPE is applied
