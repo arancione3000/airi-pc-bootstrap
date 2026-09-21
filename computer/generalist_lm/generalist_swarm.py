@@ -449,7 +449,9 @@ def _domain_regression(
     for domain, old_value in old.items():
         if domain in new:
             values.append(float(new[domain]) - float(old_value))
-    return max(values) if values else float("inf")
+    # Missing comparable held-out domains must remain fail-closed, but the
+    # persisted swarm report is strict JSON and must never emit Infinity.
+    return max(values) if values else 1_000_000.0
 
 
 def _load_stage_source(
@@ -505,7 +507,7 @@ def run_candidate(
         raise RuntimeError("Generalist swarm worker has no champion checkpoint")
     _champion_genome, champion_runtime = loaded
     source_runtime = champion_runtime
-    source_metadata: dict[str, Any] | None = None
+    source_metadata: dict[str, Any] = {}
     if source_checkpoint is not None:
         source_runtime, source_metadata = _load_stage_source(
             source_checkpoint,
@@ -634,8 +636,8 @@ def run_candidate(
             "cycle": int(plan["cycle"]),
             "stage": int(stage),
             "previous_stage": (
-                int(source_metadata.get("stage"))
-                if source_metadata is not None
+                int(source_metadata["stage"])
+                if "stage" in source_metadata
                 else None
             ),
             "cumulative_steps": (
@@ -675,8 +677,8 @@ def run_candidate(
             + int(steps)
         ),
         "continued_from_stage": (
-            int(source_metadata.get("stage"))
-            if source_metadata is not None
+            int(source_metadata["stage"])
+            if "stage" in source_metadata
             else None
         ),
         "candidate_index": int(candidate_index),
