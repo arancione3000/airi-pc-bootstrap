@@ -2,6 +2,11 @@ name: AIRI Generalist Research Continuum
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - AIRI Generalist Language Bootstrap
+      - AIRI Generalist Architecture Search
+    types: [completed]
   schedule:
     - cron: '*/5 * * * *'
   push:
