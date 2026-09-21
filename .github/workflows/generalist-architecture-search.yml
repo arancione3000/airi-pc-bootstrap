@@ -31,6 +31,7 @@ jobs:
       run_search: ${{ steps.plan.outputs.run_search }}
       matrix: ${{ steps.plan.outputs.matrix }}
       cycle: ${{ steps.plan.outputs.cycle }}
+      base_state_sha: ${{ steps.plan.outputs.base_state_sha }}
     env:
       PYTHONPATH: computer
       STATE_REPO: /tmp/airi-architecture-state-repo
@@ -115,10 +116,12 @@ jobs:
           run_search="$(jq -r '.run_search' "${BUNDLE}/plan.json")"
           matrix="$(jq -c '.matrix' "${BUNDLE}/plan.json")"
           cycle="$(jq -r '.cycle' "${BUNDLE}/plan.json")"
+          base_state_sha="$(git -C "${STATE_REPO}" rev-parse HEAD)"
           {
             echo "run_search=${run_search}"
             echo "matrix=${matrix}"
             echo "cycle=${cycle}"
+            echo "base_state_sha=${base_state_sha}"
           } >> "${GITHUB_OUTPUT}"
 
       - uses: actions/upload-artifact@v4
@@ -312,6 +315,13 @@ jobs:
           git -C "${STATE_REPO}" config user.email "airi-architecture@users.noreply.github.com"
           git -C "${STATE_REPO}" fetch --quiet origin generalist-state:generalist-state
           git -C "${STATE_REPO}" checkout --quiet generalist-state
+          current_state_sha="$(git -C "${STATE_REPO}" rev-parse HEAD)"
+          expected_state_sha="${{ needs.plan.outputs.base_state_sha }}"
+          if [[ "${current_state_sha}" != "${expected_state_sha}" ]]; then
+            echo "generalist-state advanced during architecture research; refusing stale overwrite." >&2
+            echo "expected=${expected_state_sha} current=${current_state_sha}" >&2
+            exit 1
+          fi
           rm -rf "${STATE_REPO}/generalist-state"
           mkdir -p "${STATE_REPO}/generalist-state"
           cp -a "${STATE_DIR}/." "${STATE_REPO}/generalist-state/"
