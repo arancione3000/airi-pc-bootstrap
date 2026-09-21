@@ -21,14 +21,17 @@ class LatticeMigrationEvidence:
     max_active_parameter_ratio: float
 
     def to_dict(self) -> dict[str, Any]:
+        def safe(value: float) -> float | None:
+            return float(value) if math.isfinite(float(value)) else None
+
         return {
             "genome_id": self.genome_id,
             "winning_cycles": self.winning_cycles,
             "seed_wins": self.seed_wins,
             "seed_count": self.seed_count,
-            "mean_margin": self.mean_margin,
-            "worst_margin": self.worst_margin,
-            "max_active_parameter_ratio": self.max_active_parameter_ratio,
+            "mean_margin": safe(self.mean_margin),
+            "worst_margin": safe(self.worst_margin),
+            "max_active_parameter_ratio": safe(self.max_active_parameter_ratio),
         }
 
 
