@@ -342,21 +342,22 @@ class CausalTransformerLM:
                     logits = result["logits"][:, -1, :]
                     past_key_values = result["past_key_values"] if use_cache else None
 
-                    penalty = max(1.0, float(repetition_penalty or 1.0))
-                    if penalty > 1.0 and int(out.shape[1]) > prompt_length:
-                        logits = logits.clone()
-                        for batch_index in range(int(out.shape[0])):
-                            repeated = torch.unique(out[batch_index, prompt_length:])
-                            values = logits[batch_index, repeated]
-                            logits[batch_index, repeated] = torch.where(
-                                values < 0,
-                                values * penalty,
-                                values / penalty,
-                            )
-
                     if temperature is None or float(temperature) <= 0.0:
+                        # Canonical RAW GREEDY: sampling controls intentionally
+                        # cannot alter deterministic evaluation output.
                         next_token = logits.argmax(dim=-1, keepdim=True)
                     else:
+                        penalty = max(1.0, float(repetition_penalty or 1.0))
+                        if penalty > 1.0 and int(out.shape[1]) > prompt_length:
+                            logits = logits.clone()
+                            for batch_index in range(int(out.shape[0])):
+                                repeated = torch.unique(out[batch_index, prompt_length:])
+                                values = logits[batch_index, repeated]
+                                logits[batch_index, repeated] = torch.where(
+                                    values < 0,
+                                    values * penalty,
+                                    values / penalty,
+                                )
                         scaled = logits / max(1e-5, float(temperature))
                         if top_k is not None and 0 < int(top_k) < scaled.shape[-1]:
                             values, _ = torch.topk(scaled, int(top_k))
