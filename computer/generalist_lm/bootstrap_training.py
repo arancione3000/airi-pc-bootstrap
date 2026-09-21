@@ -343,7 +343,11 @@ def run_segment(
                 bad_eval_count += 1
             progress["best_validation_loss"] = best_loss
             progress["bad_eval_count"] = bad_eval_count
-            if bad_eval_count >= 4:
+            minimum_before_early_stop = min(600_000, int(target_tokens * 0.60))
+            if (
+                bad_eval_count >= 4
+                and int(progress["tokens_processed"]) >= minimum_before_early_stop
+            ):
                 early_stopped = True
                 break
             runtime.model.train()
