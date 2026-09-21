@@ -904,12 +904,16 @@ def _pretraining_domain_weights(
     """Map held-out task weakness onto grounded pretraining domains."""
     source = dict(domain_weights or {})
     mapping = {
-        "language": "general",
         "coding": "code",
         "data": "data",
         "reasoning": "reasoning",
     }
     out: dict[str, float] = {}
+    language_weight = source.get("language")
+    if isinstance(language_weight, (int, float)) and math.isfinite(float(language_weight)):
+        value = max(0.05, float(language_weight))
+        out["general"] = value
+        out["language-it"] = value
     for task_domain, corpus_domain in mapping.items():
         value = source.get(task_domain)
         if isinstance(value, (int, float)) and math.isfinite(float(value)):
