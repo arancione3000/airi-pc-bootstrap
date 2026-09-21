@@ -68,7 +68,7 @@ class ArchitectureSpec:
             raise ValueError("invalid parent_id")
         if not (0 <= int(self.generation) <= 1_000_000):
             raise ValueError("invalid architecture generation")
-        if not (384 <= int(self.target_vocab_size) <= 65_536):
+        if not (264 <= int(self.target_vocab_size) <= 65_536):
             raise ValueError("target vocab outside bounded Architecture IR")
 
         # GeneralistGenome and GeneralistLMConfig remain the authoritative
@@ -77,7 +77,7 @@ class ArchitectureSpec:
         genome = self.to_genome(validate=False)
         genome.validate()
         self.to_model_config(
-            vocab_size=max(384, min(int(self.target_vocab_size), 65_536)),
+            vocab_size=max(264, min(int(self.target_vocab_size), 65_536)),
             validate=False,
         ).validate()
         return self
