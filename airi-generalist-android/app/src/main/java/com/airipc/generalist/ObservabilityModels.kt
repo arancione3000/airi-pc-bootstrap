@@ -14,6 +14,11 @@ data class NeuralArchitecture(
     val normType: String,
     val positionEncoding: String,
     val ffVariant: String,
+    val attentionType: String = "mha",
+    val nKvHeads: Int = 0,
+    val localAttentionWindow: Int = 0,
+    val localAttentionEvery: Int = 0,
+    val normPlacement: String = "pre",
     val tiedEmbeddingLmHead: Boolean,
 )
 
@@ -29,6 +34,7 @@ data class NeuralComponent(
 data class NeuralHead(
     val layer: Int,
     val head: Int,
+    val kind: String = "mha_qkv",
     val parameters: Int,
     val meanAbsWeight: Double,
     val rmsWeight: Double,
@@ -132,7 +138,15 @@ internal fun parseNeuralDiagnostics(raw: JSONObject?): NeuralDiagnostics? {
         normType = archRaw.optString("norm_type"),
         positionEncoding = archRaw.optString("position_encoding"),
         ffVariant = archRaw.optString("ff_variant"),
-        tiedEmbeddingLmHead = archRaw.optBoolean("tied_embedding_lm_head"),
+        attentionType = archRaw.optString("attention_type", "mha"),
+        nKvHeads = archRaw.optInt(
+            "n_kv_heads",
+            archRaw.optInt("n_heads"),
+        ),
+        localAttentionWindow = archRaw.optInt("local_attention_window", 0),
+        localAttentionEvery = archRaw.optInt("local_attention_every", 0),
+        normPlacement = archRaw.optString("norm_placement", "pre"),
+        tiedEmbeddingLmHead = archRaw.optBoolean("tied_embedding_lm_head", true),
     )
     val components = buildList {
         val array = raw.optJSONArray("components") ?: return@buildList
@@ -158,6 +172,7 @@ internal fun parseNeuralDiagnostics(raw: JSONObject?): NeuralDiagnostics? {
                 NeuralHead(
                     layer = row.optInt("layer"),
                     head = row.optInt("head"),
+                    kind = row.optString("kind", "mha_qkv"),
                     parameters = row.optInt("parameters"),
                     meanAbsWeight = row.optDouble("mean_abs_weight"),
                     rmsWeight = row.optDouble("rms_weight"),
