@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import shutil
 from typing import Any, Callable, Iterable
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote, quote_plus, urlparse
 from urllib.request import Request, urlopen
 
 
@@ -327,7 +327,8 @@ def grow_generalist_data(
             budget = min(max_file_bytes, remaining)
             if budget < 128:
                 break
-            raw_url = f"https://raw.githubusercontent.com/{full_name}/{commit}/{path}"
+            raw_path = quote(path, safe="/")
+            raw_url = f"https://raw.githubusercontent.com/{full_name}/{commit}/{raw_path}"
             try:
                 raw = _request_raw(
                     raw_url,
