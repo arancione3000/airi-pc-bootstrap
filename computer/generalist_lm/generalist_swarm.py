@@ -765,7 +765,6 @@ def finalize_swarm(
 
         # Recompute validation in the external reducer. Worker-reported metrics
         # are useful for ranking but cannot directly authorize promotion.
-        from .curriculum import validation_rows
         verified = _grouped_validation(
             runtime.model,
             runtime.tokenizer,

@@ -584,3 +584,84 @@ def test_generalist_swarm_plan_contains_progressive_scale_and_adaptive_policy(tm
     assert plan["progressive_scaling"]["target_parameters"] == 250_000
     assert plan["progressive_scaling"]["candidate_generated"] is True
     assert any(row["kind"] == "progressive_scale" for row in plan["candidates"])
+
+
+
+def test_generalist_swarm_finalize_handles_no_eligible_finalist(tmp_path: Path):
+    pytest.importorskip("torch")
+    import json
+
+    from generalist_lm.evolution import GeneralistGenome
+    from generalist_lm.generalist_swarm import finalize_swarm
+    from generalist_lm.model import GeneralistLMConfig
+    from generalist_lm.runtime import GeneralistRuntime
+
+    state = tmp_path / "state"
+    champion_dir = state / "champion"
+    state.mkdir()
+
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        dropout=0.0,
+    ).validate()
+    GeneralistRuntime.fresh(cfg).save_checkpoint(
+        champion_dir,
+        metadata={
+            "role": "research_champion",
+            "production_qualified": False,
+        },
+    )
+    genome = GeneralistGenome(
+        generation=1,
+        parent_id="seed",
+        genome_id="no-finalist-champion",
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        retrieval_adapter=False,
+        symbolic_adapter=False,
+        code_adapter=False,
+        data_adapter=False,
+        reasoning_depth=1,
+    ).validate()
+    (state / "champion-genome.json").write_text(
+        json.dumps(genome.to_dict()),
+        encoding="utf-8",
+    )
+
+    plan = {
+        "cycle": 1,
+        "champion": genome.to_dict(),
+        "champion_report": {},
+        "signals": [],
+        "mathesis": None,
+        "curriculum": {},
+        "domain_weights": {},
+        "data_growth": {"ok": True, "skipped": True},
+        "progressive_scaling": {},
+        "plateau": {},
+    }
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    empty_results = tmp_path / "results"
+    empty_results.mkdir()
+
+    result = finalize_swarm(
+        state,
+        plan_path,
+        [empty_results],
+        tmp_path / "final.json",
+    )
+    assert result["ok"] is True
+    assert result["promoted"] is False
+    assert result["winner"] is None
+    assert result["champion"]["genome_id"] == genome.genome_id
+    assert "no finalist" in result["promotion_reason"]
+    assert result["policy"]["candidate_can_self_promote"] is False
