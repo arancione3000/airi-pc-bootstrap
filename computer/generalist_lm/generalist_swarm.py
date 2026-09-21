@@ -452,6 +452,35 @@ def _domain_regression(
     return max(values) if values else float("inf")
 
 
+def _load_stage_source(
+    checkpoint: str | Path,
+    *,
+    genome: GeneralistGenome,
+    cycle: int,
+    stage: int,
+) -> tuple[GeneralistRuntime, dict[str, Any]]:
+    root = Path(checkpoint).expanduser().resolve()
+    metadata_path = root / "metadata.json"
+    if not metadata_path.is_file():
+        raise FileNotFoundError("cumulative stage checkpoint requires metadata.json")
+    metadata = _load_json(metadata_path)
+    if not isinstance(metadata, dict):
+        raise ValueError("cumulative stage checkpoint metadata must be an object")
+    if str(metadata.get("candidate_id") or "") != genome.genome_id:
+        raise ValueError("cumulative stage checkpoint candidate mismatch")
+    if int(metadata.get("cycle", -1)) != int(cycle):
+        raise ValueError("cumulative stage checkpoint cycle mismatch")
+    previous_stage = int(metadata.get("stage", -1))
+    if previous_stage != int(stage) - 1:
+        raise ValueError("cumulative stage checkpoint must come from immediately previous stage")
+
+    runtime = GeneralistRuntime.from_checkpoint(root, device="cpu")
+    expected = genome.model_config(runtime.tokenizer.vocab_size).to_dict()
+    if runtime.config.to_dict() != expected:
+        raise ValueError("cumulative stage checkpoint architecture mismatch")
+    return runtime, metadata
+
+
 def run_candidate(
     plan_path: str | Path,
     state_dir: str | Path,
@@ -465,6 +494,7 @@ def run_candidate(
     pretrain_steps: int = 1,
     max_repo_bytes: int = 5_000_000,
     max_external_bytes: int = 20_000_000,
+    source_checkpoint: str | Path | None = None,
 ) -> dict[str, Any]:
     plan = _load_json(plan_path)
     row = _candidate(plan, candidate_index)
@@ -474,6 +504,15 @@ def run_candidate(
     if loaded is None:
         raise RuntimeError("Generalist swarm worker has no champion checkpoint")
     _champion_genome, champion_runtime = loaded
+    source_runtime = champion_runtime
+    source_metadata: dict[str, Any] | None = None
+    if source_checkpoint is not None:
+        source_runtime, source_metadata = _load_stage_source(
+            source_checkpoint,
+            genome=genome,
+            cycle=int(plan["cycle"]),
+            stage=int(stage),
+        )
 
     memory = CurriculumMemory(root, max_rows=20_000)
     replay_rows = memory.rows()
@@ -486,7 +525,7 @@ def run_candidate(
 
     tokenizer = _tokenizer_for_genome(
         genome,
-        source_runtime=champion_runtime,
+        source_runtime=source_runtime,
         replay_rows=replay_rows,
         pretrain_documents=documents,
         bpe_vocab_size=512,
@@ -530,8 +569,8 @@ def run_candidate(
             device="cpu",
             replay_rows=replay_rows,
             domain_weights=dict(plan.get("domain_weights") or {}),
-            source_model=champion_runtime.model,
-            source_tokenizer=champion_runtime.tokenizer,
+            source_model=source_runtime.model,
+            source_tokenizer=source_runtime.tokenizer,
             tokenizer=tokenizer,
             gradient_accumulation_steps=1,
             precision="fp32",
@@ -594,6 +633,15 @@ def run_candidate(
             "candidate_id": genome.genome_id,
             "cycle": int(plan["cycle"]),
             "stage": int(stage),
+            "previous_stage": (
+                int(source_metadata.get("stage"))
+                if source_metadata is not None
+                else None
+            ),
+            "cumulative_steps": (
+                int(source_metadata.get("cumulative_steps", 0) or 0)
+                + int(steps)
+            ),
             "production_qualified": False,
         },
     )
@@ -622,6 +670,15 @@ def run_candidate(
         "cycle": int(plan["cycle"]),
         "stage": int(stage),
         "steps": int(steps),
+        "cumulative_steps": (
+            int(source_metadata.get("cumulative_steps", 0) or 0)
+            + int(steps)
+        ),
+        "continued_from_stage": (
+            int(source_metadata.get("stage"))
+            if source_metadata is not None
+            else None
+        ),
         "candidate_index": int(candidate_index),
         "candidate_id": genome.genome_id,
         "kind": row.get("kind"),
@@ -951,6 +1008,7 @@ def main(argv=None) -> int:
     worker.add_argument("--pretrain-steps", type=int, default=1)
     worker.add_argument("--max-repo-bytes", type=int, default=5_000_000)
     worker.add_argument("--max-external-bytes", type=int, default=20_000_000)
+    worker.add_argument("--source-checkpoint")
 
     select = sub.add_parser("select")
     select.add_argument("output")
@@ -991,6 +1049,7 @@ def main(argv=None) -> int:
             pretrain_steps=args.pretrain_steps,
             max_repo_bytes=args.max_repo_bytes,
             max_external_bytes=args.max_external_bytes,
+            source_checkpoint=args.source_checkpoint,
         )
     elif args.cmd == "select":
         result = select_survivors(
