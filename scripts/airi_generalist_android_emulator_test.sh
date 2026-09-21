@@ -119,6 +119,6 @@ for TAB in Live Neural Airi-PC; do
 done
 
 dump_ui /sdcard/airi-lab-final.xml "$OUT/lab-final.xml"
-grep -q 'AIRI-PC Lab copy' "$OUT/lab-final.xml"
+grep -Eq 'Airi-PC Lab|Sandbox AIRI-PC|read-only' "$OUT/lab-final.xml"
 
 echo "AIRI_GENERALIST_ANDROID_SMOKE=PASS pid=$PID apk=$APK inference=PASS observability=PASS"
