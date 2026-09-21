@@ -250,7 +250,7 @@ def progressive_scale_candidate(
     ]
     heads = min(valid_heads, key=lambda value: abs(value - champion.n_heads))
     scale_learning_rate = max(
-        5e-4,
+        1e-4,
         min(float(champion.learning_rate) * 0.25, 1e-3),
     )
     payload = {
