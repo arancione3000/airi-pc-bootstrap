@@ -7,11 +7,18 @@ import json
 import math
 from pathlib import Path
 import random
+import re
+from collections import Counter
 import shutil
 import time
 from typing import Any
 
-from .airi_pc_lab import snapshot_airi_pc_lab, run_airi_pc_lab_probe
+from .airi_pc_lab import (
+    build_airi_pc_lab_rows,
+    load_verified_lab_experiences,
+    snapshot_airi_pc_lab,
+    run_airi_pc_lab_probe,
+)
 from .bootstrap_data import build_bootstrap_bundle
 from .curriculum import train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
@@ -150,21 +157,66 @@ def _write_latest_research(
     return summary
 
 
-def _mixed_replay_rows(root: Path, bootstrap_sft) -> list:
-    rows = list(bootstrap_sft[:1200])
-    rows.extend(row.sft() for row in train_rows())
+def _frequent_word_documents(documents):
+    counts: Counter[str] = Counter()
+    parsed: list[tuple[Any, list[str]]] = []
+    for document in documents:
+        words = re.findall(r"[^\\W\\d_]+", document.text.casefold(), flags=re.UNICODE)
+        parsed.append((document, words))
+        counts.update(words)
+    frequent = {word for word, _count in counts.most_common(768)}
+    selected = [
+        document
+        for document, words in parsed
+        if 1 <= len(words) <= 12
+        and words
+        and sum(word in frequent for word in words) / len(words) >= 0.70
+        and len(document.text) <= 100
+    ]
+    return selected or [row for row in documents if len(row.text) <= 100] or list(documents)
+
+
+def _causal_curriculum_stage(processed: int, target: int) -> str:
+    ratio = max(0.0, min(1.0, processed / max(1, target)))
+    if ratio < 0.15:
+        return "A_frequent_word_contexts"
+    if ratio < 0.40:
+        return "B_short_sentence_completion"
+    return "C_causal_next_sentence"
+
+
+def _mixed_replay_rows(root: Path, bootstrap_sft, repo: Path) -> tuple[list, dict[str, int]]:
+    one_turn = [row for row in bootstrap_sft if len(row.messages) <= 2]
+    multi_turn = [row for row in bootstrap_sft if len(row.messages) > 2]
+    base = [row.sft() for row in train_rows()]
+    lab = build_airi_pc_lab_rows(snapshot_airi_pc_lab(repo), max_rows=18)
+    verified = load_verified_lab_experiences(root, max_rows=32)
+
+    stage_rows = {
+        "D_simple_prompt_response": one_turn[:900] + base[:200],
+        "E_simple_multiturn_chat": multi_turn[:600] + one_turn[:300],
+        "F_airi_pc_lab_tool_use": [row.sft() for row in (lab + verified)] + base,
+    }
+    rows = []
+    counts: dict[str, int] = {}
+    for stage, stage_items in stage_rows.items():
+        counts[stage] = len(stage_items)
+        rows.extend(stage_items)
     try:
         memory = CurriculumMemory(root, max_rows=4000)
-        rows.extend(row.sft() for row in memory.rows()[:2400])
+        memory_rows = [row.sft() for row in memory.rows()[:2400]]
+        rows.extend(memory_rows)
+        counts["persistent_replay"] = len(memory_rows)
     except Exception:
-        pass
+        counts["persistent_replay"] = 0
+
     # Deterministic de-duplication without ever adding protected evaluation rows.
     unique = {}
     for row in rows:
         raw = json.dumps(row.messages, ensure_ascii=False, sort_keys=True)
         key = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         unique.setdefault(key, row)
-    return list(unique.values())
+    return list(unique.values()), counts
 
 
 def run_segment(
@@ -253,18 +305,38 @@ def run_segment(
             },
         )
 
-    train_blocks = pack_causal_blocks(
-        bundle.train_documents,
-        runtime.tokenizer,
-        context_length=runtime.config.context_length,
-    )
+    stage_documents = {
+        "A_frequent_word_contexts": _frequent_word_documents(bundle.train_documents),
+        "B_short_sentence_completion": [
+            row for row in bundle.train_documents
+            if len(row.text) <= 220
+        ] or list(bundle.train_documents),
+        "C_causal_next_sentence": list(bundle.train_documents),
+    }
+    stage_blocks = {
+        stage: pack_causal_blocks(
+            documents,
+            runtime.tokenizer,
+            context_length=runtime.config.context_length,
+        )
+        for stage, documents in stage_documents.items()
+    }
     validation_blocks = pack_causal_blocks(
         bundle.validation_documents,
         runtime.tokenizer,
         context_length=runtime.config.context_length,
     )
-    if not train_blocks or not validation_blocks:
-        raise RuntimeError("bootstrap corpus did not produce train/validation blocks")
+    if any(not rows for rows in stage_blocks.values()) or not validation_blocks:
+        raise RuntimeError("bootstrap corpus did not produce curriculum train/validation blocks")
+
+    progress["curriculum_schedule"] = [
+        "A_frequent_word_contexts",
+        "B_short_sentence_completion",
+        "C_causal_next_sentence",
+        "D_simple_prompt_response",
+        "E_simple_multiturn_chat",
+        "F_airi_pc_lab_tool_use",
+    ]
 
     optimizer = torch.optim.AdamW(
         runtime.model.parameters(),
@@ -290,6 +362,12 @@ def run_segment(
         and int(progress["tokens_processed"]) - processed_before_segment < segment_budget
     ):
         step = int(progress["steps"])
+        stage = _causal_curriculum_stage(
+            int(progress["tokens_processed"]),
+            target_tokens,
+        )
+        progress["curriculum_stage"] = stage
+        train_blocks = stage_blocks[stage]
         rng = random.Random(5_000_000 + step)
         indices = [rng.randrange(len(train_blocks)) for _ in range(max(1, int(batch_size)))]
         ids, labels = _batch(train_blocks, indices, device=runtime.device)
@@ -370,7 +448,9 @@ def run_segment(
     progress["updated_at_unix"] = int(time.time())
 
     if rung_complete and target_tokens not in set(progress.get("sft_completed_rungs") or []):
-        replay = _mixed_replay_rows(root, bundle.sft_train)
+        progress["curriculum_stage"] = "D_to_F_supervised_replay"
+        replay, replay_counts = _mixed_replay_rows(root, bundle.sft_train, repo)
+        progress["curriculum_replay_rows"] = replay_counts
         if replay:
             sft_report = train_sft(
                 runtime.model,
