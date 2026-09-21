@@ -1,0 +1,604 @@
+from __future__ import annotations
+
+import argparse
+import copy
+import hashlib
+import json
+import math
+from pathlib import Path
+import random
+import shutil
+import time
+from typing import Any
+
+from .airi_pc_lab import snapshot_airi_pc_lab, run_airi_pc_lab_probe
+from .bootstrap_data import build_bootstrap_bundle
+from .curriculum import train_rows, validation_rows
+from .curriculum_memory import CurriculumMemory, canary_rows
+from .phase5_diagnostics import evaluate_phase5_language, degeneration_gate
+from .pretraining import pack_causal_blocks, corpus_loss
+from .research_cycle import (
+    _continual_candidate_genome,
+    _grouped_validation,
+    _load_champion,
+    _research_eligible,
+    _research_score,
+    _save_champion,
+)
+from .runtime import GeneralistRuntime
+from .tokenizer import PAD
+from .training import train_sft
+
+
+PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v1"
+
+
+def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    tmp.replace(path)
+
+
+def _load_json(path: Path, default: dict[str, Any] | None = None) -> dict[str, Any]:
+    if not path.is_file():
+        return dict(default or {})
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"expected JSON object: {path}")
+    return raw
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _batch(blocks: list[list[int]], indices: list[int], *, device):
+    import torch
+    ids = torch.tensor([blocks[i] for i in indices], dtype=torch.long, device=device)
+    labels = ids.clone()
+    labels[labels == PAD] = -100
+    return ids, labels
+
+
+def _learning_rate(
+    *,
+    base_lr: float,
+    processed_tokens: int,
+    target_tokens: int,
+    warmup_tokens: int,
+) -> float:
+    processed = max(0, int(processed_tokens))
+    target = max(1, int(target_tokens))
+    warmup = max(1, min(int(warmup_tokens), target // 3))
+    if processed < warmup:
+        return float(base_lr) * max(0.05, processed / warmup)
+    progress = min(1.0, (processed - warmup) / max(1, target - warmup))
+    cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+    return float(base_lr) * (0.10 + 0.90 * cosine)
+
+
+def _phase5_success(before: dict[str, Any], after: dict[str, Any]) -> tuple[bool, list[str]]:
+    reasons: list[str] = []
+    if float(after.get("language_nll", float("inf"))) >= float(before.get("language_nll", float("inf"))) - 0.02:
+        reasons.append("language NLL did not improve by at least 0.02 byte-NLL")
+    if bool(after.get("pathological_repetition")):
+        reasons.append("pathological repetition remains")
+    if float(after.get("repetition_rate", 1.0)) > min(
+        0.60,
+        float(before.get("repetition_rate", 0.0)) + 0.02,
+    ):
+        reasons.append("repetition rate did not improve enough")
+    if float(after.get("non_empty_rate", 0.0)) < 0.70:
+        reasons.append("non-empty rate is below 70%")
+    if float(after.get("word_output_rate", 0.0)) < 0.40:
+        reasons.append("fewer than 40% of held-out prompts produce word-like output")
+    return (not reasons), reasons
+
+
+def _write_latest_research(
+    root: Path,
+    runtime: GeneralistRuntime,
+    *,
+    report: dict[str, Any],
+    cycle: int,
+    base_model_sha256: str,
+) -> dict[str, Any]:
+    latest = root / "latest-research"
+    tmp = root / ".phase5-latest-research"
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True, exist_ok=True)
+    runtime.save_checkpoint(
+        tmp,
+        metadata={
+            "role": "phase5_language_bootstrap",
+            "research_only": True,
+            "production_qualified": False,
+            "cycle": int(cycle),
+            "base_champion_model_sha256": base_model_sha256,
+        },
+    )
+    _atomic_json(tmp / "research-metrics.json", report)
+    summary = {
+        "candidate_id": f"phase5-bootstrap-{cycle}",
+        "kind": "language_bootstrap",
+        "cycle": int(cycle),
+        "stage": 5,
+        "parameters": int(report.get("parameters", 0) or 0),
+        "score": float(report.get("score", 0.0) or 0.0),
+        "mean_nll_per_byte": float(report.get("nll_per_byte", 0.0) or 0.0),
+        "mean_generation_accuracy": float(report.get("generation_exact_accuracy", 0.0) or 0.0),
+        "mean_generation_similarity": float(report.get("generation_similarity", 0.0) or 0.0),
+        "mean_generation_nonempty_rate": float(report.get("generation_nonempty_rate", 0.0) or 0.0),
+        "worst_domain_regression": float(report.get("worst_domain_regression", 0.0) or 0.0),
+        "all_seed_eligible": bool(report.get("research_gate_passed")),
+        "any_seed_eligible": bool(report.get("research_gate_passed")),
+        "tokenizer_vocab_size": int(runtime.tokenizer.vocab_size),
+        "research_only": True,
+        "external_pretrained": False,
+    }
+    _atomic_json(tmp / "research-summary.json", summary)
+    shutil.rmtree(latest, ignore_errors=True)
+    tmp.replace(latest)
+    return summary
+
+
+def _mixed_replay_rows(root: Path, bootstrap_sft) -> list:
+    rows = list(bootstrap_sft[:1200])
+    rows.extend(row.sft() for row in train_rows())
+    try:
+        memory = CurriculumMemory(root, max_rows=4000)
+        rows.extend(row.sft() for row in memory.rows()[:2400])
+    except Exception:
+        pass
+    # Deterministic de-duplication without ever adding protected evaluation rows.
+    unique = {}
+    for row in rows:
+        raw = json.dumps(row.messages, ensure_ascii=False, sort_keys=True)
+        key = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        unique.setdefault(key, row)
+    return list(unique.values())
+
+
+def run_segment(
+    state_dir: str | Path,
+    repo_root: str | Path,
+    cache_dir: str | Path,
+    *,
+    target_tokens: int,
+    segment_tokens: int = 250_000,
+    batch_size: int = 16,
+    base_learning_rate: float = 3e-4,
+    eval_every_steps: int = 32,
+) -> dict[str, Any]:
+    import torch
+
+    root = Path(state_dir).expanduser().resolve()
+    repo = Path(repo_root).expanduser().resolve()
+    cache = Path(cache_dir).expanduser().resolve()
+    bootstrap_root = root / "bootstrap-data"
+    candidate_dir = bootstrap_root / "candidate"
+    progress_path = bootstrap_root / "progress.json"
+    optimizer_path = bootstrap_root / "optimizer.pt"
+    manifest_path = bootstrap_root / "manifest.json"
+    before_path = bootstrap_root / "before.json"
+    bootstrap_root.mkdir(parents=True, exist_ok=True)
+
+    status = _load_json(root / "status.json")
+    cycle = int(status.get("cycle", 0) or 0)
+    loaded = _load_champion(root, device="cpu")
+    if loaded is None:
+        raise RuntimeError("Phase 5 requires an existing champion checkpoint")
+    champion_genome, champion_runtime = loaded
+    champion_model_path = root / "champion" / "model.pt"
+    base_model_sha = _sha256_file(champion_model_path)
+
+    previous_manifest = _load_json(manifest_path) if manifest_path.is_file() else None
+    bundle = build_bootstrap_bundle(
+        champion_runtime.tokenizer,
+        cache_dir=cache,
+        target_tokens=int(target_tokens),
+        previous_manifest=previous_manifest,
+    )
+    _atomic_json(manifest_path, bundle.manifest)
+
+    if not before_path.is_file():
+        _atomic_json(before_path, evaluate_phase5_language(champion_runtime))
+    before = _load_json(before_path)
+
+    progress = _load_json(progress_path, {
+        "schema": 1,
+        "version": PHASE5_BOOTSTRAP_VERSION,
+        "base_champion_model_sha256": base_model_sha,
+        "target_tokens": int(target_tokens),
+        "tokens_processed": 0,
+        "steps": 0,
+        "best_validation_loss": None,
+        "bad_eval_count": 0,
+        "completed_rungs": [],
+        "sft_completed_rungs": [],
+    })
+    if str(progress.get("base_champion_model_sha256")) != base_model_sha:
+        # A completed previous rung may have promoted the candidate to champion.
+        # Otherwise fail closed rather than training on a stale base.
+        if int(progress.get("tokens_processed", 0) or 0) < int(progress.get("target_tokens", 0) or 0):
+            raise RuntimeError("champion changed during an incomplete Phase 5 bootstrap")
+        progress["base_champion_model_sha256"] = base_model_sha
+
+    progress["target_tokens"] = max(int(progress.get("target_tokens", 0) or 0), int(target_tokens))
+    target_tokens = int(progress["target_tokens"])
+
+    if candidate_dir.is_dir():
+        runtime = GeneralistRuntime.from_checkpoint(candidate_dir, device="cpu")
+    else:
+        runtime = GeneralistRuntime(
+            copy.deepcopy(champion_runtime.model),
+            champion_runtime.config,
+            tokenizer=champion_runtime.tokenizer,
+            device="cpu",
+        )
+        runtime.save_checkpoint(
+            candidate_dir,
+            metadata={
+                "role": "phase5_language_bootstrap_candidate",
+                "production_qualified": False,
+                "base_champion_model_sha256": base_model_sha,
+            },
+        )
+
+    train_blocks = pack_causal_blocks(
+        bundle.train_documents,
+        runtime.tokenizer,
+        context_length=runtime.config.context_length,
+    )
+    validation_blocks = pack_causal_blocks(
+        bundle.validation_documents,
+        runtime.tokenizer,
+        context_length=runtime.config.context_length,
+    )
+    if not train_blocks or not validation_blocks:
+        raise RuntimeError("bootstrap corpus did not produce train/validation blocks")
+
+    optimizer = torch.optim.AdamW(
+        runtime.model.parameters(),
+        lr=float(base_learning_rate),
+        weight_decay=0.01,
+    )
+    if optimizer_path.is_file():
+        optimizer.load_state_dict(torch.load(optimizer_path, map_location="cpu", weights_only=True))
+
+    processed_before_segment = int(progress.get("tokens_processed", 0) or 0)
+    segment_budget = max(1, int(segment_tokens))
+    eval_every_steps = max(8, int(eval_every_steps))
+    best_loss = progress.get("best_validation_loss")
+    best_loss = float(best_loss) if best_loss is not None else float("inf")
+    bad_eval_count = int(progress.get("bad_eval_count", 0) or 0)
+    early_stopped = False
+    last_train_loss = None
+    last_validation_loss = None
+
+    runtime.model.train()
+    while (
+        int(progress["tokens_processed"]) < target_tokens
+        and int(progress["tokens_processed"]) - processed_before_segment < segment_budget
+    ):
+        step = int(progress["steps"])
+        rng = random.Random(5_000_000 + step)
+        indices = [rng.randrange(len(train_blocks)) for _ in range(max(1, int(batch_size)))]
+        ids, labels = _batch(train_blocks, indices, device=runtime.device)
+        optimizer.zero_grad(set_to_none=True)
+
+        lr = _learning_rate(
+            base_lr=float(base_learning_rate),
+            processed_tokens=int(progress["tokens_processed"]),
+            target_tokens=target_tokens,
+            warmup_tokens=min(100_000, max(20_000, target_tokens // 10)),
+        )
+        for group in optimizer.param_groups:
+            group["lr"] = lr
+
+        loss = runtime.model(ids, labels=labels)["loss"]
+        if not torch.isfinite(loss):
+            raise RuntimeError("non-finite Phase 5 bootstrap loss")
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(runtime.model.parameters(), 1.0)
+        optimizer.step()
+
+        supervised = int((labels[:, 1:] != -100).sum().item())
+        progress["tokens_processed"] = int(progress["tokens_processed"]) + supervised
+        progress["steps"] = step + 1
+        progress["learning_rate"] = float(lr)
+        last_train_loss = float(loss.detach().cpu())
+        progress["last_train_loss"] = last_train_loss
+
+        if int(progress["steps"]) % eval_every_steps == 0:
+            last_validation_loss = corpus_loss(
+                runtime.model,
+                validation_blocks,
+                device="cpu",
+                batch_size=max(2, int(batch_size) // 2),
+                max_blocks=min(96, len(validation_blocks)),
+                seed=991,
+            )
+            progress["last_validation_loss"] = float(last_validation_loss)
+            if last_validation_loss + 1e-4 < best_loss:
+                best_loss = float(last_validation_loss)
+                bad_eval_count = 0
+                runtime.save_checkpoint(
+                    bootstrap_root / "best",
+                    metadata={
+                        "role": "phase5_language_bootstrap_best",
+                        "validation_loss": best_loss,
+                        "tokens_processed": int(progress["tokens_processed"]),
+                    },
+                )
+            else:
+                bad_eval_count += 1
+            progress["best_validation_loss"] = best_loss
+            progress["bad_eval_count"] = bad_eval_count
+            if bad_eval_count >= 4:
+                early_stopped = True
+                break
+            runtime.model.train()
+
+    runtime.save_checkpoint(
+        candidate_dir,
+        metadata={
+            "role": "phase5_language_bootstrap_candidate",
+            "production_qualified": False,
+            "base_champion_model_sha256": base_model_sha,
+            "tokens_processed": int(progress["tokens_processed"]),
+            "target_tokens": target_tokens,
+        },
+    )
+    torch.save(optimizer.state_dict(), optimizer_path)
+
+    rung_complete = int(progress["tokens_processed"]) >= target_tokens or early_stopped
+    progress["early_stopped"] = bool(early_stopped)
+    progress["rung_complete"] = bool(rung_complete)
+    progress["updated_at_unix"] = int(time.time())
+
+    if rung_complete and target_tokens not in set(progress.get("sft_completed_rungs") or []):
+        replay = _mixed_replay_rows(root, bundle.sft_train)
+        if replay:
+            sft_report = train_sft(
+                runtime.model,
+                runtime.tokenizer,
+                replay,
+                steps=160,
+                batch_size=8,
+                learning_rate=1e-4,
+                weight_decay=0.01,
+                seed=51 + len(progress.get("completed_rungs") or []),
+                device="cpu",
+                gradient_accumulation_steps=1,
+                precision="fp32",
+            )
+        else:
+            sft_report = {"ok": False, "reason": "no replay rows"}
+        progress["sft_report"] = sft_report
+        completed_sft = list(progress.get("sft_completed_rungs") or [])
+        completed_sft.append(target_tokens)
+        progress["sft_completed_rungs"] = sorted(set(int(x) for x in completed_sft))
+        runtime.save_checkpoint(
+            candidate_dir,
+            metadata={
+                "role": "phase5_language_bootstrap_candidate",
+                "production_qualified": False,
+                "base_champion_model_sha256": base_model_sha,
+                "tokens_processed": int(progress["tokens_processed"]),
+                "target_tokens": target_tokens,
+                "sft_replay": True,
+            },
+        )
+
+    if rung_complete:
+        after = evaluate_phase5_language(runtime)
+        _atomic_json(bootstrap_root / "after.json", after)
+
+        champion_report = _grouped_validation(
+            champion_runtime.model,
+            champion_runtime.tokenizer,
+            validation_rows(),
+            device="cpu",
+        )
+        champion_report["parameters"] = sum(
+            int(p.numel()) for p in champion_runtime.model.parameters() if p.requires_grad
+        )
+        champion_report["score"] = _research_score(
+            champion_report,
+            champion_report["parameters"],
+        )
+        candidate_report = _grouped_validation(
+            runtime.model,
+            runtime.tokenizer,
+            validation_rows(),
+            device="cpu",
+        )
+        candidate_report["parameters"] = sum(
+            int(p.numel()) for p in runtime.model.parameters() if p.requires_grad
+        )
+        candidate_report["score"] = _research_score(
+            candidate_report,
+            candidate_report["parameters"],
+        )
+        rotating = canary_rows(max(1, cycle))
+        champion_report["canary_cycle"] = max(1, cycle)
+        champion_report["canary"] = _grouped_validation(
+            champion_runtime.model,
+            champion_runtime.tokenizer,
+            rotating,
+            device="cpu",
+        )
+        candidate_report["canary_cycle"] = max(1, cycle)
+        candidate_report["canary"] = _grouped_validation(
+            runtime.model,
+            runtime.tokenizer,
+            rotating,
+            device="cpu",
+        )
+        eligible, eligible_reason = _research_eligible(
+            champion_report,
+            candidate_report,
+            minimum_loss_gain=0.01,
+            max_domain_regression=0.08,
+        )
+        degeneration_ok, degeneration_reason = degeneration_gate(before, after)
+        phase5_ok, phase5_reasons = _phase5_success(before, after)
+
+        old_domains = champion_report.get("domain_nll_per_byte") or {}
+        new_domains = candidate_report.get("domain_nll_per_byte") or {}
+        regressions = [
+            float(new_domains[name]) - float(old)
+            for name, old in old_domains.items()
+            if name in new_domains
+        ]
+        worst_domain_regression = max(regressions, default=0.0)
+        candidate_report["worst_domain_regression"] = float(worst_domain_regression)
+        candidate_report["research_gate_passed"] = bool(eligible)
+        candidate_report["phase5_degeneration_gate_passed"] = bool(degeneration_ok)
+        candidate_report["phase5_minimum_success"] = bool(phase5_ok)
+        candidate_report["phase5_diagnostics"] = after
+
+        latest_summary = _write_latest_research(
+            root,
+            runtime,
+            report=candidate_report,
+            cycle=cycle,
+            base_model_sha256=base_model_sha,
+        )
+
+        promoted = bool(eligible and degeneration_ok and phase5_ok)
+        promotion_reason = (
+            "existing research gates + Phase 5 degeneration/language gates passed"
+            if promoted
+            else "; ".join(
+                [
+                    f"research={eligible_reason}" if not eligible else "",
+                    f"degeneration={degeneration_reason}" if not degeneration_ok else "",
+                    ("phase5=" + ", ".join(phase5_reasons)) if not phase5_ok else "",
+                ]
+            ).strip("; ")
+        )
+        if promoted:
+            genome = _continual_candidate_genome(champion_genome, cycle + 1)
+            _save_champion(root, genome, runtime, candidate_report)
+            status["champion"] = genome.to_dict()
+            status["champion_report"] = candidate_report
+            status["promoted"] = True
+            status["promotion_reason"] = "phase5_bootstrap:" + promotion_reason
+
+        status["latest_research"] = latest_summary
+        status["phase5_bootstrap"] = {
+            "version": PHASE5_BOOTSTRAP_VERSION,
+            "target_tokens": target_tokens,
+            "tokens_processed": int(progress["tokens_processed"]),
+            "steps": int(progress["steps"]),
+            "before": before,
+            "after": after,
+            "research_gate_passed": bool(eligible),
+            "research_gate_reason": eligible_reason,
+            "degeneration_gate_passed": bool(degeneration_ok),
+            "degeneration_gate_reason": degeneration_reason,
+            "minimum_success": bool(phase5_ok),
+            "minimum_success_reasons": phase5_reasons,
+            "promoted": promoted,
+            "promotion_reason": promotion_reason,
+            "manifest_sha256": bundle.manifest.get("manifest_content_sha256"),
+        }
+        _atomic_json(root / "status.json", status)
+
+        snapshot = snapshot_airi_pc_lab(repo)
+        lab_probe = run_airi_pc_lab_probe(runtime, snapshot)
+        phase5_lab = {
+            "version": "airi-pc-lab-phase5-v1",
+            "mode": snapshot.get("mode"),
+            "candidate": lab_probe,
+            "denied_capabilities": snapshot.get("denied_capabilities") or [],
+            "capabilities": snapshot.get("capabilities") or [],
+        }
+        _atomic_json(bootstrap_root / "airi-pc-lab-after.json", phase5_lab)
+        existing_lab = _load_json(root / "airi-pc-lab-report.json")
+        existing_lab["phase5"] = phase5_lab
+        _atomic_json(root / "airi-pc-lab-report.json", existing_lab)
+
+        completed = list(progress.get("completed_rungs") or [])
+        completed.append(target_tokens)
+        progress["completed_rungs"] = sorted(set(int(x) for x in completed))
+        report = {
+            "schema": 1,
+            "version": PHASE5_BOOTSTRAP_VERSION,
+            "target_tokens": target_tokens,
+            "tokens_processed": int(progress["tokens_processed"]),
+            "steps": int(progress["steps"]),
+            "model_parameters": int(candidate_report["parameters"]),
+            "tokenizer_version": str(runtime.tokenizer.version),
+            "tokenizer_vocab_size": int(runtime.tokenizer.vocab_size),
+            "before": before,
+            "after": after,
+            "validation": {
+                "champion": champion_report,
+                "candidate": candidate_report,
+            },
+            "research_gate_passed": bool(eligible),
+            "research_gate_reason": eligible_reason,
+            "degeneration_gate_passed": bool(degeneration_ok),
+            "degeneration_gate_reason": degeneration_reason,
+            "minimum_success": bool(phase5_ok),
+            "minimum_success_reasons": phase5_reasons,
+            "promoted": promoted,
+            "promotion_reason": promotion_reason,
+            "airi_pc_lab_after": lab_probe,
+            "manifest_sha256": bundle.manifest.get("manifest_content_sha256"),
+        }
+        _atomic_json(bootstrap_root / "report.json", report)
+
+    _atomic_json(progress_path, progress)
+    return {
+        "ok": True,
+        "version": PHASE5_BOOTSTRAP_VERSION,
+        "target_tokens": target_tokens,
+        "tokens_processed": int(progress["tokens_processed"]),
+        "segment_tokens_processed": int(progress["tokens_processed"]) - processed_before_segment,
+        "steps": int(progress["steps"]),
+        "rung_complete": bool(rung_complete),
+        "early_stopped": bool(early_stopped),
+        "last_train_loss": last_train_loss,
+        "last_validation_loss": last_validation_loss,
+        "best_validation_loss": progress.get("best_validation_loss"),
+        "report_path": str(bootstrap_root / "report.json") if rung_complete else None,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="AIRI Generalist Phase 5 language bootstrap")
+    parser.add_argument("--state-dir", required=True)
+    parser.add_argument("--repo-root", required=True)
+    parser.add_argument("--cache-dir", required=True)
+    parser.add_argument("--target-tokens", type=int, default=1_000_000)
+    parser.add_argument("--segment-tokens", type=int, default=250_000)
+    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--learning-rate", type=float, default=3e-4)
+    args = parser.parse_args(argv)
+    result = run_segment(
+        args.state_dir,
+        args.repo_root,
+        args.cache_dir,
+        target_tokens=args.target_tokens,
+        segment_tokens=args.segment_tokens,
+        batch_size=args.batch_size,
+        base_learning_rate=args.learning_rate,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
