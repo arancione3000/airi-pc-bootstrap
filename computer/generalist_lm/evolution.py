@@ -165,13 +165,16 @@ def progressive_scale_candidate(
     vocab_size: int = 264,
     max_width: int = 512,
     max_layers: int = 12,
+    prefer_function_preserving: bool = False,
 ) -> GeneralistGenome:
     """Construct the closest bounded larger genome to a target parameter tier.
 
     Search is deterministic and deliberately small. It preserves tokenizer,
-    adapters and architectural choices while scaling width/depth/FFN. The
-    resulting candidate still has to pass the normal research and production
-    gates.
+    adapters and architectural choices while scaling width/depth/FFN. When
+    prefer_function_preserving is enabled, same-width depth/FFN expansion is
+    preferred whenever possible so Net2Grow can preserve the current function
+    while capacity is added. The resulting candidate still has to pass the
+    normal research and production gates.
     """
     champion.validate()
     target = max(1, int(target_parameters))
@@ -238,7 +241,17 @@ def progressive_scale_candidate(
 
     if not candidates:
         raise RuntimeError("unable to construct progressive scaling candidate")
-    _distance, _params, width, layers, ff = min(candidates)
+    if prefer_function_preserving:
+        _distance, _params, width, layers, ff = min(
+            candidates,
+            key=lambda row: (
+                0 if int(row[2]) == int(champion.d_model) else 1,
+                int(row[0]),
+                int(row[1]),
+            ),
+        )
+    else:
+        _distance, _params, width, layers, ff = min(candidates)
     valid_heads = [
         heads for heads in (1, 2, 4, 8, 16)
         if heads <= width
