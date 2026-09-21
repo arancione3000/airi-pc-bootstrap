@@ -137,6 +137,25 @@ def prepare_swarm_plan(
         if len(candidates) >= total:
             break
 
+    incumbent_cfg = champion.lattice_config()
+    incumbent = {
+        "index": 9999,
+        "candidate_id": champion.genome_id,
+        "mutation": {
+            "name": "incumbent-revalidation",
+            "family": "incumbent",
+            "changes": {},
+            "rationale": "re-validate the current research champion on fresh independent seeds",
+            "mathesis_tags": [],
+        },
+        "genome": champion.to_dict(),
+        "source_parent_id": champion.genome_id,
+        "source_parent_generation": champion.generation,
+        "source_parent_kind": "incumbent",
+        "cost": architecture_cost_vector(incumbent_cfg),
+        "stability": stability_certificate(incumbent_cfg),
+    }
+
     plan = {
         "ok": bool(candidates),
         "version": LATTICE_SWARM_VERSION,
@@ -159,6 +178,7 @@ def prepare_swarm_plan(
             "family_feedback": mutation_family_feedback(elite_archive),
         },
         "candidates": candidates,
+        "incumbent": incumbent,
         "matrix": {"include": [{"index": row["index"]} for row in candidates]},
         "policy": {
             "parallel_candidates": True,
@@ -176,6 +196,11 @@ def prepare_swarm_plan(
 
 
 def _candidate_from_plan(plan: dict[str, Any], index: int) -> tuple[dict[str, Any], LatticeGenome]:
+    incumbent = plan.get("incumbent")
+    if isinstance(incumbent, dict) and int(incumbent.get("index", -1)) == int(index):
+        genome = LatticeGenome(**dict(incumbent["genome"])).validate()
+        return incumbent, genome
+
     candidates = plan.get("candidates")
     if not isinstance(candidates, list):
         raise ValueError("invalid Lattice swarm plan candidates")
@@ -272,6 +297,7 @@ def run_candidate(
         "candidate_id": row["candidate_id"],
         "mutation": row["mutation"],
         "genome": genome.to_dict(),
+        "source_parent_kind": row.get("source_parent_kind"),
         "reports": reports,
         "all_seed_wins": bool(reports) and all(
             bool(report.get("ok") and report.get("candidate_wins"))
@@ -403,7 +429,12 @@ def finalize_swarm(
     root.mkdir(parents=True, exist_ok=True)
     plan = _load_json(plan_path)
     reports = [row for row in _load_result_files(result_paths) if row.get("ok")]
-    finalists = [row for row in reports if row.get("all_seed_wins")]
+    incumbent_id = str((plan.get("incumbent") or {}).get("candidate_id") or "")
+    finalists = [
+        row for row in reports
+        if row.get("all_seed_wins")
+        and str(row.get("candidate_id") or "") != incumbent_id
+    ]
 
     archive_path = root / "lattice-elite-archive.json"
     elite_archive = update_elite_archive(
