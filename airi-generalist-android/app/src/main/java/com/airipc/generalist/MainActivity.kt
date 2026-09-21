@@ -3,6 +3,7 @@ package com.airipc.generalist
 import android.content.Context
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -115,6 +116,10 @@ class GeneralistController(context: Context) : Closeable {
                     }
                 }
                 val elapsed = SystemClock.elapsedRealtime() - startedAt
+                Log.i(
+                    "AiriGeneralistLab",
+                    "AIRI_GENERALIST_INFERENCE=PASS model=$modelId chars=${output.length} elapsed_ms=$elapsed",
+                )
                 _state.value = _state.value.copy(
                     messages = _state.value.messages + ChatLine(
                         role = "assistant",
@@ -249,7 +254,10 @@ private fun AiriGeneralistApp(
     MaterialTheme(colorScheme = scheme) {
         Scaffold(
             topBar = {
-                Surface(shadowElevation = 2.dp) {
+                Surface(
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
