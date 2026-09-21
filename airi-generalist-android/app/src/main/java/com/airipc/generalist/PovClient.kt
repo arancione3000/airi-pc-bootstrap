@@ -57,6 +57,7 @@ class AiriPovClient {
     private val _state = MutableStateFlow(PovState())
     val state: StateFlow<PovState> = _state
     private var job: Job? = null
+    private var lastKeyPublishMs: Long = 0L
 
     fun start() {
         if (job?.isActive == true) return
@@ -64,7 +65,12 @@ class AiriPovClient {
             while (isActive) {
                 try {
                     val config = fetchConfig()
-                    publishViewerKey(config)
+                    val now = System.currentTimeMillis()
+                    if (lastKeyPublishMs == 0L || now - lastKeyPublishMs >= 30L * 60L * 1000L) {
+                        publishViewerKey(config)
+                        lastKeyPublishMs = now
+                    }
+                    validateCurrentScreen()
                     _state.value = _state.value.copy(
                         connected = true,
                         waiting = _state.value.screenUrl.isBlank(),
@@ -107,6 +113,40 @@ class AiriPovClient {
             }
         }.getOrElse {
             PovConfig(FALLBACK_RELAY, FALLBACK_TOPIC)
+        }
+    }
+
+    private fun validateCurrentScreen() {
+        val current = _state.value.screenUrl
+        if (current.isBlank()) return
+        val marker = "/view/"
+        val index = current.indexOf(marker)
+        if (index <= 0) {
+            _state.value = _state.value.copy(screenUrl = "", sessionId = "", waiting = true)
+            return
+        }
+        val base = current.substring(0, index)
+        val token = current.substring(index + marker.length).substringBefore('?')
+        if (token.isBlank()) {
+            _state.value = _state.value.copy(screenUrl = "", sessionId = "", waiting = true)
+            return
+        }
+        val request = Request.Builder()
+            .url("$base/health/$token")
+            .header("User-Agent", "AIRI-Generalist-Lab/1.2")
+            .build()
+        val healthy = runCatching {
+            client.newCall(request).execute().use { response ->
+                response.isSuccessful
+            }
+        }.getOrDefault(false)
+        if (!healthy) {
+            _state.value = _state.value.copy(
+                screenUrl = "",
+                sessionId = "",
+                waiting = true,
+                lastOfferTs = 0L,
+            )
         }
     }
 
