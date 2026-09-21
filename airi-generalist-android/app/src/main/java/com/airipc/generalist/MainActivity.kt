@@ -284,7 +284,7 @@ class GeneralistController(context: Context) : Closeable {
             var liveSnapshot: LiveEvolutionSnapshot? = null
             var liveFailure: Exception? = null
             try {
-                coroutineScope {
+                supervisorScope {
                     val liveDeferred = async(Dispatchers.IO) {
                         liveRepository.fetch()
                     }
