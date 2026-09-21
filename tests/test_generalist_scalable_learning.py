@@ -1104,3 +1104,40 @@ def test_generalist_data_growth_prioritizes_useful_domains_and_skips_quotes(tmp_
     assert result["domain_files"]["data"] >= 1
     assert result["domain_files"]["code"] >= 1
     assert result["desired_domains"][:3] == ["reasoning", "data", "code"]
+
+
+def test_generalist_data_growth_discovery_is_license_first_and_quality_ranked():
+    from generalist_lm.generalist_data_growth import (
+        _candidate_queries,
+        _domain_for,
+        _search_repositories,
+    )
+
+    queries = _candidate_queries(["reasoning_gap", "data_gap"])
+    assert queries
+    assert all("license:" in query for query in queries)
+    assert queries[0].startswith("reasoning dataset")
+    assert any(query.startswith("csv dataset") for query in queries)
+    assert _domain_for("proofs/chapter.tex") == "reasoning"
+
+    seen = []
+
+    def opener(request, timeout):
+        del timeout
+        seen.append(request.full_url)
+        return _FakeResponse(
+            json.dumps({"items": [{"full_name": "example/permissive"}]}).encode(),
+            request.full_url,
+        )
+
+    rows = _search_repositories(
+        ["reasoning dataset license:mit"],
+        token=None,
+        per_query=4,
+        opener=opener,
+    )
+    assert rows[0]["full_name"] == "example/permissive"
+    assert len(seen) == 1
+    assert "license%3Amit" in seen[0]
+    assert "size%3A%3C100000" in seen[0]
+    assert "sort=stars" in seen[0]
