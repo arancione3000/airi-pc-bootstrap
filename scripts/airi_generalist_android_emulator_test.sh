@@ -77,7 +77,12 @@ for attempt in $(seq 1 35); do
       break
     fi
     if grep -Eq "isn't responding|non risponde" "$OUT/home.xml"; then
-      adb shell input keyevent 4 || true
+      if read WAIT_X WAIT_Y < <(center_for_text "$OUT/home.xml" "Wait" 2>/dev/null); then
+        adb shell input tap "$WAIT_X" "$WAIT_Y" || true
+      else
+        adb shell input keyevent 4 || true
+      fi
+      adb shell am start -n com.airipc.generalist/.MainActivity >/dev/null 2>&1 || true
     fi
   fi
 done
