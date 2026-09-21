@@ -293,7 +293,7 @@ def test_adaptive_curriculum_weights_weak_domains_more_heavily():
     assert counts["language"] > counts["coding"]
 
 
-def test_progressive_weight_inheritance_copies_overlap_and_embeddings():
+def test_progressive_weight_inheritance_preserves_same_width_function():
     torch = pytest.importorskip("torch")
     from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
     from generalist_lm.research_cycle import _transfer_compatible_weights
@@ -311,17 +311,16 @@ def test_progressive_weight_inheritance_copies_overlap_and_embeddings():
     target_cfg = GeneralistLMConfig(
         vocab_size=264,
         context_length=64,
-        d_model=64,
+        d_model=32,
         n_heads=4,
-        n_layers=1,
-        d_ff=128,
+        n_layers=2,
+        d_ff=96,
         dropout=0.0,
     ).validate()
+    torch.manual_seed(123)
     source = CausalTransformerLM(source_cfg)
+    torch.manual_seed(456)
     target = CausalTransformerLM(target_cfg)
-    with torch.no_grad():
-        source.token_embedding.weight.fill_(0.125)
-        source.blocks[0].attn.qkv.weight.fill_(0.25)
 
     report = _transfer_compatible_weights(
         source,
@@ -329,16 +328,25 @@ def test_progressive_weight_inheritance_copies_overlap_and_embeddings():
         source_tokenizer=ByteTokenizer(),
         target_tokenizer=ByteTokenizer(),
     )
-    assert report["embedding_width_migrated"] is True
-    assert report["partial_prefix_tensors"]
-    assert torch.allclose(
-        target.token_embedding.weight[:, :32],
-        source.token_embedding.weight,
+    assert report["function_preserving_growth"] is True
+    assert report["embedding_width_migrated"] is False
+    assert any(
+        name == "blocks.0.ff.up.weight"
+        for name in report["partial_prefix_tensors"]
     )
-    assert torch.allclose(
-        target.blocks[0].attn.qkv.weight[:96, :32],
-        source.blocks[0].attn.qkv.weight,
+    assert "blocks.1.attn.out.weight" in report["identity_initialized_tensors"]
+    assert "blocks.1.ff.down.weight" in report["identity_initialized_tensors"]
+
+    ids = torch.tensor(
+        [[1, 40, 41, 42, 43, 44, 45, 46]],
+        dtype=torch.long,
     )
+    source.eval()
+    target.eval()
+    with torch.no_grad():
+        source_logits = source(ids)["logits"]
+        target_logits = target(ids)["logits"]
+    assert torch.allclose(source_logits, target_logits, atol=1e-6, rtol=1e-6)
 
 
 def test_generalist_data_growth_admits_only_permissive_immutable_text(tmp_path: Path):
