@@ -1,0 +1,454 @@
+"""Deterministic Markdown reading report assembly."""
+
+from __future__ import annotations
+
+import json
+from typing import TYPE_CHECKING, Any
+
+from papergraph.evidence_triage import (
+    build_evidence_triage,
+    render_evidence_triage_markdown,
+)
+
+if TYPE_CHECKING:
+    from papergraph.workspace import Workspace
+
+
+REPORT_SCHEMA_VERSION = 1
+REQUIRED_BOUNDARIES = [
+    "PaperGraph does not verify proofs.",
+    "PaperGraph does not infer hidden mathematical prerequisites.",
+    "PaperGraph does not perform semantic theorem matching.",
+    (
+        "Empty dependencies mean no supported extraction evidence was found, "
+        "not that no mathematical dependencies exist."
+    ),
+]
+
+
+def build_paper_reading_report(
+    workspace: Workspace,
+    paper_id: str,
+    max_candidates: int = 5,
+) -> dict[str, Any]:
+    """Build a deterministic Markdown reading report for one stored paper."""
+
+    paper_map = workspace.get_paper_map(paper_id, max_candidates=max_candidates)
+    summary = {
+        "recommended_start_result_id": paper_map["summary"][
+            "recommended_start_result_id"
+        ],
+        "main_candidate_count": paper_map["summary"]["main_candidate_count"],
+        "reading_route_count": len(paper_map["reading_route"]),
+        "external_risk_count": paper_map["summary"]["external_risk_count"],
+        "unresolved_risk_count": paper_map["summary"]["unresolved_risk_count"],
+        "evidence_status": paper_map["summary"]["evidence_status"],
+    }
+    reference_resolutions = workspace.list_external_reference_resolutions(
+        paper_map["paper"]["paper_id"]
+    )
+    reference_searches = workspace.list_external_reference_searches(
+        paper_map["paper"]["paper_id"]
+    )
+    evidence_triage = build_evidence_triage(
+        paper_map,
+        reference_resolutions=reference_resolutions,
+        reference_searches=reference_searches,
+    )
+    expansions = []
+    for item in workspace.list_reference_expansions()["runs"]:
+        run = workspace.get_reference_expansion(item["run_id"])
+        if any(n["paper_id"] == paper_id for n in run["nodes"]):
+            expansions.append(item)
+    evidence_triage["reference_expansions"] = expansions
+    sections = _sections_from_paper_map(
+        paper_map,
+        summary,
+        evidence_triage,
+        reference_resolutions,
+        reference_searches,
+    )
+    report: dict[str, Any] = {
+        "report_schema_version": REPORT_SCHEMA_VERSION,
+        "format": "markdown",
+        "paper_id": paper_map["paper"]["paper_id"],
+        "title": paper_map["paper"].get("title"),
+        "summary": summary,
+        "evidence_triage": evidence_triage,
+        "sections": sections,
+        "warnings": paper_map["evidence_quality"]["warnings"],
+        "reference_resolutions": reference_resolutions,
+        "reference_searches": reference_searches,
+        "reference_expansions": expansions,
+        "paper_map": paper_map,
+    }
+    report["markdown"] = render_paper_reading_report_markdown(report)
+    return report
+
+
+def render_paper_reading_report_markdown(report_model: dict[str, Any]) -> str:
+    """Render a report payload as GitHub-flavored Markdown."""
+
+    paper_map = report_model["paper_map"]
+    paper = paper_map["paper"]
+    summary = report_model["summary"]
+    title = report_model.get("title") or report_model["paper_id"]
+    lines = [
+        f"# Reading Report: {_text(title)}",
+        "",
+        "## Paper",
+        "",
+        f"- Paper ID: `{paper['paper_id']}`",
+        f"- Source type: `{paper['source_type']}`",
+        f"- Title: {_text(paper.get('title') or 'Unknown')}",
+        f"- Result count: {paper['result_count']}",
+        f"- Proof count: {paper['proof_count']}",
+        f"- Citation count: {paper['citation_count']}",
+        f"- Report format: `{report_model['format']}`",
+        f"- Report schema version: {report_model['report_schema_version']}",
+        "",
+        "## Paper Map",
+        "",
+        f"- Candidate starting point: {_code_or_none(summary['recommended_start_result_id'])}",
+        f"- Evidence status: `{summary['evidence_status']}`",
+        f"- Main-result candidates: {summary['main_candidate_count']}",
+        f"- Reading route items: {summary['reading_route_count']}",
+        f"- External risks: {summary['external_risk_count']}",
+        f"- Unresolved risks: {summary['unresolved_risk_count']}",
+        "",
+        "## Evidence Triage",
+        "",
+    ]
+    lines.extend(render_evidence_triage_markdown(report_model["evidence_triage"]))
+    if report_model.get("reference_expansions"):
+        lines.extend(["", "## Reference Expansion", ""])
+        for run in report_model["reference_expansions"]:
+            lines.append(f"- `{run['run_id']}`: {run['state']}; {run['usage']['new_papers']} new papers; {run['summary']['needs_review']} decisions; {run['summary']['boundary']} source boundaries. Export the expansion report for evidence and next actions.")
+    lines.extend(["", "## Main-Result Candidates", ""])
+    lines.extend(_render_main_candidates(paper_map["main_result_candidates"]))
+    lines.extend(["", "## Candidate Reading Route", ""])
+    lines.extend(_render_reading_route(paper_map["reading_route"]))
+    lines.extend(["", "## Supported Local Logic Chain", ""])
+    lines.extend(_render_logic_chain(paper_map["reading_route"]))
+    lines.extend(["", "## External Reading Risks", ""])
+    lines.extend(_render_external_risks(paper_map["external_risks"]))
+    lines.extend(["", "### Resolved External References", ""])
+    lines.extend(_render_reference_resolutions(report_model["reference_resolutions"]))
+    lines.extend(["", "### Scholarly Reference Candidates", ""])
+    lines.extend(_render_reference_search_candidates(report_model["reference_searches"]))
+    lines.extend(["", "### Search Boundaries", ""])
+    lines.extend(_render_reference_search_boundaries(report_model["reference_searches"]))
+    lines.extend(["", "## Evidence Quality", ""])
+    lines.extend(_render_warnings(report_model["warnings"]))
+    lines.extend(["", "## Evidence Boundaries", ""])
+    lines.extend(f"- {boundary}" for boundary in REQUIRED_BOUNDARIES)
+    lines.extend(
+        [
+            "",
+            "## Next Commands",
+            "",
+            "```powershell",
+            (
+                "papergraph-mcp --workspace <WORKSPACE> get-paper-map "
+                f"{paper['paper_id']}"
+            ),
+            (
+                "papergraph-mcp --workspace <WORKSPACE> create-reading-queue "
+                f"{summary['recommended_start_result_id'] or '<RESULT_ID>'}"
+            ),
+            (
+                "papergraph-mcp --workspace <WORKSPACE> "
+                f"plan-external-imports-for-paper {paper['paper_id']}"
+            ),
+            "```",
+        ]
+    )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _sections_from_paper_map(
+    paper_map: dict[str, Any],
+    summary: dict[str, Any],
+    evidence_triage: dict[str, Any],
+    reference_resolutions: dict[str, Any],
+    reference_searches: dict[str, Any],
+) -> list[dict[str, Any]]:
+    return [
+        {"id": "paper", "title": "Paper", "items": [paper_map["paper"]]},
+        {"id": "paper-map", "title": "Paper Map", "items": [summary]},
+        {
+            "id": "evidence-triage",
+            "title": "Evidence Triage",
+            "items": [evidence_triage],
+        },
+        {
+            "id": "main-result-candidates",
+            "title": "Main-Result Candidates",
+            "items": paper_map["main_result_candidates"],
+        },
+        {
+            "id": "candidate-reading-route",
+            "title": "Candidate Reading Route",
+            "items": paper_map["reading_route"],
+        },
+        {
+            "id": "external-reading-risks",
+            "title": "External Reading Risks",
+            "items": [paper_map["external_risks"]],
+        },
+        {
+            "id": "reference-resolutions",
+            "title": "Resolved External References",
+            "items": reference_resolutions["resolutions"],
+        },
+        {
+            "id": "reference-searches",
+            "title": "Scholarly Reference Searches",
+            "items": reference_searches["searches"],
+        },
+        {
+            "id": "evidence-quality",
+            "title": "Evidence Quality",
+            "items": paper_map["evidence_quality"]["warnings"],
+        },
+        {
+            "id": "evidence-boundaries",
+            "title": "Evidence Boundaries",
+            "items": REQUIRED_BOUNDARIES,
+        },
+    ]
+
+
+def _render_main_candidates(candidates: list[dict[str, Any]]) -> list[str]:
+    if not candidates:
+        return ["No main-result candidates were found from supported evidence."]
+    lines: list[str] = []
+    for index, candidate in enumerate(candidates, start=1):
+        heading_parts = [
+            f"{index}. `{candidate['result_id']}`",
+            str(candidate.get("display_kind") or "result"),
+        ]
+        if candidate.get("title"):
+            heading_parts.append(f"- {_text(candidate['title'])}")
+        lines.append(" ".join(heading_parts))
+        lines.append(f"   - Score: {candidate['score']}")
+        if candidate.get("statement_preview"):
+            lines.append(f"   - Statement: {_text(candidate['statement_preview'])}")
+        lines.append("   - Reasons:")
+        for reason in candidate["reasons"]:
+            lines.append(
+                "     - "
+                f"`{reason['kind']}` weight {reason['weight']}: "
+                f"{_text(reason['evidence'])}"
+            )
+    return lines
+
+
+def _render_reading_route(route: list[dict[str, Any]]) -> list[str]:
+    if not route:
+        return ["No reading route evidence was extracted for this paper."]
+    lines = []
+    for item in route:
+        evidence = _compact_json(item.get("evidence"))
+        lines.append(
+            f"{item['position']}. `{item['target_id']}` "
+            f"{item['priority']} - {item['reason']} "
+            f"({item['target_kind']}; evidence: {evidence})"
+        )
+    return lines
+
+
+def _render_logic_chain(route: list[dict[str, Any]]) -> list[str]:
+    dependencies = [
+        item for item in route if item["reason"] in {"local_dependency", "proof_evidence"}
+    ]
+    if not dependencies:
+        return [
+            "No local dependency evidence was extracted for the candidate route."
+        ]
+    lines = []
+    for item in dependencies:
+        evidence = item.get("evidence") or {}
+        source = evidence.get("source", "reading_route")
+        result_id = evidence.get("result_id") or item["target_id"]
+        lines.append(
+            f"- `{result_id}` uses local evidence involving `{item['target_id']}` "
+            f"from `{source}`."
+        )
+    return lines
+
+
+def _render_external_risks(external_risks: dict[str, Any]) -> list[str]:
+    summary = external_risks.get("summary", {})
+    lines = [
+        f"- Import candidates: {summary.get('import_candidate_count', 0)}",
+        f"- Already imported: {summary.get('already_imported_count', 0)}",
+        f"- Blocked items: {summary.get('blocked_count', 0)}",
+    ]
+    candidates = external_risks.get("candidates", [])
+    if candidates:
+        for candidate in candidates:
+            source = candidate.get("source") or {}
+            arxiv_id = (
+                candidate.get("arxiv_id")
+                or source.get("arxiv_id")
+                or candidate.get("paper_id")
+            )
+            if arxiv_id:
+                lines.append(f"- Review candidate: arXiv:{arxiv_id}")
+            review = candidate.get("review") or {}
+            if review.get("citation_keys"):
+                keys = ", ".join(str(key) for key in review["citation_keys"])
+                lines.append(f"  - Citation keys: {keys}")
+            snippets = review.get("cited_result_snippets") or review.get("raw_texts")
+            if snippets:
+                lines.append("  - Cited-result snippets:")
+                for snippet in snippets:
+                    lines.append(f"    - {_text(snippet)}")
+            if review.get("evidence_summary"):
+                lines.append(f"  - Review summary: {_text(review['evidence_summary'])}")
+    else:
+        lines.append("- No external import candidates were found.")
+
+    already_imported = external_risks.get("already_imported", [])
+    for item in already_imported:
+        lines.append(f"- Already imported: `{item.get('paper_id')}`")
+
+    blocked = external_risks.get("blocked", [])
+    for item in blocked:
+        lines.append(
+            "- Blocked: "
+            f"{_text(item.get('reason') or item.get('message') or _compact_json(item))}"
+        )
+    return lines
+
+
+def _render_reference_resolutions(reference_resolutions: dict[str, Any]) -> list[str]:
+    resolutions = reference_resolutions.get("resolutions", [])
+    if not resolutions:
+        return ["No external reference resolutions have been recorded."]
+    lines = []
+    for resolution in resolutions:
+        target = resolution.get("target", {})
+        selection = resolution.get("source", {}).get("review", {}).get("selection")
+        if selection:
+            lines.append(f"- Selection: {selection['kind']} (expansion `{selection['run_id']}`, edge `{selection['edge_id']}`).")
+        target_label = _reference_target_label(target)
+        if resolution["status"] == "resolved_imported":
+            paper_id = resolution.get("import", {}).get("paper_id")
+            lines.append(
+                f"- Resolved and imported: {target_label} -> `{paper_id}`"
+            )
+        elif resolution["status"] == "resolved_not_imported":
+            lines.append(
+                "- Resolved, not imported: "
+                f"{target_label} "
+                "(provide a local source before PaperGraph can analyze it)."
+            )
+        elif resolution["status"] == "failed_import":
+            warnings = "; ".join(str(item) for item in resolution.get("warnings", []))
+            lines.append(
+                f"- Failed import: {target_label}"
+                + (f" ({_text(warnings)})" if warnings else "")
+            )
+    return lines
+
+
+def _render_reference_search_candidates(reference_searches: dict[str, Any]) -> list[str]:
+    searches = reference_searches.get("searches", [])
+    candidates = [
+        candidate
+        for search in searches
+        for candidate in search.get("candidates", [])
+    ]
+    if not candidates:
+        return ["No scholarly reference candidates have been searched yet."]
+    lines = []
+    for candidate in candidates:
+        target = candidate.get("target", {})
+        title = _text(target.get("title") or _reference_target_label(target))
+        lines.append(
+            "- "
+            f"{title} "
+            f"({target.get('kind', 'metadata')}; "
+            f"confidence: {candidate.get('confidence')}; "
+            f"score: {candidate.get('score')})"
+        )
+        if target.get("doi"):
+            lines.append(f"  - DOI: `{target['doi']}`")
+        if target.get("arxiv_id"):
+            lines.append(f"  - arXiv: `{target['arxiv_id']}`")
+        evidence = candidate.get("evidence", [])
+        if evidence:
+            lines.append(f"  - Evidence: {', '.join(_text(item) for item in evidence)}")
+    return lines
+
+
+def _render_reference_search_boundaries(reference_searches: dict[str, Any]) -> list[str]:
+    boundaries = [
+        boundary
+        for search in reference_searches.get("searches", [])
+        for boundary in search.get("boundaries", [])
+    ]
+    if not boundaries:
+        return ["No scholarly reference search boundaries have been recorded."]
+    lines = []
+    for boundary in boundaries:
+        lines.append(
+            f"- `{boundary.get('kind', 'boundary')}`: {_text(boundary.get('message', ''))}"
+        )
+    return lines
+
+
+def _reference_target_label(target: dict[str, Any]) -> str:
+    kind = target.get("kind", "metadata")
+    if kind == "doi":
+        return f"DOI `{target.get('doi')}`"
+    if kind == "url":
+        return f"URL `{target.get('url')}`"
+    if kind == "arxiv":
+        return f"arXiv `{target.get('arxiv_id')}`"
+    if kind == "pdf":
+        return f"PDF `{target.get('path')}`"
+    parts = [
+        str(target.get("title") or "").strip(),
+        str(target.get("year") or "").strip(),
+        str(target.get("venue") or "").strip(),
+    ]
+    compact = ", ".join(part for part in parts if part)
+    return _text(compact or "metadata target")
+
+
+def _render_warnings(warnings: list[dict[str, Any]]) -> list[str]:
+    if not warnings:
+        return ["No evidence-quality warnings were produced."]
+    lines = []
+    for warning in warnings:
+        lines.append(f"- `{warning['kind']}`: {_text(warning['message'])}")
+        if warning.get("evidence"):
+            lines.append(f"  - Evidence: {_compact_json(warning['evidence'])}")
+    return lines
+
+
+def _compact_json(value: Any) -> str:
+    if value is None:
+        return "`None`"
+    return "`" + json.dumps(value, sort_keys=True, ensure_ascii=False) + "`"
+
+
+def _code_or_none(value: str | None) -> str:
+    if value is None:
+        return "`None`"
+    return f"`{value}`"
+
+
+def _text(value: Any) -> str:
+    compact = " ".join(str(value).split())
+    return (
+        compact.replace("\\", "\\\\")
+        .replace("`", "\\`")
+        .replace("*", "\\*")
+        .replace("_", "\\_")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+    )
