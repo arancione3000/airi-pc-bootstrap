@@ -10,6 +10,12 @@ from statistics import mean
 import time
 from typing import Any, Iterable, Sequence
 
+from .airi_pc_lab import (
+    build_airi_pc_lab_rows,
+    run_airi_pc_lab_probe,
+    snapshot_airi_pc_lab,
+    summarize_lab_learning,
+)
 from .corpus import repository_corpus
 from .curriculum import DOMAINS, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
@@ -259,8 +265,16 @@ def prepare_swarm(
         signals.append("tokenizer_efficiency_gap")
     signals = list(dict.fromkeys(str(row) for row in signals))
 
+    lab_snapshot = snapshot_airi_pc_lab(Path.cwd())
+    lab_rows = build_airi_pc_lab_rows(lab_snapshot, max_rows=18)
+    lab_learning = summarize_lab_learning(lab_rows)
+
     memory = CurriculumMemory(root, max_rows=curriculum_max_rows)
-    curriculum = memory.expand(cycle, signals=signals)
+    curriculum = memory.expand(
+        cycle,
+        signals=signals,
+        extra_rows=lab_rows,
+    )
     domain_weights = adaptive_domain_weights(champion_report)
 
     data_report: dict[str, Any] = {
@@ -371,6 +385,10 @@ def prepare_swarm(
         "champion_report": champion_report,
         "signals": signals,
         "mathesis": mathesis,
+        "airi_pc_lab": {
+            "snapshot": lab_snapshot,
+            "learning": lab_learning,
+        },
         "curriculum": curriculum,
         "domain_weights": domain_weights,
         "data_growth": data_report,
@@ -423,6 +441,8 @@ def prepare_swarm(
             "inherited_sft_lr_cap": 0.001,
             "weight_inheritance": True,
             "automatic_data_growth_fail_closed": True,
+            "airi_pc_lab_read_only": True,
+            "airi_pc_lab_training": True,
             "corpus_language_bridge": True,
             "progressive_bpe_vocab": 1024,
         },
@@ -1165,6 +1185,38 @@ def finalize_swarm(
         if row.messages
     }
 
+    lab_plan = plan.get("airi_pc_lab") or {}
+    lab_snapshot = lab_plan.get("snapshot") or {
+        "version": "airi-pc-lab-v1",
+        "mode": "read_only_sandbox",
+        "modules": [],
+        "capabilities": [],
+        "denied_capabilities": [],
+    }
+    airi_pc_lab_report = {
+        "version": str(lab_snapshot.get("version") or "airi-pc-lab-v1"),
+        "mode": str(lab_snapshot.get("mode") or "read_only_sandbox"),
+        "learning": lab_plan.get("learning") or {},
+        "champion": run_airi_pc_lab_probe(champion_runtime, lab_snapshot),
+    }
+    latest_runtime_path = root / "latest-research"
+    if latest_runtime_path.is_dir():
+        try:
+            latest_runtime = GeneralistRuntime.from_checkpoint(
+                latest_runtime_path,
+                device="cpu",
+            )
+            airi_pc_lab_report["research"] = run_airi_pc_lab_probe(
+                latest_runtime,
+                lab_snapshot,
+            )
+        except Exception as exc:
+            airi_pc_lab_report["research"] = {
+                "ok": False,
+                "error": f"{type(exc).__name__}:{exc}",
+            }
+    _atomic_json(root / "airi-pc-lab-report.json", airi_pc_lab_report)
+
     status = {
         "ok": True,
         "version": GENERALIST_SWARM_VERSION,
@@ -1177,6 +1229,7 @@ def finalize_swarm(
         "champion_report": champion_report,
         "signals": plan.get("signals") or [],
         "mathesis": plan.get("mathesis"),
+        "airi_pc_lab": airi_pc_lab_report,
         "curriculum_memory": plan.get("curriculum"),
         "adaptive_curriculum": {
             "domain_weights": plan.get("domain_weights") or {},
@@ -1199,11 +1252,18 @@ def finalize_swarm(
         },
         "automatic_data_growth": plan.get("data_growth"),
         "progressive_scaling": plan.get("progressive_scaling"),
+        "progressive_tokenizer": plan.get("progressive_tokenizer"),
         "plateau": plan.get("plateau"),
         "trials": [row for _path, row in scanned],
         "policy": {
             "research_only": True,
             "latest_research_checkpoint_isolated": True,
+            "airi_pc_lab": {
+                "mode": "read_only_sandbox",
+                "host_actions": False,
+                "training_from_verified_snapshot": True,
+                "successful_tool_use_recorded": True,
+            },
             "parallel_swarm": "8->4->2",
             "candidate_can_self_promote": False,
             "external_reducer": True,
