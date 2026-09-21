@@ -139,13 +139,9 @@ def scaled_descendant(
         genome,
         target_vocab_size=parent.target_vocab_size,
     )
-    return replace(
+    restored = replace(
         spec,
-        architecture_id=architecture_id(
-            parent.architecture_id,
-            spec.generation,
-            spec.canonical_payload(),
-        ),
+        architecture_id="pending",
         attention_type=parent.attention_type,
         n_kv_heads=parent.n_kv_heads,
         local_attention_window=parent.local_attention_window,
@@ -155,6 +151,14 @@ def scaled_descendant(
         norm_type=parent.norm_type,
         position_encoding=parent.position_encoding,
         ff_variant=parent.ff_variant,
+    )
+    return replace(
+        restored,
+        architecture_id=architecture_id(
+            parent.architecture_id,
+            restored.generation,
+            restored.canonical_payload(),
+        ),
     ).validate()
 
 
