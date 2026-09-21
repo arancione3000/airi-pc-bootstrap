@@ -108,8 +108,8 @@ grep -q 'AIRI_GENERALIST_INFERENCE=PASS' "$OUT/logcat.txt"
 adb exec-out screencap -p > "$OUT/chat-after.png"
 test -s "$OUT/chat-after.png"
 
-# Verify the three observability screens are actually navigable.
-for TAB in Live Neural Airi-PC; do
+# Verify all four observability screens, including the Airi-PC live POV tab.
+for TAB in Live Neural Airi-PC POV; do
   dump_ui "/sdcard/airi-$TAB.xml" "$OUT/tab.xml"
   read TAB_X TAB_Y < <(center_for_text "$OUT/tab.xml" "$TAB")
   adb shell input tap "$TAB_X" "$TAB_Y"
@@ -118,7 +118,7 @@ for TAB in Live Neural Airi-PC; do
   test -s "$OUT/tab-$TAB.png"
 done
 
-dump_ui /sdcard/airi-lab-final.xml "$OUT/lab-final.xml"
-grep -Eq 'Airi-PC Lab|Sandbox AIRI-PC|read-only' "$OUT/lab-final.xml"
+dump_ui /sdcard/airi-pov-final.xml "$OUT/pov-final.xml"
+grep -Eq 'Airi-PC POV live|In attesa del POV Airi-PC|Sessione' "$OUT/pov-final.xml"
 
-echo "AIRI_GENERALIST_ANDROID_SMOKE=PASS pid=$PID apk=$APK inference=PASS observability=PASS"
+echo "AIRI_GENERALIST_ANDROID_SMOKE=PASS pid=$PID apk=$APK inference=PASS observability=PASS pov=PASS"
