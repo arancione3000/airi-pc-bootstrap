@@ -1,0 +1,77 @@
+import { readFileSync } from "fs";
+import { join } from "path";
+import { glob } from "glob";
+import Papa from "papaparse";
+import { Brewery } from "./types.ts";
+import { papaParseOptions } from "./config.ts";
+
+function validateFiles(files: string[]) {
+  let valid = true;
+  let totalErrors = 0;
+
+  for (let file of files) {
+    console.log(`📋 Validating ${file}...`);
+    const csv = readFileSync(file, { encoding: "utf-8" });
+    const breweries = Papa.parse<Brewery>(csv, papaParseOptions);
+
+    let errors = [];
+    for (let data of breweries.data) {
+      const result = Brewery.safeParse(data);
+      if (!result.success) {
+        for (let error of result.error.issues) {
+          // IDs are added during the maintance workflow so ignore for now
+          if (error.code === 'invalid_type' && error.path[0] === 'id') {
+            continue;
+          }
+          valid = false;
+
+          errors.push({
+            brewery: data.name,
+            error: error,
+          });
+          console.log(
+            `${data.name}: ${error.path.join(" > ")} - ${error.message}`
+          );
+        }
+      }
+    }
+    if (errors.length) {
+      console.log(`🛑 There are ${errors.length} errors!\n`);
+    }
+    totalErrors += errors.length;
+  }
+
+  return { valid, totalErrors };
+}
+
+const main = async () => {
+  const startTime = new Date().getTime();
+  const fileGlob = join(import.meta.dirname, "../data/**/*.csv");
+
+  // Validate individual files
+  let files = await glob(fileGlob);
+  const filesResult = validateFiles(files);
+
+  // Separately validate full dataset CSV
+  const fullDatasetResult = validateFiles([
+    join(import.meta.dirname, "../breweries.csv"),
+  ]);
+
+  const resultText =
+    filesResult.valid && fullDatasetResult.valid
+      ? `✅  All ${files.length + 1} files are valid!`
+      : `🛑 ${
+          filesResult.totalErrors + fullDatasetResult.totalErrors
+        } errors were found.`;
+
+  console.log(`${resultText} (${new Date().getTime() - startTime}ms)`);
+
+  if (!filesResult.valid || !fullDatasetResult.valid) {
+    throw new Error("invalid");
+  }
+};
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

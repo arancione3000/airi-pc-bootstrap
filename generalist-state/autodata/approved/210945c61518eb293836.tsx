@@ -1,0 +1,550 @@
+import { faTable, faPlay, faAlignLeft } from "@fortawesome/free-solid-svg-icons";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalHeader,
+  Spinner,
+  useDisclosure,
+} from "@heroui/react";
+import { memo, useState, useRef, useMemo, useCallback, useEffect } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useTranslation } from "../../../i18n";
+import {
+  useReactTable,
+  getCoreRowModel,
+  flexRender,
+  ColumnDef,
+} from "@tanstack/react-table";
+
+interface ColumnTypeInfo {
+  column_name: string;
+  arrow_type: string;
+  default_sql_type: string;
+}
+
+interface DataResultProps {
+  data: {
+    header: string[];
+    columns?: ColumnTypeInfo[];
+    rows: string[][];
+  };
+  isLoading: boolean;
+  onLoadMore?: () => Promise<void>;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+}
+
+const ROW_HEIGHT = 36;
+const DEFAULT_COLUMN_WIDTH = 150;
+
+const MODAL_MIN_WIDTH = 400;
+const MODAL_MIN_HEIGHT = 300;
+const MODAL_DEFAULT_WIDTH = 512;
+const MODAL_DEFAULT_HEIGHT = 400;
+
+const SCROLL_LOAD_THRESHOLD = 50;
+
+function ColumnHeaderLabel({
+  name,
+  columnType,
+}: {
+  name: string;
+  columnType?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5 min-w-0">
+      <span className="truncate text-sm font-semibold text-default-700" title={name}>
+        {name}
+      </span>
+      {columnType && (
+        <span
+          className="truncate text-xs font-normal font-mono text-default-500"
+          title={columnType}
+        >
+          {columnType}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function DataResult({
+  data,
+  isLoading,
+  onLoadMore,
+  hasMore = false,
+  isLoadingMore = false,
+}: DataResultProps) {
+  const { isOpen, onOpen, onOpenChange } = useDisclosure();
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
+  const { translate } = useTranslation();
+
+  const isMac = useMemo(() => {
+    if (typeof navigator !== "undefined") {
+      return /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+    }
+    return false;
+  }, []);
+  const [modalSize, setModalSize] = useState({
+    width: MODAL_DEFAULT_WIDTH,
+    height: MODAL_DEFAULT_HEIGHT,
+  });
+  const [lastColumnExtraWidth, setLastColumnExtraWidth] = useState(0);
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  // Dynamically generate column definitions
+  const columns = useMemo<ColumnDef<string[]>[]>(() => {
+    // Row number column
+    const indexColumn: ColumnDef<string[]> = {
+      id: "_index",
+      header: "#",
+      size: 56,
+      minSize: 56,
+      maxSize: 56,
+      enableResizing: false,
+      cell: ({ row }) => row.index + 1,
+    };
+
+    // Data columns
+    const isSingleColumn = data.header.length === 1;
+
+    const dataColumns: ColumnDef<string[]>[] = data.header.map(
+      (header, index) => {
+        const columnType = data.columns?.[index]?.arrow_type;
+        return {
+          id: `col_${index}`,
+          accessorFn: (row: string[]) => row[index],
+          header: () => (
+            <ColumnHeaderLabel name={header} columnType={columnType} />
+          ),
+          size: isSingleColumn ? 9999 : DEFAULT_COLUMN_WIDTH,
+          minSize: 50,
+        };
+      }
+    );
+
+    return [indexColumn, ...dataColumns];
+  }, [data.header, data.columns]);
+
+  // Table instance
+  const table = useReactTable({
+    data: data.rows,
+    columns,
+    columnResizeMode: "onChange",
+    enableColumnResizing: true,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  // When total column width is less than container, expand last column to fill the table
+  const tableRef = useRef(table);
+  tableRef.current = table;
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el || data.header.length === 0) return;
+
+    const updateLastColumnExtraWidth = () => {
+      const containerWidth = el.clientWidth;
+      const totalColumnWidth = tableRef.current.getTotalSize();
+      if (totalColumnWidth < containerWidth) {
+        setLastColumnExtraWidth(containerWidth - totalColumnWidth);
+      } else {
+        setLastColumnExtraWidth(0);
+      }
+    };
+
+    updateLastColumnExtraWidth();
+    const observer = new ResizeObserver(updateLastColumnExtraWidth);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [data.header.length, data.rows.length]);
+
+  // Virtualization
+  const virtualizer = useVirtualizer({
+    count: data.rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 5,
+  });
+
+  const virtualItems = virtualizer.getVirtualItems();
+
+  // Load next page when scrolling to bottom
+  useEffect(() => {
+    if (
+      !onLoadMore ||
+      !hasMore ||
+      isLoadingMore ||
+      data.rows.length === 0 ||
+      virtualItems.length === 0
+    ) {
+      return;
+    }
+    const lastVisibleIndex =
+      virtualItems[virtualItems.length - 1]?.index ?? 0;
+    if (lastVisibleIndex >= data.rows.length - SCROLL_LOAD_THRESHOLD) {
+      onLoadMore();
+    }
+  }, [
+    virtualItems,
+    data.rows.length,
+    onLoadMore,
+    hasMore,
+    isLoadingMore,
+  ]);
+
+  // Reset selected state when data changes to prevent showing old data
+  useEffect(() => {
+    setSelectedRowIndex(null);
+  }, [data.rows]);
+
+  // Use useCallback to avoid unnecessary re-renders
+  const handleRowDoubleClick = useCallback(
+    (index: number) => {
+      setSelectedRowIndex(index);
+      onOpen();
+    },
+    [onOpen]
+  );
+
+  // Handle column width adjustment, prevent selection effect
+  const handleResize = useCallback(
+    (
+      e: React.MouseEvent | React.TouchEvent,
+      handler: (e: MouseEvent | TouchEvent) => void
+    ) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handler(e.nativeEvent);
+    },
+    []
+  );
+
+  // Modal resize: add listeners on mousedown, remove on mouseup
+  const handleModalResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startW = modalSize.width;
+      const startH = modalSize.height;
+
+      const onMouseMove = (ev: MouseEvent) => {
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        setModalSize({
+          width: Math.max(MODAL_MIN_WIDTH, startW + dx),
+          height: Math.max(MODAL_MIN_HEIGHT, startH + dy),
+        });
+      };
+
+      const onMouseUp = () => {
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+      };
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    },
+    [modalSize]
+  );
+
+  // Safely get selected row data to prevent index out of bounds
+  const selectedRowData =
+    selectedRowIndex !== null && selectedRowIndex < data.rows.length
+      ? data.rows[selectedRowIndex]
+      : null;
+
+  if (isLoading) {
+    return (
+      <div
+        className="flex items-center justify-center w-full"
+        style={{ height: "calc(40vh - 50px)" }}
+      >
+        <Spinner label="Loading..." />
+      </div>
+    );
+  }
+
+  if (data.rows.length === 0) {
+    return (
+      <div className="w-full">
+        <div style={{ height: "calc(40vh - 50px)" }} className="overflow-auto">
+          <table className="border-collapse" style={{ minWidth: "100%" }}>
+            <thead className="bg-default-100">
+              <tr className="border-b border-default-200 font-semibold text-sm text-default-600">
+                <th className="px-3 py-2 text-left border-r border-default-200 w-14">
+                  #
+                </th>
+                {data.header.map((col, i) => {
+                  const columnType = data.columns?.[i]?.arrow_type;
+                  return (
+                    <th
+                      key={i}
+                      className="px-3 py-2 text-left font-semibold whitespace-nowrap border-r border-default-200 last:border-r-0"
+                      style={{ minWidth: 100 }}
+                    >
+                      <ColumnHeaderLabel name={col} columnType={columnType} />
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+          </table>
+          <div className="flex flex-col items-center justify-center gap-2 text-default-400 pt-16">
+            <FontAwesomeIcon icon={faTable} size="2x" />
+            {data.header.length > 0 ? (
+              <p className="font-medium text-default-500">No records found</p>
+            ) : (
+              <>
+                <p className="font-medium text-default-500">
+                  {translate("notebook.resultsEmptyTitle")}
+                </p>
+                <p className="text-sm">{translate("notebook.resultsEmptyDescription")}</p>
+                <div className="mt-6 flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      {isMac ? (
+                        <>
+                          <kbd className="inline-flex items-center justify-center min-w-[28px] h-[24px] px-1.5 rounded-md border border-default-300 bg-default-50 text-default-600 font-mono text-[11px] leading-none shadow-sm">⌘</kbd>
+                          <kbd className="inline-flex items-center justify-center min-w-[28px] h-[24px] px-1.5 rounded-md border border-default-300 bg-default-50 text-default-600 font-mono text-[11px] leading-none shadow-sm">Enter</kbd>
+                        </>
+                      ) : (
+                        <>
+                          <kbd className="inline-flex items-center justify-center min-w-[28px] h-[24px] px-1.5 rounded-md border border-default-300 bg-default-50 text-default-600 font-mono text-[11px] leading-none shadow-sm">Ctrl</kbd>
+                          <kbd className="inline-flex items-center justify-center min-w-[28px] h-[24px] px-1.5 rounded-md border border-default-300 bg-default-50 text-default-600 font-mono text-[11px] leading-none shadow-sm">Enter</kbd>
+                        </>
+                      )}
+                      <span className="text-default-400 text-xs mx-1">/</span>
+                      <kbd className="inline-flex items-center justify-center min-w-[28px] h-[24px] px-1.5 rounded-md border border-default-300 bg-default-50 text-default-600 font-mono text-[11px] leading-none shadow-sm">F5</kbd>
+                    </div>
+                    <div className="flex items-center gap-2 text-default-500">
+                      <FontAwesomeIcon icon={faPlay} style={{ fontSize: "0.85em", color: "#87CEEB" }} />
+                      <span className="text-sm">{translate("notebook.resultsEmptyShortcutRun")}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      {isMac ? (
+                        <>
+                          <kbd className="inline-flex items-center justify-center min-w-[28px] h-[24px] px-1.5 rounded-md border border-default-300 bg-default-50 text-default-600 font-mono text-[11px] leading-none shadow-sm">⌘</kbd>
+                          <kbd className="inline-flex items-center justify-center min-w-[28px] h-[24px] px-1.5 rounded-md border border-default-300 bg-default-50 text-default-600 font-mono text-[11px] leading-none shadow-sm">K</kbd>
+                        </>
+                      ) : (
+                        <>
+                          <kbd className="inline-flex items-center justify-center min-w-[28px] h-[24px] px-1.5 rounded-md border border-default-300 bg-default-50 text-default-600 font-mono text-[11px] leading-none shadow-sm">Ctrl</kbd>
+                          <kbd className="inline-flex items-center justify-center min-w-[28px] h-[24px] px-1.5 rounded-md border border-default-300 bg-default-50 text-default-600 font-mono text-[11px] leading-none shadow-sm">K</kbd>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-default-500">
+                      <FontAwesomeIcon icon={faAlignLeft} style={{ fontSize: "0.85em" }} />
+                      <span className="text-sm">{translate("notebook.resultsEmptyShortcutFormat")}</span>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const totalSize = virtualizer.getTotalSize();
+  const { rows: tableRows } = table.getRowModel();
+  const baseTableWidth = table.getTotalSize();
+  const tableWidth = baseTableWidth + lastColumnExtraWidth;
+  const isSingleColumn = data.header.length === 1;
+
+  return (
+    <div className="w-full">
+      <div
+        ref={parentRef}
+        className="overflow-auto"
+        style={{ height: "calc(40vh - 50px)" }}
+      >
+        <div style={{ width: tableWidth, minWidth: "100%" }}>
+          {/* Fixed table header */}
+          <div
+            className="sticky top-0 z-20 bg-default-100 select-none"
+            style={{ width: tableWidth }}
+          >
+            {table.getHeaderGroups().map((headerGroup) => (
+              <div
+                key={headerGroup.id}
+                className="flex border-b border-default-200"
+              >
+                {headerGroup.headers.map((header) => {
+                  const isLastColumn =
+                    header.id ===
+                    headerGroup.headers[headerGroup.headers.length - 1].id;
+                  const baseWidth = header.getSize();
+                  const width =
+                    isLastColumn && header.id !== "_index"
+                      ? baseWidth + lastColumnExtraWidth
+                      : baseWidth;
+                  return (
+                  <div
+                    key={header.id}
+                    className={`relative px-3 border-r border-default-200 last:border-r-0 overflow-hidden ${
+                      header.id === "_index"
+                        ? "py-2 font-semibold text-sm text-default-600 text-center sticky left-0 bg-default-100 z-30 whitespace-nowrap"
+                        : "py-2.5 text-left"
+                    }`}
+                    style={
+                      isSingleColumn && header.id !== "_index"
+                        ? { flex: 1 }
+                        : { width }
+                    }
+                  >
+                    {flexRender(
+                      header.column.columnDef.header,
+                      header.getContext()
+                    )}
+                    {/* Drag handle for column width adjustment */}
+                    {header.column.getCanResize() && (
+                      <div
+                        onMouseDown={(e) =>
+                          handleResize(e, header.getResizeHandler())
+                        }
+                        onTouchStart={(e) =>
+                          handleResize(e, header.getResizeHandler())
+                        }
+                        className={`absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none hover:bg-primary-400 ${
+                          header.column.getIsResizing() ? "bg-primary-500" : ""
+                        }`}
+                        style={{ userSelect: "none" }}
+                      />
+                    )}
+                  </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          {/* Virtualized data row container */}
+          <div style={{ height: totalSize, position: "relative" }}>
+            {virtualItems.map((virtualRow) => {
+              const row = tableRows[virtualRow.index];
+              if (!row) return null;
+              const isEven = virtualRow.index % 2 === 0;
+
+              return (
+                <div
+                  key={virtualRow.index}
+                  className={`absolute left-0 flex text-sm cursor-pointer hover:bg-primary-50 ${
+                    isEven ? "bg-default-50" : "bg-white"
+                  }`}
+                  style={{
+                    height: ROW_HEIGHT,
+                    width: tableWidth,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                  onDoubleClick={() => handleRowDoubleClick(virtualRow.index)}
+                >
+                  {row.getVisibleCells().map((cell) => {
+                    const isLastCell =
+                      cell.column.id ===
+                      row.getVisibleCells()[row.getVisibleCells().length - 1]
+                        .column.id;
+                    const baseSize = cell.column.getSize();
+                    const cellWidth =
+                      isLastCell && cell.column.id !== "_index"
+                        ? baseSize + lastColumnExtraWidth
+                        : baseSize;
+                    return (
+                    <div
+                      key={cell.id}
+                      className={`px-3 py-2 border-r border-default-100 last:border-r-0 whitespace-nowrap overflow-hidden text-ellipsis ${
+                        cell.column.id === "_index"
+                          ? `text-center text-default-500 sticky left-0 z-10 ${
+                              isEven ? "bg-default-50" : "bg-white"
+                            }`
+                          : "text-left"
+                      }`}
+                      style={
+                        isSingleColumn && cell.column.id !== "_index"
+                          ? { flex: 1 }
+                          : { width: cellWidth }
+                      }
+                    >
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
+                    </div>
+                  );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {isLoadingMore && (
+          <div className="flex items-center justify-center py-3 border-t border-default-200">
+            <Spinner size="sm" label="Loading more..." />
+          </div>
+        )}
+      </div>
+
+      {/* Row details Modal */}
+      <Modal
+        isOpen={isOpen}
+        onOpenChange={onOpenChange}
+        size="lg"
+        classNames={{ base: "max-w-[95vw]" }}
+      >
+        <ModalContent
+          className="relative overflow-visible"
+          style={{
+            width: modalSize.width,
+            height: modalSize.height,
+            minWidth: MODAL_MIN_WIDTH,
+            minHeight: MODAL_MIN_HEIGHT,
+          }}
+        >
+          <ModalHeader>Row Details</ModalHeader>
+          <ModalBody className="pb-6 flex-1 overflow-hidden">
+            {selectedRowData && (
+              <div
+                className="overflow-y-auto"
+                style={{ maxHeight: modalSize.height - 120 }}
+              >
+                <table className="w-full border-collapse">
+                  <tbody>
+                    {data.header.map((header, index) => (
+                      <tr key={index} className="border-b border-gray-200">
+                        <th className="py-2 px-4 text-left bg-gray-50 font-medium w-1/3">
+                          {header}
+                        </th>
+                        <td className="py-2 px-4">
+                          {selectedRowData[index] ?? ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </ModalBody>
+          {/* Resize handle */}
+          <div
+            onMouseDown={handleModalResizeStart}
+            className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize select-none touch-none z-[100] pointer-events-auto hover:opacity-80"
+            style={{
+              background:
+                "linear-gradient(135deg, transparent 50%, rgba(0,0,0,0.2) 50%)",
+            }}
+            aria-label="Resize modal"
+          />
+        </ModalContent>
+      </Modal>
+    </div>
+  );
+}
+
+export default memo(DataResult);

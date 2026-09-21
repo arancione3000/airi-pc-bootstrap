@@ -1,0 +1,30 @@
+{
+  "name": "csv-demo-webpack-ts",
+  "version": "0.3.3",
+  "description": "",
+  "private": true,
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "csv-generate": "^4.6.1",
+    "csv-parse": "^7.0.2",
+    "csv-stringify": "^6.8.3",
+    "http-server": "^14.1.1",
+    "stream-transform": "^3.5.1"
+  },
+  "devDependencies": {
+    "buffer-browserify": "^0.2.5",
+    "node-polyfill-webpack-plugin": "^4.1.0",
+    "stream-browserify": "^3.0.0",
+    "ts-loader": "^9.6.2",
+    "typescript": "^6.0.3",
+    "webpack": "^5.108.1",
+    "webpack-cli": "^7.1.0"
+  },
+  "scripts": {
+    "build": "npx webpack --config webpack.config.js",
+    "start": "http-server ./dist -p 8000",
+    "test": "npm run build >/dev/null"
+  }
+}

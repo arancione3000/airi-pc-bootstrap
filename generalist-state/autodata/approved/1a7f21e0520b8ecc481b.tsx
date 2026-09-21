@@ -1,0 +1,319 @@
+import AceEditor from "react-ace";
+import "ace-builds/src-noconflict/theme-sqlserver";
+import "ace-builds/src-noconflict/mode-sql";
+import "ace-builds/src-noconflict/snippets/sql";
+import { useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import langTools from "ace-builds/src-noconflict/ext-language_tools";
+import { useTranslation } from "@/i18n";
+
+export interface AceEditorInstance {
+  getSelectedText: () => string;
+  getCursorPosition: () => { row: number; column: number };
+  insert: (text: string) => void;
+  clearSelection: () => void;
+  getSession: () => {
+    getValue: () => string;
+    setValue: (value: string, cursorPos?: number) => void;
+  };
+  commands: {
+    addCommand: (command: AceEditorCommand) => void;
+    removeCommand: (command: AceEditorCommand | string) => void;
+  };
+}
+
+interface AceEditorCommand {
+  name: string;
+  bindKey: { win?: string; mac?: string };
+  exec: (editor: AceEditorInstance) => void;
+}
+
+interface AceEditorProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  fontSize?: number;
+  height?: string;
+  width?: string;
+  showPrintMargin?: boolean;
+  showGutter?: boolean;
+  highlightActiveLine?: boolean;
+  enableBasicAutocompletion?: boolean;
+  enableLiveAutocompletion?: boolean;
+  enableSnippets?: boolean;
+  showLineNumbers?: boolean;
+  tabSize?: number;
+  onLoad?: (editor: AceEditorInstance) => void;
+  tableColumns?: string[];
+  commands?: AceEditorCommand[];
+}
+
+function CustomAceEditor({
+  value,
+  onChange,
+  placeholder = "",
+  fontSize = 16,
+  height = "100%",
+  width = "100%",
+  showPrintMargin = true,
+  showGutter = true,
+  highlightActiveLine = true,
+  enableBasicAutocompletion = true,
+  enableLiveAutocompletion = true,
+  enableSnippets = true,
+  showLineNumbers = true,
+  tabSize = 2,
+  onLoad,
+  tableColumns = [],
+  commands = [],
+}: AceEditorProps) {
+  const { translate } = useTranslation();
+  const completerAdded = useRef(false);
+  const tableColumnsRef = useRef<string[]>([]);
+
+  // Update table columns reference
+  useEffect(() => {
+    tableColumnsRef.current = tableColumns || [];
+  }, [tableColumns]);
+
+  // Track editor instance and previous command names for updates
+  const editorRef = useRef<AceEditorInstance | null>(null);
+  const prevCommandNamesRef = useRef<string[]>([]);
+  const isSilentSetRef = useRef(false);
+
+  // Keep Ace session in sync when SQL is set externally (e.g. query history).
+  // useLayoutEffect runs before paint so Run cannot read a stale session value.
+  useLayoutEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    const session = editor.getSession();
+    const currentValue = session.getValue();
+    if (currentValue !== value) {
+      isSilentSetRef.current = true;
+      session.setValue(value, -1);
+      editor.clearSelection();
+      isSilentSetRef.current = false;
+    }
+  }, [value]);
+
+  const handleChange = useCallback(
+    (nextValue: string) => {
+      if (!isSilentSetRef.current) {
+        onChange(nextValue);
+      }
+    },
+    [onChange],
+  );
+
+  // Register custom Ace editor commands on load
+  const handleLoad = useCallback(
+    (editor: AceEditorInstance) => {
+      editorRef.current = editor;
+      commands.forEach((cmd) => {
+        editor.commands.addCommand(cmd);
+      });
+      prevCommandNamesRef.current = commands.map((cmd) => cmd.name);
+      onLoad?.(editor);
+    },
+    [commands, onLoad],
+  );
+
+  // Update commands when they change (remove old, add new)
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    // Remove previously registered commands by name
+    prevCommandNamesRef.current.forEach((name) => {
+      editor.commands.removeCommand(name);
+    });
+    // Add new commands
+    commands.forEach((cmd) => {
+      editor.commands.addCommand(cmd);
+    });
+    prevCommandNamesRef.current = commands.map((cmd) => cmd.name);
+  }, [commands]);
+
+  useEffect(() => {
+    // Ensure the completer is only added once
+    if (!completerAdded.current) {
+      const customCompleter = {
+        getCompletions: (
+          editor: unknown,
+          session: unknown,
+          pos: unknown,
+          prefix: string,
+          callback: (error: unknown, results: unknown[]) => void,
+        ) => {
+          const completions = [
+            {
+              caption: translate("functions.readCsv.name"),
+              snippet: "read_csv(${1:'path'})",
+              meta: translate("functions.readCsv.description"),
+              value: "read_csv",
+            },
+            {
+              caption: translate("functions.readText.name"),
+              snippet: "read_text(${1:'path'})",
+              meta: translate("functions.readText.description"),
+              value: "read_text",
+            },
+            {
+              caption: translate("functions.readTsv.name"),
+              snippet: "read_tsv(${1:'path'})",
+              meta: translate("functions.readTsv.description"),
+              value: "read_tsv",
+            },
+            {
+              caption: translate("functions.readJson.name"),
+              snippet: "read_json(${1:'path'})",
+              meta: translate("functions.readJson.description"),
+              value: "read_json",
+            },
+            {
+              caption: translate("functions.readExcel.name"),
+              snippet: "read_excel(${1:'path'})",
+              meta: translate("functions.readExcel.description"),
+              value: "read_excel",
+            },
+            {
+              caption: translate("functions.readMysql.name"),
+              snippet:
+                "read_mysql(${1:'table_name'}, ${2:conn => 'mysql://user:password@localhost:3306/mydb'})",
+              meta: translate("functions.readMysql.description"),
+              value: "read_mysql",
+            },
+            {
+              caption: translate("functions.readPostgres.name"),
+              snippet:
+                "read_postgres(${1:'table_name'}, ${2:host => 'localhost'}, ${3:username => 'postgres'}, ${4:db => 'mydb'}, ${5:pass => 'password'})",
+              meta: translate("functions.readPostgres.description"),
+              value: "read_postgres",
+            },
+            {
+              caption: translate("functions.regexpLike.name"),
+              snippet: "regexp_like(${1:column}, ${2:pattern})",
+              meta: translate("functions.regexpLike.description"),
+              value: "regexp_like",
+            },
+            {
+              caption: "conn",
+              snippet: "conn => ${1:'connection'}",
+              meta: translate("functions.readMysql.conn"),
+              value: "conn",
+            },
+            {
+              caption: "host",
+              snippet: "host => ${1:'localhost'}",
+              meta: translate("functions.readPostgres.host"),
+              value: "host",
+            },
+            {
+              caption: "username",
+              snippet: "username => ${1:'postgres'}",
+              meta: translate("functions.readPostgres.username"),
+              value: "username",
+            },
+            {
+              caption: "db",
+              snippet: "db => ${1:'mydb'}",
+              meta: translate("functions.readPostgres.db"),
+              value: "db",
+            },
+            {
+              caption: "pass",
+              snippet: "pass => ${1:'password'}",
+              meta: translate("functions.readPostgres.pass"),
+              value: "pass",
+            },
+            {
+              caption: "port",
+              snippet: "port => ${1:'5432'}",
+              meta: translate("functions.readPostgres.port"),
+              value: "port",
+            },
+            {
+              caption: "sslmode",
+              snippet: "sslmode => ${1:'disable'}",
+              meta: translate("functions.readPostgres.sslmode"),
+              value: "sslmode",
+            },
+            {
+              caption: "infer_schema",
+              snippet: "infer_schema => ${1:true}",
+              meta: translate("functions.readCsv.inferSchema"),
+              value: "infer_schema",
+            },
+            {
+              caption: "sheet_name",
+              snippet: "sheet_name => ${1:'Sheet1'}",
+              meta: translate("functions.readExcel.sheetName"),
+              value: "sheet_name",
+            },
+            {
+              caption: "has_header",
+              snippet: "has_header => ${1:false}",
+              meta: translate("functions.readCsv.hasHeader"),
+              value: "has_header",
+            },
+            {
+              caption: "delimiter",
+              snippet: "delimiter => ${1:','}",
+              meta: translate("functions.readCsv.delimiter"),
+              value: "delimiter",
+            },
+            {
+              caption: "file_extension",
+              snippet: "file_extension => ${1:'.csv'}",
+              meta: translate("functions.readCsv.fileExtension"),
+              value: "file_extension",
+            },
+          ];
+
+          // Add table columns to completion list (with double quotes)
+          const columnCompletions = tableColumnsRef.current
+            .filter((column) => column && column.trim())
+            .map((column) => ({
+              caption: column,
+              snippet: `"${column}"`,
+              meta: "column",
+              value: `"${column}"`,
+            }));
+
+          callback(null, [...completions, ...columnCompletions]);
+        },
+      };
+
+      langTools.addCompleter(customCompleter);
+      completerAdded.current = true;
+    }
+  }, [translate]);
+
+  return (
+    <AceEditor
+      mode="sql"
+      theme="sqlserver"
+      name="editor"
+      width={width}
+      height={height}
+      fontSize={fontSize}
+      showPrintMargin={showPrintMargin}
+      showGutter={showGutter}
+      highlightActiveLine={highlightActiveLine}
+      placeholder={placeholder}
+      value={value}
+      onChange={handleChange}
+      onLoad={handleLoad}
+      setOptions={{
+        enableBasicAutocompletion,
+        enableLiveAutocompletion,
+        enableSnippets,
+        showLineNumbers,
+        tabSize,
+      }}
+      editorProps={{ $blockScrolling: true }}
+    />
+  );
+}
+
+export default CustomAceEditor;
