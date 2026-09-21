@@ -1307,11 +1307,13 @@ def test_research_cycle_architecture_trial_records_weight_transfer(tmp_path: Pat
     assert transfer["copied_tensors"] > 0
     assert 0.0 < transfer["parameter_fraction"] <= 1.0
     if trial["genome"]["tokenizer_version"] == result["champion"]["tokenizer_version"]:
-        assert transfer["policy"] == "exact tensors plus safe prefix inheritance for expansions"
+        assert transfer["policy"] == "layout-aware Net2Grow transfer with identity residual depth expansion"
         assert transfer["tokenizer_identical"] is True
         assert isinstance(transfer["partial_prefix_tensors"], list)
+        assert isinstance(transfer["identity_initialized_tensors"], list)
+        assert isinstance(transfer["function_preserving_growth"], bool)
     else:
-        assert transfer["policy"] == "exact/prefix-compatible tensors plus deterministic byte-compatible vocabulary migration"
+        assert transfer["policy"] == "exact compatible tensors plus deterministic byte-compatible vocabulary migration"
         assert transfer["vocabulary_migrated"] is True
         assert transfer["shared_token_rows"] > 0
 

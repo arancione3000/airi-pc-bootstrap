@@ -526,7 +526,14 @@ def _transfer_compatible_weights(
     source_tokenizer=None,
     target_tokenizer=None,
 ) -> dict[str, Any]:
-    """Transfer compatible tensors and migrate vocabulary embeddings safely."""
+    """Transfer learned structure into a larger compatible Generalist model.
+
+    Exact tensors are copied directly. For same-width progressive growth,
+    SwiGLU/GELU FFN expansion is layout-aware and new residual blocks are
+    initialized as identities by zeroing their output projections. This avoids
+    the semantic corruption caused by naive prefix copies of concatenated
+    QKV/SwiGLU tensors.
+    """
     source = source_model.state_dict()
     target = target_model.state_dict()
     copied: dict[str, Any] = {}
@@ -543,13 +550,29 @@ def _transfer_compatible_weights(
     )
     vocab_names = {"token_embedding.weight", "lm_head.weight"}
 
-    partial_tensors: list[str] = []
+    source_cfg = getattr(source_model, "config", None)
+    target_cfg = getattr(target_model, "config", None)
+    same_width = bool(
+        source_cfg is not None
+        and target_cfg is not None
+        and int(source_cfg.d_model) == int(target_cfg.d_model)
+    )
+    same_ff_variant = bool(
+        source_cfg is not None
+        and target_cfg is not None
+        and str(source_cfg.ff_variant) == str(target_cfg.ff_variant)
+    )
+
+    structured_growth_tensors: list[str] = []
+    identity_initialized_tensors: list[str] = []
+
     for name, tensor in target.items():
         old = source.get(name)
         if old is None:
             continue
         if name in vocab_names and not tokenizer_identical:
             continue
+
         if tuple(old.shape) == tuple(tensor.shape):
             copied[name] = old.detach().to(
                 device=tensor.device,
@@ -558,25 +581,129 @@ def _transfer_compatible_weights(
             copied_params += int(tensor.numel())
             continue
 
-        # Progressive scaling may enlarge width/FFN while keeping the same
-        # semantic tensor. Preserve the overlapping prefix rather than
-        # discarding all learned structure. Shrinking or rank changes remain
-        # fail-closed because they can silently destroy representations.
+        # Context growth is semantically aligned by position row. New positions
+        # start neutral while every learned old position is retained exactly.
         if (
-            name not in vocab_names
-            and old.ndim == tensor.ndim
-            and 1 <= old.ndim <= 2
-            and all(int(new) >= int(previous) for previous, new in zip(old.shape, tensor.shape))
+            name == "position_embedding.weight"
+            and old.ndim == tensor.ndim == 2
+            and int(old.shape[1]) == int(tensor.shape[1])
+            and int(tensor.shape[0]) > int(old.shape[0])
         ):
-            migrated = tensor.detach().clone()
-            slices = tuple(slice(0, int(size)) for size in old.shape)
-            migrated[slices] = old.detach().to(
+            migrated = tensor.detach().new_zeros(tensor.shape)
+            migrated[: int(old.shape[0]), :] = old.detach().to(
                 device=migrated.device,
                 dtype=migrated.dtype,
             )
             copied[name] = migrated
             copied_params += int(old.numel())
-            partial_tensors.append(name)
+            structured_growth_tensors.append(name)
+            continue
+
+        # Same-width FFN growth can preserve the existing residual function.
+        # SwiGLU stores [gate ; value] in one tensor, so each half must be
+        # copied into its corresponding half in the larger tensor rather than
+        # using a flat prefix.
+        if (
+            same_width
+            and same_ff_variant
+            and name.endswith(".ff.up.weight")
+            and old.ndim == tensor.ndim == 2
+            and int(old.shape[1]) == int(tensor.shape[1])
+            and int(tensor.shape[0]) > int(old.shape[0])
+        ):
+            migrated = tensor.detach().new_zeros(tensor.shape)
+            if str(target_cfg.ff_variant) == "swiglu":
+                if int(old.shape[0]) % 2 or int(tensor.shape[0]) % 2:
+                    continue
+                old_ff = int(old.shape[0]) // 2
+                new_ff = int(tensor.shape[0]) // 2
+                migrated[:old_ff, :] = old[:old_ff, :].detach().to(
+                    device=migrated.device,
+                    dtype=migrated.dtype,
+                )
+                migrated[new_ff:new_ff + old_ff, :] = old[old_ff:, :].detach().to(
+                    device=migrated.device,
+                    dtype=migrated.dtype,
+                )
+            else:
+                migrated[: int(old.shape[0]), :] = old.detach().to(
+                    device=migrated.device,
+                    dtype=migrated.dtype,
+                )
+            copied[name] = migrated
+            copied_params += int(old.numel())
+            structured_growth_tensors.append(name)
+            continue
+
+        if (
+            same_width
+            and same_ff_variant
+            and name.endswith(".ff.up.bias")
+            and old.ndim == tensor.ndim == 1
+            and int(tensor.shape[0]) > int(old.shape[0])
+        ):
+            migrated = tensor.detach().new_zeros(tensor.shape)
+            if str(target_cfg.ff_variant) == "swiglu":
+                if int(old.shape[0]) % 2 or int(tensor.shape[0]) % 2:
+                    continue
+                old_ff = int(old.shape[0]) // 2
+                new_ff = int(tensor.shape[0]) // 2
+                migrated[:old_ff] = old[:old_ff].detach().to(
+                    device=migrated.device,
+                    dtype=migrated.dtype,
+                )
+                migrated[new_ff:new_ff + old_ff] = old[old_ff:].detach().to(
+                    device=migrated.device,
+                    dtype=migrated.dtype,
+                )
+            else:
+                migrated[: int(old.shape[0])] = old.detach().to(
+                    device=migrated.device,
+                    dtype=migrated.dtype,
+                )
+            copied[name] = migrated
+            copied_params += int(old.numel())
+            structured_growth_tensors.append(name)
+            continue
+
+        if (
+            same_width
+            and same_ff_variant
+            and name.endswith(".ff.down.weight")
+            and old.ndim == tensor.ndim == 2
+            and int(old.shape[0]) == int(tensor.shape[0])
+            and int(tensor.shape[1]) > int(old.shape[1])
+        ):
+            migrated = tensor.detach().new_zeros(tensor.shape)
+            migrated[:, : int(old.shape[1])] = old.detach().to(
+                device=migrated.device,
+                dtype=migrated.dtype,
+            )
+            copied[name] = migrated
+            copied_params += int(old.numel())
+            structured_growth_tensors.append(name)
+            continue
+
+    # A newly inserted Transformer block is made an exact residual identity at
+    # initialization: attention and FFN branches may compute internal values,
+    # but their output projections are zero so x -> x. This lets added depth
+    # learn gradually instead of destroying the champion before training.
+    source_layers = int(getattr(source_cfg, "n_layers", 0) or 0)
+    target_layers = int(getattr(target_cfg, "n_layers", 0) or 0)
+    if same_width and target_layers > source_layers:
+        for layer in range(source_layers, target_layers):
+            for suffix in (
+                "attn.out.weight",
+                "attn.out.bias",
+                "ff.down.weight",
+                "ff.down.bias",
+            ):
+                name = f"blocks.{layer}.{suffix}"
+                tensor = target.get(name)
+                if tensor is None:
+                    continue
+                copied[name] = tensor.detach().new_zeros(tensor.shape)
+                identity_initialized_tensors.append(name)
 
     shared_token_rows = 0
     derived_bpe_rows = 0
@@ -584,6 +711,9 @@ def _transfer_compatible_weights(
     source_embed = source.get("token_embedding.weight")
     target_embed = target.get("token_embedding.weight")
 
+    # Width growth is not claimed function-preserving because normalization
+    # spans the model width, but retaining old embedding coordinates is still
+    # preferable to randomizing known tokens. New coordinates start at zero.
     if (
         tokenizer_identical
         and source_embed is not None
@@ -593,7 +723,7 @@ def _transfer_compatible_weights(
         and int(target_embed.shape[0]) == int(source_embed.shape[0])
         and int(target_embed.shape[1]) > int(source_embed.shape[1])
     ):
-        migrated = target_embed.detach().clone()
+        migrated = target_embed.detach().new_zeros(target_embed.shape)
         migrated[:, : int(source_embed.shape[1])] = source_embed.detach().to(
             device=migrated.device,
             dtype=migrated.dtype,
@@ -606,6 +736,7 @@ def _transfer_compatible_weights(
             copied["lm_head.weight"] = migrated.clone()
         copied_params += int(source_embed.numel())
         embedding_width_migrated = True
+
     if (
         source_embed is not None
         and target_embed is not None
@@ -643,9 +774,10 @@ def _transfer_compatible_weights(
                 derived_bpe_rows += 1
 
         copied["token_embedding.weight"] = migrated
-        # The model ties lm_head to token_embedding. Supplying the same migrated
-        # values for both state-dict keys keeps loading deterministic.
-        if "lm_head.weight" in target and tuple(target["lm_head.weight"].shape) == tuple(migrated.shape):
+        if (
+            "lm_head.weight" in target
+            and tuple(target["lm_head.weight"].shape) == tuple(migrated.shape)
+        ):
             copied["lm_head.weight"] = migrated.clone()
 
         migrated_params = int(migrated.numel())
@@ -657,7 +789,24 @@ def _transfer_compatible_weights(
     source_unmatched = sorted(
         name
         for name, tensor in source.items()
-        if name not in target or tuple(target[name].shape) != tuple(tensor.shape)
+        if name not in target
+        or (
+            tuple(target[name].shape) != tuple(tensor.shape)
+            and name not in copied
+        )
+    )
+    function_preserving_growth = bool(
+        tokenizer_identical
+        and same_width
+        and same_ff_variant
+        and source_cfg is not None
+        and target_cfg is not None
+        and int(target_cfg.n_layers) >= int(source_cfg.n_layers)
+        and int(target_cfg.d_ff) >= int(source_cfg.d_ff)
+        and int(target_cfg.context_length) >= int(source_cfg.context_length)
+        and int(target_cfg.n_heads) == int(source_cfg.n_heads)
+        and str(target_cfg.norm_type) == str(source_cfg.norm_type)
+        and str(target_cfg.position_encoding) == str(source_cfg.position_encoding)
     )
     return {
         "copied_tensors": len(copied),
@@ -667,7 +816,8 @@ def _transfer_compatible_weights(
         "copied_parameters": copied_params,
         "target_parameters": total_params,
         "parameter_fraction": (
-            float(min(copied_params, total_params) / total_params) if total_params else 0.0
+            float(min(copied_params, total_params) / total_params)
+            if total_params else 0.0
         ),
         "source_tokenizer": source_version,
         "target_tokenizer": target_version,
@@ -678,14 +828,18 @@ def _transfer_compatible_weights(
         "vocabulary_migrated": bool(
             shared_token_rows or derived_bpe_rows or embedding_width_migrated
         ),
-        "partial_prefix_tensors": sorted(partial_tensors),
+        "partial_prefix_tensors": sorted(structured_growth_tensors),
         "partial_prefix_parameters": sum(
-            int(source[name].numel()) for name in partial_tensors
+            int(source[name].numel())
+            for name in structured_growth_tensors
+            if name in source
         ),
+        "identity_initialized_tensors": sorted(identity_initialized_tensors),
+        "function_preserving_growth": function_preserving_growth,
         "policy": (
-            "exact tensors plus safe prefix inheritance for expansions"
+            "layout-aware Net2Grow transfer with identity residual depth expansion"
             if tokenizer_identical
-            else "exact/prefix-compatible tensors plus deterministic byte-compatible vocabulary migration"
+            else "exact compatible tensors plus deterministic byte-compatible vocabulary migration"
         ),
     }
 
