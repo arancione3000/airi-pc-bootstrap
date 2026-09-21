@@ -195,151 +195,12 @@
     "version": "airi-pc-lab-v1"
   },
   "automatic_data_growth": {
-    "added_bytes": 0,
-    "added_files": 0,
-    "approved_dir": "/tmp/airi-generalist-state/autodata/approved",
-    "desired_domains": [
-      "reasoning",
-      "data",
-      "language-it",
-      "general",
-      "code"
-    ],
-    "domain_bytes": {
-      "code": 7210611,
-      "data": 14314555,
-      "general": 4203121,
-      "reasoning": 39544
-    },
-    "domain_files": {
-      "code": 501,
-      "data": 292,
-      "general": 387,
-      "reasoning": 8
-    },
-    "external_pretrained": false,
-    "manifest": "/tmp/airi-generalist-state/autodata/manifest.json",
     "ok": true,
-    "queries": [
-      "reasoning dataset license:mit",
-      "mathematics proofs license:mit",
-      "csv dataset license:mit",
-      "json dataset license:mit",
-      "natural language corpus license:mit",
-      "italian corpus license:mit",
-      "text corpus license:mit",
-      "educational corpus license:apache-2.0"
-    ],
-    "rejected": [
-      {
-        "path": "modeling/evaluate_gpt3.py",
-        "reason": "secret_like_content",
-        "repo": "hendrycks/math"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "xid32/SoundMind"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "OpenBioLink/ThoughtSource"
-      },
-      {
-        "path": "models/Gemini.py",
-        "reason": "secret_like_content",
-        "repo": "mathllm/MATH-V"
-      },
-      {
-        "path": "models/GPT4V.py",
-        "reason": "secret_like_content",
-        "repo": "mathllm/MATH-V"
-      },
-      {
-        "path": "models/GPT4.py",
-        "reason": "secret_like_content",
-        "repo": "mathllm/MATH-V"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "Paper-Proof/paperproof"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "lotchuazzz-crypto/papergraph-mcp"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "Intrafere/MOTO-Autonomous-ASI"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "turnstilelabs/adjoint"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "adaltas/node-csv"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "shencangsheng/easydb_app"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "SEC-API-io/sec-api-python"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "openbrewerydb/openbrewerydb"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "idiap/atco2-corpus"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "mefarion/wordview"
-      },
-      {
-        "path": "src/italia_corpus/pipeline.py",
-        "reason": "secret_like_content",
-        "repo": "ahmeabd/italia-corpus-script"
-      },
-      {
-        "path": "src/italia_corpus/github_client.py",
-        "reason": "secret_like_content",
-        "repo": "ahmeabd/italia-corpus-script"
-      },
-      {
-        "path": "src/italia_corpus/git_ops.py",
-        "reason": "secret_like_content",
-        "repo": "ahmeabd/italia-corpus-script"
-      },
-      {
-        "path": "OEG_task.py",
-        "reason": "secret_like_content",
-        "repo": "WalterPaci/IMPAQTS-PID"
-      },
-      {
-        "path": "MCG_task.py",
-        "reason": "secret_like_content",
-        "repo": "WalterPaci/IMPAQTS-PID"
-      },
-      {
-        "path": "NLP analyses/LOME_Spacy.py",
-        "reason": "secret_like_content",
-        "repo": "valimenti/Linguistic-Markers-of-Anorexia-and-Bulimia-Nervosa-in-Italian"
-      },
-      {
-        "reason": "persistent_repo_cap",
-        "repo": "rodolformelo/DEMoS-italian-corpus-analysis"
-      }
-    ],
-    "repositories_used": 0,
-    "total_bytes": 25767831,
-    "total_files": 1188,
-    "version": "generalist-data-growth-v3"
+    "reason": "automatic data growth disabled",
+    "skipped": true
   },
   "champion": {
+    "attention_type": "mha",
     "code_adapter": false,
     "context_length": 128,
     "d_ff": 128,
@@ -350,28 +211,33 @@
     "generation": 2,
     "genome_id": "generalist-2-0-57f3721a",
     "learning_rate": 0.003,
+    "local_attention_every": 0,
+    "local_attention_window": 0,
     "n_heads": 4,
+    "n_kv_heads": null,
     "n_layers": 2,
+    "norm_placement": "pre",
     "norm_type": "layernorm",
     "parent_id": "generalist-1-continual-7463dc25",
     "position_encoding": "learned",
     "reasoning_depth": 1,
     "retrieval_adapter": false,
     "symbolic_adapter": false,
+    "tie_embeddings": true,
     "tokenizer_version": "bpe-v1",
     "tool_protocol": "tool-json-v1"
   },
   "champion_report": {
-    "bits_per_byte": 2.714611446191957,
+    "bits_per_byte": 2.7146116677142644,
     "canary": {
-      "bits_per_byte": 3.026367110688385,
+      "bits_per_byte": 2.9925838215109004,
       "domain_bits_per_byte": {
-        "coding": 3.925422618461445,
-        "data": 4.234702670832006,
-        "language": 6.6918306361153315,
-        "reasoning": 5.302132117882803,
-        "structured": 3.89948376975649,
-        "tools": 1.6199373543566478
+        "coding": 3.904268505455872,
+        "data": 4.110983396625727,
+        "language": 6.7811862173698545,
+        "reasoning": 5.048017157101711,
+        "structured": 3.8576416902260418,
+        "tools": 1.5878199297803497
       },
       "domain_generation_accuracy": {
         "coding": 0.0,
@@ -390,20 +256,20 @@
         "tools": 0.35374149659863946
       },
       "domain_loss": {
-        "coding": 4.0813434307391825,
-        "data": 2.5159476143973216,
-        "language": 4.2167486710981885,
-        "reasoning": 3.062631607055664,
-        "structured": 3.040780703226725,
-        "tools": 1.4910041934154072
+        "coding": 4.059349060058594,
+        "data": 2.4424427577427457,
+        "language": 4.273054643110796,
+        "reasoning": 2.915849049886068,
+        "structured": 3.008152643839518,
+        "tools": 1.4614430411917265
       },
       "domain_nll_per_byte": {
-        "coding": 2.7208956204927883,
-        "data": 2.935272216796875,
-        "language": 4.6384235382080075,
-        "reasoning": 3.675157928466797,
-        "structured": 2.702916180645978,
-        "tools": 1.1228550098560475
+        "coding": 2.706232706705729,
+        "data": 2.8495165506998696,
+        "language": 4.700360107421875,
+        "reasoning": 3.4990188598632814,
+        "structured": 2.6739134611906827,
+        "tools": 1.1005929075641396
       },
       "domain_token_accuracy": {
         "coding": 0.15384615384615385,
@@ -411,7 +277,7 @@
         "language": 0.09090909090909091,
         "reasoning": 0.16666666666666666,
         "structured": 0.25,
-        "tools": 0.7213114754098361
+        "tools": 0.7049180327868853
       },
       "finite": true,
       "generated_solved_items": [],
@@ -423,71 +289,71 @@
       "generation_probe": [
         {
           "domain": "coding",
-          "item": "coding:3d8711e106634497",
+          "item": "coding:e4e5caca33b64233",
           "ok": false,
           "output": "defff_ccalal_calue xxxxxxxx):1",
           "similarity": 0.34782608695652173,
-          "target": "def canary_sub_96(x):\n    return x - 11"
+          "target": "def canary_sub_97(x):\n    return x - 12"
         },
         {
           "domain": "data",
-          "item": "data:3aa86233f73d9fd9",
+          "item": "data:c82e16d88d2dea63",
           "ok": false,
           "output": "1",
           "similarity": 0.2857142857142857,
-          "target": "187735"
+          "target": "188128"
         },
         {
           "domain": "language",
-          "item": "language:27c3cbde3d662607",
+          "item": "language:2bd5b943a52fd311",
           "ok": false,
           "output": "11",
           "similarity": 0.0,
-          "target": "CANARY0096"
+          "target": "CANARY0097"
         },
         {
           "domain": "reasoning",
-          "item": "reasoning:d1c4b3068372c065",
+          "item": "reasoning:eafc9a724ad8dadc",
           "ok": false,
           "output": "11111111",
           "similarity": 0.0,
-          "target": "62592"
+          "target": "62723"
         },
         {
           "domain": "structured",
-          "item": "structured:69314e642dd33a23",
+          "item": "structured:727ada87ddf50f98",
           "ok": false,
           "output": "11111111111",
           "similarity": 0.0,
-          "target": "{\"canary\":96,\"value\":62576}"
+          "target": "{\"canary\":97,\"value\":62707}"
         },
         {
           "domain": "tools",
-          "item": "tools:9e0ae6384d48bde2",
+          "item": "tools:7c68b18ef943d4b7",
           "ok": false,
           "output": "<tool_call>{\":{\":\":\":\":\":\":{\":\":\":{\"\":\":\":\":1111111111111111111111",
           "similarity": 0.35374149659863946,
-          "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"62576*3\"}}</tool_call>"
+          "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"62707*4\"}}</tool_call>"
         }
       ],
       "generation_repetition_rate": 0.8363636363636364,
       "generation_similarity": 0.1645469782115745,
       "generation_unique_token_ratio": 0.16363636363636364,
-      "loss": 2.6104932996961807,
-      "nll_per_byte": 2.097717830113002,
+      "loss": 2.5813524034288196,
+      "nll_per_byte": 2.0743010384695872,
       "solved_items": [],
-      "target_token_accuracy": 0.42962962962962964,
+      "target_token_accuracy": 0.4222222222222222,
       "target_tokens": 135,
       "tokenizer_version": "bpe-v1",
       "validation_target_bytes": 168,
       "validation_target_tokens": 135
     },
-    "canary_cycle": 96,
+    "canary_cycle": 97,
     "domain_bits_per_byte": {
       "coding": 3.0236824045084525,
-      "data": 4.843641780328073,
+      "data": 4.843642330672556,
       "language": 6.297878918310038,
-      "reasoning": 4.532526304916538,
+      "reasoning": 4.532525911813336,
       "structured": 1.893167898869445,
       "tools": 1.6814958903103974
     },
@@ -509,17 +375,17 @@
     },
     "domain_loss": {
       "coding": 3.304278949359516,
-      "data": 2.238237762451172,
+      "data": 2.2382380167643228,
       "language": 5.431316287018532,
-      "reasoning": 2.314942610891242,
+      "reasoning": 2.3149424101177014,
       "structured": 1.5106064552484557,
       "tools": 1.5674290097992996
     },
     "domain_nll_per_byte": {
       "coding": 2.09585693359375,
-      "data": 3.357356643676758,
+      "data": 3.3573570251464844,
       "language": 4.365357015734521,
-      "reasoning": 3.1417078290666853,
+      "reasoning": 3.141707556588309,
       "structured": 1.3122439914279513,
       "tools": 1.165524135491787
     },
@@ -591,10 +457,10 @@
     "generation_repetition_rate": 0.813953488372093,
     "generation_similarity": 0.18469332364660263,
     "generation_unique_token_ratio": 0.18604651162790697,
-    "loss": 2.4644021249485175,
-    "nll_per_byte": 1.8816252702437106,
+    "loss": 2.4644023260528214,
+    "nll_per_byte": 1.8816254237912735,
     "parameters": 115328,
-    "score": 34.702523156129686,
+    "score": 34.70252130699776,
     "solved_items": [],
     "target_token_accuracy": 0.5123558484349259,
     "target_tokens": 607,
@@ -604,22 +470,22 @@
   },
   "curriculum_memory": {
     "added": 10,
-    "cycle": 96,
+    "cycle": 97,
     "domains": {
-      "coding": 111,
-      "data": 185,
-      "language": 128,
-      "reasoning": 192,
-      "structured": 96,
-      "tools": 98
+      "coding": 112,
+      "data": 187,
+      "language": 131,
+      "reasoning": 194,
+      "structured": 97,
+      "tools": 99
     },
     "extra_rows_considered": 10,
-    "max_rows": 4000,
+    "max_rows": 5000,
     "ok": true,
-    "stored": 810,
+    "stored": 820,
     "validation_overlap": []
   },
-  "cycle": 96,
+  "cycle": 97,
   "grounded_pretraining": {
     "adaptive_budget": true,
     "corpus": {
@@ -631,24 +497,28 @@
   },
   "latest_research": {
     "all_seed_eligible": false,
+    "any_generation_pathological_repetition": true,
     "any_seed_eligible": false,
-    "candidate_id": "phase5-bootstrap-96",
-    "cycle": 96,
+    "candidate_id": "airi-arch-3-c212da9583a1",
+    "cycle": 97,
     "external_pretrained": false,
-    "kind": "language_bootstrap",
+    "kind": "architecture_structural_mutation",
+    "language_bridge_rows": 32,
+    "max_generation_repeated_token_run": 10,
     "mean_generation_accuracy": 0.0,
     "mean_generation_nonempty_rate": 1.0,
-    "mean_generation_similarity": 0.2666394187662868,
-    "mean_nll_per_byte": 1.9093616413620282,
-    "parameters": 115328,
+    "mean_generation_repetition_rate": 0.7833959899749373,
+    "mean_generation_similarity": 0.1962618884673092,
+    "mean_nll_per_byte": 1.830148449783805,
+    "parameters": 106816,
     "research_only": true,
-    "score": 34.37168588719188,
-    "stage": 5,
+    "score": 36.02472264985716,
+    "stage": 3,
     "tokenizer_vocab_size": 384,
-    "worst_domain_regression": 0.5878801442155934
+    "worst_domain_regression": 0.5342014312744139
   },
   "mathesis": {
-    "curriculum_cursor": 534,
+    "curriculum_cursor": 547,
     "mathesis_generation": 15,
     "ok": true,
     "policy": "persisted MATHESIS metadata is untrusted; current verifier re-proof is required before mathematics may influence generalist curriculum/architecture, and generalist promotion remains independently benchmark-gated",
@@ -662,1472 +532,6 @@
     "verifier_available": true
   },
   "ok": true,
-  "phase5_bootstrap": {
-    "after": {
-      "bpe_token_distribution": {
-        "merged_fraction": 0.11512445887445888,
-        "tokenizer_version": "bpe-v1",
-        "vocab_size": 384
-      },
-      "dominant_token_fraction": 0.2653061224489796,
-      "eos_probability": 0.03459598388625923,
-      "exact_accuracy": 0.0,
-      "generation_length": 42.0,
-      "generation_similarity": 0.09317496846816346,
-      "language_bits_per_byte": 4.4009633783980915,
-      "language_nll": 3.0505153574842088,
-      "longest_repeated_token_run": 24,
-      "multiword_output_rate": 0.0,
-      "non_empty_rate": 1.0,
-      "pathological_repetition": true,
-      "prompt_count": 7,
-      "repetition_rate": 0.8410443722943723,
-      "schema": 1,
-      "suite": "phase5-language-holdout-v1",
-      "suite_training_excluded": true,
-      "token_entropy": 3.399036148751992,
-      "token_frequency_distribution": [
-        {
-          "count": 78,
-          "fraction": 0.2653061224489796,
-          "token_id": 40
-        },
-        {
-          "count": 39,
-          "fraction": 0.1326530612244898,
-          "token_id": 123
-        },
-        {
-          "count": 38,
-          "fraction": 0.1292517006802721,
-          "token_id": 119
-        },
-        {
-          "count": 37,
-          "fraction": 0.12585034013605442,
-          "token_id": 133
-        },
-        {
-          "count": 35,
-          "fraction": 0.11904761904761904,
-          "token_id": 120
-        },
-        {
-          "count": 32,
-          "fraction": 0.10884353741496598,
-          "token_id": 272
-        },
-        {
-          "count": 6,
-          "fraction": 0.02040816326530612,
-          "token_id": 42
-        },
-        {
-          "count": 6,
-          "fraction": 0.02040816326530612,
-          "token_id": 66
-        },
-        {
-          "count": 6,
-          "fraction": 0.02040816326530612,
-          "token_id": 105
-        },
-        {
-          "count": 5,
-          "fraction": 0.017006802721088437,
-          "token_id": 81
-        },
-        {
-          "count": 3,
-          "fraction": 0.01020408163265306,
-          "token_id": 131
-        },
-        {
-          "count": 3,
-          "fraction": 0.01020408163265306,
-          "token_id": 117
-        },
-        {
-          "count": 3,
-          "fraction": 0.01020408163265306,
-          "token_id": 276
-        },
-        {
-          "count": 2,
-          "fraction": 0.006802721088435374,
-          "token_id": 333
-        },
-        {
-          "count": 1,
-          "fraction": 0.003401360544217687,
-          "token_id": 113
-        }
-      ],
-      "top1_probability": 0.23108800237300006,
-      "top5_probability_mass": 0.5011666098065463,
-      "traces": [
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 31,
-            "merged_fraction": 0.03125,
-            "merged_tokens": 1
-          },
-          "eos_probability": 0.13731463450345804,
-          "exact": false,
-          "generated_token_ids": [
-            131,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            333,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133
-          ],
-          "generation_length": 32,
-          "generation_similarity": 0.0,
-          "language": "it",
-          "longest_repeated_token_run": 24,
-          "nonempty": true,
-          "prompt": "Ciao",
-          "raw_output": "{\":\":\":ue}}}}}}}}}}}}}}}}}}}}}}}}",
-          "repetition_rate": 0.84375,
-          "target": "Ciao!",
-          "token_entropy": 2.472795287768046,
-          "token_frequency_distribution": [
-            {
-              "count": 24,
-              "fraction": 0.75,
-              "token_id": 133
-            },
-            {
-              "count": 3,
-              "fraction": 0.09375,
-              "token_id": 42
-            },
-            {
-              "count": 3,
-              "fraction": 0.09375,
-              "token_id": 66
-            },
-            {
-              "count": 1,
-              "fraction": 0.03125,
-              "token_id": 131
-            },
-            {
-              "count": 1,
-              "fraction": 0.03125,
-              "token_id": 333
-            }
-          ],
-          "top1_probability": 0.4407929200114626,
-          "top5_probability_mass": 0.758172510248242,
-          "unique_token_ratio": 0.15625
-        },
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 43,
-            "merged_fraction": 0.10416666666666667,
-            "merged_tokens": 5
-          },
-          "eos_probability": 0.0011962290982410195,
-          "exact": false,
-          "generated_token_ids": [
-            81,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            120,
-            113,
-            40,
-            120,
-            272,
-            40,
-            123,
-            119,
-            117,
-            276
-          ],
-          "generation_length": 48,
-          "generation_similarity": 0.08823529411764706,
-          "language": "it",
-          "longest_repeated_token_run": 1,
-          "nonempty": true,
-          "prompt": "Come ti chiami?",
-          "raw_output": "I so so so so so so per per per so so so pi per some ",
-          "repetition_rate": 0.8125,
-          "target": "Mi chiamo AIRI.",
-          "token_entropy": 3.6898931910594306,
-          "token_frequency_distribution": [
-            {
-              "count": 15,
-              "fraction": 0.3125,
-              "token_id": 40
-            },
-            {
-              "count": 10,
-              "fraction": 0.20833333333333334,
-              "token_id": 123
-            },
-            {
-              "count": 10,
-              "fraction": 0.20833333333333334,
-              "token_id": 119
-            },
-            {
-              "count": 5,
-              "fraction": 0.10416666666666667,
-              "token_id": 120
-            },
-            {
-              "count": 4,
-              "fraction": 0.08333333333333333,
-              "token_id": 272
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 81
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 113
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 117
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 276
-            }
-          ],
-          "top1_probability": 0.16140860443313917,
-          "top5_probability_mass": 0.4171534019211928,
-          "unique_token_ratio": 0.1875
-        },
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 38,
-            "merged_fraction": 0.20833333333333334,
-            "merged_tokens": 10
-          },
-          "eos_probability": 0.0008564524356794815,
-          "exact": false,
-          "generated_token_ids": [
-            81,
-            40,
-            120,
-            272,
-            40,
-            105,
-            40,
-            123,
-            119,
-            40,
-            120,
-            272,
-            40,
-            105,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            117,
-            276,
-            120,
-            272,
-            40,
-            123,
-            119,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            123,
-            119,
-            117,
-            276,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            120
-          ],
-          "generation_length": 48,
-          "generation_similarity": 0.2619047619047619,
-          "language": "it",
-          "longest_repeated_token_run": 1,
-          "nonempty": true,
-          "prompt": "Scrivi una frase su un gatto.",
-          "raw_output": "I per a so per a so some per so per per some per per per p",
-          "repetition_rate": 0.8125,
-          "target": "Il gatto dorme sul divano.",
-          "token_entropy": 3.748862956960996,
-          "token_frequency_distribution": [
-            {
-              "count": 14,
-              "fraction": 0.2916666666666667,
-              "token_id": 40
-            },
-            {
-              "count": 9,
-              "fraction": 0.1875,
-              "token_id": 120
-            },
-            {
-              "count": 8,
-              "fraction": 0.16666666666666666,
-              "token_id": 272
-            },
-            {
-              "count": 5,
-              "fraction": 0.10416666666666667,
-              "token_id": 123
-            },
-            {
-              "count": 5,
-              "fraction": 0.10416666666666667,
-              "token_id": 119
-            },
-            {
-              "count": 2,
-              "fraction": 0.041666666666666664,
-              "token_id": 105
-            },
-            {
-              "count": 2,
-              "fraction": 0.041666666666666664,
-              "token_id": 117
-            },
-            {
-              "count": 2,
-              "fraction": 0.041666666666666664,
-              "token_id": 276
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 81
-            }
-          ],
-          "top1_probability": 0.14195969382611415,
-          "top5_probability_mass": 0.40442731728156406,
-          "unique_token_ratio": 0.1875
-        },
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 46,
-            "merged_fraction": 0.041666666666666664,
-            "merged_tokens": 2
-          },
-          "eos_probability": 0.0014792893431755754,
-          "exact": false,
-          "generated_token_ids": [
-            81,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            120,
-            272,
-            40,
-            123,
-            119,
-            40,
-            120,
-            272,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123
-          ],
-          "generation_length": 48,
-          "generation_similarity": 0.034482758620689655,
-          "language": "it",
-          "longest_repeated_token_run": 1,
-          "nonempty": true,
-          "prompt": "Completa: Il cielo è",
-          "raw_output": "I so so so so so so so so so per so per so so so s",
-          "repetition_rate": 0.875,
-          "target": "azzurro.",
-          "token_entropy": 3.7767867793639502,
-          "token_frequency_distribution": [
-            {
-              "count": 16,
-              "fraction": 0.3333333333333333,
-              "token_id": 40
-            },
-            {
-              "count": 14,
-              "fraction": 0.2916666666666667,
-              "token_id": 123
-            },
-            {
-              "count": 13,
-              "fraction": 0.2708333333333333,
-              "token_id": 119
-            },
-            {
-              "count": 2,
-              "fraction": 0.041666666666666664,
-              "token_id": 120
-            },
-            {
-              "count": 2,
-              "fraction": 0.041666666666666664,
-              "token_id": 272
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 81
-            }
-          ],
-          "top1_probability": 0.16540460591204464,
-          "top5_probability_mass": 0.4003371897463997,
-          "unique_token_ratio": 0.125
-        },
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 43,
-            "merged_fraction": 0.10416666666666667,
-            "merged_tokens": 5
-          },
-          "eos_probability": 0.0010242635065272527,
-          "exact": false,
-          "generated_token_ids": [
-            81,
-            40,
-            123,
-            119,
-            40,
-            120,
-            272,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            120,
-            272,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            120,
-            272,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            123,
-            119,
-            40,
-            123,
-            119,
-            40,
-            120
-          ],
-          "generation_length": 48,
-          "generation_similarity": 0.14925373134328357,
-          "language": "it",
-          "longest_repeated_token_run": 1,
-          "nonempty": true,
-          "prompt": "Scrivi tre parole italiane.",
-          "raw_output": "I so per so so so per so so per so so per per so so p",
-          "repetition_rate": 0.875,
-          "target": "casa sole mare",
-          "token_entropy": 3.75788447757562,
-          "token_frequency_distribution": [
-            {
-              "count": 16,
-              "fraction": 0.3333333333333333,
-              "token_id": 40
-            },
-            {
-              "count": 10,
-              "fraction": 0.20833333333333334,
-              "token_id": 123
-            },
-            {
-              "count": 10,
-              "fraction": 0.20833333333333334,
-              "token_id": 119
-            },
-            {
-              "count": 6,
-              "fraction": 0.125,
-              "token_id": 120
-            },
-            {
-              "count": 5,
-              "fraction": 0.10416666666666667,
-              "token_id": 272
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 81
-            }
-          ],
-          "top1_probability": 0.1542710909464707,
-          "top5_probability_mass": 0.40099969195822877,
-          "unique_token_ratio": 0.125
-        },
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 21,
-            "merged_fraction": 0.045454545454545456,
-            "merged_tokens": 1
-          },
-          "eos_probability": 0.09974740874579015,
-          "exact": false,
-          "generated_token_ids": [
-            131,
-            42,
-            66,
-            131,
-            42,
-            66,
-            42,
-            66,
-            333,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133,
-            133
-          ],
-          "generation_length": 22,
-          "generation_similarity": 0.06896551724137931,
-          "language": "en",
-          "longest_repeated_token_run": 13,
-          "nonempty": true,
-          "prompt": "Hello",
-          "raw_output": "{\":{\":\":ue}}}}}}}}}}}}}",
-          "repetition_rate": 0.7727272727272727,
-          "target": "Hello!",
-          "token_entropy": 2.5956431497698245,
-          "token_frequency_distribution": [
-            {
-              "count": 13,
-              "fraction": 0.5909090909090909,
-              "token_id": 133
-            },
-            {
-              "count": 3,
-              "fraction": 0.13636363636363635,
-              "token_id": 42
-            },
-            {
-              "count": 3,
-              "fraction": 0.13636363636363635,
-              "token_id": 66
-            },
-            {
-              "count": 2,
-              "fraction": 0.09090909090909091,
-              "token_id": 131
-            },
-            {
-              "count": 1,
-              "fraction": 0.045454545454545456,
-              "token_id": 333
-            }
-          ],
-          "top1_probability": 0.4146283738639044,
-          "top5_probability_mass": 0.7260646327682163,
-          "unique_token_ratio": 0.22727272727272727
-        },
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 35,
-            "merged_fraction": 0.2708333333333333,
-            "merged_tokens": 13
-          },
-          "eos_probability": 0.000553609570943081,
-          "exact": false,
-          "generated_token_ids": [
-            81,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            105,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            105,
-            40,
-            105,
-            40,
-            105,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272,
-            40,
-            120,
-            272
-          ],
-          "generation_length": 48,
-          "generation_similarity": 0.04938271604938271,
-          "language": "en",
-          "longest_repeated_token_run": 1,
-          "nonempty": true,
-          "prompt": "Write one simple sentence.",
-          "raw_output": "I per per per per a per per per a a a per per per per per per",
-          "repetition_rate": 0.8958333333333334,
-          "target": "The cat is sleeping.",
-          "token_entropy": 3.7513871987660727,
-          "token_frequency_distribution": [
-            {
-              "count": 17,
-              "fraction": 0.3541666666666667,
-              "token_id": 40
-            },
-            {
-              "count": 13,
-              "fraction": 0.2708333333333333,
-              "token_id": 120
-            },
-            {
-              "count": 13,
-              "fraction": 0.2708333333333333,
-              "token_id": 272
-            },
-            {
-              "count": 4,
-              "fraction": 0.08333333333333333,
-              "token_id": 105
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 81
-            }
-          ],
-          "top1_probability": 0.13915072761786482,
-          "top5_probability_mass": 0.4010115247219801,
-          "unique_token_ratio": 0.10416666666666667
-        }
-      ],
-      "unique_token_ratio": 0.1589556277056277,
-      "word_output_rate": 1.0
-    },
-    "before": {
-      "bpe_token_distribution": {
-        "merged_fraction": 0.05952380952380952,
-        "tokenizer_version": "bpe-v1",
-        "vocab_size": 384
-      },
-      "dominant_token_fraction": 0.34104046242774566,
-      "eos_probability": 0.046376203736842266,
-      "exact_accuracy": 0.0,
-      "generation_length": 24.714285714285715,
-      "generation_similarity": 0.0518584356819651,
-      "language_bits_per_byte": 7.092205509628155,
-      "language_nll": 4.915942252950465,
-      "longest_repeated_token_run": 29,
-      "multiword_output_rate": 0.14285714285714285,
-      "non_empty_rate": 0.8571428571428571,
-      "pathological_repetition": true,
-      "prompt_count": 7,
-      "repetition_rate": 0.5170068027210885,
-      "schema": 1,
-      "suite": "phase5-language-holdout-v1",
-      "suite_training_excluded": true,
-      "token_entropy": 3.2747821858199977,
-      "token_frequency_distribution": [
-        {
-          "count": 59,
-          "fraction": 0.34104046242774566,
-          "token_id": 57
-        },
-        {
-          "count": 38,
-          "fraction": 0.21965317919075145,
-          "token_id": 42
-        },
-        {
-          "count": 37,
-          "fraction": 0.2138728323699422,
-          "token_id": 66
-        },
-        {
-          "count": 17,
-          "fraction": 0.09826589595375723,
-          "token_id": 131
-        },
-        {
-          "count": 5,
-          "fraction": 0.028901734104046242,
-          "token_id": 281
-        },
-        {
-          "count": 4,
-          "fraction": 0.023121387283236993,
-          "token_id": 107
-        },
-        {
-          "count": 3,
-          "fraction": 0.017341040462427744,
-          "token_id": 103
-        },
-        {
-          "count": 3,
-          "fraction": 0.017341040462427744,
-          "token_id": 116
-        },
-        {
-          "count": 3,
-          "fraction": 0.017341040462427744,
-          "token_id": 70
-        },
-        {
-          "count": 2,
-          "fraction": 0.011560693641618497,
-          "token_id": 108
-        },
-        {
-          "count": 1,
-          "fraction": 0.005780346820809248,
-          "token_id": 298
-        },
-        {
-          "count": 1,
-          "fraction": 0.005780346820809248,
-          "token_id": 58
-        }
-      ],
-      "top1_probability": 0.2893292589499583,
-      "top5_probability_mass": 0.5418467751013584,
-      "traces": [
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 32,
-            "merged_fraction": 0.0,
-            "merged_tokens": 0
-          },
-          "eos_probability": 0.05689159823073582,
-          "exact": false,
-          "generated_token_ids": [
-            131,
-            42,
-            66,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57
-          ],
-          "generation_length": 32,
-          "generation_similarity": 0.0,
-          "language": "it",
-          "longest_repeated_token_run": 29,
-          "nonempty": true,
-          "prompt": "Ciao",
-          "raw_output": "{\":11111111111111111111111111111",
-          "repetition_rate": 0.875,
-          "target": "Ciao!",
-          "token_entropy": 3.5226798671664614,
-          "token_frequency_distribution": [
-            {
-              "count": 29,
-              "fraction": 0.90625,
-              "token_id": 57
-            },
-            {
-              "count": 1,
-              "fraction": 0.03125,
-              "token_id": 131
-            },
-            {
-              "count": 1,
-              "fraction": 0.03125,
-              "token_id": 42
-            },
-            {
-              "count": 1,
-              "fraction": 0.03125,
-              "token_id": 66
-            }
-          ],
-          "top1_probability": 0.14505108874855618,
-          "top5_probability_mass": 0.45156794063972705,
-          "unique_token_ratio": 0.125
-        },
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 46,
-            "merged_fraction": 0.041666666666666664,
-            "merged_tokens": 2
-          },
-          "eos_probability": 0.00764474127451346,
-          "exact": false,
-          "generated_token_ids": [
-            108,
-            103,
-            107,
-            281,
-            281,
-            116,
-            70,
-            131,
-            42,
-            66,
-            131,
-            42,
-            66,
-            131,
-            42,
-            66,
-            42,
-            66,
-            131,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            131,
-            42,
-            66,
-            131,
-            42,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            57,
-            57
-          ],
-          "generation_length": 48,
-          "generation_similarity": 0.06153846153846154,
-          "language": "it",
-          "longest_repeated_token_run": 2,
-          "nonempty": true,
-          "prompt": "Come ti chiami?",
-          "raw_output": "d_calall>{\":{\":{\":\":{\":\":\":\":\":\":\":\":{\":{\"\":\":\":11",
-          "repetition_rate": 0.7916666666666666,
-          "target": "Mi chiamo AIRI.",
-          "token_entropy": 2.387194269647201,
-          "token_frequency_distribution": [
-            {
-              "count": 17,
-              "fraction": 0.3541666666666667,
-              "token_id": 42
-            },
-            {
-              "count": 16,
-              "fraction": 0.3333333333333333,
-              "token_id": 66
-            },
-            {
-              "count": 6,
-              "fraction": 0.125,
-              "token_id": 131
-            },
-            {
-              "count": 2,
-              "fraction": 0.041666666666666664,
-              "token_id": 281
-            },
-            {
-              "count": 2,
-              "fraction": 0.041666666666666664,
-              "token_id": 57
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 108
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 103
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 107
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 116
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 70
-            }
-          ],
-          "top1_probability": 0.5046994644217193,
-          "top5_probability_mass": 0.7308641870816549,
-          "unique_token_ratio": 0.20833333333333334
-        },
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 4,
-            "merged_fraction": 0.3333333333333333,
-            "merged_tokens": 2
-          },
-          "eos_probability": 0.06555870567847576,
-          "exact": false,
-          "generated_token_ids": [
-            298,
-            103,
-            107,
-            281,
-            116,
-            70
-          ],
-          "generation_length": 6,
-          "generation_similarity": 0.17647058823529413,
-          "language": "it",
-          "longest_repeated_token_run": 1,
-          "nonempty": true,
-          "prompt": "Scrivi una frase su un gatto.",
-          "raw_output": "de_call>",
-          "repetition_rate": 0.0,
-          "target": "Il gatto dorme sul divano.",
-          "token_entropy": 3.650094372885568,
-          "token_frequency_distribution": [
-            {
-              "count": 1,
-              "fraction": 0.16666666666666666,
-              "token_id": 298
-            },
-            {
-              "count": 1,
-              "fraction": 0.16666666666666666,
-              "token_id": 103
-            },
-            {
-              "count": 1,
-              "fraction": 0.16666666666666666,
-              "token_id": 107
-            },
-            {
-              "count": 1,
-              "fraction": 0.16666666666666666,
-              "token_id": 281
-            },
-            {
-              "count": 1,
-              "fraction": 0.16666666666666666,
-              "token_id": 116
-            },
-            {
-              "count": 1,
-              "fraction": 0.16666666666666666,
-              "token_id": 70
-            }
-          ],
-          "top1_probability": 0.28211277616875513,
-          "top5_probability_mass": 0.5167258211544582,
-          "unique_token_ratio": 1.0
-        },
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 7,
-            "merged_fraction": 0.0,
-            "merged_tokens": 0
-          },
-          "eos_probability": 0.05555601844389457,
-          "exact": false,
-          "generated_token_ids": [
-            131,
-            42,
-            66,
-            57,
-            57,
-            57,
-            58
-          ],
-          "generation_length": 7,
-          "generation_similarity": 0.0,
-          "language": "it",
-          "longest_repeated_token_run": 3,
-          "nonempty": true,
-          "prompt": "Completa: Il cielo è",
-          "raw_output": "{\":1112",
-          "repetition_rate": 0.2857142857142857,
-          "target": "azzurro.",
-          "token_entropy": 3.3195948600769043,
-          "token_frequency_distribution": [
-            {
-              "count": 3,
-              "fraction": 0.42857142857142855,
-              "token_id": 57
-            },
-            {
-              "count": 1,
-              "fraction": 0.14285714285714285,
-              "token_id": 131
-            },
-            {
-              "count": 1,
-              "fraction": 0.14285714285714285,
-              "token_id": 42
-            },
-            {
-              "count": 1,
-              "fraction": 0.14285714285714285,
-              "token_id": 66
-            },
-            {
-              "count": 1,
-              "fraction": 0.14285714285714285,
-              "token_id": 58
-            }
-          ],
-          "top1_probability": 0.2655729539692402,
-          "top5_probability_mass": 0.5088564790785313,
-          "unique_token_ratio": 0.7142857142857143
-        },
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 46,
-            "merged_fraction": 0.041666666666666664,
-            "merged_tokens": 2
-          },
-          "eos_probability": 0.007094271057818939,
-          "exact": false,
-          "generated_token_ids": [
-            108,
-            103,
-            107,
-            107,
-            281,
-            281,
-            116,
-            70,
-            131,
-            42,
-            66,
-            131,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            131,
-            42,
-            66,
-            42,
-            66,
-            131,
-            42,
-            66,
-            131,
-            42,
-            66,
-            131,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            42,
-            66,
-            57,
-            57
-          ],
-          "generation_length": 48,
-          "generation_similarity": 0.125,
-          "language": "it",
-          "longest_repeated_token_run": 2,
-          "nonempty": true,
-          "prompt": "Scrivi tre parole italiane.",
-          "raw_output": "d_ccalall>{\":{\":\":\":\":{\":\":{\":{\":{\":\":\":\":\":\":\":11",
-          "repetition_rate": 0.7916666666666666,
-          "target": "casa sole mare",
-          "token_entropy": 2.3805823450287185,
-          "token_frequency_distribution": [
-            {
-              "count": 16,
-              "fraction": 0.3333333333333333,
-              "token_id": 42
-            },
-            {
-              "count": 16,
-              "fraction": 0.3333333333333333,
-              "token_id": 66
-            },
-            {
-              "count": 6,
-              "fraction": 0.125,
-              "token_id": 131
-            },
-            {
-              "count": 2,
-              "fraction": 0.041666666666666664,
-              "token_id": 107
-            },
-            {
-              "count": 2,
-              "fraction": 0.041666666666666664,
-              "token_id": 281
-            },
-            {
-              "count": 2,
-              "fraction": 0.041666666666666664,
-              "token_id": 57
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 108
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 103
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 116
-            },
-            {
-              "count": 1,
-              "fraction": 0.020833333333333332,
-              "token_id": 70
-            }
-          ],
-          "top1_probability": 0.5108464310566584,
-          "top5_probability_mass": 0.7337073137362798,
-          "unique_token_ratio": 0.20833333333333334
-        },
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 32,
-            "merged_fraction": 0.0,
-            "merged_tokens": 0
-          },
-          "eos_probability": 0.041741117743323695,
-          "exact": false,
-          "generated_token_ids": [
-            131,
-            42,
-            66,
-            131,
-            42,
-            66,
-            131,
-            42,
-            66,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57,
-            57
-          ],
-          "generation_length": 32,
-          "generation_similarity": 0.0,
-          "language": "en",
-          "longest_repeated_token_run": 23,
-          "nonempty": true,
-          "prompt": "Hello",
-          "raw_output": "{\":{\":{\":11111111111111111111111",
-          "repetition_rate": 0.875,
-          "target": "Hello!",
-          "token_entropy": 3.2659821356787826,
-          "token_frequency_distribution": [
-            {
-              "count": 23,
-              "fraction": 0.71875,
-              "token_id": 57
-            },
-            {
-              "count": 3,
-              "fraction": 0.09375,
-              "token_id": 131
-            },
-            {
-              "count": 3,
-              "fraction": 0.09375,
-              "token_id": 42
-            },
-            {
-              "count": 3,
-              "fraction": 0.09375,
-              "token_id": 66
-            }
-          ],
-          "top1_probability": 0.22687512455564557,
-          "top5_probability_mass": 0.5116561425454689,
-          "unique_token_ratio": 0.125
-        },
-        {
-          "bpe_token_distribution": {
-            "byte_tokens": 0,
-            "merged_fraction": 0.0,
-            "merged_tokens": 0
-          },
-          "eos_probability": 0.0901469737291336,
-          "exact": false,
-          "generated_token_ids": [],
-          "generation_length": 0,
-          "generation_similarity": 0.0,
-          "language": "en",
-          "longest_repeated_token_run": 0,
-          "nonempty": false,
-          "prompt": "Write one simple sentence.",
-          "raw_output": "",
-          "repetition_rate": 0.0,
-          "target": "The cat is sleeping.",
-          "token_entropy": 4.397347450256348,
-          "token_frequency_distribution": [],
-          "top1_probability": 0.0901469737291336,
-          "top5_probability_mass": 0.33954954147338867,
-          "unique_token_ratio": 0.0
-        }
-      ],
-      "unique_token_ratio": 0.3401360544217687,
-      "word_output_rate": 0.8571428571428571
-    },
-    "degeneration_gate_passed": false,
-    "degeneration_gate_reason": "pathological repetition detected",
-    "manifest_sha256": "94a339782be76579e064d10f9402ce75b6b13d1f84ce0f5f24bc994767d4e5a5",
-    "minimum_success": false,
-    "minimum_success_reasons": [
-      "pathological repetition remains",
-      "repetition rate did not improve enough"
-    ],
-    "promoted": false,
-    "promotion_reason": "research=candidate did not reduce held-out NLL per byte by the research margin; degeneration=pathological repetition detected; phase5=pathological repetition remains, repetition rate did not improve enough",
-    "research_gate_passed": false,
-    "research_gate_reason": "candidate did not reduce held-out NLL per byte by the research margin",
-    "steps": 1231,
-    "target_tokens": 5000000,
-    "tokens_processed": 5002160,
-    "version": "phase5-language-bootstrap-v1"
-  },
   "plateau": {
     "generation_exact_accuracy": 0.0,
     "history_rows": 8,
@@ -2175,7 +579,7 @@
     "latest_research_checkpoint_isolated": true,
     "parallel_swarm": "8->4->2",
     "production_qualification_separate": true,
-    "progressive_scaling_max_parameters": 2000000,
+    "progressive_scaling_max_parameters": 7000000,
     "research_only": true,
     "rotating_canary": {
       "domains": 6,
@@ -2211,8 +615,9 @@
     "tiers": [
       250000,
       500000,
-      1000000,
-      2000000
+      1250000,
+      3000000,
+      7000000
     ]
   },
   "progressive_tokenizer": {
@@ -2225,7 +630,7 @@
   "promoted": false,
   "promotion_reason": "no finalist passed every independent research gate",
   "rotating_canary": {
-    "cycle": 96,
+    "cycle": 97,
     "domains": [
       "language",
       "coding",
@@ -2242,21 +647,23 @@
     "reasoning_gap",
     "symbolic_reasoning_signal",
     "research_curriculum_signal",
-    "deep_symbolic_signal"
+    "deep_symbolic_signal",
+    "language_collapse",
+    "autoregressive_collapse"
   ],
   "trials": [
     {
       "all_seed_eligible": false,
       "any_generation_pathological_repetition": true,
       "any_seed_eligible": false,
-      "best_nll_per_byte": 1.7365515367040094,
-      "candidate_id": "generalist-3-scale-0e5f96fe",
+      "best_nll_per_byte": 1.7502968074390723,
+      "candidate_id": "airi-arch-4-b2f3f021d57a",
       "candidate_index": 1,
       "checkpoint_dir": "best-checkpoint",
       "continued_from_stage": 2,
       "corpus": {
-        "bytes": 27483311,
-        "documents": 1668,
+        "bytes": 27565570,
+        "documents": 1689,
         "external": {
           "documents": 1180,
           "domain_documents": {
@@ -2269,20 +676,21 @@
           "total_bytes": 25615820
         },
         "repository": {
-          "bytes_read": 1868859,
-          "chars_emitted": 1888349,
-          "digest": "dd4a7081c44145f7e2ee94ce008d83334a26d0a175a1000c4eca01a49dacfb02",
-          "documents": 488,
+          "bytes_read": 1951135,
+          "chars_emitted": 1971729,
+          "digest": "6f40a778e3db13092b70cc2b1dc2421bb524f0b8b3a820d56fe4df1a1b9191dd",
+          "documents": 509,
           "excluded_budget": 1,
-          "excluded_protected": 72,
+          "excluded_protected": 73,
           "excluded_sensitive": 0,
-          "files": 280
+          "files": 290
         }
       },
-      "cumulative_steps": 31,
-      "cycle": 96,
+      "cumulative_steps": 28,
+      "cycle": 97,
       "external_pretrained": false,
       "genome": {
+        "attention_type": "mha",
         "code_adapter": false,
         "context_length": 128,
         "d_ff": 192,
@@ -2290,48 +698,53 @@
         "data_adapter": false,
         "dropout": 0.0,
         "ff_variant": "swiglu",
-        "generation": 3,
-        "genome_id": "generalist-3-scale-0e5f96fe",
+        "generation": 4,
+        "genome_id": "airi-arch-4-b2f3f021d57a",
         "learning_rate": 0.00075,
+        "local_attention_every": 0,
+        "local_attention_window": 0,
         "n_heads": 4,
+        "n_kv_heads": null,
         "n_layers": 4,
-        "norm_type": "layernorm",
-        "parent_id": "generalist-2-0-57f3721a",
-        "position_encoding": "learned",
+        "norm_placement": "pre",
+        "norm_type": "rmsnorm",
+        "parent_id": "airi-arch-3-c212da9583a1",
+        "position_encoding": "rope",
         "reasoning_depth": 1,
         "retrieval_adapter": false,
         "symbolic_adapter": false,
+        "tie_embeddings": true,
         "tokenizer_version": "bpe-v1",
         "tool_protocol": "tool-json-v1"
       },
-      "kind": "progressive_scale",
+      "kind": "architecture_capacity_plus_structure",
       "language_bpe_probe": false,
       "language_bridge_rows": 32,
       "max_generation_repeated_token_run": 20,
       "mean_generation_accuracy": 0.0,
-      "mean_generation_nonempty_rate": 0.9166666666666667,
-      "mean_generation_repetition_rate": 0.7943103448275861,
-      "mean_generation_similarity": 0.2264071423407793,
-      "mean_nll_per_byte": 1.7396294743759828,
+      "mean_generation_nonempty_rate": 1.0,
+      "mean_generation_repetition_rate": 0.8334943639291466,
+      "mean_generation_similarity": 0.19369229457163287,
+      "mean_nll_per_byte": 1.7707234700520833,
       "ok": true,
-      "parameters": 246912,
-      "pretrain_budget_multiplier": 9.0,
-      "pretrain_steps": 18,
+      "parameters": 238144,
+      "pretrain_budget_multiplier": 0.75,
+      "pretrain_steps": 24,
       "reports": [
         {
           "eligible": false,
-          "reason": "candidate regressed in byte-normalized validation domain: reasoning",
+          "reason": "candidate regressed in byte-normalized validation domain: data",
           "report": {
-            "bits_per_byte": 2.505314290250983,
+            "bits_per_byte": 2.5251445241761346,
             "canary": {
-              "bits_per_byte": 2.734233252349198,
+              "bits_per_byte": 2.7802077200950444,
               "domain_bits_per_byte": {
-                "coding": 3.6849480444653624,
-                "data": 4.384644483780639,
-                "language": 6.059313117944336,
-                "reasoning": 5.678606268205113,
-                "structured": 4.00176345739601,
-                "tools": 1.1394645391832319
+                "coding": 3.5484157629026174,
+                "data": 4.04461139338435,
+                "language": 5.711388087665253,
+                "reasoning": 4.832553439689405,
+                "structured": 3.8356809070509796,
+                "tools": 1.4762841273784226
               },
               "domain_generation_accuracy": {
                 "coding": 0.0,
@@ -2342,114 +755,114 @@
                 "tools": 0.0
               },
               "domain_generation_similarity": {
-                "coding": 0.046511627906976744,
-                "data": 0.2857142857142857,
-                "language": 0.08695652173913043,
+                "coding": 0.08823529411764706,
+                "data": 0.26666666666666666,
+                "language": 0.0,
                 "reasoning": 0.0,
-                "structured": 0.29411764705882354,
-                "tools": 0.2482758620689655
+                "structured": 0.25806451612903225,
+                "tools": 0.2857142857142857
               },
               "domain_loss": {
-                "coding": 3.8313170212965746,
-                "data": 2.605031967163086,
-                "language": 3.8181780034845527,
-                "reasoning": 3.2800916035970054,
-                "structured": 3.120537439982096,
-                "tools": 1.0487729056936796
+                "coding": 3.689361572265625,
+                "data": 2.4030094146728516,
+                "language": 3.598938681862571,
+                "reasoning": 2.7913923263549805,
+                "structured": 2.99102783203125,
+                "tools": 1.358784534892098
               },
               "domain_nll_per_byte": {
-                "coding": 2.5542113475310497,
-                "data": 3.039203961690267,
-                "language": 4.199995803833008,
-                "reasoning": 3.936109924316406,
-                "structured": 2.7738110577618635,
-                "tools": 0.7898166326828945
+                "coding": 2.4595743815104165,
+                "data": 2.8035109837849936,
+                "language": 3.958832550048828,
+                "reasoning": 3.3496707916259765,
+                "structured": 2.65869140625,
+                "tools": 1.0232821805977528
               },
               "domain_token_accuracy": {
-                "coding": 0.19230769230769232,
+                "coding": 0.2692307692307692,
                 "data": 0.2857142857142857,
                 "language": 0.18181818181818182,
                 "reasoning": 0.16666666666666666,
                 "structured": 0.2916666666666667,
-                "tools": 0.819672131147541
+                "tools": 0.7049180327868853
               },
               "finite": true,
               "generated_solved_items": [],
-              "generation_dominant_token_fraction": 0.17721518987341772,
+              "generation_dominant_token_fraction": 0.24489795918367346,
               "generation_exact_accuracy": 0.0,
-              "generation_longest_repeated_token_run": 9,
+              "generation_longest_repeated_token_run": 27,
               "generation_nonempty_rate": 1.0,
               "generation_pathological_repetition": true,
               "generation_probe": [
                 {
                   "domain": "coding",
-                  "item": "coding:3d8711e106634497",
+                  "item": "coding:e4e5caca33b64233",
                   "ok": false,
-                  "output": "{\"14",
-                  "similarity": 0.046511627906976744,
-                  "target": "def canary_sub_96(x):\n    return x - 11"
+                  "output": "defffffffffffffffffffffffffff",
+                  "similarity": 0.08823529411764706,
+                  "target": "def canary_sub_97(x):\n    return x - 12"
                 },
                 {
                   "domain": "data",
-                  "item": "data:3aa86233f73d9fd9",
+                  "item": "data:c82e16d88d2dea63",
                   "ok": false,
-                  "output": "1",
-                  "similarity": 0.2857142857142857,
-                  "target": "187735"
+                  "output": "111111111",
+                  "similarity": 0.26666666666666666,
+                  "target": "188128"
                 },
                 {
                   "domain": "language",
-                  "item": "language:27c3cbde3d662607",
+                  "item": "language:2bd5b943a52fd311",
                   "ok": false,
-                  "output": "CCCLEEEEEEEEE",
-                  "similarity": 0.08695652173913043,
-                  "target": "CANARY0096"
+                  "output": "{\":trments\":trments",
+                  "similarity": 0.0,
+                  "target": "CANARY0097"
                 },
                 {
                   "domain": "reasoning",
-                  "item": "reasoning:d1c4b3068372c065",
+                  "item": "reasoning:eafc9a724ad8dadc",
                   "ok": false,
-                  "output": "1",
+                  "output": "11111111",
                   "similarity": 0.0,
-                  "target": "62592"
+                  "target": "62723"
                 },
                 {
                   "domain": "structured",
-                  "item": "structured:69314e642dd33a23",
+                  "item": "structured:727ada87ddf50f98",
                   "ok": false,
-                  "output": "{\"call>",
-                  "similarity": 0.29411764705882354,
-                  "target": "{\"canary\":96,\"value\":62576}"
+                  "output": "{\":trments\":trments\":trments\":\":\":\"",
+                  "similarity": 0.25806451612903225,
+                  "target": "{\"canary\":97,\"value\":62707}"
                 },
                 {
                   "domain": "tools",
-                  "item": "tools:9e0ae6384d48bde2",
+                  "item": "tools:7c68b18ef943d4b7",
                   "ok": false,
-                  "output": "<tool_call>{\"call>{\"\"calall>{\"call>{\":{\"\"\":\"\"call>{\"call>{\"call>",
-                  "similarity": 0.2482758620689655,
-                  "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"62576*3\"}}</tool_call>"
+                  "output": "<tool_call>{\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":",
+                  "similarity": 0.2857142857142857,
+                  "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"62707*4\"}}</tool_call>"
                 }
               ],
-              "generation_repetition_rate": 0.7974683544303798,
-              "generation_similarity": 0.160262657414697,
-              "generation_unique_token_ratio": 0.20253164556962025,
-              "loss": 2.3585035536024304,
-              "nll_per_byte": 1.895226069859096,
+              "generation_repetition_rate": 0.8775510204081632,
+              "generation_similarity": 0.14978012710460528,
+              "generation_unique_token_ratio": 0.12244897959183673,
+              "loss": 2.398160355179398,
+              "nll_per_byte": 1.9270931425548734,
               "solved_items": [],
-              "target_token_accuracy": 0.4962962962962963,
+              "target_token_accuracy": 0.45925925925925926,
               "target_tokens": 135,
               "tokenizer_version": "bpe-v1",
               "validation_target_bytes": 168,
               "validation_target_tokens": 135
             },
-            "canary_cycle": 96,
+            "canary_cycle": 97,
             "domain_bits_per_byte": {
-              "coding": 3.064889935103152,
-              "data": 4.449481759707758,
-              "language": 5.511415873082808,
-              "reasoning": 5.680231985807189,
-              "structured": 2.173325038276014,
-              "tools": 1.3499237818806777
+              "coding": 3.0061956645684367,
+              "data": 5.9444831912717735,
+              "language": 5.366752425212383,
+              "reasoning": 4.248485262196351,
+              "structured": 2.532249926030814,
+              "tools": 1.378325395491127
             },
             "domain_generation_accuracy": {
               "coding": 0.0,
@@ -2462,41 +875,41 @@
             "domain_generation_similarity": {
               "coding": 0.11320754716981132,
               "data": 0.0,
-              "language": 0.0,
-              "reasoning": 0.5,
-              "structured": 0.0,
-              "tools": 0.5103448275862069
+              "language": 0.21428571428571427,
+              "reasoning": 0.2222222222222222,
+              "structured": 0.41379310344827586,
+              "tools": 0.302158273381295
             },
             "domain_loss": {
-              "coding": 3.349310522680884,
-              "data": 2.056097157796224,
-              "language": 4.753067371457122,
-              "reasoning": 2.901121842233758,
-              "structured": 1.734150908714117,
-              "tools": 1.258349609375
+              "coding": 3.2851694467905403,
+              "data": 2.746934509277344,
+              "language": 4.628309028093205,
+              "reasoning": 2.1698714808413855,
+              "structured": 2.020546136900436,
+              "tools": 1.2848245554956896
             },
             "domain_nll_per_byte": {
-              "coding": 2.1244198172433038,
-              "data": 3.084145736694336,
-              "language": 3.8202223733206777,
-              "reasoning": 3.937236785888672,
-              "structured": 1.5064341227213542,
-              "tools": 0.9356958633814103
+              "coding": 2.083736049107143,
+              "data": 4.120401763916016,
+              "language": 3.7199493122992116,
+              "reasoning": 2.9448255811418806,
+              "structured": 1.7552218967013888,
+              "tools": 0.9553823617788462
             },
             "domain_token_accuracy": {
-              "coding": 0.2702702702702703,
+              "coding": 0.35135135135135137,
               "data": 0.3333333333333333,
-              "language": 0.12790697674418605,
-              "reasoning": 0.2631578947368421,
-              "structured": 0.627906976744186,
-              "tools": 0.7620689655172413
+              "language": 0.08139534883720931,
+              "reasoning": 0.47368421052631576,
+              "structured": 0.5581395348837209,
+              "tools": 0.7482758620689656
             },
             "finite": true,
             "generated_solved_items": [],
-            "generation_dominant_token_fraction": 0.32,
+            "generation_dominant_token_fraction": 0.25,
             "generation_exact_accuracy": 0.0,
             "generation_longest_repeated_token_run": 20,
-            "generation_nonempty_rate": 0.8333333333333334,
+            "generation_nonempty_rate": 1.0,
             "generation_pathological_repetition": true,
             "generation_probe": [
               {
@@ -2511,7 +924,7 @@
                 "domain": "data",
                 "item": "data:5bd96918425fd195",
                 "ok": false,
-                "output": "1",
+                "output": "11111",
                 "similarity": 0.0,
                 "target": "20"
               },
@@ -2519,58 +932,58 @@
                 "domain": "language",
                 "item": "language:082c2713322e1930",
                 "ok": false,
-                "output": "ddddddffffffffffff",
-                "similarity": 0.0,
+                "output": "despres",
+                "similarity": 0.21428571428571427,
                 "target": "Musicians play music."
               },
               {
                 "domain": "reasoning",
                 "item": "reasoning:d206563c75c2d4bd",
                 "ok": false,
-                "output": "1",
-                "similarity": 0.5,
+                "output": "111111",
+                "similarity": 0.2222222222222222,
                 "target": "144"
               },
               {
                 "domain": "structured",
                 "item": "structured:b4833d19223b3d60",
                 "ok": false,
-                "output": "",
-                "similarity": 0.0,
+                "output": "{\":trments\":trment",
+                "similarity": 0.41379310344827586,
                 "target": "{\"count\":2}"
               },
               {
                 "domain": "tools",
                 "item": "tools:169b024c50474998",
                 "ok": false,
-                "output": "<tool_call>{\":\"call>{\"call>{\":\":\"call>{\":{\"\"\":\"\"call>{\"}}}}}}}</tool",
-                "similarity": 0.5103448275862069,
+                "output": "<tool_call>{\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":",
+                "similarity": 0.302158273381295,
                 "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
               }
             ],
-            "generation_repetition_rate": 0.83,
-            "generation_similarity": 0.18725872912600305,
-            "generation_unique_token_ratio": 0.17,
-            "loss": 2.274396164216948,
-            "nll_per_byte": 1.7365515367040094,
-            "parameters": 246912,
+            "generation_repetition_rate": 0.8148148148148149,
+            "generation_similarity": 0.21094447675121977,
+            "generation_unique_token_ratio": 0.18518518518518517,
+            "loss": 2.292398619298291,
+            "nll_per_byte": 1.7502968074390723,
+            "parameters": 238144,
             "pretraining": {
-              "best_step_loss": 4.9151740074157715,
-              "blocks": 146002,
-              "corpus_bytes": 27483311,
-              "corpus_sha256": "0f68d144cd0cc9bb39074ba3238f67ccdf3c2a51562a7b1eae746fd3de664889",
-              "documents": 1668,
+              "best_step_loss": 4.502681255340576,
+              "blocks": 146364,
+              "corpus_bytes": 27565570,
+              "corpus_sha256": "5bf755bfe310da81804b7036783356fc89f324e53ad54abd3286e3cb341e4b1e",
+              "documents": 1689,
               "domain_blocks": {
-                "code": 40219,
+                "code": 40496,
                 "data": 80159,
-                "general": 25400,
+                "general": 25485,
                 "reasoning": 224
               },
               "eval_blocks": 128,
-              "final_loss": 5.056601911783218,
-              "initial_loss": 5.617541432380676,
+              "final_loss": 4.6809122413396835,
+              "initial_loss": 5.134645730257034,
               "learning_rate": 0.000375,
-              "loss_improvement": 0.5609395205974579,
+              "loss_improvement": 0.45373348891735077,
               "ok": true,
               "sampling_domain_weights": {
                 "code": 0.1721510046978385,
@@ -2578,31 +991,31 @@
                 "general": 0.32656137400070495,
                 "reasoning": 0.24330774281673703
               },
-              "steps": 18
+              "steps": 24
             },
-            "score": 36.54209430056243,
+            "score": 36.35947391671922,
             "solved_items": [],
-            "target_token_accuracy": 0.5370675453047776,
+            "target_token_accuracy": 0.5354200988467874,
             "target_tokens": 607,
             "tokenizer_version": "bpe-v1",
             "training": {
-              "best_step_loss": 1.217840552330017,
+              "best_step_loss": 1.5275256633758545,
               "effective_batch_size": 4,
-              "final_loss": 2.2692911624908447,
+              "final_loss": 2.553375720977783,
               "gradient_accumulation_steps": 1,
-              "initial_loss": 2.865764856338501,
+              "initial_loss": 3.021216630935669,
               "learning_rate": 0.00075,
-              "loss_improvement": 0.5964736938476562,
+              "loss_improvement": 0.46784090995788574,
               "micro_batch_size": 4,
               "ok": true,
               "precision": "fp32",
-              "steps": 18
+              "steps": 16
             },
             "validation_target_bytes": 795,
             "validation_target_tokens": 607,
             "weight_transfer": {
-              "copied_parameters": 271488,
-              "copied_tensors": 37,
+              "copied_parameters": 262720,
+              "copied_tensors": 27,
               "derived_bpe_rows": 0,
               "embedding_width_migrated": false,
               "function_preserving_growth": true,
@@ -2612,32 +1025,32 @@
               "partial_prefix_tensors": [],
               "policy": "layout-aware Net2Grow transfer with identity residual depth expansion",
               "shared_token_rows": 0,
-              "source_tensors": 37,
+              "source_tensors": 27,
               "source_tokenizer": "bpe-v1",
               "source_unmatched_tensors": [],
-              "target_parameters": 271488,
-              "target_tensors": 37,
+              "target_parameters": 262720,
+              "target_tensors": 27,
               "target_tokenizer": "bpe-v1",
               "tokenizer_identical": true,
               "vocabulary_migrated": false
             }
           },
-          "seed": 1811740052
+          "seed": 678324943
         },
         {
           "eligible": false,
-          "reason": "candidate regressed in byte-normalized validation domain: reasoning",
+          "reason": "candidate regressed in byte-normalized validation domain: data",
           "report": {
-            "bits_per_byte": 2.5141953410820257,
+            "bits_per_byte": 2.5840834138835405,
             "canary": {
-              "bits_per_byte": 2.583855815535579,
+              "bits_per_byte": 2.828897482691313,
               "domain_bits_per_byte": {
-                "coding": 3.6593753708330685,
-                "data": 4.201445812359162,
-                "language": 5.7440471803057385,
-                "reasoning": 5.008686238296714,
-                "structured": 3.8276687067071395,
-                "tools": 0.9917598255991995
+                "coding": 3.5409872412971035,
+                "data": 3.9561843349963253,
+                "language": 5.82062761508193,
+                "reasoning": 4.891645577836901,
+                "structured": 3.852612764641346,
+                "tools": 1.564618629374886
               },
               "domain_generation_accuracy": {
                 "coding": 0.0,
@@ -2648,114 +1061,114 @@
                 "tools": 0.0
               },
               "domain_generation_similarity": {
-                "coding": 0.125,
-                "data": 0.2857142857142857,
-                "language": 0.08695652173913043,
+                "coding": 0.18181818181818182,
+                "data": 0.26666666666666666,
+                "language": 0.0,
                 "reasoning": 0.0,
-                "structured": 0.17142857142857143,
-                "tools": 0.7388535031847133
+                "structured": 0.34285714285714286,
+                "tools": 0.2857142857142857
               },
               "domain_loss": {
-                "coding": 3.8047285813551683,
-                "data": 2.4961888449532643,
-                "language": 3.619518280029297,
-                "reasoning": 2.893130620320638,
-                "structured": 2.9847799936930337,
-                "tools": 0.9128242242531698
+                "coding": 3.6816379840557394,
+                "data": 2.3504725864955356,
+                "language": 3.667774200439453,
+                "reasoning": 2.8255252838134766,
+                "structured": 3.0042311350504556,
+                "tools": 1.4400883658987578
               },
               "domain_nll_per_byte": {
-                "coding": 2.5364857209034457,
-                "data": 2.912220319112142,
-                "language": 3.9814701080322266,
-                "reasoning": 3.4717567443847654,
-                "structured": 2.653137772171586,
-                "tools": 0.6874355269067082
+                "coding": 2.454425322703826,
+                "data": 2.742218017578125,
+                "language": 4.034551620483398,
+                "reasoning": 3.390630340576172,
+                "structured": 2.670427675600405,
+                "tools": 1.0845109916027682
               },
               "domain_token_accuracy": {
                 "coding": 0.19230769230769232,
                 "data": 0.2857142857142857,
-                "language": 0.18181818181818182,
+                "language": 0.09090909090909091,
                 "reasoning": 0.16666666666666666,
-                "structured": 0.3333333333333333,
-                "tools": 0.8524590163934426
+                "structured": 0.2916666666666667,
+                "tools": 0.6885245901639344
               },
               "finite": true,
               "generated_solved_items": [],
-              "generation_dominant_token_fraction": 0.15217391304347827,
+              "generation_dominant_token_fraction": 0.2440944881889764,
               "generation_exact_accuracy": 0.0,
-              "generation_longest_repeated_token_run": 9,
+              "generation_longest_repeated_token_run": 30,
               "generation_nonempty_rate": 1.0,
               "generation_pathological_repetition": true,
               "generation_probe": [
                 {
                   "domain": "coding",
-                  "item": "coding:3d8711e106634497",
+                  "item": "coding:e4e5caca33b64233",
                   "ok": false,
-                  "output": "{\":111111",
-                  "similarity": 0.125,
-                  "target": "def canary_sub_96(x):\n    return x - 11"
+                  "output": "desok\":trmentsok\":trmentsok\":trmentsok",
+                  "similarity": 0.18181818181818182,
+                  "target": "def canary_sub_97(x):\n    return x - 12"
                 },
                 {
                   "domain": "data",
-                  "item": "data:3aa86233f73d9fd9",
+                  "item": "data:c82e16d88d2dea63",
                   "ok": false,
-                  "output": "1",
-                  "similarity": 0.2857142857142857,
-                  "target": "187735"
+                  "output": "111111111",
+                  "similarity": 0.26666666666666666,
+                  "target": "188128"
                 },
                 {
                   "domain": "language",
-                  "item": "language:27c3cbde3d662607",
+                  "item": "language:2bd5b943a52fd311",
                   "ok": false,
-                  "output": "CCCLEEEEEEEEE",
-                  "similarity": 0.08695652173913043,
-                  "target": "CANARY0096"
+                  "output": "1111111111111",
+                  "similarity": 0.0,
+                  "target": "CANARY0097"
                 },
                 {
                   "domain": "reasoning",
-                  "item": "reasoning:d1c4b3068372c065",
+                  "item": "reasoning:eafc9a724ad8dadc",
                   "ok": false,
-                  "output": "1",
+                  "output": "11111111",
                   "similarity": 0.0,
-                  "target": "62592"
+                  "target": "62723"
                 },
                 {
                   "domain": "structured",
-                  "item": "structured:69314e642dd33a23",
+                  "item": "structured:727ada87ddf50f98",
                   "ok": false,
-                  "output": "{\":11114",
-                  "similarity": 0.17142857142857143,
-                  "target": "{\"canary\":96,\"value\":62576}"
+                  "output": "{\":true}",
+                  "similarity": 0.34285714285714286,
+                  "target": "{\"canary\":97,\"value\":62707}"
                 },
                 {
                   "domain": "tools",
-                  "item": "tools:9e0ae6384d48bde2",
+                  "item": "tools:7c68b18ef943d4b7",
                   "ok": false,
-                  "output": "<tool_call>{\"name\":\"calcalall>{\"call>{\":{\"ression\":\":\"1555+15\"}}</tool_call>",
-                  "similarity": 0.7388535031847133,
-                  "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"62576*3\"}}</tool_call>"
+                  "output": "<tool_call>{\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":",
+                  "similarity": 0.2857142857142857,
+                  "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"62707*4\"}}</tool_call>"
                 }
               ],
-              "generation_repetition_rate": 0.7282608695652174,
-              "generation_similarity": 0.2346588136777835,
-              "generation_unique_token_ratio": 0.2717391304347826,
-              "loss": 2.2287905092592593,
-              "nll_per_byte": 1.7909923735119047,
+              "generation_repetition_rate": 0.8346456692913385,
+              "generation_similarity": 0.1795093795093795,
+              "generation_unique_token_ratio": 0.16535433070866143,
+              "loss": 2.440159324363426,
+              "nll_per_byte": 1.9608423142206102,
               "solved_items": [],
-              "target_token_accuracy": 0.5185185185185185,
+              "target_token_accuracy": 0.42962962962962964,
               "target_tokens": 135,
               "tokenizer_version": "bpe-v1",
               "validation_target_bytes": 168,
               "validation_target_tokens": 135
             },
-            "canary_cycle": 96,
+            "canary_cycle": 97,
             "domain_bits_per_byte": {
-              "coding": 3.024906370638113,
-              "data": 4.05560461615158,
-              "language": 5.810466687191216,
-              "reasoning": 5.435680911447516,
-              "structured": 2.0458232297626124,
-              "tools": 1.355166222309489
+              "coding": 3.1353893778273965,
+              "data": 5.494787358551563,
+              "language": 5.359124136340677,
+              "reasoning": 4.519414347614758,
+              "structured": 2.4492364089739613,
+              "tools": 1.4654690293782568
             },
             "domain_generation_accuracy": {
               "coding": 0.0,
@@ -2766,42 +1179,42 @@
               "tools": 0.0
             },
             "domain_generation_similarity": {
-              "coding": 0.13333333333333333,
+              "coding": 0.11320754716981132,
               "data": 0.0,
               "language": 0.0,
-              "reasoning": 0.5,
-              "structured": 0.32,
-              "tools": 0.64
+              "reasoning": 0.2222222222222222,
+              "structured": 0.42105263157894735,
+              "tools": 0.302158273381295
             },
             "domain_loss": {
-              "coding": 3.3056164990674266,
-              "data": 1.8740872701009115,
-              "language": 5.010970004769259,
-              "reasoning": 2.7762198197214225,
-              "structured": 1.632413997206577,
-              "tools": 1.2632364207300646
+              "coding": 3.4263522861240148,
+              "data": 2.5391309102376303,
+              "language": 4.62173036087391,
+              "reasoning": 2.3082458094546667,
+              "structured": 1.9543075561523438,
+              "tools": 1.3660566658809268
             },
             "domain_nll_per_byte": {
-              "coding": 2.096705322265625,
-              "data": 2.811130905151367,
-              "language": 4.027508601964077,
-              "reasoning": 3.7677268981933594,
-              "structured": 1.418056603633996,
-              "tools": 0.9393296461838943
+              "coding": 2.173286307198661,
+              "data": 3.8086963653564454,
+              "language": 3.714661785375292,
+              "reasoning": 3.1326193128313338,
+              "structured": 1.6976813114050664,
+              "tools": 1.0157857259114584
             },
             "domain_token_accuracy": {
-              "coding": 0.32432432432432434,
+              "coding": 0.22522522522522523,
               "data": 0.3333333333333333,
-              "language": 0.09302325581395349,
-              "reasoning": 0.2631578947368421,
-              "structured": 0.6976744186046512,
-              "tools": 0.7448275862068966
+              "language": 0.011627906976744186,
+              "reasoning": 0.47368421052631576,
+              "structured": 0.6046511627906976,
+              "tools": 0.7275862068965517
             },
             "finite": true,
             "generated_solved_items": [],
-            "generation_dominant_token_fraction": 0.14942528735632185,
+            "generation_dominant_token_fraction": 0.23478260869565218,
             "generation_exact_accuracy": 0.0,
-            "generation_longest_repeated_token_run": 12,
+            "generation_longest_repeated_token_run": 18,
             "generation_nonempty_rate": 1.0,
             "generation_pathological_repetition": true,
             "generation_probe": [
@@ -2809,15 +1222,15 @@
                 "domain": "coding",
                 "item": "coding:9f36f220338cd9ff",
                 "ok": false,
-                "output": "deffffffffffff",
-                "similarity": 0.13333333333333333,
+                "output": "d_cycycycyccccall>{\":1",
+                "similarity": 0.11320754716981132,
                 "target": "def sub(a, b):\n    return a - b"
               },
               {
                 "domain": "data",
                 "item": "data:5bd96918425fd195",
                 "ok": false,
-                "output": "1",
+                "output": "11111",
                 "similarity": 0.0,
                 "target": "20"
               },
@@ -2825,7 +1238,7 @@
                 "domain": "language",
                 "item": "language:082c2713322e1930",
                 "ok": false,
-                "output": "re",
+                "output": "dddddddddddddddddd",
                 "similarity": 0.0,
                 "target": "Musicians play music."
               },
@@ -2833,50 +1246,50 @@
                 "domain": "reasoning",
                 "item": "reasoning:d206563c75c2d4bd",
                 "ok": false,
-                "output": "1",
-                "similarity": 0.5,
+                "output": "111111",
+                "similarity": 0.2222222222222222,
                 "target": "144"
               },
               {
                 "domain": "structured",
                 "item": "structured:b4833d19223b3d60",
                 "ok": false,
-                "output": "{\"cccall>{\"cal",
-                "similarity": 0.32,
+                "output": "{\":true}",
+                "similarity": 0.42105263157894735,
                 "target": "{\"count\":2}"
               },
               {
                 "domain": "tools",
                 "item": "tools:169b024c50474998",
                 "ok": false,
-                "output": "<tool_call>{\":\"call{\":\"calcalall>{\"call>{\":{\"ression\":\":\"1555+15\"}}</tool",
-                "similarity": 0.64,
+                "output": "<tool_call>{\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":",
+                "similarity": 0.302158273381295,
                 "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
               }
             ],
-            "generation_repetition_rate": 0.7586206896551724,
-            "generation_similarity": 0.26555555555555554,
-            "generation_unique_token_ratio": 0.2413793103448276,
-            "loss": 2.282458636866763,
-            "nll_per_byte": 1.742707412047956,
-            "parameters": 246912,
+            "generation_repetition_rate": 0.8521739130434782,
+            "generation_similarity": 0.17644011239204596,
+            "generation_unique_token_ratio": 0.14782608695652175,
+            "loss": 2.3459050337211695,
+            "nll_per_byte": 1.7911501326650943,
+            "parameters": 238144,
             "pretraining": {
-              "best_step_loss": 4.944931983947754,
-              "blocks": 146002,
-              "corpus_bytes": 27483311,
-              "corpus_sha256": "0f68d144cd0cc9bb39074ba3238f67ccdf3c2a51562a7b1eae746fd3de664889",
-              "documents": 1668,
+              "best_step_loss": 4.3084330558776855,
+              "blocks": 146364,
+              "corpus_bytes": 27565570,
+              "corpus_sha256": "5bf755bfe310da81804b7036783356fc89f324e53ad54abd3286e3cb341e4b1e",
+              "documents": 1689,
               "domain_blocks": {
-                "code": 40219,
+                "code": 40496,
                 "data": 80159,
-                "general": 25400,
+                "general": 25485,
                 "reasoning": 224
               },
               "eval_blocks": 128,
-              "final_loss": 5.1001602709293365,
-              "initial_loss": 5.647587984800339,
+              "final_loss": 4.759093686938286,
+              "initial_loss": 5.225487187504768,
               "learning_rate": 0.000375,
-              "loss_improvement": 0.5474277138710022,
+              "loss_improvement": 0.46639350056648254,
               "ok": true,
               "sampling_domain_weights": {
                 "code": 0.1721510046978385,
@@ -2884,31 +1297,31 @@
                 "general": 0.32656137400070495,
                 "reasoning": 0.24330774281673703
               },
-              "steps": 18
+              "steps": 24
             },
-            "score": 36.46007676697779,
+            "score": 35.8272864415429,
             "solved_items": [],
-            "target_token_accuracy": 0.5436573311367381,
+            "target_token_accuracy": 0.49917627677100496,
             "target_tokens": 607,
             "tokenizer_version": "bpe-v1",
             "training": {
-              "best_step_loss": 0.9506529569625854,
+              "best_step_loss": 1.6684542894363403,
               "effective_batch_size": 4,
-              "final_loss": 2.269533157348633,
+              "final_loss": 2.5718994140625,
               "gradient_accumulation_steps": 1,
-              "initial_loss": 2.9753360748291016,
+              "initial_loss": 3.023402214050293,
               "learning_rate": 0.00075,
-              "loss_improvement": 0.7058029174804688,
+              "loss_improvement": 0.45150279998779297,
               "micro_batch_size": 4,
               "ok": true,
               "precision": "fp32",
-              "steps": 18
+              "steps": 16
             },
             "validation_target_bytes": 795,
             "validation_target_tokens": 607,
             "weight_transfer": {
-              "copied_parameters": 271488,
-              "copied_tensors": 37,
+              "copied_parameters": 262720,
+              "copied_tensors": 27,
               "derived_bpe_rows": 0,
               "embedding_width_migrated": false,
               "function_preserving_growth": true,
@@ -2918,42 +1331,42 @@
               "partial_prefix_tensors": [],
               "policy": "layout-aware Net2Grow transfer with identity residual depth expansion",
               "shared_token_rows": 0,
-              "source_tensors": 37,
+              "source_tensors": 27,
               "source_tokenizer": "bpe-v1",
               "source_unmatched_tensors": [],
-              "target_parameters": 271488,
-              "target_tensors": 37,
+              "target_parameters": 262720,
+              "target_tensors": 27,
               "target_tokenizer": "bpe-v1",
               "tokenizer_identical": true,
               "vocabulary_migrated": false
             }
           },
-          "seed": 1811741049
+          "seed": 678325940
         }
       ],
-      "requested_pretrain_steps": 2,
-      "requested_steps": 12,
-      "scale_budget_multiplier": 1.4402644966115696,
-      "score": 36.54209430056243,
+      "requested_pretrain_steps": 32,
+      "requested_steps": 16,
+      "scale_budget_multiplier": 1.0,
+      "score": 36.35947391671922,
       "stage": 3,
-      "steps": 18,
+      "steps": 16,
       "tokenizer_vocab_size": 384,
       "tokenizer_vocab_target": 384,
       "version": "airi-generalist-free-speed-v4",
-      "worst_domain_regression": 0.7955289568219865
+      "worst_domain_regression": 0.7630451202392581
     },
     {
       "all_seed_eligible": false,
       "any_generation_pathological_repetition": true,
       "any_seed_eligible": false,
-      "best_nll_per_byte": 1.7768926272602201,
-      "candidate_id": "generalist-3-3-734c01c8",
-      "candidate_index": 5,
+      "best_nll_per_byte": 1.775863244398585,
+      "candidate_id": "airi-arch-3-c212da9583a1",
+      "candidate_index": 4,
       "checkpoint_dir": "best-checkpoint",
       "continued_from_stage": 2,
       "corpus": {
-        "bytes": 27483311,
-        "documents": 1668,
+        "bytes": 27565570,
+        "documents": 1689,
         "external": {
           "documents": 1180,
           "domain_documents": {
@@ -2966,20 +1379,21 @@
           "total_bytes": 25615820
         },
         "repository": {
-          "bytes_read": 1868859,
-          "chars_emitted": 1888349,
-          "digest": "dd4a7081c44145f7e2ee94ce008d83334a26d0a175a1000c4eca01a49dacfb02",
-          "documents": 488,
+          "bytes_read": 1951135,
+          "chars_emitted": 1971729,
+          "digest": "6f40a778e3db13092b70cc2b1dc2421bb524f0b8b3a820d56fe4df1a1b9191dd",
+          "documents": 509,
           "excluded_budget": 1,
-          "excluded_protected": 72,
+          "excluded_protected": 73,
           "excluded_sensitive": 0,
-          "files": 280
+          "files": 290
         }
       },
-      "cumulative_steps": 20,
-      "cycle": 96,
+      "cumulative_steps": 28,
+      "cycle": 97,
       "external_pretrained": false,
       "genome": {
+        "attention_type": "mha",
         "code_adapter": false,
         "context_length": 128,
         "d_ff": 128,
@@ -2988,47 +1402,52 @@
         "dropout": 0.0,
         "ff_variant": "swiglu",
         "generation": 3,
-        "genome_id": "generalist-3-3-734c01c8",
+        "genome_id": "airi-arch-3-c212da9583a1",
         "learning_rate": 0.003,
+        "local_attention_every": 0,
+        "local_attention_window": 0,
         "n_heads": 4,
+        "n_kv_heads": null,
         "n_layers": 2,
-        "norm_type": "layernorm",
+        "norm_placement": "pre",
+        "norm_type": "rmsnorm",
         "parent_id": "generalist-2-0-57f3721a",
-        "position_encoding": "learned",
-        "reasoning_depth": 2,
+        "position_encoding": "rope",
+        "reasoning_depth": 1,
         "retrieval_adapter": false,
         "symbolic_adapter": false,
+        "tie_embeddings": true,
         "tokenizer_version": "bpe-v1",
         "tool_protocol": "tool-json-v1"
       },
-      "kind": "architecture",
+      "kind": "architecture_structural_mutation",
       "language_bpe_probe": false,
       "language_bridge_rows": 32,
-      "max_generation_repeated_token_run": 14,
+      "max_generation_repeated_token_run": 10,
       "mean_generation_accuracy": 0.0,
-      "mean_generation_nonempty_rate": 0.8333333333333334,
-      "mean_generation_repetition_rate": 0.7895604395604396,
-      "mean_generation_similarity": 0.24165629103194602,
-      "mean_nll_per_byte": 1.7862982599990174,
+      "mean_generation_nonempty_rate": 1.0,
+      "mean_generation_repetition_rate": 0.7833959899749373,
+      "mean_generation_similarity": 0.1962618884673092,
+      "mean_nll_per_byte": 1.830148449783805,
       "ok": true,
-      "parameters": 115328,
-      "pretrain_budget_multiplier": 6.0,
-      "pretrain_steps": 12,
+      "parameters": 106816,
+      "pretrain_budget_multiplier": 0.75,
+      "pretrain_steps": 24,
       "reports": [
         {
           "eligible": false,
-          "reason": "candidate regressed in byte-normalized validation domain: structured",
+          "reason": "candidate did not reduce held-out NLL per byte by the research margin",
           "report": {
-            "bits_per_byte": 2.590653100957852,
+            "bits_per_byte": 2.7186630891966153,
             "canary": {
-              "bits_per_byte": 2.7448444181144325,
+              "bits_per_byte": 2.925031656940002,
               "domain_bits_per_byte": {
-                "coding": 3.640560927449079,
-                "data": 3.9844968069119644,
-                "language": 5.73003265805223,
-                "reasoning": 5.007441359076709,
-                "structured": 3.9620677213483306,
-                "tools": 1.307797454912649
+                "coding": 3.5185933009516495,
+                "data": 4.0936305764638705,
+                "language": 5.530497010659992,
+                "reasoning": 4.474451439235106,
+                "structured": 3.8642494929823927,
+                "tools": 1.8223017384183953
               },
               "domain_generation_accuracy": {
                 "coding": 0.0,
@@ -3039,114 +1458,114 @@
                 "tools": 0.0
               },
               "domain_generation_similarity": {
-                "coding": 0.09302325581395349,
+                "coding": 0.0975609756097561,
                 "data": 0.2857142857142857,
-                "language": 0.14285714285714285,
+                "language": 0.08695652173913043,
                 "reasoning": 0.0,
-                "structured": 0.2222222222222222,
-                "tools": 0.2571428571428571
+                "structured": 0.1935483870967742,
+                "tools": 0.13725490196078433
               },
               "domain_loss": {
-                "coding": 3.7851668137770433,
-                "data": 2.3672937665666853,
-                "language": 3.610687255859375,
-                "reasoning": 2.892411549886068,
-                "structured": 3.089583079020182,
-                "tools": 1.2037079607854124
+                "coding": 3.65835453913762,
+                "data": 2.432132993425642,
+                "language": 3.4849531000310723,
+                "reasoning": 2.5845444997151694,
+                "structured": 3.013305346171061,
+                "tools": 1.6772621029713115
               },
               "domain_nll_per_byte": {
-                "coding": 2.5234445425180287,
-                "data": 2.761842727661133,
-                "language": 3.9717559814453125,
-                "reasoning": 3.4708938598632812,
-                "structured": 2.746296070240162,
-                "tools": 0.9064961186161747
+                "coding": 2.438903026091747,
+                "data": 2.8374884923299155,
+                "language": 3.8334484100341797,
+                "reasoning": 3.101453399658203,
+                "structured": 2.6784936410409435,
+                "tools": 1.2631233121141976
               },
               "domain_token_accuracy": {
-                "coding": 0.15384615384615385,
+                "coding": 0.2692307692307692,
                 "data": 0.2857142857142857,
                 "language": 0.18181818181818182,
                 "reasoning": 0.16666666666666666,
                 "structured": 0.2916666666666667,
-                "tools": 0.7704918032786885
+                "tools": 0.6721311475409836
               },
               "finite": true,
               "generated_solved_items": [],
-              "generation_dominant_token_fraction": 0.21621621621621623,
+              "generation_dominant_token_fraction": 0.6987951807228916,
               "generation_exact_accuracy": 0.0,
-              "generation_longest_repeated_token_run": 8,
+              "generation_longest_repeated_token_run": 58,
               "generation_nonempty_rate": 1.0,
               "generation_pathological_repetition": true,
               "generation_probe": [
                 {
                   "domain": "coding",
-                  "item": "coding:3d8711e106634497",
+                  "item": "coding:e4e5caca33b64233",
                   "ok": false,
-                  "output": "{\":1",
-                  "similarity": 0.09302325581395349,
-                  "target": "def canary_sub_96(x):\n    return x - 11"
+                  "output": "de",
+                  "similarity": 0.0975609756097561,
+                  "target": "def canary_sub_97(x):\n    return x - 12"
                 },
                 {
                   "domain": "data",
-                  "item": "data:3aa86233f73d9fd9",
+                  "item": "data:c82e16d88d2dea63",
                   "ok": false,
                   "output": "1",
                   "similarity": 0.2857142857142857,
-                  "target": "187735"
+                  "target": "188128"
                 },
                 {
                   "domain": "language",
-                  "item": "language:27c3cbde3d662607",
+                  "item": "language:2bd5b943a52fd311",
                   "ok": false,
-                  "output": "CCCL",
-                  "similarity": 0.14285714285714285,
-                  "target": "CANARY0096"
+                  "output": "CLEEEEEEEEEEE",
+                  "similarity": 0.08695652173913043,
+                  "target": "CANARY0097"
                 },
                 {
                   "domain": "reasoning",
-                  "item": "reasoning:d1c4b3068372c065",
+                  "item": "reasoning:eafc9a724ad8dadc",
                   "ok": false,
                   "output": "1",
                   "similarity": 0.0,
-                  "target": "62592"
+                  "target": "62723"
                 },
                 {
                   "domain": "structured",
-                  "item": "structured:69314e642dd33a23",
+                  "item": "structured:727ada87ddf50f98",
                   "ok": false,
-                  "output": "{\":111115",
-                  "similarity": 0.2222222222222222,
-                  "target": "{\"canary\":96,\"value\":62576}"
+                  "output": "{\":1",
+                  "similarity": 0.1935483870967742,
+                  "target": "{\"canary\":97,\"value\":62707}"
                 },
                 {
                   "domain": "tools",
-                  "item": "tools:9e0ae6384d48bde2",
+                  "item": "tools:7c68b18ef943d4b7",
                   "ok": false,
-                  "output": "<tool_call>{\"call>{\":\"n{\":\":\":\":{\":{\":\":\":\":\"11111111888888",
-                  "similarity": 0.2571428571428571,
-                  "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"62576*3\"}}</tool_call>"
+                  "output": "<tool_calalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalalal",
+                  "similarity": 0.13725490196078433,
+                  "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"62707*4\"}}</tool_call>"
                 }
               ],
-              "generation_repetition_rate": 0.7702702702702703,
-              "generation_similarity": 0.16682662729174358,
-              "generation_unique_token_ratio": 0.22972972972972974,
-              "loss": 2.367656566478588,
-              "nll_per_byte": 1.9025811694917225,
+              "generation_repetition_rate": 0.8313253012048193,
+              "generation_similarity": 0.1335058453534551,
+              "generation_unique_token_ratio": 0.1686746987951807,
+              "loss": 2.5230830439814813,
+              "nll_per_byte": 2.0274774460565474,
               "solved_items": [],
-              "target_token_accuracy": 0.4666666666666667,
+              "target_token_accuracy": 0.4444444444444444,
               "target_tokens": 135,
               "tokenizer_version": "bpe-v1",
               "validation_target_bytes": 168,
               "validation_target_tokens": 135
             },
-            "canary_cycle": 96,
+            "canary_cycle": 97,
             "domain_bits_per_byte": {
-              "coding": 2.8595187335741508,
-              "data": 4.804103931997558,
-              "language": 5.616373458109878,
-              "reasoning": 4.539172500752281,
-              "structured": 2.086571847073272,
-              "tools": 1.6411311987844235
+              "coding": 3.078769937440946,
+              "data": 5.46223833480763,
+              "language": 5.4582807819150645,
+              "reasoning": 4.343944871350456,
+              "structured": 2.4856918945962705,
+              "tools": 1.7358847139512323
             },
             "domain_generation_accuracy": {
               "coding": 0.0,
@@ -3160,40 +1579,40 @@
               "coding": 0.12121212121212122,
               "data": 0.0,
               "language": 0.0,
-              "reasoning": 0.3333333333333333,
-              "structured": 0.42105263157894735,
-              "tools": 0.4084507042253521
+              "reasoning": 0.4,
+              "structured": 0.0,
+              "tools": 0.302158273381295
             },
             "domain_loss": {
-              "coding": 3.124880953951999,
-              "data": 2.2199673970540363,
-              "language": 4.843583217886991,
-              "reasoning": 2.318337089137027,
-              "structured": 1.664928347565407,
-              "tools": 1.5298025196996228
+              "coding": 3.3644785838084177,
+              "data": 2.524090067545573,
+              "language": 4.707243453624637,
+              "reasoning": 2.218626524272718,
+              "structured": 1.9833963083666424,
+              "tools": 1.6181282832704742
             },
             "domain_nll_per_byte": {
-              "coding": 1.982067347935268,
-              "data": 3.3299510955810545,
-              "language": 3.8929734274605723,
-              "reasoning": 3.1463146209716797,
-              "structured": 1.446301392834596,
-              "tools": 1.1375454633663862
+              "coding": 2.134040701729911,
+              "data": 3.7861351013183593,
+              "language": 3.7833919346889604,
+              "reasoning": 3.0109931400844028,
+              "structured": 1.7229503284801135,
+              "tools": 1.2032235952524037
             },
             "domain_token_accuracy": {
-              "coding": 0.3783783783783784,
+              "coding": 0.35135135135135137,
               "data": 0.3333333333333333,
-              "language": 0.05813953488372093,
-              "reasoning": 0.3157894736842105,
-              "structured": 0.6976744186046512,
-              "tools": 0.6793103448275862
+              "language": 0.03488372093023256,
+              "reasoning": 0.47368421052631576,
+              "structured": 0.5930232558139535,
+              "tools": 0.7068965517241379
             },
             "finite": true,
             "generated_solved_items": [],
-            "generation_dominant_token_fraction": 0.2571428571428571,
+            "generation_dominant_token_fraction": 0.32894736842105265,
             "generation_exact_accuracy": 0.0,
-            "generation_longest_repeated_token_run": 14,
-            "generation_nonempty_rate": 0.8333333333333334,
+            "generation_longest_repeated_token_run": 10,
+            "generation_nonempty_rate": 1.0,
             "generation_pathological_repetition": true,
             "generation_probe": [
               {
@@ -3216,7 +1635,7 @@
                 "domain": "language",
                 "item": "language:082c2713322e1930",
                 "ok": false,
-                "output": "",
+                "output": "de",
                 "similarity": 0.0,
                 "target": "Musicians play music."
               },
@@ -3224,8 +1643,314 @@
                 "domain": "reasoning",
                 "item": "reasoning:d206563c75c2d4bd",
                 "ok": false,
-                "output": "111",
-                "similarity": 0.3333333333333333,
+                "output": "16",
+                "similarity": 0.4,
+                "target": "144"
+              },
+              {
+                "domain": "structured",
+                "item": "structured:b4833d19223b3d60",
+                "ok": false,
+                "output": "CLEEEEEEEEEE",
+                "similarity": 0.0,
+                "target": "{\"count\":2}"
+              },
+              {
+                "domain": "tools",
+                "item": "tools:169b024c50474998",
+                "ok": false,
+                "output": "<tool_call>{\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":",
+                "similarity": 0.302158273381295,
+                "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
+              }
+            ],
+            "generation_repetition_rate": 0.7763157894736842,
+            "generation_similarity": 0.1372283990989027,
+            "generation_unique_token_ratio": 0.2236842105263158,
+            "loss": 2.4680803226678334,
+            "nll_per_byte": 1.884433655169025,
+            "parameters": 106816,
+            "pretraining": {
+              "best_step_loss": 4.165196418762207,
+              "blocks": 146364,
+              "corpus_bytes": 27565570,
+              "corpus_sha256": "5bf755bfe310da81804b7036783356fc89f324e53ad54abd3286e3cb341e4b1e",
+              "documents": 1689,
+              "domain_blocks": {
+                "code": 40496,
+                "data": 80159,
+                "general": 25485,
+                "reasoning": 224
+              },
+              "eval_blocks": 128,
+              "final_loss": 4.4171081483364105,
+              "initial_loss": 4.966837756335735,
+              "learning_rate": 0.001,
+              "loss_improvement": 0.5497296079993248,
+              "ok": true,
+              "sampling_domain_weights": {
+                "code": 0.1721510046978385,
+                "data": 0.2579798784847195,
+                "general": 0.32656137400070495,
+                "reasoning": 0.24330774281673703
+              },
+              "steps": 24
+            },
+            "score": 34.66874397236736,
+            "solved_items": [],
+            "target_token_accuracy": 0.514003294892916,
+            "target_tokens": 607,
+            "tokenizer_version": "bpe-v1",
+            "training": {
+              "best_step_loss": 1.767685055732727,
+              "effective_batch_size": 4,
+              "final_loss": 2.630434513092041,
+              "gradient_accumulation_steps": 1,
+              "initial_loss": 3.472914457321167,
+              "learning_rate": 0.001,
+              "loss_improvement": 0.842479944229126,
+              "micro_batch_size": 4,
+              "ok": true,
+              "precision": "fp32",
+              "steps": 16
+            },
+            "validation_target_bytes": 795,
+            "validation_target_tokens": 607,
+            "weight_transfer": {
+              "copied_parameters": 131392,
+              "copied_tensors": 15,
+              "derived_bpe_rows": 0,
+              "embedding_width_migrated": false,
+              "function_preserving_growth": true,
+              "identity_initialized_tensors": [],
+              "parameter_fraction": 1.0,
+              "partial_prefix_parameters": 0,
+              "partial_prefix_tensors": [],
+              "policy": "layout-aware Net2Grow transfer with identity residual depth expansion",
+              "shared_token_rows": 0,
+              "source_tensors": 15,
+              "source_tokenizer": "bpe-v1",
+              "source_unmatched_tensors": [],
+              "target_parameters": 131392,
+              "target_tensors": 15,
+              "target_tokenizer": "bpe-v1",
+              "tokenizer_identical": true,
+              "vocabulary_migrated": false
+            }
+          },
+          "seed": 696084008
+        },
+        {
+          "eligible": false,
+          "reason": "candidate regressed in byte-normalized validation domain: coding",
+          "report": {
+            "bits_per_byte": 2.5620290959908236,
+            "canary": {
+              "bits_per_byte": 2.835037230568515,
+              "domain_bits_per_byte": {
+                "coding": 3.6043482604834063,
+                "data": 4.243757672055033,
+                "language": 5.758765593152699,
+                "reasoning": 4.796974219223389,
+                "structured": 4.148544407574164,
+                "tools": 1.4403823710736279
+              },
+              "domain_generation_accuracy": {
+                "coding": 0.0,
+                "data": 0.0,
+                "language": 0.0,
+                "reasoning": 0.0,
+                "structured": 0.0,
+                "tools": 0.0
+              },
+              "domain_generation_similarity": {
+                "coding": 0.26229508196721313,
+                "data": 0.2857142857142857,
+                "language": 0.08695652173913043,
+                "reasoning": 0.0,
+                "structured": 0.29411764705882354,
+                "tools": 0.3129251700680272
+              },
+              "domain_loss": {
+                "coding": 3.7475157517653246,
+                "data": 2.521327427455357,
+                "language": 3.6287928494540127,
+                "reasoning": 2.7708409627278647,
+                "structured": 3.2349958419799805,
+                "tools": 1.3257402513847976
+              },
+              "domain_nll_per_byte": {
+                "coding": 2.4983438345102162,
+                "data": 2.9415486653645835,
+                "language": 3.991672134399414,
+                "reasoning": 3.3250091552734373,
+                "structured": 2.8755518595377603,
+                "tools": 0.998396979437934
+              },
+              "domain_token_accuracy": {
+                "coding": 0.19230769230769232,
+                "data": 0.2857142857142857,
+                "language": 0.2727272727272727,
+                "reasoning": 0.16666666666666666,
+                "structured": 0.3333333333333333,
+                "tools": 0.7213114754098361
+              },
+              "finite": true,
+              "generated_solved_items": [],
+              "generation_dominant_token_fraction": 0.25,
+              "generation_exact_accuracy": 0.0,
+              "generation_longest_repeated_token_run": 12,
+              "generation_nonempty_rate": 1.0,
+              "generation_pathological_repetition": true,
+              "generation_probe": [
+                {
+                  "domain": "coding",
+                  "item": "coding:e4e5caca33b64233",
+                  "ok": false,
+                  "output": "de pre pre pre pre pre",
+                  "similarity": 0.26229508196721313,
+                  "target": "def canary_sub_97(x):\n    return x - 12"
+                },
+                {
+                  "domain": "data",
+                  "item": "data:c82e16d88d2dea63",
+                  "ok": false,
+                  "output": "1",
+                  "similarity": 0.2857142857142857,
+                  "target": "188128"
+                },
+                {
+                  "domain": "language",
+                  "item": "language:2bd5b943a52fd311",
+                  "ok": false,
+                  "output": "CLLLLLLLLLLLL",
+                  "similarity": 0.08695652173913043,
+                  "target": "CANARY0097"
+                },
+                {
+                  "domain": "reasoning",
+                  "item": "reasoning:eafc9a724ad8dadc",
+                  "ok": false,
+                  "output": "1",
+                  "similarity": 0.0,
+                  "target": "62723"
+                },
+                {
+                  "domain": "structured",
+                  "item": "structured:727ada87ddf50f98",
+                  "ok": false,
+                  "output": "{\"call>",
+                  "similarity": 0.29411764705882354,
+                  "target": "{\"canary\":97,\"value\":62707}"
+                },
+                {
+                  "domain": "tools",
+                  "item": "tools:7c68b18ef943d4b7",
+                  "ok": false,
+                  "output": "<tool_call>{\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\"}}}}}}}",
+                  "similarity": 0.3129251700680272,
+                  "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"62707*4\"}}</tool_call>"
+                }
+              ],
+              "generation_repetition_rate": 0.8,
+              "generation_similarity": 0.20700145109124665,
+              "generation_unique_token_ratio": 0.2,
+              "loss": 2.445455367476852,
+              "nll_per_byte": 1.9650980631510417,
+              "solved_items": [],
+              "target_token_accuracy": 0.4666666666666667,
+              "target_tokens": 135,
+              "tokenizer_version": "bpe-v1",
+              "validation_target_bytes": 168,
+              "validation_target_tokens": 135
+            },
+            "canary_cycle": 97,
+            "domain_bits_per_byte": {
+              "coding": 3.2172894423739553,
+              "data": 5.614331536063457,
+              "language": 5.205176634216392,
+              "reasoning": 4.399683760564489,
+              "structured": 2.66353032193636,
+              "tools": 1.3728343686928717
+            },
+            "domain_generation_accuracy": {
+              "coding": 0.0,
+              "data": 0.0,
+              "language": 0.0,
+              "reasoning": 0.0,
+              "structured": 0.0,
+              "tools": 0.0
+            },
+            "domain_generation_similarity": {
+              "coding": 0.12903225806451613,
+              "data": 0.0,
+              "language": 0.13636363636363635,
+              "reasoning": 0.5,
+              "structured": 0.42105263157894735,
+              "tools": 0.34532374100719426
+            },
+            "domain_loss": {
+              "coding": 3.515852644636824,
+              "data": 2.594372049967448,
+              "language": 4.488965411518896,
+              "reasoning": 2.2470946060983756,
+              "structured": 2.125298078670058,
+              "tools": 1.279706021012931
+            },
+            "domain_nll_per_byte": {
+              "coding": 2.2300551060267857,
+              "data": 3.891558074951172,
+              "language": 3.607953508323598,
+              "reasoning": 3.0496283939906528,
+              "structured": 1.8462185329861112,
+              "tools": 0.9515762720352564
+            },
+            "domain_token_accuracy": {
+              "coding": 0.2882882882882883,
+              "data": 0.3333333333333333,
+              "language": 0.09302325581395349,
+              "reasoning": 0.47368421052631576,
+              "structured": 0.6046511627906976,
+              "tools": 0.7586206896551724
+            },
+            "finite": true,
+            "generated_solved_items": [],
+            "generation_dominant_token_fraction": 0.2571428571428571,
+            "generation_exact_accuracy": 0.0,
+            "generation_longest_repeated_token_run": 5,
+            "generation_nonempty_rate": 1.0,
+            "generation_pathological_repetition": true,
+            "generation_probe": [
+              {
+                "domain": "coding",
+                "item": "coding:9f36f220338cd9ff",
+                "ok": false,
+                "output": "{\":trments\":trment\":trment\":trm",
+                "similarity": 0.12903225806451613,
+                "target": "def sub(a, b):\n    return a - b"
+              },
+              {
+                "domain": "data",
+                "item": "data:5bd96918425fd195",
+                "ok": false,
+                "output": "1",
+                "similarity": 0.0,
+                "target": "20"
+              },
+              {
+                "domain": "language",
+                "item": "language:082c2713322e1930",
+                "ok": false,
+                "output": "d pre pre pre pre pre p",
+                "similarity": 0.13636363636363635,
+                "target": "Musicians play music."
+              },
+              {
+                "domain": "reasoning",
+                "item": "reasoning:d206563c75c2d4bd",
+                "ok": false,
+                "output": "1",
+                "similarity": 0.5,
                 "target": "144"
               },
               {
@@ -3240,34 +1965,34 @@
                 "domain": "tools",
                 "item": "tools:169b024c50474998",
                 "ok": false,
-                "output": "<tool_call>{\":\"call>{\"call>{\":\":\"call>{\":{\":\":\":\":\"11111111111111",
-                "similarity": 0.4084507042253521,
+                "output": "<tool_call>{\":{\":{\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\":\"}}}}}",
+                "similarity": 0.34532374100719426,
                 "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
               }
             ],
-            "generation_repetition_rate": 0.7714285714285715,
-            "generation_similarity": 0.214008131724959,
-            "generation_unique_token_ratio": 0.22857142857142856,
-            "loss": 2.3518691840635295,
-            "nll_per_byte": 1.7957038927378144,
-            "parameters": 115328,
+            "generation_repetition_rate": 0.7904761904761904,
+            "generation_similarity": 0.2552953778357157,
+            "generation_unique_token_ratio": 0.20952380952380953,
+            "loss": 2.3258834914281303,
+            "nll_per_byte": 1.775863244398585,
+            "parameters": 106816,
             "pretraining": {
-              "best_step_loss": 4.901900768280029,
-              "blocks": 146002,
-              "corpus_bytes": 27483311,
-              "corpus_sha256": "0f68d144cd0cc9bb39074ba3238f67ccdf3c2a51562a7b1eae746fd3de664889",
-              "documents": 1668,
+              "best_step_loss": 4.021236419677734,
+              "blocks": 146364,
+              "corpus_bytes": 27565570,
+              "corpus_sha256": "5bf755bfe310da81804b7036783356fc89f324e53ad54abd3286e3cb341e4b1e",
+              "documents": 1689,
               "domain_blocks": {
-                "code": 40219,
+                "code": 40496,
                 "data": 80159,
-                "general": 25400,
+                "general": 25485,
                 "reasoning": 224
               },
               "eval_blocks": 128,
-              "final_loss": 4.865041986107826,
-              "initial_loss": 5.46883250772953,
+              "final_loss": 4.435257323086262,
+              "initial_loss": 4.965067848563194,
               "learning_rate": 0.001,
-              "loss_improvement": 0.6037905216217041,
+              "loss_improvement": 0.5298105254769325,
               "ok": true,
               "sampling_domain_weights": {
                 "code": 0.1721510046978385,
@@ -3275,31 +2000,31 @@
                 "general": 0.32656137400070495,
                 "reasoning": 0.24330774281673703
               },
-              "steps": 12
+              "steps": 24
             },
-            "score": 35.769051878785504,
+            "score": 36.02472264985716,
             "solved_items": [],
-            "target_token_accuracy": 0.5189456342668863,
+            "target_token_accuracy": 0.5370675453047776,
             "target_tokens": 607,
             "tokenizer_version": "bpe-v1",
             "training": {
-              "best_step_loss": 1.845496416091919,
+              "best_step_loss": 1.7136849164962769,
               "effective_batch_size": 4,
-              "final_loss": 2.402923583984375,
+              "final_loss": 2.560763120651245,
               "gradient_accumulation_steps": 1,
-              "initial_loss": 2.983562707901001,
+              "initial_loss": 3.3314785957336426,
               "learning_rate": 0.001,
-              "loss_improvement": 0.580639123916626,
+              "loss_improvement": 0.7707154750823975,
               "micro_batch_size": 4,
               "ok": true,
               "precision": "fp32",
-              "steps": 12
+              "steps": 16
             },
             "validation_target_bytes": 795,
             "validation_target_tokens": 607,
             "weight_transfer": {
-              "copied_parameters": 139904,
-              "copied_tensors": 21,
+              "copied_parameters": 131392,
+              "copied_tensors": 15,
               "derived_bpe_rows": 0,
               "embedding_width_migrated": false,
               "function_preserving_growth": true,
@@ -3309,338 +2034,32 @@
               "partial_prefix_tensors": [],
               "policy": "layout-aware Net2Grow transfer with identity residual depth expansion",
               "shared_token_rows": 0,
-              "source_tensors": 21,
+              "source_tensors": 15,
               "source_tokenizer": "bpe-v1",
               "source_unmatched_tensors": [],
-              "target_parameters": 139904,
-              "target_tensors": 21,
+              "target_parameters": 131392,
+              "target_tensors": 15,
               "target_tokenizer": "bpe-v1",
               "tokenizer_identical": true,
               "vocabulary_migrated": false
             }
           },
-          "seed": 1375730417
-        },
-        {
-          "eligible": false,
-          "reason": "candidate regressed in byte-normalized validation domain: reasoning",
-          "report": {
-            "bits_per_byte": 2.563514181540481,
-            "canary": {
-              "bits_per_byte": 2.6856082207468543,
-              "domain_bits_per_byte": {
-                "coding": 3.6983056106318215,
-                "data": 4.1618549475101405,
-                "language": 5.615089910760702,
-                "reasoning": 5.282597640467202,
-                "structured": 4.021647607389455,
-                "tools": 1.1213429862974154
-              },
-              "domain_generation_accuracy": {
-                "coding": 0.0,
-                "data": 0.0,
-                "language": 0.0,
-                "reasoning": 0.0,
-                "structured": 0.0,
-                "tools": 0.0
-              },
-              "domain_generation_similarity": {
-                "coding": 0.09090909090909091,
-                "data": 0.2857142857142857,
-                "language": 0.16666666666666666,
-                "reasoning": 0.0,
-                "structured": 0.1875,
-                "tools": 0.37168141592920356
-              },
-              "domain_loss": {
-                "coding": 3.84520516028771,
-                "data": 2.4726668766566684,
-                "language": 3.5382579456676138,
-                "reasoning": 3.0513480504353843,
-                "structured": 3.136042912801107,
-                "tools": 1.0320936734559105
-              },
-              "domain_nll_per_byte": {
-                "coding": 2.5634701068584738,
-                "data": 2.8847780227661133,
-                "language": 3.892083740234375,
-                "reasoning": 3.661617660522461,
-                "structured": 2.7875937002676503,
-                "tools": 0.7772557293927228
-              },
-              "domain_token_accuracy": {
-                "coding": 0.19230769230769232,
-                "data": 0.2857142857142857,
-                "language": 0.09090909090909091,
-                "reasoning": 0.16666666666666666,
-                "structured": 0.25,
-                "tools": 0.8032786885245902
-              },
-              "finite": true,
-              "generated_solved_items": [],
-              "generation_dominant_token_fraction": 0.3333333333333333,
-              "generation_exact_accuracy": 0.0,
-              "generation_longest_repeated_token_run": 6,
-              "generation_nonempty_rate": 1.0,
-              "generation_pathological_repetition": false,
-              "generation_probe": [
-                {
-                  "domain": "coding",
-                  "item": "coding:3d8711e106634497",
-                  "ok": false,
-                  "output": "{\":10",
-                  "similarity": 0.09090909090909091,
-                  "target": "def canary_sub_96(x):\n    return x - 11"
-                },
-                {
-                  "domain": "data",
-                  "item": "data:3aa86233f73d9fd9",
-                  "ok": false,
-                  "output": "1",
-                  "similarity": 0.2857142857142857,
-                  "target": "187735"
-                },
-                {
-                  "domain": "language",
-                  "item": "language:27c3cbde3d662607",
-                  "ok": false,
-                  "output": "10",
-                  "similarity": 0.16666666666666666,
-                  "target": "CANARY0096"
-                },
-                {
-                  "domain": "reasoning",
-                  "item": "reasoning:d1c4b3068372c065",
-                  "ok": false,
-                  "output": "1",
-                  "similarity": 0.0,
-                  "target": "62592"
-                },
-                {
-                  "domain": "structured",
-                  "item": "structured:69314e642dd33a23",
-                  "ok": false,
-                  "output": "{\":10",
-                  "similarity": 0.1875,
-                  "target": "{\"canary\":96,\"value\":62576}"
-                },
-                {
-                  "domain": "tools",
-                  "item": "tools:9e0ae6384d48bde2",
-                  "ok": false,
-                  "output": "<tool_call>{\"\"\"\":\"\"\"\"\"\":\":\"call>",
-                  "similarity": 0.37168141592920356,
-                  "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"62576*3\"}}</tool_call>"
-                }
-              ],
-              "generation_repetition_rate": 0.6904761904761905,
-              "generation_similarity": 0.18374524320320781,
-              "generation_unique_token_ratio": 0.30952380952380953,
-              "loss": 2.316560420283565,
-              "nll_per_byte": 1.8615217662992931,
-              "solved_items": [],
-              "target_token_accuracy": 0.4740740740740741,
-              "target_tokens": 135,
-              "tokenizer_version": "bpe-v1",
-              "validation_target_bytes": 168,
-              "validation_target_tokens": 135
-            },
-            "canary_cycle": 96,
-            "domain_bits_per_byte": {
-              "coding": 2.967738221078222,
-              "data": 4.427989156622492,
-              "language": 5.610049948568891,
-              "reasoning": 4.676650124958783,
-              "structured": 2.118095579045822,
-              "tools": 1.5356912920109194
-            },
-            "domain_generation_accuracy": {
-              "coding": 0.0,
-              "data": 0.0,
-              "language": 0.0,
-              "reasoning": 0.0,
-              "structured": 0.0,
-              "tools": 0.0
-            },
-            "domain_generation_similarity": {
-              "coding": 0.0,
-              "data": 0.5,
-              "language": 0.0,
-              "reasoning": 0.3333333333333333,
-              "structured": 0.23076923076923078,
-              "tools": 0.5517241379310345
-            },
-            "domain_loss": {
-              "coding": 3.243143167581644,
-              "data": 2.0461654663085938,
-              "language": 4.8381297976471656,
-              "reasoning": 2.3885524147435238,
-              "structured": 1.690081929051599,
-              "tools": 1.4315152924636314
-            },
-            "domain_nll_per_byte": {
-              "coding": 2.0570793805803573,
-              "data": 3.0692481994628906,
-              "language": 3.888590304650993,
-              "reasoning": 3.2416068485804965,
-              "structured": 1.468151978772096,
-              "tools": 1.0644600892678284
-            },
-            "domain_token_accuracy": {
-              "coding": 0.2882882882882883,
-              "data": 0.3333333333333333,
-              "language": 0.046511627906976744,
-              "reasoning": 0.3684210526315789,
-              "structured": 0.5930232558139535,
-              "tools": 0.7206896551724138
-            },
-            "finite": true,
-            "generated_solved_items": [],
-            "generation_dominant_token_fraction": 0.23076923076923078,
-            "generation_exact_accuracy": 0.0,
-            "generation_longest_repeated_token_run": 2,
-            "generation_nonempty_rate": 0.8333333333333334,
-            "generation_pathological_repetition": true,
-            "generation_probe": [
-              {
-                "domain": "coding",
-                "item": "coding:9f36f220338cd9ff",
-                "ok": false,
-                "output": "10",
-                "similarity": 0.0,
-                "target": "def sub(a, b):\n    return a - b"
-              },
-              {
-                "domain": "data",
-                "item": "data:5bd96918425fd195",
-                "ok": false,
-                "output": "10",
-                "similarity": 0.5,
-                "target": "20"
-              },
-              {
-                "domain": "language",
-                "item": "language:082c2713322e1930",
-                "ok": false,
-                "output": "",
-                "similarity": 0.0,
-                "target": "Musicians play music."
-              },
-              {
-                "domain": "reasoning",
-                "item": "reasoning:d206563c75c2d4bd",
-                "ok": false,
-                "output": "100",
-                "similarity": 0.3333333333333333,
-                "target": "144"
-              },
-              {
-                "domain": "structured",
-                "item": "structured:b4833d19223b3d60",
-                "ok": false,
-                "output": "<tool_call>{\":\"",
-                "similarity": 0.23076923076923078,
-                "target": "{\"count\":2}"
-              },
-              {
-                "domain": "tools",
-                "item": "tools:169b024c50474998",
-                "ok": false,
-                "output": "<tool_call>{\":\":\":\":{\"calcalall>{\"call>{\":{\"\":\":\":\":\":\":{\":\"}}</tool",
-                "similarity": 0.5517241379310345,
-                "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
-              }
-            ],
-            "generation_repetition_rate": 0.8076923076923077,
-            "generation_similarity": 0.2693044503389331,
-            "generation_unique_token_ratio": 0.19230769230769232,
-            "loss": 2.3272316946818368,
-            "nll_per_byte": 1.7768926272602201,
-            "parameters": 115328,
-            "pretraining": {
-              "best_step_loss": 4.753575801849365,
-              "blocks": 146002,
-              "corpus_bytes": 27483311,
-              "corpus_sha256": "0f68d144cd0cc9bb39074ba3238f67ccdf3c2a51562a7b1eae746fd3de664889",
-              "documents": 1668,
-              "domain_blocks": {
-                "code": 40219,
-                "data": 80159,
-                "general": 25400,
-                "reasoning": 224
-              },
-              "eval_blocks": 128,
-              "final_loss": 4.8083634823560715,
-              "initial_loss": 5.478176191449165,
-              "learning_rate": 0.001,
-              "loss_improvement": 0.6698127090930939,
-              "ok": true,
-              "sampling_domain_weights": {
-                "code": 0.1721510046978385,
-                "data": 0.2579798784847195,
-                "general": 0.32656137400070495,
-                "reasoning": 0.24330774281673703
-              },
-              "steps": 12
-            },
-            "score": 36.011359879330406,
-            "solved_items": [],
-            "target_token_accuracy": 0.5074135090609555,
-            "target_tokens": 607,
-            "tokenizer_version": "bpe-v1",
-            "training": {
-              "best_step_loss": 1.1275815963745117,
-              "effective_batch_size": 4,
-              "final_loss": 2.3828699588775635,
-              "gradient_accumulation_steps": 1,
-              "initial_loss": 2.9159576892852783,
-              "learning_rate": 0.001,
-              "loss_improvement": 0.5330877304077148,
-              "micro_batch_size": 4,
-              "ok": true,
-              "precision": "fp32",
-              "steps": 12
-            },
-            "validation_target_bytes": 795,
-            "validation_target_tokens": 607,
-            "weight_transfer": {
-              "copied_parameters": 139904,
-              "copied_tensors": 21,
-              "derived_bpe_rows": 0,
-              "embedding_width_migrated": false,
-              "function_preserving_growth": true,
-              "identity_initialized_tensors": [],
-              "parameter_fraction": 1.0,
-              "partial_prefix_parameters": 0,
-              "partial_prefix_tensors": [],
-              "policy": "layout-aware Net2Grow transfer with identity residual depth expansion",
-              "shared_token_rows": 0,
-              "source_tensors": 21,
-              "source_tokenizer": "bpe-v1",
-              "source_unmatched_tensors": [],
-              "target_parameters": 139904,
-              "target_tensors": 21,
-              "target_tokenizer": "bpe-v1",
-              "tokenizer_identical": true,
-              "vocabulary_migrated": false
-            }
-          },
-          "seed": 1375731414
+          "seed": 696085005
         }
       ],
-      "requested_pretrain_steps": 2,
-      "requested_steps": 12,
+      "requested_pretrain_steps": 32,
+      "requested_steps": 16,
       "scale_budget_multiplier": 1.0,
-      "score": 36.011359879330406,
+      "score": 36.02472264985716,
       "stage": 3,
-      "steps": 12,
+      "steps": 16,
       "tokenizer_vocab_size": 384,
       "tokenizer_vocab_target": 384,
       "version": "airi-generalist-free-speed-v4",
-      "worst_domain_regression": 0.15590798734414468
+      "worst_domain_regression": 0.5342014312744139
     }
   ],
-  "updated_at": 1790023913.0254195,
+  "updated_at": 1790028241.280928,
   "version": "airi-generalist-free-speed-v4",
   "winner": null
 }
