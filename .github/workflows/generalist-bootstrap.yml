@@ -56,7 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-continuum.yml/runs?per_page=30"
-          for attempt in $(seq 1 75); do
+          for _ in $(seq 1 75); do
             payload="$(curl --fail-with-body -sS --retry 3 --retry-all-errors \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${GH_TOKEN}" \
