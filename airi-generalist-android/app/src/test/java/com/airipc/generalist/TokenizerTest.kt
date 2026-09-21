@@ -7,6 +7,16 @@ import org.junit.Test
 
 class TokenizerTest {
     @Test
+    fun cacheBustingKeepsBranchPathAndAddsVersionKey() {
+        val url = cacheBustedUrl(
+            "https://raw.githubusercontent.com/a/b/generalist-mobile/manifest.json",
+            "cycle-93",
+        )
+        assertTrue(url.startsWith("https://raw.githubusercontent.com/a/b/generalist-mobile/manifest.json?"))
+        assertTrue("airi_v=cycle-93" in url)
+    }
+
+    @Test
     fun byteTokenizerRoundTripsUtf8() {
         val tokenizer = ByteTokenizer()
         val text = "ciao AIRI 🌸"
