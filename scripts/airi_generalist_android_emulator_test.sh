@@ -109,6 +109,35 @@ test "$READY" -eq 1
 adb exec-out screencap -p > "$OUT/home.png"
 test -s "$OUT/home.png"
 
+# Reproduce the user's manual refresh path. The tap must start a real
+# commit-pinned synchronization and emit PASS after the click, not merely
+# return immediately with a cached branch-name response.
+adb logcat -c
+dump_ui /sdcard/airi-refresh.xml "$OUT/refresh-before.xml"
+read REFRESH_X REFRESH_Y < <(center_for_text "$OUT/refresh-before.xml" "Aggiorna")
+adb shell input tap "$REFRESH_X" "$REFRESH_Y"
+
+REFRESH_PASS=0
+for _ in $(seq 1 45); do
+  if adb logcat -d | grep -q 'AIRI_GENERALIST_REFRESH=PASS'; then
+    REFRESH_PASS=1
+    break
+  fi
+  sleep 1
+done
+test "$REFRESH_PASS" -eq 1
+adb logcat -d > "$OUT/refresh-logcat.txt"
+grep -q 'AIRI_GENERALIST_REFRESH=PASS' "$OUT/refresh-logcat.txt"
+
+for _ in $(seq 1 20); do
+  dump_ui /sdcard/airi-refresh-after.xml "$OUT/refresh-after.xml" || true
+  if grep -q 'text="Aggiorna"' "$OUT/refresh-after.xml" 2>/dev/null; then
+    break
+  fi
+  sleep 1
+done
+grep -q 'text="Aggiorna"' "$OUT/refresh-after.xml"
+
 # Real on-device inference.
 adb logcat -c
 read INPUT_X INPUT_Y < <(center_for_edit_text "$OUT/home.xml")
@@ -143,4 +172,4 @@ for TAB in Live Neural Airi-PC; do
   test -s "$OUT/tab-$TAB.png"
 done
 
-echo "AIRI_GENERALIST_ANDROID_SMOKE=PASS pid=$PID apk=$APK inference=PASS observability=PASS"
+echo "AIRI_GENERALIST_ANDROID_SMOKE=PASS pid=$PID apk=$APK refresh=PASS inference=PASS observability=PASS"
