@@ -34,6 +34,8 @@ _PROTECTED_PATHS = {
     "computer/generalist_lm/production_promotion.py",
     "computer/generalist_lm/research_health.py",
     "computer/generalist_lm/research_cycle.py",
+    "computer/generalist_lm/generalist_swarm.py",
+    "computer/generalist_lm/generalist_data_growth.py",
     "computer/generalist_lm/evolution.py",
     "computer/generalist_lm/mathesis_bridge.py",
     "computer/control_plane/generalist_provider.py",
