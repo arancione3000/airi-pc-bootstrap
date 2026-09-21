@@ -63,6 +63,126 @@
       "worst_margin": -0.07241356372833252
     },
     {
+      "active_parameters": 26895.0,
+      "all_seed_wins": false,
+      "candidate_id": "lattice-2-694a8b9e4b48",
+      "cycle": 6,
+      "genome": {
+        "config": {
+          "active_experts": 1,
+          "architecture_version": "airi-lattice-v0",
+          "context_length": 64,
+          "d_expert": 48,
+          "d_model": 32,
+          "deep_write_power": 1.6,
+          "dropout": 0.0,
+          "init_std": 0.02,
+          "lattice_mix": 0.2,
+          "local_recurrence": true,
+          "max_reasoning_steps": 2,
+          "memory_bands": 3,
+          "memory_decay_max": 0.995,
+          "memory_decay_min": 0.25,
+          "n_cells": 1,
+          "n_experts": 4,
+          "predictive_error_memory": false,
+          "rms_eps": 1e-06,
+          "surprise_power": 1.5,
+          "surprise_threshold": 0.25,
+          "tie_embeddings": true,
+          "tokenizer_version": "byte-v1",
+          "vocab_size": 264
+        },
+        "generation": 2,
+        "genome_id": "lattice-2-694a8b9e4b48",
+        "learning_rate": 0.002,
+        "min_learning_rate": 0.0002,
+        "parent_id": "lattice-1-6a6cefdecf5c",
+        "weight_decay": 0.025
+      },
+      "mean_baseline_loss": 4.87646746635437,
+      "mean_loss": 4.928773492574692,
+      "mean_margin": -0.052306026220321655,
+      "mutation": {
+        "changes": {
+          "weight_decay": 0.025
+        },
+        "family": "optimizer",
+        "mathesis_tags": [],
+        "name": "optimizer-less-decay",
+        "rationale": "relax regularization when tiny scratch models are underfitting"
+      },
+      "mutation_family": "optimizer",
+      "seed_count": 2,
+      "seed_wins": 0,
+      "stage": 3,
+      "state_bytes": 384.0,
+      "train_seconds": 3.391739108500019,
+      "win_fraction": 0.0,
+      "worst_margin": -0.06068897247314453
+    },
+    {
+      "active_parameters": 22840.0,
+      "all_seed_wins": false,
+      "candidate_id": "lattice-2-329849b939db",
+      "cycle": 6,
+      "genome": {
+        "config": {
+          "active_experts": 1,
+          "architecture_version": "airi-lattice-v0",
+          "context_length": 64,
+          "d_expert": 48,
+          "d_model": 32,
+          "deep_write_power": 1.36,
+          "dropout": 0.0,
+          "init_std": 0.02,
+          "lattice_mix": 0.2,
+          "local_recurrence": false,
+          "max_reasoning_steps": 2,
+          "memory_bands": 4,
+          "memory_decay_max": 0.995,
+          "memory_decay_min": 0.25,
+          "n_cells": 1,
+          "n_experts": 4,
+          "predictive_error_memory": false,
+          "rms_eps": 1e-06,
+          "surprise_power": 1.5,
+          "surprise_threshold": 0.25,
+          "tie_embeddings": true,
+          "tokenizer_version": "byte-v1",
+          "vocab_size": 264
+        },
+        "generation": 2,
+        "genome_id": "lattice-2-329849b939db",
+        "learning_rate": 0.002,
+        "min_learning_rate": 0.0002,
+        "parent_id": "lattice-1-26cb562d023c",
+        "weight_decay": 0.05
+      },
+      "mean_baseline_loss": 4.9446494579315186,
+      "mean_loss": 5.117737323045731,
+      "mean_margin": -0.17308786511421204,
+      "mutation": {
+        "changes": {
+          "deep_write_power": 1.36
+        },
+        "family": "memory",
+        "mathesis_tags": [
+          "reasoning"
+        ],
+        "name": "memory-broader-deep-write",
+        "rationale": "allow more information to reach slow memory when deep writes are too rare"
+      },
+      "mutation_family": "memory",
+      "seed_count": 2,
+      "seed_wins": 0,
+      "stage": 3,
+      "state_bytes": 512.0,
+      "train_seconds": 3.319737012499999,
+      "win_fraction": 0.0,
+      "worst_margin": -0.20802825689315796
+    },
+    {
       "active_parameters": 22840.0,
       "all_seed_wins": false,
       "candidate_id": "lattice-1-26cb562d023c",
@@ -125,9 +245,9 @@
     }
   ],
   "summary": {
-    "count": 2,
+    "count": 4,
     "near_winners": 0,
-    "pareto_count": 2
+    "pareto_count": 4
   },
   "version": "airi-lattice-elite-archive-v1"
 }
