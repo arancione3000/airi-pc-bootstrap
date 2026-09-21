@@ -1,5 +1,5 @@
 {
-  "last_cycle": 88,
+  "last_cycle": 89,
   "rows": [
     {
       "domain": "language",
@@ -10077,6 +10077,406 @@
         },
         {
           "content": "100",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "language",
+      "id": "de54ab72a53143c2c404aaa5",
+      "messages": [
+        {
+          "content": "Reply with exactly CYCLEWORD89 and nothing else.",
+          "role": "user"
+        },
+        {
+          "content": "CYCLEWORD89",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "coding",
+      "id": "db149e8c0e756acc54566079",
+      "messages": [
+        {
+          "content": "Return only Python code defining offset_89(x) that returns x + 99.",
+          "role": "user"
+        },
+        {
+          "content": "def offset_89(x):\n    return x + 99",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "data",
+      "id": "f07b6eb434b066b88b52e8b4",
+      "messages": [
+        {
+          "content": "Mean of 2513,2519,2525? Number only.",
+          "role": "user"
+        },
+        {
+          "content": "2519",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "reasoning",
+      "id": "6253c8b0ef5426cf88fddadd",
+      "messages": [
+        {
+          "content": "What is 129*96? Number only.",
+          "role": "user"
+        },
+        {
+          "content": "12384",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "tools",
+      "id": "1f04f7982203edff1935fd80",
+      "messages": [
+        {
+          "content": "Use calculator for 2513+102.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"2513+102\"}}</tool_call>",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "structured",
+      "id": "466a2b3c2f9253ce04565f0a",
+      "messages": [
+        {
+          "content": "Return exactly this JSON object: {\"cycle\":89,\"ok\":true}",
+          "role": "user"
+        },
+        {
+          "content": "{\"cycle\":89,\"ok\":true}",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "language",
+      "id": "8baf4c0cfdb6872841091fe3",
+      "messages": [
+        {
+          "content": "Write one grammatical sentence using exactly these content words: subject=agent89; verb=checks; object=report89.",
+          "role": "user"
+        },
+        {
+          "content": "Agent89 checks report89.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "language",
+      "id": "4d8b27d8a1fb7641127b3d2c",
+      "messages": [
+        {
+          "content": "Write one grammatical sentence using exactly these content words: subject=system89; verb=stores; object=result89.",
+          "role": "user"
+        },
+        {
+          "content": "System89 stores result89.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "data",
+      "id": "84e4fca812c562f6921c6aa7",
+      "messages": [
+        {
+          "content": "Sum of 2514,2516,2518,2520? Number only.",
+          "role": "user"
+        },
+        {
+          "content": "10068",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "reasoning",
+      "id": "ede16a28993f96b071ca0f77",
+      "messages": [
+        {
+          "content": "Sequence 89,92,95,98. Next term only.",
+          "role": "user"
+        },
+        {
+          "content": "101",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "tools",
+      "id": "984aec1d86109ebf7a046d61",
+      "messages": [
+        {
+          "content": "Available tools are strictly allowlisted. If a tool is required, output exactly <tool_call>{\"name\":\"tool_name\",\"arguments\":{...}}</tool_call>. Never invent tool names. Tool specifications: {\"lab_describe_task_flow\": {\"description\": \"Return the sandboxed AIRI-PC task lifecycle and verification flow. This is descriptive only and cannot run a real task.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, \"lab_inspect_module\": {\"description\": \"Inspect classes/functions/docstrings for one allowlisted AIRI-PC Control Plane module.\", \"schema\": {\"additionalProperties\": false, \"properties\": {\"module\": {\"enum\": [\"task_engine\", \"experience\", \"judge\", \"verification_engine\", \"model_router\", \"mcp_tasks\", \"generalist_agent_bridge\", \"local_agent\"], \"type\": \"string\"}}, \"required\": [\"module\"], \"type\": \"object\"}}, \"lab_list_capabilities\": {\"description\": \"List the read-only AIRI-PC Lab modules and allowed sandbox capabilities. It never executes host actions.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}}",
+          "role": "system"
+        },
+        {
+          "content": "In AIRI-PC Lab, inspect which safe capabilities are available.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"lab_list_capabilities\",\"arguments\":{}}</tool_call>",
+          "role": "assistant"
+        },
+        {
+          "content": "{\"capabilities\":[\"list_capabilities\",\"inspect_module\",\"describe_task_flow\"],\"denied_capabilities\":[\"shell\",\"network\",\"filesystem_write\",\"credentials\",\"phone_control\",\"production_promotion\"],\"mode\":\"read_only_sandbox\",\"modules\":[\"task_engine\",\"experience\",\"judge\",\"verification_engine\",\"model_router\",\"mcp_tasks\",\"generalist_agent_bridge\",\"local_agent\"]}",
+          "role": "tool"
+        },
+        {
+          "content": "The lab is read-only. I can inspect allowlisted AIRI-PC modules and task flow, but I cannot execute host actions.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "tools",
+      "id": "d7d27039f58b8f81ff0a362c",
+      "messages": [
+        {
+          "content": "Available tools are strictly allowlisted. If a tool is required, output exactly <tool_call>{\"name\":\"tool_name\",\"arguments\":{...}}</tool_call>. Never invent tool names. Tool specifications: {\"lab_describe_task_flow\": {\"description\": \"Return the sandboxed AIRI-PC task lifecycle and verification flow. This is descriptive only and cannot run a real task.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, \"lab_inspect_module\": {\"description\": \"Inspect classes/functions/docstrings for one allowlisted AIRI-PC Control Plane module.\", \"schema\": {\"additionalProperties\": false, \"properties\": {\"module\": {\"enum\": [\"task_engine\", \"experience\", \"judge\", \"verification_engine\", \"model_router\", \"mcp_tasks\", \"generalist_agent_bridge\", \"local_agent\"], \"type\": \"string\"}}, \"required\": [\"module\"], \"type\": \"object\"}}, \"lab_list_capabilities\": {\"description\": \"List the read-only AIRI-PC Lab modules and allowed sandbox capabilities. It never executes host actions.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}}",
+          "role": "system"
+        },
+        {
+          "content": "Show the AIRI-PC Lab task lifecycle before learning from a result.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"lab_describe_task_flow\",\"arguments\":{}}</tool_call>",
+          "role": "assistant"
+        },
+        {
+          "content": "{\"flow\":[\"task_engine:start\",\"bounded_operation\",\"verification_engine\",\"judge\",\"experience_record\"],\"mutation\":false,\"production_promotion\":false}",
+          "role": "tool"
+        },
+        {
+          "content": "A task is bounded, verified, judged, and only then recorded as experience. The lab does not mutate production.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "coding",
+      "id": "94c2341ce0bc4bc501a91260",
+      "messages": [
+        {
+          "content": "Available tools are strictly allowlisted. If a tool is required, output exactly <tool_call>{\"name\":\"tool_name\",\"arguments\":{...}}</tool_call>. Never invent tool names. Tool specifications: {\"lab_describe_task_flow\": {\"description\": \"Return the sandboxed AIRI-PC task lifecycle and verification flow. This is descriptive only and cannot run a real task.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, \"lab_inspect_module\": {\"description\": \"Inspect classes/functions/docstrings for one allowlisted AIRI-PC Control Plane module.\", \"schema\": {\"additionalProperties\": false, \"properties\": {\"module\": {\"enum\": [\"task_engine\", \"experience\", \"judge\", \"verification_engine\", \"model_router\", \"mcp_tasks\", \"generalist_agent_bridge\", \"local_agent\"], \"type\": \"string\"}}, \"required\": [\"module\"], \"type\": \"object\"}}, \"lab_list_capabilities\": {\"description\": \"List the read-only AIRI-PC Lab modules and allowed sandbox capabilities. It never executes host actions.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}}",
+          "role": "system"
+        },
+        {
+          "content": "Inspect AIRI-PC Lab module task_engine before using it.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"lab_inspect_module\",\"arguments\":{\"module\":\"task_engine\"}}</tool_call>",
+          "role": "assistant"
+        },
+        {
+          "content": "{\"doc\":\"\",\"name\":\"task_engine\",\"path\":\"computer/control_plane/task_engine.py\",\"symbols\":[{\"doc\":\"\",\"kind\":\"class\",\"name\":\"TaskEngine\"}]}",
+          "role": "tool"
+        },
+        {
+          "content": "task_engine is available only through the read-only lab. Key symbols: TaskEngine.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "coding",
+      "id": "79128886c6905296676d297b",
+      "messages": [
+        {
+          "content": "Available tools are strictly allowlisted. If a tool is required, output exactly <tool_call>{\"name\":\"tool_name\",\"arguments\":{...}}</tool_call>. Never invent tool names. Tool specifications: {\"lab_describe_task_flow\": {\"description\": \"Return the sandboxed AIRI-PC task lifecycle and verification flow. This is descriptive only and cannot run a real task.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, \"lab_inspect_module\": {\"description\": \"Inspect classes/functions/docstrings for one allowlisted AIRI-PC Control Plane module.\", \"schema\": {\"additionalProperties\": false, \"properties\": {\"module\": {\"enum\": [\"task_engine\", \"experience\", \"judge\", \"verification_engine\", \"model_router\", \"mcp_tasks\", \"generalist_agent_bridge\", \"local_agent\"], \"type\": \"string\"}}, \"required\": [\"module\"], \"type\": \"object\"}}, \"lab_list_capabilities\": {\"description\": \"List the read-only AIRI-PC Lab modules and allowed sandbox capabilities. It never executes host actions.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}}",
+          "role": "system"
+        },
+        {
+          "content": "Inspect AIRI-PC Lab module experience before using it.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"lab_inspect_module\",\"arguments\":{\"module\":\"experience\"}}</tool_call>",
+          "role": "assistant"
+        },
+        {
+          "content": "{\"doc\":\"\",\"name\":\"experience\",\"path\":\"computer/control_plane/experience.py\",\"symbols\":[{\"doc\":\"\",\"kind\":\"class\",\"name\":\"ExperienceStore\"}]}",
+          "role": "tool"
+        },
+        {
+          "content": "experience is available only through the read-only lab. Key symbols: ExperienceStore.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "coding",
+      "id": "c0b2cc54295f1317618ef004",
+      "messages": [
+        {
+          "content": "Available tools are strictly allowlisted. If a tool is required, output exactly <tool_call>{\"name\":\"tool_name\",\"arguments\":{...}}</tool_call>. Never invent tool names. Tool specifications: {\"lab_describe_task_flow\": {\"description\": \"Return the sandboxed AIRI-PC task lifecycle and verification flow. This is descriptive only and cannot run a real task.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, \"lab_inspect_module\": {\"description\": \"Inspect classes/functions/docstrings for one allowlisted AIRI-PC Control Plane module.\", \"schema\": {\"additionalProperties\": false, \"properties\": {\"module\": {\"enum\": [\"task_engine\", \"experience\", \"judge\", \"verification_engine\", \"model_router\", \"mcp_tasks\", \"generalist_agent_bridge\", \"local_agent\"], \"type\": \"string\"}}, \"required\": [\"module\"], \"type\": \"object\"}}, \"lab_list_capabilities\": {\"description\": \"List the read-only AIRI-PC Lab modules and allowed sandbox capabilities. It never executes host actions.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}}",
+          "role": "system"
+        },
+        {
+          "content": "Inspect AIRI-PC Lab module judge before using it.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"lab_inspect_module\",\"arguments\":{\"module\":\"judge\"}}</tool_call>",
+          "role": "assistant"
+        },
+        {
+          "content": "{\"doc\":\"\",\"name\":\"judge\",\"path\":\"computer/control_plane/judge.py\",\"symbols\":[{\"doc\":\"Independent fail-closed verifier executed against an isolated copy. The implementation loop cannot pass merely by asserting success: Judge runs explicit checks in a throw-away sandbox and emits a content-addressed attestation. Test/build commands may mutate the sandbox but never the live workspace.\",\"kind\":\"class\",\"name\":\"TrustedJudge\"}]}",
+          "role": "tool"
+        },
+        {
+          "content": "judge is available only through the read-only lab. Key symbols: TrustedJudge.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "coding",
+      "id": "e9ac72eacb0b7e74af422238",
+      "messages": [
+        {
+          "content": "Available tools are strictly allowlisted. If a tool is required, output exactly <tool_call>{\"name\":\"tool_name\",\"arguments\":{...}}</tool_call>. Never invent tool names. Tool specifications: {\"lab_describe_task_flow\": {\"description\": \"Return the sandboxed AIRI-PC task lifecycle and verification flow. This is descriptive only and cannot run a real task.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, \"lab_inspect_module\": {\"description\": \"Inspect classes/functions/docstrings for one allowlisted AIRI-PC Control Plane module.\", \"schema\": {\"additionalProperties\": false, \"properties\": {\"module\": {\"enum\": [\"task_engine\", \"experience\", \"judge\", \"verification_engine\", \"model_router\", \"mcp_tasks\", \"generalist_agent_bridge\", \"local_agent\"], \"type\": \"string\"}}, \"required\": [\"module\"], \"type\": \"object\"}}, \"lab_list_capabilities\": {\"description\": \"List the read-only AIRI-PC Lab modules and allowed sandbox capabilities. It never executes host actions.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}}",
+          "role": "system"
+        },
+        {
+          "content": "Inspect AIRI-PC Lab module verification_engine before using it.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"lab_inspect_module\",\"arguments\":{\"module\":\"verification_engine\"}}</tool_call>",
+          "role": "assistant"
+        },
+        {
+          "content": "{\"doc\":\"\",\"name\":\"verification_engine\",\"path\":\"computer/control_plane/verification_engine.py\",\"symbols\":[{\"doc\":\"\",\"kind\":\"class\",\"name\":\"VerificationEngine\"}]}",
+          "role": "tool"
+        },
+        {
+          "content": "verification_engine is available only through the read-only lab. Key symbols: VerificationEngine.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "coding",
+      "id": "91ffb7aea907ec2f3375346b",
+      "messages": [
+        {
+          "content": "Available tools are strictly allowlisted. If a tool is required, output exactly <tool_call>{\"name\":\"tool_name\",\"arguments\":{...}}</tool_call>. Never invent tool names. Tool specifications: {\"lab_describe_task_flow\": {\"description\": \"Return the sandboxed AIRI-PC task lifecycle and verification flow. This is descriptive only and cannot run a real task.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, \"lab_inspect_module\": {\"description\": \"Inspect classes/functions/docstrings for one allowlisted AIRI-PC Control Plane module.\", \"schema\": {\"additionalProperties\": false, \"properties\": {\"module\": {\"enum\": [\"task_engine\", \"experience\", \"judge\", \"verification_engine\", \"model_router\", \"mcp_tasks\", \"generalist_agent_bridge\", \"local_agent\"], \"type\": \"string\"}}, \"required\": [\"module\"], \"type\": \"object\"}}, \"lab_list_capabilities\": {\"description\": \"List the read-only AIRI-PC Lab modules and allowed sandbox capabilities. It never executes host actions.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}}",
+          "role": "system"
+        },
+        {
+          "content": "Inspect AIRI-PC Lab module model_router before using it.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"lab_inspect_module\",\"arguments\":{\"module\":\"model_router\"}}</tool_call>",
+          "role": "assistant"
+        },
+        {
+          "content": "{\"doc\":\"\",\"name\":\"model_router\",\"path\":\"computer/control_plane/model_router.py\",\"symbols\":[{\"doc\":\"Route to a qualified local generalist model only when explicitly enabled.\",\"kind\":\"class\",\"name\":\"ModelRouter\"}]}",
+          "role": "tool"
+        },
+        {
+          "content": "model_router is available only through the read-only lab. Key symbols: ModelRouter.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "coding",
+      "id": "f6005d8553f88984b12100ff",
+      "messages": [
+        {
+          "content": "Available tools are strictly allowlisted. If a tool is required, output exactly <tool_call>{\"name\":\"tool_name\",\"arguments\":{...}}</tool_call>. Never invent tool names. Tool specifications: {\"lab_describe_task_flow\": {\"description\": \"Return the sandboxed AIRI-PC task lifecycle and verification flow. This is descriptive only and cannot run a real task.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, \"lab_inspect_module\": {\"description\": \"Inspect classes/functions/docstrings for one allowlisted AIRI-PC Control Plane module.\", \"schema\": {\"additionalProperties\": false, \"properties\": {\"module\": {\"enum\": [\"task_engine\", \"experience\", \"judge\", \"verification_engine\", \"model_router\", \"mcp_tasks\", \"generalist_agent_bridge\", \"local_agent\"], \"type\": \"string\"}}, \"required\": [\"module\"], \"type\": \"object\"}}, \"lab_list_capabilities\": {\"description\": \"List the read-only AIRI-PC Lab modules and allowed sandbox capabilities. It never executes host actions.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}}",
+          "role": "system"
+        },
+        {
+          "content": "Inspect AIRI-PC Lab module mcp_tasks before using it.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"lab_inspect_module\",\"arguments\":{\"module\":\"mcp_tasks\"}}</tool_call>",
+          "role": "assistant"
+        },
+        {
+          "content": "{\"doc\":\"\",\"name\":\"mcp_tasks\",\"path\":\"computer/control_plane/mcp_tasks.py\",\"symbols\":[{\"doc\":\"Durable implementation of the MCP Tasks extension. Task records survive process restarts. A task still marked ``working`` can be resumed lazily on the next tasks/get call. Listeners receive complete public task snapshots so subscriptions/listen can emit notifications/tasks.\",\"kind\":\"class\",\"name\":\"MCPTaskStore\"}]}",
+          "role": "tool"
+        },
+        {
+          "content": "mcp_tasks is available only through the read-only lab. Key symbols: MCPTaskStore.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "coding",
+      "id": "6ddeae5212fbe6106a999def",
+      "messages": [
+        {
+          "content": "Available tools are strictly allowlisted. If a tool is required, output exactly <tool_call>{\"name\":\"tool_name\",\"arguments\":{...}}</tool_call>. Never invent tool names. Tool specifications: {\"lab_describe_task_flow\": {\"description\": \"Return the sandboxed AIRI-PC task lifecycle and verification flow. This is descriptive only and cannot run a real task.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, \"lab_inspect_module\": {\"description\": \"Inspect classes/functions/docstrings for one allowlisted AIRI-PC Control Plane module.\", \"schema\": {\"additionalProperties\": false, \"properties\": {\"module\": {\"enum\": [\"task_engine\", \"experience\", \"judge\", \"verification_engine\", \"model_router\", \"mcp_tasks\", \"generalist_agent_bridge\", \"local_agent\"], \"type\": \"string\"}}, \"required\": [\"module\"], \"type\": \"object\"}}, \"lab_list_capabilities\": {\"description\": \"List the read-only AIRI-PC Lab modules and allowed sandbox capabilities. It never executes host actions.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}}",
+          "role": "system"
+        },
+        {
+          "content": "Inspect AIRI-PC Lab module generalist_agent_bridge before using it.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"lab_inspect_module\",\"arguments\":{\"module\":\"generalist_agent_bridge\"}}</tool_call>",
+          "role": "assistant"
+        },
+        {
+          "content": "{\"doc\":\"\",\"name\":\"generalist_agent_bridge\",\"path\":\"computer/control_plane/generalist_agent_bridge.py\",\"symbols\":[{\"doc\":\"\",\"kind\":\"function\",\"name\":\"tool_specs\"},{\"doc\":\"\",\"kind\":\"function\",\"name\":\"execute_readonly_tool\"},{\"doc\":\"\",\"kind\":\"function\",\"name\":\"run_generalist_agent\"}]}",
+          "role": "tool"
+        },
+        {
+          "content": "generalist_agent_bridge is available only through the read-only lab. Key symbols: tool_specs, execute_readonly_tool, run_generalist_agent.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "coding",
+      "id": "dc27b3ebdd733c4bab94bcd9",
+      "messages": [
+        {
+          "content": "Available tools are strictly allowlisted. If a tool is required, output exactly <tool_call>{\"name\":\"tool_name\",\"arguments\":{...}}</tool_call>. Never invent tool names. Tool specifications: {\"lab_describe_task_flow\": {\"description\": \"Return the sandboxed AIRI-PC task lifecycle and verification flow. This is descriptive only and cannot run a real task.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, \"lab_inspect_module\": {\"description\": \"Inspect classes/functions/docstrings for one allowlisted AIRI-PC Control Plane module.\", \"schema\": {\"additionalProperties\": false, \"properties\": {\"module\": {\"enum\": [\"task_engine\", \"experience\", \"judge\", \"verification_engine\", \"model_router\", \"mcp_tasks\", \"generalist_agent_bridge\", \"local_agent\"], \"type\": \"string\"}}, \"required\": [\"module\"], \"type\": \"object\"}}, \"lab_list_capabilities\": {\"description\": \"List the read-only AIRI-PC Lab modules and allowed sandbox capabilities. It never executes host actions.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}}",
+          "role": "system"
+        },
+        {
+          "content": "Inspect AIRI-PC Lab module local_agent before using it.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"lab_inspect_module\",\"arguments\":{\"module\":\"local_agent\"}}</tool_call>",
+          "role": "assistant"
+        },
+        {
+          "content": "{\"doc\":\"\",\"name\":\"local_agent\",\"path\":\"computer/control_plane/local_agent.py\",\"symbols\":[{\"doc\":\"\",\"kind\":\"function\",\"name\":\"ask_local_model\"},{\"doc\":\"\",\"kind\":\"function\",\"name\":\"ask_local_model_changes\"},{\"doc\":\"\",\"kind\":\"function\",\"name\":\"apply_patch\"},{\"doc\":\"\",\"kind\":\"function\",\"name\":\"run_tests\"},{\"doc\":\"\",\"kind\":\"function\",\"name\":\"autonomous_cycle\"},{\"doc\":\"\",\"kind\":\"function\",\"name\":\"provider_status\"}]}",
+          "role": "tool"
+        },
+        {
+          "content": "local_agent is available only through the read-only lab. Key symbols: ask_local_model, ask_local_model_changes, apply_patch, run_tests, autonomous_cycle, provider_status.",
           "role": "assistant"
         }
       ]

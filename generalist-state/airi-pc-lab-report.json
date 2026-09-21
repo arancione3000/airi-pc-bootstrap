@@ -1,0 +1,185 @@
+{
+  "champion": {
+    "error": "ValueError:model output is not a valid tool-call JSON object",
+    "mode": "read_only_sandbox",
+    "ok": false,
+    "tool_call_valid": false,
+    "version": "airi-pc-lab-v1"
+  },
+  "champion_experience": {
+    "reason": "probe_not_verified",
+    "stored": false
+  },
+  "learning": {
+    "domains": {
+      "coding": 8,
+      "tools": 2
+    },
+    "training_rows": 10,
+    "verified_experience_rows": 0,
+    "version": "airi-pc-lab-v1"
+  },
+  "mode": "read_only_sandbox",
+  "research": {
+    "error": "ValueError:model output is not a valid tool-call JSON object",
+    "mode": "read_only_sandbox",
+    "ok": false,
+    "tool_call_valid": false,
+    "version": "airi-pc-lab-v1"
+  },
+  "research_experience": {
+    "reason": "probe_not_verified",
+    "stored": false
+  },
+  "snapshot": {
+    "capabilities": [
+      "list_capabilities",
+      "inspect_module",
+      "describe_task_flow"
+    ],
+    "denied_capabilities": [
+      "shell",
+      "network",
+      "filesystem_write",
+      "credentials",
+      "phone_control",
+      "production_promotion"
+    ],
+    "mode": "read_only_sandbox",
+    "modules": [
+      {
+        "doc": "",
+        "name": "task_engine",
+        "path": "computer/control_plane/task_engine.py",
+        "symbols": [
+          {
+            "doc": "",
+            "kind": "class",
+            "name": "TaskEngine"
+          }
+        ]
+      },
+      {
+        "doc": "",
+        "name": "experience",
+        "path": "computer/control_plane/experience.py",
+        "symbols": [
+          {
+            "doc": "",
+            "kind": "class",
+            "name": "ExperienceStore"
+          }
+        ]
+      },
+      {
+        "doc": "",
+        "name": "judge",
+        "path": "computer/control_plane/judge.py",
+        "symbols": [
+          {
+            "doc": "Independent fail-closed verifier executed against an isolated copy. The implementation loop cannot pass merely by asserting success: Judge runs explicit checks in a throw-away sandbox and emits a content-addressed attestation. Test/build commands may mutate the sandbox but never the live workspace.",
+            "kind": "class",
+            "name": "TrustedJudge"
+          }
+        ]
+      },
+      {
+        "doc": "",
+        "name": "verification_engine",
+        "path": "computer/control_plane/verification_engine.py",
+        "symbols": [
+          {
+            "doc": "",
+            "kind": "class",
+            "name": "VerificationEngine"
+          }
+        ]
+      },
+      {
+        "doc": "",
+        "name": "model_router",
+        "path": "computer/control_plane/model_router.py",
+        "symbols": [
+          {
+            "doc": "Route to a qualified local generalist model only when explicitly enabled.",
+            "kind": "class",
+            "name": "ModelRouter"
+          }
+        ]
+      },
+      {
+        "doc": "",
+        "name": "mcp_tasks",
+        "path": "computer/control_plane/mcp_tasks.py",
+        "symbols": [
+          {
+            "doc": "Durable implementation of the MCP Tasks extension. Task records survive process restarts. A task still marked ``working`` can be resumed lazily on the next tasks/get call. Listeners receive complete public task snapshots so subscriptions/listen can emit notifications/tasks.",
+            "kind": "class",
+            "name": "MCPTaskStore"
+          }
+        ]
+      },
+      {
+        "doc": "",
+        "name": "generalist_agent_bridge",
+        "path": "computer/control_plane/generalist_agent_bridge.py",
+        "symbols": [
+          {
+            "doc": "",
+            "kind": "function",
+            "name": "tool_specs"
+          },
+          {
+            "doc": "",
+            "kind": "function",
+            "name": "execute_readonly_tool"
+          },
+          {
+            "doc": "",
+            "kind": "function",
+            "name": "run_generalist_agent"
+          }
+        ]
+      },
+      {
+        "doc": "",
+        "name": "local_agent",
+        "path": "computer/control_plane/local_agent.py",
+        "symbols": [
+          {
+            "doc": "",
+            "kind": "function",
+            "name": "ask_local_model"
+          },
+          {
+            "doc": "",
+            "kind": "function",
+            "name": "ask_local_model_changes"
+          },
+          {
+            "doc": "",
+            "kind": "function",
+            "name": "apply_patch"
+          },
+          {
+            "doc": "",
+            "kind": "function",
+            "name": "run_tests"
+          },
+          {
+            "doc": "",
+            "kind": "function",
+            "name": "autonomous_cycle"
+          },
+          {
+            "doc": "",
+            "kind": "function",
+            "name": "provider_status"
+          }
+        ]
+      }
+    ],
+    "version": "airi-pc-lab-v1"
+  },
+  "version": "airi-pc-lab-v1"
+}
