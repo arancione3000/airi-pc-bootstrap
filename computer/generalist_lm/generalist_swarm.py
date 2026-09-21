@@ -1326,7 +1326,7 @@ def finalize_swarm(
             "production_qualification_separate": True,
             "external_pretrained": False,
             "adaptive_curriculum": True,
-            "progressive_scaling_max_parameters": 2_000_000,
+            "progressive_scaling_max_parameters": 7_000_000,
             "scale_probe_retention": "reserve one safe scale survivor through reductions",
             "scale_budget_adaptive": True,
             "adaptive_pretraining_budget": {
@@ -1391,10 +1391,10 @@ def main(argv=None) -> int:
     prepare.add_argument("output")
     prepare.add_argument("--mathesis-state")
     prepare.add_argument("--population-size", type=int, default=8)
-    prepare.add_argument("--max-params", type=int, default=2_000_000)
+    prepare.add_argument("--max-params", type=int, default=7_000_000)
     prepare.add_argument("--max-context", type=int, default=512)
-    prepare.add_argument("--max-width", type=int, default=256)
-    prepare.add_argument("--max-layers", type=int, default=6)
+    prepare.add_argument("--max-width", type=int, default=384)
+    prepare.add_argument("--max-layers", type=int, default=10)
     prepare.add_argument("--curriculum-max-rows", type=int, default=4000)
     prepare.add_argument("--data-max-new-bytes", type=int, default=8_000_000)
     prepare.add_argument("--data-max-total-bytes", type=int, default=50_000_000)
