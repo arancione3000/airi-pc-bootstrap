@@ -40,7 +40,7 @@ from .research_cycle import (
 from .runtime import GeneralistRuntime
 
 
-GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v2"
+GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v3"
 
 
 def _atomic_json(path: Path, payload: Any) -> None:
@@ -391,6 +391,11 @@ def prepare_swarm(
             "progressive_scaling": True,
             "scale_probe_retention": "reserve one safe scale survivor through reductions",
             "scale_budget_adaptive": True,
+            "adaptive_pretraining_budget": True,
+            "domain_balanced_pretraining": True,
+            "language_gap_routing": True,
+            "autoregressive_similarity_ranking": True,
+            "inherited_sft_lr_cap": 0.001,
             "weight_inheritance": True,
             "automatic_data_growth_fail_closed": True,
         },
@@ -435,11 +440,40 @@ def _corpus_documents(
             max_total_bytes=max(0, int(max_external_bytes)),
             max_documents=10_000,
         )
-        documents.extend(loaded.documents)
+        manifest_domains: dict[str, str] = {}
+        try:
+            manifest = _load_json(Path(state_dir) / "autodata" / "manifest.json")
+            for item in manifest.get("files", []):
+                if not isinstance(item, dict):
+                    continue
+                digest = str(item.get("sha256") or "")
+                domain = str(item.get("domain") or "general")
+                if digest:
+                    manifest_domains[digest] = domain
+        except Exception:
+            manifest_domains = {}
+
+        external_documents = [
+            CorpusDocument(
+                source=document.source,
+                text=document.text,
+                sha256=document.sha256,
+                bytes=document.bytes,
+                domain=manifest_domains.get(document.sha256, "general"),
+            )
+            for document in loaded.documents
+        ]
+        documents.extend(external_documents)
+        external_domain_documents: dict[str, int] = {}
+        for document in external_documents:
+            external_domain_documents[document.domain] = (
+                external_domain_documents.get(document.domain, 0) + 1
+            )
         external_report = {
-            "documents": len(loaded.documents),
+            "documents": len(external_documents),
             "total_bytes": loaded.total_bytes,
             "skipped": len(loaded.skipped),
+            "domain_documents": external_domain_documents,
         }
 
     # Cross-source content dedup.
@@ -453,6 +487,42 @@ def _corpus_documents(
         "documents": len(final),
         "bytes": sum(row.bytes for row in final),
     }
+
+
+def _adaptive_pretrain_steps(
+    requested_steps: int,
+    *,
+    corpus_bytes: int,
+    stage: int,
+    scale_multiplier: float = 1.0,
+) -> int:
+    """Increase grounded pretraining only when there is corpus to justify it.
+
+    The budget grows with corpus size and later successive-halving stages, but
+    remains capped so autonomous CPU runs stay bounded.
+    """
+    requested = max(0, int(requested_steps))
+    if requested <= 0:
+        return 0
+
+    size = max(0, int(corpus_bytes))
+    if size >= 8_000_000:
+        corpus_multiplier = 4.0
+    elif size >= 2_000_000:
+        corpus_multiplier = 3.0
+    elif size >= 512_000:
+        corpus_multiplier = 2.0
+    else:
+        corpus_multiplier = 1.0
+
+    stage_multiplier = 1.0 + 0.25 * max(0, min(2, int(stage) - 1))
+    effective = int(math.ceil(
+        requested
+        * corpus_multiplier
+        * stage_multiplier
+        * max(1.0, float(scale_multiplier))
+    ))
+    return min(24, max(requested, effective))
 
 
 def _domain_regression(
@@ -598,13 +668,12 @@ def run_candidate(
             requested_steps,
             int(math.ceil(requested_steps * scale_budget_multiplier)),
         )
-        if requested_pretrain_steps:
-            effective_pretrain_steps = max(
-                requested_pretrain_steps,
-                int(math.ceil(
-                    requested_pretrain_steps * scale_budget_multiplier
-                )),
-            )
+    effective_pretrain_steps = _adaptive_pretrain_steps(
+        requested_pretrain_steps,
+        corpus_bytes=int(corpus_report.get("bytes", 0) or 0),
+        stage=int(stage),
+        scale_multiplier=scale_budget_multiplier,
+    )
 
     reports = []
     runtimes: list[tuple[GeneralistRuntime, dict[str, Any]]] = []
@@ -713,6 +782,14 @@ def run_candidate(
         float(item["report"].get("generation_exact_accuracy", 0.0))
         for item in valid
     ]
+    generation_similarities = [
+        float(item["report"].get("generation_similarity", 0.0) or 0.0)
+        for item in valid
+    ]
+    generation_nonempty_rates = [
+        float(item["report"].get("generation_nonempty_rate", 0.0) or 0.0)
+        for item in valid
+    ]
     regressions = [
         _domain_regression(plan["champion_report"], item["report"])
         for item in valid
@@ -746,6 +823,13 @@ def run_candidate(
         "mean_nll_per_byte": mean(nlls),
         "best_nll_per_byte": min(nlls),
         "mean_generation_accuracy": mean(generations),
+        "mean_generation_similarity": mean(generation_similarities),
+        "mean_generation_nonempty_rate": mean(generation_nonempty_rates),
+        "pretrain_budget_multiplier": (
+            float(effective_pretrain_steps / requested_pretrain_steps)
+            if requested_pretrain_steps
+            else 0.0
+        ),
         "worst_domain_regression": max(regressions),
         "parameters": int(best_report["parameters"]),
         "score": float(best_report["score"]),
@@ -813,6 +897,8 @@ def select_survivors(
     rank_key = lambda row: (
         0 if row.get("any_seed_eligible") else 1,
         -float(row.get("mean_generation_accuracy", 0.0)),
+        -float(row.get("mean_generation_similarity", 0.0)),
+        -float(row.get("mean_generation_nonempty_rate", 0.0)),
         float(row.get("mean_nll_per_byte", float("inf"))),
         int(row.get("parameters", 1 << 60)),
         -float(row.get("score", 0.0)),
@@ -885,6 +971,8 @@ def finalize_swarm(
         finalists.sort(
             key=lambda pair: (
                 -float(pair[1].get("mean_generation_accuracy", 0.0)),
+                -float(pair[1].get("mean_generation_similarity", 0.0)),
+                -float(pair[1].get("mean_generation_nonempty_rate", 0.0)),
                 float(pair[1].get("mean_nll_per_byte", float("inf"))),
                 int(pair[1].get("parameters", 1 << 60)),
             )
