@@ -344,9 +344,33 @@ def _export_checkpoint(
         opset_version=18,
         do_constant_folding=True,
         dynamo=True,
+        external_data=False,
     )
-    onnx_model = onnx.load(str(model_path))
+    onnx_model = onnx.load(str(model_path), load_external_data=False)
+    external_initializers = [
+        initializer.name
+        for initializer in onnx_model.graph.initializer
+        if int(initializer.data_location) == int(onnx.TensorProto.EXTERNAL)
+        or bool(initializer.external_data)
+    ]
+    if external_initializers:
+        raise RuntimeError(
+            f"mobile ONNX for {slot_name} is not self-contained: "
+            f"external initializers={external_initializers[:8]}"
+        )
     onnx.checker.check_model(onnx_model)
+
+    # No sidecar is permitted in the Android bundle. Catch exporter behavior
+    # changes even if ONNX metadata is malformed or incomplete.
+    sidecars = sorted(
+        path.name
+        for path in output_dir.glob("model.onnx*")
+        if path.name != "model.onnx"
+    )
+    if sidecars:
+        raise RuntimeError(
+            f"mobile ONNX for {slot_name} emitted forbidden sidecars: {sidecars}"
+        )
 
     session = ort.InferenceSession(
         str(model_path),
