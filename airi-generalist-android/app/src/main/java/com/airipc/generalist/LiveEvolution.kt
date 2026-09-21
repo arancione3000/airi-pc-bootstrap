@@ -3,22 +3,17 @@ package com.airipc.generalist
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 private const val ACTIONS_BASE =
     "https://api.github.com/repos/arancione3000/airi-pc-bootstrap/actions"
-private const val CONTINUUM_RUNS =
-    "$ACTIONS_BASE/workflows/generalist-continuum.yml/runs?branch=main&per_page=1"
-private const val BOOTSTRAP_RUNS =
-    "$ACTIONS_BASE/workflows/generalist-bootstrap.yml/runs?branch=main&per_page=1"
-private const val STATE_RAW =
-    "https://raw.githubusercontent.com/arancione3000/airi-pc-bootstrap/generalist-state/generalist-state"
-private const val BOOTSTRAP_PROGRESS =
-    "$STATE_RAW/bootstrap-data/progress.json"
-private const val BOOTSTRAP_MANIFEST =
-    "$STATE_RAW/bootstrap-data/manifest.json"
+private const val MAIN_RUNS =
+    "$ACTIONS_BASE/runs?branch=main&per_page=30"
+private const val CONTINUUM_NAME = "AIRI Generalist Research Continuum"
+private const val BOOTSTRAP_NAME = "AIRI Generalist Language Bootstrap"
+private const val STATE_BRANCH = "generalist-state"
+private const val STATE_ROOT = "generalist-state"
 
 data class LiveJob(
     val name: String,
@@ -61,6 +56,7 @@ data class BootstrapProgress(
 }
 
 data class LiveEvolutionSnapshot(
+    val stateRevision: String,
     val runId: Long,
     val runNumber: Int,
     val status: String,
@@ -105,14 +101,25 @@ class LiveEvolutionRepository {
         .readTimeout(30, TimeUnit.SECONDS)
         .callTimeout(45, TimeUnit.SECONDS)
         .build()
+    private val github = GitHubSnapshotClient(client)
 
     suspend fun fetch(): LiveEvolutionSnapshot = withContext(Dispatchers.IO) {
-        val runs = getJson(CONTINUUM_RUNS)
+        val stateRevision = github.resolveBranchSha(STATE_BRANCH)
+        val runs = github.getJson(MAIN_RUNS)
         val array = runs.getJSONArray("workflow_runs")
-        check(array.length() > 0) { "Nessun Continuum trovato" }
-        val run = array.getJSONObject(0)
+
+        fun latestRun(name: String): JSONObject? {
+            for (index in 0 until array.length()) {
+                val candidate = array.getJSONObject(index)
+                if (candidate.optString("name") == name) return candidate
+            }
+            return null
+        }
+
+        val run = latestRun(CONTINUUM_NAME)
+            ?: error("Nessun Continuum trovato")
         val runId = run.getLong("id")
-        val jobsRaw = getJson("$ACTIONS_BASE/runs/$runId/jobs?per_page=100")
+        val jobsRaw = github.getJson("$ACTIONS_BASE/runs/$runId/jobs?per_page=100")
         val jobsArray = jobsRaw.getJSONArray("jobs")
         val jobs = buildList {
             for (i in 0 until jobsArray.length()) {
@@ -128,10 +135,7 @@ class LiveEvolutionRepository {
             }
         }
 
-        val bootstrapRun = getJsonOrNull(BOOTSTRAP_RUNS)
-            ?.optJSONArray("workflow_runs")
-            ?.takeIf { it.length() > 0 }
-            ?.getJSONObject(0)
+        val bootstrapRun = latestRun(BOOTSTRAP_NAME)
             ?.let { raw ->
                 BootstrapRun(
                     runId = raw.optLong("id"),
@@ -143,8 +147,14 @@ class LiveEvolutionRepository {
                 )
             }
 
-        val progressRaw = getJsonOrNull(BOOTSTRAP_PROGRESS)
-        val manifestRaw = getJsonOrNull(BOOTSTRAP_MANIFEST)
+        val progressRaw = getStateJsonOrNull(
+            stateRevision,
+            "$STATE_ROOT/bootstrap-data/progress.json",
+        )
+        val manifestRaw = getStateJsonOrNull(
+            stateRevision,
+            "$STATE_ROOT/bootstrap-data/manifest.json",
+        )
         val bootstrap = if (progressRaw != null && manifestRaw != null) {
             parseBootstrap(progressRaw, manifestRaw)
         } else {
@@ -152,6 +162,7 @@ class LiveEvolutionRepository {
         }
 
         LiveEvolutionSnapshot(
+            stateRevision = stateRevision,
             runId = runId,
             runNumber = run.optInt("run_number"),
             status = run.optString("status"),
@@ -212,26 +223,13 @@ class LiveEvolutionRepository {
         return optDouble(key).takeIf { it.isFinite() }
     }
 
-    private fun getJsonOrNull(url: String): JSONObject? =
+    private fun getStateJsonOrNull(
+        revision: String,
+        path: String,
+    ): JSONObject? =
         try {
-            getJson(url)
+            github.getJsonAtRevision(revision, path)
         } catch (_: Exception) {
             null
         }
-
-    private fun getJson(url: String): JSONObject {
-        val request = Request.Builder()
-            .url(url)
-            .header("Accept", "application/vnd.github+json")
-            .header("X-GitHub-Api-Version", "2022-11-28")
-            .header("User-Agent", "AIRI-Generalist-Lab/1.3")
-            .build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                error("GitHub API HTTP ${response.code}")
-            }
-            val text = response.body?.string() ?: error("Risposta GitHub vuota")
-            return JSONObject(text)
-        }
-    }
 }

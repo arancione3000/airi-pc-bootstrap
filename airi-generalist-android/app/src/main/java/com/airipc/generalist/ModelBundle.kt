@@ -4,7 +4,6 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
@@ -12,9 +11,6 @@ import java.util.concurrent.TimeUnit
 
 private const val REPO = "arancione3000/airi-pc-bootstrap"
 private const val MOBILE_BRANCH = "generalist-mobile"
-private const val RAW_BASE =
-    "https://raw.githubusercontent.com/$REPO/$MOBILE_BRANCH"
-private const val MANIFEST_URL = "$RAW_BASE/manifest.json"
 
 data class BundleFileInfo(
     val sha256: String,
@@ -43,6 +39,7 @@ data class ModelSlot(
 
 data class MobileManifest(
     val schema: Int,
+    val mobileRevision: String,
     val stateSha: String,
     val cycle: Int,
     val generatedAt: Long,
@@ -57,6 +54,7 @@ data class MobileManifest(
 data class ManifestFetch(
     val manifest: MobileManifest,
     val freshFromNetwork: Boolean,
+    val mobileRevision: String,
 )
 
 data class InstalledBundle(
@@ -70,28 +68,43 @@ data class InstalledBundle(
 class BundleRepository(context: Context) {
     private val root = File(context.filesDir, "airi-generalist-models").apply { mkdirs() }
     private val cachedManifest = File(root, "manifest.json")
+    private val cachedRevision = File(root, "manifest-revision.txt")
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
         .callTimeout(120, TimeUnit.SECONDS)
         .build()
+    private val github = GitHubSnapshotClient(client, REPO)
 
     suspend fun fetchManifest(): ManifestFetch = withContext(Dispatchers.IO) {
         try {
-            val text = getBytes(MANIFEST_URL).toString(Charsets.UTF_8)
-            val manifest = parseManifest(text)
+            val revision = github.resolveBranchSha(MOBILE_BRANCH)
+            val text = github.getTextAtRevision(revision, "manifest.json")
+            val manifest = parseManifest(text, revision)
             val tmp = File(root, "manifest.json.tmp")
             tmp.writeText(text)
             if (cachedManifest.exists()) cachedManifest.delete()
             check(tmp.renameTo(cachedManifest))
-            ManifestFetch(manifest, true)
+            cachedRevision.writeText(revision)
+            ManifestFetch(manifest, true, revision)
         } catch (network: Exception) {
             if (!cachedManifest.isFile) throw network
-            ManifestFetch(parseManifest(cachedManifest.readText()), false)
+            val revision = cachedRevision.takeIf { it.isFile }
+                ?.readText()
+                ?.trim()
+                .orEmpty()
+            ManifestFetch(
+                parseManifest(cachedManifest.readText(), revision),
+                false,
+                revision,
+            )
         }
     }
 
-    suspend fun ensureBundle(slot: ModelSlot): InstalledBundle = withContext(Dispatchers.IO) {
+    suspend fun ensureBundle(
+        slot: ModelSlot,
+        mobileRevision: String,
+    ): InstalledBundle = withContext(Dispatchers.IO) {
         val modelHash = slot.files["model.onnx"]?.sha256
             ?: error("Manifest mobile privo di model.onnx")
         val directory = File(root, "${slot.name}-${modelHash.take(16)}").apply { mkdirs() }
@@ -99,7 +112,11 @@ class BundleRepository(context: Context) {
         for ((name, info) in slot.files) {
             val target = File(directory, name)
             if (!target.isFile || sha256(target) != info.sha256) {
-                val bytes = getBytes("$RAW_BASE/${slot.path}/$name")
+                check(mobileRevision.isNotBlank()) { "Revisione mobile mancante" }
+                val bytes = github.getBytesAtRevision(
+                    mobileRevision,
+                    "${slot.path}/$name",
+                )
                 val tmp = File(directory, "$name.tmp")
                 tmp.writeBytes(bytes)
                 check(sha256(tmp) == info.sha256) {
@@ -128,17 +145,6 @@ class BundleRepository(context: Context) {
         InstalledBundle(slot, directory, model, config, tokenizer)
     }
 
-    private fun getBytes(url: String): ByteArray {
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", "AIRI-Generalist-Lab/1.0")
-            .build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("HTTP ${response.code}: $url")
-            return response.body?.bytes() ?: error("Risposta vuota: $url")
-        }
-    }
-
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input ->
@@ -152,7 +158,10 @@ class BundleRepository(context: Context) {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    private fun parseManifest(text: String): MobileManifest {
+    private fun parseManifest(
+        text: String,
+        mobileRevision: String,
+    ): MobileManifest {
         val root = JSONObject(text)
         check(root.getInt("schema") == 1)
         val rawSlots = root.getJSONObject("slots")
@@ -190,6 +199,7 @@ class BundleRepository(context: Context) {
         }
         return MobileManifest(
             schema = root.getInt("schema"),
+            mobileRevision = mobileRevision,
             stateSha = root.optString("state_sha"),
             cycle = root.optInt("cycle", 0),
             generatedAt = root.optLong("generated_at", 0L),

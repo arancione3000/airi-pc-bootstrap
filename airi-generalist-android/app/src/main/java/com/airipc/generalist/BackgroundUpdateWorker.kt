@@ -17,9 +17,14 @@ class ModelUpdateWorker(
     override suspend fun doWork(): Result {
         return try {
             val repository = BundleRepository(applicationContext)
-            val manifest = repository.fetchManifest().manifest
-            manifest.slots["champion"]?.let { repository.ensureBundle(it) }
-            manifest.slots["research"]?.let { repository.ensureBundle(it) }
+            val fetched = repository.fetchManifest()
+            val manifest = fetched.manifest
+            manifest.slots["champion"]?.let {
+                repository.ensureBundle(it, fetched.mobileRevision)
+            }
+            manifest.slots["research"]?.let {
+                repository.ensureBundle(it, fetched.mobileRevision)
+            }
             Result.success()
         } catch (_: Exception) {
             Result.retry()
