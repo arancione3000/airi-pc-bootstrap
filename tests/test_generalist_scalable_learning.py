@@ -443,3 +443,143 @@ def test_generalist_data_growth_rejects_unknown_license(tmp_path: Path):
     )
     assert result["added_files"] == 0
     assert any("license" in row["reason"] for row in result["rejected"])
+
+
+
+def test_generalist_swarm_reducer_prefers_safe_generation_and_nll(tmp_path: Path):
+    import json
+
+    from generalist_lm.generalist_swarm import select_survivors
+
+    root = tmp_path / "results"
+    root.mkdir()
+    rows = [
+        {
+            "index": 0,
+            "eligible": False,
+            "generation": 0.0,
+            "nll": 4.0,
+            "regression": 0.01,
+            "params": 100_000,
+        },
+        {
+            "index": 1,
+            "eligible": True,
+            "generation": 0.0,
+            "nll": 4.2,
+            "regression": 0.01,
+            "params": 120_000,
+        },
+        {
+            "index": 2,
+            "eligible": False,
+            "generation": 0.2,
+            "nll": 4.5,
+            "regression": 0.02,
+            "params": 150_000,
+        },
+        {
+            "index": 3,
+            "eligible": True,
+            "generation": 0.1,
+            "nll": 4.1,
+            "regression": 0.50,
+            "params": 110_000,
+        },
+    ]
+    for row in rows:
+        folder = root / str(row["index"])
+        folder.mkdir()
+        payload = {
+            "ok": True,
+            "version": "airi-generalist-free-speed-v1",
+            "cycle": 1,
+            "stage": 1,
+            "steps": 3,
+            "candidate_index": row["index"],
+            "candidate_id": f"g-{row['index']}",
+            "kind": "architecture",
+            "genome": {},
+            "reports": [],
+            "all_seed_eligible": row["eligible"],
+            "any_seed_eligible": row["eligible"],
+            "mean_nll_per_byte": row["nll"],
+            "best_nll_per_byte": row["nll"],
+            "mean_generation_accuracy": row["generation"],
+            "worst_domain_regression": row["regression"],
+            "parameters": row["params"],
+            "score": 10.0,
+            "corpus": {},
+            "checkpoint_dir": "best-checkpoint",
+            "external_pretrained": False,
+        }
+        (folder / "result.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    output = tmp_path / "selection.json"
+    result = select_survivors([root], output, survivors=2)
+    selected = [row["index"] for row in result["selected"]]
+    assert 3 not in selected  # catastrophic domain regression is cut early
+    assert 1 in selected      # fully eligible candidate survives
+    assert len(selected) == 2
+
+
+def test_generalist_swarm_plan_contains_progressive_scale_and_adaptive_policy(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    from generalist_lm.evolution import GeneralistGenome
+    from generalist_lm.runtime import GeneralistRuntime
+    from generalist_lm.generalist_swarm import prepare_swarm
+    from generalist_lm.model import GeneralistLMConfig
+
+    state = tmp_path / "state"
+    champion = state / "champion"
+    state.mkdir()
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        dropout=0.0,
+    ).validate()
+    GeneralistRuntime.fresh(cfg).save_checkpoint(
+        champion,
+        metadata={"role": "research_champion", "production_qualified": False},
+    )
+    genome = GeneralistGenome(
+        generation=1,
+        parent_id="seed",
+        genome_id="tiny-champion",
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        retrieval_adapter=False,
+        symbolic_adapter=False,
+        code_adapter=False,
+        data_adapter=False,
+        reasoning_depth=1,
+    ).validate()
+    (state / "champion-genome.json").write_text(
+        json.dumps(genome.to_dict()),
+        encoding="utf-8",
+    )
+
+    plan = prepare_swarm(
+        state,
+        tmp_path / "plan.json",
+        population_size=4,
+        max_params=2_000_000,
+        max_context=512,
+        max_width=256,
+        max_layers=6,
+        grow_data=False,
+    )
+    assert plan["ok"] is True
+    assert len(plan["candidates"]) == 4
+    assert plan["policy"]["parallel_candidates"] is True
+    assert plan["policy"]["adaptive_curriculum"] is True
+    assert plan["progressive_scaling"]["target_parameters"] == 250_000
+    assert plan["progressive_scaling"]["candidate_generated"] is True
+    assert any(row["kind"] == "progressive_scale" for row in plan["candidates"])
