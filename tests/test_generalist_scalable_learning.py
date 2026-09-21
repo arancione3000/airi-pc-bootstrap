@@ -1382,3 +1382,25 @@ def test_generalist_phase4_bpe_refreshes_only_until_target_vocab():
         bpe_max_bytes=50_000,
     )
     assert stable is refreshed
+
+
+def test_generalist_phase4_bpe_extension_preserves_existing_token_ids():
+    from generalist_lm.bpe_tokenizer import extend_bpe, train_bpe
+
+    text = (
+        "Natural language models learn repeated words and useful sentence patterns. "
+        "Language improves when repeated patterns remain stable across training. "
+    ) * 40
+    source = train_bpe([text], vocab_size=300, max_bytes=40_000)
+    extended = extend_bpe(
+        source,
+        [text],
+        vocab_size=min(340, source.vocab_size + 40),
+        max_bytes=40_000,
+    )
+
+    assert extended.merges[: len(source.merges)] == source.merges
+    assert extended.vocab_size >= source.vocab_size
+    for token_id in range(source.vocab_size):
+        if token_id >= 8:
+            assert extended.token_bytes(token_id) == source.token_bytes(token_id)

@@ -236,3 +236,70 @@ def train_bpe(
         next_id += 1
 
     return BPETokenizer(tuple(merges))
+
+
+def extend_bpe(
+    source: BPETokenizer,
+    texts: Iterable[str],
+    *,
+    vocab_size: int,
+    min_frequency: int = 2,
+    max_bytes: int = 256_000,
+) -> BPETokenizer:
+    """Extend an existing BPE vocabulary without renumbering learned tokens.
+
+    Existing merges stay as an immutable prefix. Only additional merge rules
+    are learned, so old token ids and their embeddings remain reusable.
+    """
+    if not isinstance(source, BPETokenizer):
+        raise TypeError("source must be a BPETokenizer")
+    target_vocab = max(
+        int(source.vocab_size),
+        min(int(vocab_size), BYTE_VOCAB_SIZE + MAX_MERGES),
+    )
+    if target_vocab <= int(source.vocab_size):
+        return source
+
+    min_frequency = max(2, int(min_frequency))
+    max_bytes = max(1, int(max_bytes))
+    sequences: list[list[int]] = []
+    consumed = 0
+
+    for text in texts:
+        raw = str(text).encode("utf-8", errors="replace")
+        if not raw:
+            continue
+        if consumed >= max_bytes:
+            break
+        raw = raw[: max(0, max_bytes - consumed)]
+        consumed += len(raw)
+        if not raw:
+            continue
+        seq = [BYTE_OFFSET + byte for byte in raw]
+        next_id = BYTE_VOCAB_SIZE
+        for pair in source.merges:
+            seq = _replace_pair(seq, pair, next_id)
+            next_id += 1
+        sequences.append(seq)
+
+    merges = list(source.merges)
+    next_id = BYTE_VOCAB_SIZE + len(merges)
+    while next_id < target_vocab:
+        counts: dict[tuple[int, int], int] = {}
+        for seq in sequences:
+            for i in range(len(seq) - 1):
+                pair = (seq[i], seq[i + 1])
+                counts[pair] = counts.get(pair, 0) + 1
+        if not counts:
+            break
+        best_pair, best_count = min(
+            counts.items(),
+            key=lambda item: (-item[1], item[0][0], item[0][1]),
+        )
+        if best_count < min_frequency:
+            break
+        merges.append(best_pair)
+        sequences = [_replace_pair(seq, best_pair, next_id) for seq in sequences]
+        next_id += 1
+
+    return BPETokenizer(tuple(merges))

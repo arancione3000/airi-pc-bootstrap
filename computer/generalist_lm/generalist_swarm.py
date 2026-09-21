@@ -351,6 +351,18 @@ def prepare_swarm(
         )
         offset += 1
 
+    champion_vocab_size = int(getattr(champion_runtime.tokenizer, "vocab_size", 0) or 0)
+    bpe_growth_target = champion_vocab_size
+    if (
+        candidates
+        and "language_gap" in set(signals)
+        and champion_genome.tokenizer_version == "bpe-v1"
+        and champion_vocab_size < 1024
+    ):
+        bpe_growth_target = min(1024, champion_vocab_size + 128)
+        candidates[0]["kind"] = "language_bpe_probe"
+        candidates[0]["bpe_vocab_target"] = int(bpe_growth_target)
+
     plan = {
         "ok": bool(candidates),
         "version": GENERALIST_SWARM_VERSION,
@@ -363,6 +375,16 @@ def prepare_swarm(
         "domain_weights": domain_weights,
         "data_growth": data_report,
         "plateau": plateau,
+        "progressive_tokenizer": {
+            "current_vocab_size": champion_vocab_size,
+            "target_vocab_size": bpe_growth_target,
+            "maximum_vocab_size": 1024,
+            "growth_per_probe": 128,
+            "probe_generated": any(
+                row.get("kind") == "language_bpe_probe"
+                for row in candidates
+            ),
+        },
         "progressive_scaling": {
             "current_parameters": current_params,
             "target_parameters": target,
@@ -617,18 +639,28 @@ def run_candidate(
     )
     language_bridge_rows = build_language_bridge_rows(
         documents,
-        max_rows=(96 if "language_gap" in set(plan.get("signals") or []) else 48),
+        max_rows=(32 if "language_gap" in set(plan.get("signals") or []) else 16),
         seed=int(plan["cycle"]),
     )
     training_replay_rows = replay_rows + language_bridge_rows
+
+    if genome.tokenizer_version == "bpe-v1":
+        if row.get("bpe_vocab_target") is not None:
+            bpe_vocab_target = int(row["bpe_vocab_target"])
+        elif getattr(source_runtime.tokenizer, "version", "") == "bpe-v1":
+            bpe_vocab_target = int(source_runtime.tokenizer.vocab_size)
+        else:
+            bpe_vocab_target = 512
+    else:
+        bpe_vocab_target = 512
 
     tokenizer = _tokenizer_for_genome(
         genome,
         source_runtime=source_runtime,
         replay_rows=training_replay_rows,
         pretrain_documents=documents,
-        bpe_vocab_size=1024,
-        bpe_max_bytes=min(10_000_000, corpus_report["bytes"]),
+        bpe_vocab_size=bpe_vocab_target,
+        bpe_max_bytes=min(256_000, corpus_report["bytes"]),
     )
     limits = plan["limits"]
     budget_reason = _research_budget_reason(
@@ -849,6 +881,8 @@ def run_candidate(
         "external_pretrained": False,
         "language_bridge_rows": len(language_bridge_rows),
         "tokenizer_vocab_size": int(tokenizer.vocab_size),
+        "tokenizer_vocab_target": int(bpe_vocab_target),
+        "language_bpe_probe": row.get("kind") == "language_bpe_probe",
     }
     _atomic_json(out_root / "result.json", result)
     return result
@@ -1139,8 +1173,10 @@ def finalize_swarm(
                 "allowed": ["byte-v1", "bpe-v1"],
                 "comparison_metric": "nll_per_byte",
                 "protected_eval_rows_excluded_from_tokenizer_training": True,
-                "bpe_vocab_size": 1024,
-                "progressive_refresh": True,
+                "bpe_vocab_max": 1024,
+                "growth_per_probe": 128,
+                "refresh_max_bytes": 256000,
+                "progressive_refresh": "single bounded language probe",
             },
             "rotating_canary": {
                 "enabled": True,
