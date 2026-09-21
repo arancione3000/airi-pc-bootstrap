@@ -503,7 +503,7 @@ def test_generalist_swarm_reducer_prefers_safe_generation_and_nll(tmp_path: Path
         folder.mkdir()
         payload = {
             "ok": True,
-            "version": "airi-generalist-free-speed-v3",
+            "version": "airi-generalist-free-speed-v4",
             "cycle": 1,
             "stage": 1,
             "steps": 3,
@@ -1003,7 +1003,7 @@ def test_generalist_swarm_reducer_reserves_one_safe_scale_probe(tmp_path: Path):
         folder.mkdir()
         payload = {
             "ok": True,
-            "version": "airi-generalist-free-speed-v3",
+            "version": "airi-generalist-free-speed-v4",
             "cycle": 1,
             "stage": 1,
             "steps": 3,
@@ -1221,7 +1221,7 @@ def test_generalist_swarm_reducer_prefers_partial_generation_before_nll(tmp_path
         folder.mkdir()
         payload = {
             "ok": True,
-            "version": "airi-generalist-free-speed-v3",
+            "version": "airi-generalist-free-speed-v4",
             "cycle": 1,
             "stage": 1,
             "steps": 3,
@@ -1312,3 +1312,73 @@ def test_generalist_language_gap_expands_license_first_discovery():
     assert any(query.startswith("natural language corpus") for query in queries)
     assert any(query.startswith("italian corpus") for query in queries)
     assert all("license:" in query for query in queries)
+
+
+def test_generalist_phase4_language_bridge_is_deterministic_and_grounded():
+    from generalist_lm.language_bridge import build_language_bridge_rows
+    from generalist_lm.pretraining import CorpusDocument
+
+    docs = [
+        CorpusDocument(
+            source="approved:story.txt",
+            text=(
+                "The small robot studies language every morning. "
+                "It reads clear examples and learns how sentences continue. "
+                "After practice, the robot writes a short useful answer."
+            ),
+            sha256="a" * 64,
+            bytes=180,
+            domain="general",
+        ),
+        CorpusDocument(
+            source="approved:data.csv",
+            text="alpha,beta,gamma " * 20,
+            sha256="b" * 64,
+            bytes=200,
+            domain="data",
+        ),
+    ]
+    first = build_language_bridge_rows(docs, max_rows=8, seed=17)
+    second = build_language_bridge_rows(docs, max_rows=8, seed=17)
+
+    assert first
+    assert [row.messages for row in first] == [row.messages for row in second]
+    assert all(row.domain == "language" for row in first)
+    assert all(row.messages[-1]["content"] for row in first)
+    assert all("alpha,beta,gamma" not in row.messages[-1]["content"] for row in first)
+
+
+def test_generalist_phase4_bpe_refreshes_only_until_target_vocab():
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    from generalist_lm.bpe_tokenizer import train_bpe
+    from generalist_lm.research_cycle import _tokenizer_for_genome, research_seed
+
+    genome = replace(research_seed(), tokenizer_version="bpe-v1").validate()
+    source = train_bpe(
+        ["language learning improves with repeated natural sentences. " * 20],
+        vocab_size=300,
+        max_bytes=50_000,
+    )
+    runtime = SimpleNamespace(tokenizer=source)
+    refreshed = _tokenizer_for_genome(
+        genome,
+        source_runtime=runtime,
+        replay_rows=[],
+        pretrain_documents=[],
+        bpe_vocab_size=340,
+        bpe_max_bytes=50_000,
+    )
+    assert refreshed is not source
+
+    stable_runtime = SimpleNamespace(tokenizer=refreshed)
+    stable = _tokenizer_for_genome(
+        genome,
+        source_runtime=stable_runtime,
+        replay_rows=[],
+        pretrain_documents=[],
+        bpe_vocab_size=min(340, refreshed.vocab_size),
+        bpe_max_bytes=50_000,
+    )
+    assert stable is refreshed

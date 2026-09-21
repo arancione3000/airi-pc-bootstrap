@@ -20,6 +20,7 @@ from .evolution import (
     progressive_scale_target,
 )
 from .generalist_data_growth import grow_generalist_data
+from .language_bridge import build_language_bridge_rows
 from .mathesis_bridge import mathesis_signals
 from .model import estimate_parameter_count, parameter_count
 from .pretraining import CorpusDocument, load_local_corpus
@@ -40,7 +41,7 @@ from .research_cycle import (
 from .runtime import GeneralistRuntime
 
 
-GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v3"
+GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v4"
 
 
 def _atomic_json(path: Path, payload: Any) -> None:
@@ -395,9 +396,13 @@ def prepare_swarm(
             "domain_balanced_pretraining": True,
             "language_gap_routing": True,
             "autoregressive_similarity_ranking": True,
+            "corpus_language_bridge": True,
+            "progressive_bpe_vocab": 1024,
             "inherited_sft_lr_cap": 0.001,
             "weight_inheritance": True,
             "automatic_data_growth_fail_closed": True,
+            "corpus_language_bridge": True,
+            "progressive_bpe_vocab": 1024,
         },
     }
     _atomic_json(Path(output_path), plan)
@@ -610,14 +615,20 @@ def run_candidate(
         max_repo_bytes=max_repo_bytes,
         max_external_bytes=max_external_bytes,
     )
+    language_bridge_rows = build_language_bridge_rows(
+        documents,
+        max_rows=(96 if "language_gap" in set(plan.get("signals") or []) else 48),
+        seed=int(plan["cycle"]),
+    )
+    training_replay_rows = replay_rows + language_bridge_rows
 
     tokenizer = _tokenizer_for_genome(
         genome,
         source_runtime=source_runtime,
-        replay_rows=replay_rows,
+        replay_rows=training_replay_rows,
         pretrain_documents=documents,
-        bpe_vocab_size=512,
-        bpe_max_bytes=min(5_000_000, corpus_report["bytes"]),
+        bpe_vocab_size=1024,
+        bpe_max_bytes=min(10_000_000, corpus_report["bytes"]),
     )
     limits = plan["limits"]
     budget_reason = _research_budget_reason(
@@ -689,7 +700,7 @@ def run_candidate(
             steps=effective_steps,
             seed=max(1, int(seed)),
             device="cpu",
-            replay_rows=replay_rows,
+            replay_rows=training_replay_rows,
             domain_weights=dict(plan.get("domain_weights") or {}),
             source_model=source_runtime.model,
             source_tokenizer=source_runtime.tokenizer,
@@ -836,6 +847,8 @@ def run_candidate(
         "corpus": corpus_report,
         "checkpoint_dir": "best-checkpoint",
         "external_pretrained": False,
+        "language_bridge_rows": len(language_bridge_rows),
+        "tokenizer_vocab_size": int(tokenizer.vocab_size),
     }
     _atomic_json(out_root / "result.json", result)
     return result
@@ -1126,7 +1139,8 @@ def finalize_swarm(
                 "allowed": ["byte-v1", "bpe-v1"],
                 "comparison_metric": "nll_per_byte",
                 "protected_eval_rows_excluded_from_tokenizer_training": True,
-                "bpe_vocab_size": 512,
+                "bpe_vocab_size": 1024,
+                "progressive_refresh": True,
             },
             "rotating_canary": {
                 "enabled": True,
