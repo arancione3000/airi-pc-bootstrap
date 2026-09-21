@@ -986,3 +986,61 @@ def test_lattice_swarm_can_mutate_elite_lineage_without_promoting_it(tmp_path: P
     assert any(row["genome"]["generation"] >= 2 for row in elite_children)
     assert plan["policy"]["elite_can_self_promote"] is False
     assert plan["policy"]["elite_archive_is_research_only"] is True
+
+
+
+def test_lattice_migration_gate_requires_repeated_multi_seed_evidence(tmp_path: Path):
+    from generalist_lm.lattice_scale_gate import evaluate_lattice_migration_readiness
+
+    genome_id = "lattice-3-ready"
+    history = tmp_path / "history.jsonl"
+    rows = []
+    for cycle in (1, 2, 3):
+        reports = []
+        for seed in (0, 1):
+            reports.append({
+                "ok": True,
+                "candidate_wins": True,
+                "candidate": {
+                    "active_parameters": 100.0,
+                    "training": {"final": {"loss": 4.8 + seed * 0.01}},
+                },
+                "baseline": {
+                    "active_parameters": 100.0,
+                    "training": {"final": {"loss": 5.0 + seed * 0.01}},
+                },
+            })
+        rows.append({
+            "cycle": cycle,
+            "final_reports": [{
+                "candidate_id": genome_id,
+                "reports": reports,
+            }],
+        })
+    history.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    ready = evaluate_lattice_migration_readiness(
+        history,
+        {"genome_id": genome_id},
+        min_winning_cycles=3,
+        min_seed_wins=6,
+        min_total_seeds=6,
+        min_mean_margin=0.1,
+        min_worst_margin=0.1,
+        max_active_parameter_ratio=1.2,
+    )
+    assert ready["migration_ready"] is True
+    assert ready["evidence"]["winning_cycles"] == 3
+    assert ready["evidence"]["seed_wins"] == 6
+    assert ready["canonical_model_changed"] is False
+
+    not_ready = evaluate_lattice_migration_readiness(
+        history,
+        {"genome_id": genome_id},
+        min_winning_cycles=4,
+    )
+    assert not_ready["migration_ready"] is False
+    assert not_ready["checks"]["winning_cycles"] is False
