@@ -1,0 +1,1016 @@
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+from pathlib import Path
+import shutil
+from statistics import mean
+import time
+from typing import Any, Iterable, Sequence
+
+from .corpus import repository_corpus
+from .curriculum import DOMAINS, validation_rows
+from .curriculum_memory import CurriculumMemory, canary_rows
+from .evolution import (
+    GeneralistGenome,
+    generate_challengers,
+    progressive_scale_candidate,
+    progressive_scale_target,
+)
+from .generalist_data_growth import grow_generalist_data
+from .mathesis_bridge import mathesis_signals
+from .model import estimate_parameter_count, parameter_count
+from .pretraining import CorpusDocument, load_local_corpus
+from .research_cycle import (
+    _genome_training_seed,
+    _grouped_validation,
+    _load_champion,
+    _research_budget_reason,
+    _research_eligible,
+    _research_score,
+    _save_champion,
+    _tokenizer_for_genome,
+    _train_genome,
+    _weaknesses,
+    adaptive_domain_weights,
+    research_seed,
+)
+from .runtime import GeneralistRuntime
+
+
+GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v1"
+
+
+def _atomic_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+            allow_nan=False,
+        ) + "\n",
+        encoding="utf-8",
+    )
+    tmp.replace(path)
+
+
+def _load_json(path: str | Path) -> Any:
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def _history_tail(root: Path, limit: int = 8) -> list[dict[str, Any]]:
+    path = root / "history.jsonl"
+    if not path.is_file():
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines()[-max(1, int(limit)):]:
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
+def _plateau_report(
+    root: Path,
+    champion_report: dict[str, Any],
+    *,
+    current_parameters: int,
+) -> dict[str, Any]:
+    history = _history_tail(root, 8)
+    scores = []
+    champion_ids = []
+    for row in history:
+        report = row.get("champion_report")
+        champion = row.get("champion")
+        if isinstance(report, dict):
+            try:
+                score = float(report.get("score"))
+                if math.isfinite(score):
+                    scores.append(score)
+            except Exception:
+                pass
+        if isinstance(champion, dict) and champion.get("genome_id"):
+            champion_ids.append(str(champion["genome_id"]))
+
+    same_champion_cycles = 0
+    current_id = champion_ids[-1] if champion_ids else None
+    for value in reversed(champion_ids):
+        if value != current_id:
+            break
+        same_champion_cycles += 1
+
+    score_span = (
+        max(scores) - min(scores)
+        if len(scores) >= 2
+        else float("inf")
+    )
+    generation_accuracy = float(
+        champion_report.get("generation_exact_accuracy", 0.0) or 0.0
+    )
+
+    # The tiny initial model gets one early scale probe even before a long
+    # plateau. Later tiers require evidence of saturation.
+    under_initial_tier = int(current_parameters) < 250_000
+    plateau = (
+        same_champion_cycles >= 4
+        or (len(scores) >= 4 and score_span < 0.75)
+    )
+    scale_probe = under_initial_tier or plateau
+    return {
+        "history_rows": len(history),
+        "same_champion_cycles": same_champion_cycles,
+        "score_span": None if not math.isfinite(score_span) else score_span,
+        "generation_exact_accuracy": generation_accuracy,
+        "under_initial_tier": under_initial_tier,
+        "plateau": plateau,
+        "scale_probe": scale_probe,
+    }
+
+
+def _continual_genome(champion: GeneralistGenome, cycle: int) -> GeneralistGenome:
+    raw = champion.to_dict()
+    raw.update({
+        "generation": champion.generation + 1,
+        "parent_id": champion.genome_id,
+        "genome_id": f"generalist-{champion.generation + 1}-swarm-continual-{cycle}",
+    })
+    return GeneralistGenome(**raw).validate()
+
+
+def _unique_candidates(
+    rows: Iterable[tuple[str, GeneralistGenome]],
+    *,
+    count: int,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for kind, genome in rows:
+        signature = json.dumps(
+            {
+                key: value
+                for key, value in genome.to_dict().items()
+                if key not in {"generation", "parent_id", "genome_id"}
+            },
+            sort_keys=True,
+        )
+        if signature in seen:
+            continue
+        seen.add(signature)
+        out.append({
+            "index": len(out),
+            "kind": kind,
+            "genome": genome.to_dict(),
+            "candidate_id": genome.genome_id,
+            "estimated_parameters": estimate_parameter_count(
+                genome.model_config()
+            ),
+        })
+        if len(out) >= max(1, int(count)):
+            break
+    return out
+
+
+def prepare_swarm(
+    state_dir: str | Path,
+    output_path: str | Path,
+    *,
+    population_size: int = 8,
+    max_params: int = 2_000_000,
+    max_context: int = 512,
+    max_width: int = 256,
+    max_layers: int = 6,
+    curriculum_max_rows: int = 4000,
+    mathesis_state_dir: str | Path | None = None,
+    grow_data: bool = True,
+    data_max_new_bytes: int = 2_000_000,
+    data_max_total_bytes: int = 50_000_000,
+    github_token: str | None = None,
+) -> dict[str, Any]:
+    root = Path(state_dir).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+
+    loaded = _load_champion(root, device="cpu")
+    if loaded is None:
+        genome = research_seed()
+        runtime, report = _train_genome(
+            genome,
+            steps=30,
+            seed=_genome_training_seed(genome, namespace="free-speed-bootstrap"),
+            device="cpu",
+        )
+        _save_champion(root, genome, runtime, report)
+        loaded = (genome, runtime)
+
+    champion_genome, champion_runtime = loaded
+    previous = {}
+    try:
+        previous = _load_json(root / "status.json")
+    except Exception:
+        previous = {}
+    cycle = int(previous.get("cycle", 0) or 0) + 1
+
+    champion_report = _grouped_validation(
+        champion_runtime.model,
+        champion_runtime.tokenizer,
+        validation_rows(),
+        device="cpu",
+    )
+    champion_report["parameters"] = parameter_count(champion_runtime.model)
+    champion_report["score"] = _research_score(
+        champion_report,
+        champion_report["parameters"],
+    )
+    rotating = canary_rows(cycle)
+    champion_report["canary_cycle"] = cycle
+    champion_report["canary"] = _grouped_validation(
+        champion_runtime.model,
+        champion_runtime.tokenizer,
+        rotating,
+        device="cpu",
+    )
+
+    signals = _weaknesses(champion_report)
+    mathesis = None
+    if mathesis_state_dir and Path(mathesis_state_dir).exists():
+        try:
+            mathesis = mathesis_signals(mathesis_state_dir)
+            signals.extend(mathesis.get("signals") or [])
+        except Exception as exc:
+            mathesis = {
+                "ok": False,
+                "signals": [],
+                "reason": f"{type(exc).__name__}:{exc}",
+            }
+    if (
+        champion_genome.tokenizer_version == "byte-v1"
+        and float(champion_report.get("generation_exact_accuracy", 0.0)) < 1.0
+    ):
+        signals.append("tokenizer_efficiency_gap")
+    signals = list(dict.fromkeys(str(row) for row in signals))
+
+    memory = CurriculumMemory(root, max_rows=curriculum_max_rows)
+    curriculum = memory.expand(cycle, signals=signals)
+    domain_weights = adaptive_domain_weights(champion_report)
+
+    data_report: dict[str, Any] = {
+        "ok": True,
+        "skipped": True,
+        "reason": "automatic data growth disabled",
+    }
+    if grow_data:
+        try:
+            data_report = grow_generalist_data(
+                root / "autodata",
+                signals=signals,
+                github_token=github_token,
+                max_new_bytes=int(data_max_new_bytes),
+                max_total_bytes=int(data_max_total_bytes),
+            )
+        except Exception as exc:
+            data_report = {
+                "ok": False,
+                "skipped": False,
+                "reason": f"{type(exc).__name__}:{exc}",
+            }
+
+    current_params = int(champion_report["parameters"])
+    plateau = _plateau_report(
+        root,
+        champion_report,
+        current_parameters=current_params,
+    )
+    target = progressive_scale_target(
+        current_params,
+        max_parameters=max_params,
+    )
+    scale_genome = None
+    if target is not None and plateau["scale_probe"]:
+        try:
+            scale_genome = progressive_scale_candidate(
+                champion_genome,
+                target_parameters=target,
+                vocab_size=champion_runtime.tokenizer.vocab_size,
+                max_width=max_width,
+                max_layers=max_layers,
+            )
+        except Exception:
+            scale_genome = None
+
+    generated = generate_challengers(
+        champion_genome,
+        signals=signals,
+        count=max(8, population_size),
+        exploration_offset=max(0, cycle - 1),
+    )
+    rows: list[tuple[str, GeneralistGenome]] = [
+        ("continual", _continual_genome(champion_genome, cycle)),
+    ]
+    if scale_genome is not None:
+        rows.append(("progressive_scale", scale_genome))
+    rows.extend(("architecture", genome) for genome in generated)
+
+    candidates = _unique_candidates(rows, count=population_size)
+    # If a duplicate collapsed the population, rotate deeper into the standard
+    # mutation library until the requested matrix is full.
+    offset = cycle + population_size
+    while len(candidates) < population_size and offset < cycle + 64:
+        extras = generate_challengers(
+            champion_genome,
+            signals=signals,
+            count=population_size,
+            exploration_offset=offset,
+        )
+        candidates = _unique_candidates(
+            [
+                (row["kind"], GeneralistGenome(**row["genome"]).validate())
+                for row in candidates
+            ]
+            + [("architecture", genome) for genome in extras],
+            count=population_size,
+        )
+        offset += 1
+
+    plan = {
+        "ok": bool(candidates),
+        "version": GENERALIST_SWARM_VERSION,
+        "cycle": cycle,
+        "champion": champion_genome.to_dict(),
+        "champion_report": champion_report,
+        "signals": signals,
+        "mathesis": mathesis,
+        "curriculum": curriculum,
+        "domain_weights": domain_weights,
+        "data_growth": data_report,
+        "plateau": plateau,
+        "progressive_scaling": {
+            "current_parameters": current_params,
+            "target_parameters": target,
+            "candidate_generated": scale_genome is not None,
+            "tiers": [250_000, 500_000, 1_000_000, 2_000_000],
+        },
+        "limits": {
+            "max_params": int(max_params),
+            "max_context": int(max_context),
+            "max_width": int(max_width),
+            "max_layers": int(max_layers),
+        },
+        "candidates": candidates,
+        "matrix": {
+            "include": [{"index": row["index"]} for row in candidates]
+        },
+        "policy": {
+            "parallel_candidates": True,
+            "candidate_can_self_promote": False,
+            "production_qualification_separate": True,
+            "external_pretrained": False,
+            "adaptive_curriculum": True,
+            "progressive_scaling": True,
+            "weight_inheritance": True,
+            "automatic_data_growth_fail_closed": True,
+        },
+    }
+    _atomic_json(Path(output_path), plan)
+    return plan
+
+
+def _candidate(plan: dict[str, Any], index: int) -> dict[str, Any]:
+    for row in plan.get("candidates") or []:
+        if int(row.get("index", -1)) == int(index):
+            return row
+    raise IndexError(f"Generalist candidate index {index} not found")
+
+
+def _corpus_documents(
+    repo_root: str | Path,
+    state_dir: str | Path,
+    *,
+    max_repo_bytes: int,
+    max_external_bytes: int,
+) -> tuple[list[CorpusDocument], dict[str, Any]]:
+    repo_docs, repo_manifest = repository_corpus(
+        repo_root,
+        max_files=1200,
+        max_bytes=max(64_000, int(max_repo_bytes)),
+        max_file_bytes=512_000,
+        chunk_chars=6000,
+        max_documents=4000,
+    )
+    documents = list(repo_docs)
+    external_report = {
+        "documents": 0,
+        "total_bytes": 0,
+    }
+    approved = Path(state_dir) / "autodata" / "approved"
+    if approved.is_dir():
+        loaded = load_local_corpus(
+            [approved],
+            allowed_roots=[approved],
+            max_file_bytes=512_000,
+            max_total_bytes=max(0, int(max_external_bytes)),
+            max_documents=10_000,
+        )
+        documents.extend(loaded.documents)
+        external_report = {
+            "documents": len(loaded.documents),
+            "total_bytes": loaded.total_bytes,
+            "skipped": len(loaded.skipped),
+        }
+
+    # Cross-source content dedup.
+    unique: dict[str, CorpusDocument] = {}
+    for row in documents:
+        unique.setdefault(row.sha256, row)
+    final = list(unique.values())
+    return final, {
+        "repository": repo_manifest.to_dict(),
+        "external": external_report,
+        "documents": len(final),
+        "bytes": sum(row.bytes for row in final),
+    }
+
+
+def _domain_regression(
+    champion: dict[str, Any],
+    candidate: dict[str, Any],
+) -> float:
+    old = champion.get("domain_nll_per_byte") or champion.get("domain_loss") or {}
+    new = candidate.get("domain_nll_per_byte") or candidate.get("domain_loss") or {}
+    values = []
+    for domain, old_value in old.items():
+        if domain in new:
+            values.append(float(new[domain]) - float(old_value))
+    return max(values) if values else float("inf")
+
+
+def run_candidate(
+    plan_path: str | Path,
+    state_dir: str | Path,
+    repo_root: str | Path,
+    output_dir: str | Path,
+    *,
+    candidate_index: int,
+    stage: int,
+    steps: int,
+    repeat_seeds: int = 1,
+    pretrain_steps: int = 1,
+    max_repo_bytes: int = 5_000_000,
+    max_external_bytes: int = 20_000_000,
+) -> dict[str, Any]:
+    plan = _load_json(plan_path)
+    row = _candidate(plan, candidate_index)
+    genome = GeneralistGenome(**dict(row["genome"])).validate()
+    root = Path(state_dir)
+    loaded = _load_champion(root, device="cpu")
+    if loaded is None:
+        raise RuntimeError("Generalist swarm worker has no champion checkpoint")
+    _champion_genome, champion_runtime = loaded
+
+    memory = CurriculumMemory(root, max_rows=20_000)
+    replay_rows = memory.rows()
+    documents, corpus_report = _corpus_documents(
+        repo_root,
+        root,
+        max_repo_bytes=max_repo_bytes,
+        max_external_bytes=max_external_bytes,
+    )
+
+    tokenizer = _tokenizer_for_genome(
+        genome,
+        source_runtime=champion_runtime,
+        replay_rows=replay_rows,
+        pretrain_documents=documents,
+        bpe_vocab_size=512,
+        bpe_max_bytes=min(5_000_000, corpus_report["bytes"]),
+    )
+    limits = plan["limits"]
+    budget_reason = _research_budget_reason(
+        genome,
+        max_params=int(limits["max_params"]),
+        max_context=int(limits["max_context"]),
+        max_width=int(limits["max_width"]),
+        max_layers=int(limits["max_layers"]),
+        vocab_size=tokenizer.vocab_size,
+    )
+    out_root = Path(output_dir)
+    out_root.mkdir(parents=True, exist_ok=True)
+    if budget_reason:
+        result = {
+            "ok": False,
+            "version": GENERALIST_SWARM_VERSION,
+            "candidate_index": int(candidate_index),
+            "candidate_id": genome.genome_id,
+            "reason": f"research_resource_budget:{budget_reason}",
+        }
+        _atomic_json(out_root / "result.json", result)
+        return result
+
+    reports = []
+    runtimes: list[tuple[GeneralistRuntime, dict[str, Any]]] = []
+    rotating = canary_rows(int(plan["cycle"]))
+    for repeat in range(max(1, int(repeat_seeds))):
+        seed = (
+            _genome_training_seed(genome, namespace="free-speed")
+            + int(stage) * 100_003
+            + repeat * 997
+        ) % 2_000_000_000
+        runtime, report = _train_genome(
+            genome,
+            steps=max(1, int(steps)),
+            seed=max(1, int(seed)),
+            device="cpu",
+            replay_rows=replay_rows,
+            domain_weights=dict(plan.get("domain_weights") or {}),
+            source_model=champion_runtime.model,
+            source_tokenizer=champion_runtime.tokenizer,
+            tokenizer=tokenizer,
+            gradient_accumulation_steps=1,
+            precision="fp32",
+            pretrain_documents=documents,
+            pretrain_steps=max(0, int(pretrain_steps)),
+        )
+        report["canary_cycle"] = int(plan["cycle"])
+        report["canary"] = _grouped_validation(
+            runtime.model,
+            runtime.tokenizer,
+            rotating,
+            device="cpu",
+        )
+        eligible, reason = _research_eligible(
+            plan["champion_report"],
+            report,
+            minimum_loss_gain=0.01,
+            max_domain_regression=0.08,
+        )
+        reports.append({
+            "seed": int(seed),
+            "eligible": bool(eligible),
+            "reason": reason,
+            "report": report,
+        })
+        runtimes.append((runtime, report))
+
+    valid = [
+        item for item in reports
+        if isinstance(item.get("report"), dict)
+        and item["report"].get("finite")
+    ]
+    if not valid:
+        result = {
+            "ok": False,
+            "version": GENERALIST_SWARM_VERSION,
+            "candidate_index": int(candidate_index),
+            "candidate_id": genome.genome_id,
+            "reason": "no finite candidate reports",
+        }
+        _atomic_json(out_root / "result.json", result)
+        return result
+
+    best_index = min(
+        range(len(reports)),
+        key=lambda idx: float(
+            reports[idx]["report"].get(
+                "nll_per_byte",
+                reports[idx]["report"]["loss"],
+            )
+        ),
+    )
+    best_runtime, best_report = runtimes[best_index]
+    checkpoint = out_root / "best-checkpoint"
+    shutil.rmtree(checkpoint, ignore_errors=True)
+    best_runtime.save_checkpoint(
+        checkpoint,
+        metadata={
+            "role": "free_speed_candidate",
+            "candidate_id": genome.genome_id,
+            "cycle": int(plan["cycle"]),
+            "stage": int(stage),
+            "production_qualified": False,
+        },
+    )
+    _atomic_json(checkpoint / "research-metrics.json", best_report)
+
+    nlls = [
+        float(
+            item["report"].get(
+                "nll_per_byte",
+                item["report"]["loss"],
+            )
+        )
+        for item in valid
+    ]
+    generations = [
+        float(item["report"].get("generation_exact_accuracy", 0.0))
+        for item in valid
+    ]
+    regressions = [
+        _domain_regression(plan["champion_report"], item["report"])
+        for item in valid
+    ]
+    result = {
+        "ok": True,
+        "version": GENERALIST_SWARM_VERSION,
+        "cycle": int(plan["cycle"]),
+        "stage": int(stage),
+        "steps": int(steps),
+        "candidate_index": int(candidate_index),
+        "candidate_id": genome.genome_id,
+        "kind": row.get("kind"),
+        "genome": genome.to_dict(),
+        "reports": reports,
+        "all_seed_eligible": all(item["eligible"] for item in reports),
+        "any_seed_eligible": any(item["eligible"] for item in reports),
+        "mean_nll_per_byte": mean(nlls),
+        "best_nll_per_byte": min(nlls),
+        "mean_generation_accuracy": mean(generations),
+        "worst_domain_regression": max(regressions),
+        "parameters": int(best_report["parameters"]),
+        "score": float(best_report["score"]),
+        "corpus": corpus_report,
+        "checkpoint_dir": "best-checkpoint",
+        "external_pretrained": False,
+    }
+    _atomic_json(out_root / "result.json", result)
+    return result
+
+
+def _scan_results(paths: Iterable[str | Path]) -> list[tuple[Path, dict[str, Any]]]:
+    found: list[tuple[Path, dict[str, Any]]] = []
+    for raw in paths:
+        path = Path(raw)
+        candidates = (
+            sorted(path.rglob("result.json"))
+            if path.is_dir()
+            else [path]
+        )
+        for candidate in candidates:
+            if not candidate.is_file():
+                continue
+            try:
+                row = _load_json(candidate)
+            except Exception:
+                continue
+            if (
+                isinstance(row, dict)
+                and row.get("version") == GENERALIST_SWARM_VERSION
+                and "candidate_index" in row
+            ):
+                found.append((candidate, row))
+    by_index: dict[int, tuple[Path, dict[str, Any]]] = {}
+    for path, row in found:
+        idx = int(row["candidate_index"])
+        current = by_index.get(idx)
+        if current is None or int(row.get("stage", -1)) > int(current[1].get("stage", -1)):
+            by_index[idx] = (path, row)
+    return list(by_index.values())
+
+
+def select_survivors(
+    result_paths: Iterable[str | Path],
+    output_path: str | Path,
+    *,
+    survivors: int,
+) -> dict[str, Any]:
+    rows = [
+        row for _path, row in _scan_results(result_paths)
+        if row.get("ok")
+    ]
+    if not rows:
+        raise RuntimeError("Generalist swarm reducer received no valid reports")
+
+    # Fail early on strong regressions, then rank by real generation first,
+    # held-out NLL second, and efficiency third. Eligibility is preferred but
+    # not mandatory in early stages so promising undertrained models survive.
+    safe = [
+        row for row in rows
+        if float(row.get("worst_domain_regression", float("inf"))) <= 0.18
+    ]
+    if not safe:
+        safe = rows
+    safe.sort(
+        key=lambda row: (
+            0 if row.get("any_seed_eligible") else 1,
+            -float(row.get("mean_generation_accuracy", 0.0)),
+            float(row.get("mean_nll_per_byte", float("inf"))),
+            int(row.get("parameters", 1 << 60)),
+            -float(row.get("score", 0.0)),
+            int(row["candidate_index"]),
+        )
+    )
+    selected = safe[: max(1, int(survivors))]
+    payload = {
+        "ok": True,
+        "version": GENERALIST_SWARM_VERSION,
+        "selected": [
+            {
+                "index": int(row["candidate_index"]),
+                "candidate_id": row["candidate_id"],
+            }
+            for row in selected
+        ],
+        "matrix": {
+            "include": [
+                {"index": int(row["candidate_index"])}
+                for row in selected
+            ]
+        },
+    }
+    _atomic_json(Path(output_path), payload)
+    return payload
+
+
+def finalize_swarm(
+    state_dir: str | Path,
+    plan_path: str | Path,
+    result_paths: Iterable[str | Path],
+    output_path: str | Path,
+) -> dict[str, Any]:
+    root = Path(state_dir).expanduser().resolve()
+    plan = _load_json(plan_path)
+    scanned = [
+        (path, row)
+        for path, row in _scan_results(result_paths)
+        if row.get("ok")
+    ]
+    finalists = [
+        (path, row)
+        for path, row in scanned
+        if row.get("all_seed_eligible")
+    ]
+
+    promoted = False
+    winner_summary = None
+    reason = "no finalist passed every independent research gate"
+    if finalists:
+        finalists.sort(
+            key=lambda pair: (
+                -float(pair[1].get("mean_generation_accuracy", 0.0)),
+                float(pair[1].get("mean_nll_per_byte", float("inf"))),
+                int(pair[1].get("parameters", 1 << 60)),
+            )
+        )
+        result_path, winner = finalists[0]
+        checkpoint = result_path.parent / str(winner.get("checkpoint_dir") or "best-checkpoint")
+        runtime = GeneralistRuntime.from_checkpoint(checkpoint, device="cpu")
+        genome = GeneralistGenome(**dict(winner["genome"])).validate()
+
+        # Recompute validation in the external reducer. Worker-reported metrics
+        # are useful for ranking but cannot directly authorize promotion.
+        from .curriculum import validation_rows
+        verified = _grouped_validation(
+            runtime.model,
+            runtime.tokenizer,
+            validation_rows(),
+            device="cpu",
+        )
+        verified["parameters"] = parameter_count(runtime.model)
+        verified["score"] = _research_score(
+            verified,
+            verified["parameters"],
+        )
+        verified["canary_cycle"] = int(plan["cycle"])
+        verified["canary"] = _grouped_validation(
+            runtime.model,
+            runtime.tokenizer,
+            canary_rows(int(plan["cycle"])),
+            device="cpu",
+        )
+        eligible, verify_reason = _research_eligible(
+            plan["champion_report"],
+            verified,
+            minimum_loss_gain=0.01,
+            max_domain_regression=0.08,
+        )
+        if eligible:
+            _save_champion(root, genome, runtime, verified)
+            promoted = True
+            reason = verify_reason
+            winner_summary = {
+                "candidate_id": genome.genome_id,
+                "kind": winner.get("kind"),
+                "parameters": verified["parameters"],
+                "score": verified["score"],
+                "nll_per_byte": verified.get("nll_per_byte"),
+            }
+        else:
+            reason = f"external_reducer_rejected:{verify_reason}"
+
+    loaded = _load_champion(root, device="cpu")
+    if loaded is None:
+        raise RuntimeError("Generalist swarm lost champion state during finalization")
+    champion_genome, champion_runtime = loaded
+    champion_report = _grouped_validation(
+        champion_runtime.model,
+        champion_runtime.tokenizer,
+        validation_rows(),
+        device="cpu",
+    )
+    champion_report["parameters"] = parameter_count(champion_runtime.model)
+    champion_report["score"] = _research_score(
+        champion_report,
+        champion_report["parameters"],
+    )
+    cycle = int(plan["cycle"])
+    rotating = canary_rows(cycle)
+    champion_report["canary_cycle"] = cycle
+    champion_report["canary"] = _grouped_validation(
+        champion_runtime.model,
+        champion_runtime.tokenizer,
+        rotating,
+        device="cpu",
+    )
+    replay_rows = CurriculumMemory(root, max_rows=20_000).rows()
+    replay_prompts = {
+        str(row.messages[0].get("content", ""))
+        for row in replay_rows
+        if row.messages
+    }
+    rotating_prompts = {
+        str(row.messages[0].get("content", ""))
+        for row in rotating
+        if row.messages
+    }
+
+    status = {
+        "ok": True,
+        "version": GENERALIST_SWARM_VERSION,
+        "cycle": int(plan["cycle"]),
+        "promoted": promoted,
+        "promotion_reason": reason,
+        "winner": winner_summary,
+        "champion": champion_genome.to_dict(),
+        "champion_report": champion_report,
+        "signals": plan.get("signals") or [],
+        "mathesis": plan.get("mathesis"),
+        "curriculum_memory": plan.get("curriculum"),
+        "adaptive_curriculum": {
+            "domain_weights": plan.get("domain_weights") or {},
+        },
+        "rotating_canary": {
+            "cycle": cycle,
+            "domains": [row.domain for row in rotating],
+            "training_overlap": sorted(rotating_prompts & replay_prompts),
+        },
+        "grounded_pretraining": {
+            "steps": 4,
+            "corpus": {
+                "enabled": True,
+                "automatic_data_growth": bool(
+                    (plan.get("data_growth") or {}).get("ok")
+                ),
+            },
+        },
+        "automatic_data_growth": plan.get("data_growth"),
+        "progressive_scaling": plan.get("progressive_scaling"),
+        "plateau": plan.get("plateau"),
+        "trials": [row for _path, row in scanned],
+        "policy": {
+            "research_only": True,
+            "parallel_swarm": "8->4->2",
+            "candidate_can_self_promote": False,
+            "external_reducer": True,
+            "production_qualification_separate": True,
+            "external_pretrained": False,
+            "adaptive_curriculum": True,
+            "progressive_scaling_max_parameters": 2_000_000,
+            "weight_inheritance": "exact + safe expansion prefixes",
+            "automatic_data_growth": "permissive SPDX + immutable commit + quarantine + hash + quality filter",
+            "continual_learning": {
+                "enabled": True,
+                "full_replay": True,
+                "domain_balanced_base_replay": True,
+                "curriculum_max_rows": 4000,
+                "gradient_accumulation_steps": 1,
+                "precision": "fp32",
+            },
+            "tokenizer_research": {
+                "allowed": ["byte-v1", "bpe-v1"],
+                "comparison_metric": "nll_per_byte",
+                "protected_eval_rows_excluded_from_tokenizer_training": True,
+                "bpe_vocab_size": 512,
+            },
+            "rotating_canary": {
+                "enabled": True,
+                "training_excluded": True,
+                "domains": len(DOMAINS),
+            },
+            "architecture_weight_transfer": {
+                "enabled": True,
+                "exact_name_and_shape": True,
+                "safe_prefix_expansion": True,
+                "byte_to_bpe_embedding_migration": True,
+            },
+        },
+        "updated_at": time.time(),
+    }
+    _atomic_json(root / "status.json", status)
+    with (root / "history.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(status, ensure_ascii=False, sort_keys=True) + "\n"
+        )
+    _atomic_json(Path(output_path), status)
+    return status
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(
+        description="AIRI Generalist Free-Speed parallel research swarm"
+    )
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    prepare = sub.add_parser("prepare")
+    prepare.add_argument("state_dir")
+    prepare.add_argument("output")
+    prepare.add_argument("--mathesis-state")
+    prepare.add_argument("--population-size", type=int, default=8)
+    prepare.add_argument("--max-params", type=int, default=2_000_000)
+    prepare.add_argument("--max-context", type=int, default=512)
+    prepare.add_argument("--max-width", type=int, default=256)
+    prepare.add_argument("--max-layers", type=int, default=6)
+    prepare.add_argument("--curriculum-max-rows", type=int, default=4000)
+    prepare.add_argument("--no-data-growth", action="store_true")
+
+    worker = sub.add_parser("worker")
+    worker.add_argument("plan")
+    worker.add_argument("state_dir")
+    worker.add_argument("repo_root")
+    worker.add_argument("output_dir")
+    worker.add_argument("--index", type=int, required=True)
+    worker.add_argument("--stage", type=int, required=True)
+    worker.add_argument("--steps", type=int, required=True)
+    worker.add_argument("--repeat-seeds", type=int, default=1)
+    worker.add_argument("--pretrain-steps", type=int, default=1)
+    worker.add_argument("--max-repo-bytes", type=int, default=5_000_000)
+    worker.add_argument("--max-external-bytes", type=int, default=20_000_000)
+
+    select = sub.add_parser("select")
+    select.add_argument("output")
+    select.add_argument("results", nargs="+")
+    select.add_argument("--survivors", type=int, required=True)
+
+    final = sub.add_parser("finalize")
+    final.add_argument("state_dir")
+    final.add_argument("plan")
+    final.add_argument("output")
+    final.add_argument("results", nargs="+")
+
+    args = parser.parse_args(argv)
+    if args.cmd == "prepare":
+        result = prepare_swarm(
+            args.state_dir,
+            args.output,
+            population_size=args.population_size,
+            max_params=args.max_params,
+            max_context=args.max_context,
+            max_width=args.max_width,
+            max_layers=args.max_layers,
+            curriculum_max_rows=args.curriculum_max_rows,
+            mathesis_state_dir=args.mathesis_state,
+            grow_data=not args.no_data_growth,
+            github_token=os.environ.get("GITHUB_TOKEN"),
+        )
+    elif args.cmd == "worker":
+        result = run_candidate(
+            args.plan,
+            args.state_dir,
+            args.repo_root,
+            args.output_dir,
+            candidate_index=args.index,
+            stage=args.stage,
+            steps=args.steps,
+            repeat_seeds=args.repeat_seeds,
+            pretrain_steps=args.pretrain_steps,
+            max_repo_bytes=args.max_repo_bytes,
+            max_external_bytes=args.max_external_bytes,
+        )
+    elif args.cmd == "select":
+        result = select_survivors(
+            args.results,
+            args.output,
+            survivors=args.survivors,
+        )
+    elif args.cmd == "finalize":
+        result = finalize_swarm(
+            args.state_dir,
+            args.plan,
+            args.results,
+            args.output,
+        )
+    else:
+        raise AssertionError(args.cmd)
+
+    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0 if result.get("ok") else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

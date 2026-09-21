@@ -116,9 +116,14 @@ Research validation now includes a real generation probe: one held-out item per 
 
 Architecture challengers no longer discard all accumulated knowledge by default.
 Before fine-tuning, the research loop copies every champion state tensor whose
-name and shape exactly match the challenger. The transfer report records target
-coverage and source tensors that could not be reused. This keeps the rule
-conservative: there is no shape coercion or unsafe partial slicing.
+name and shape exactly match the challenger. When progressive scaling only
+expands a one- or two-dimensional tensor, AIRI also copies the learned
+overlapping prefix and leaves only the newly added rows/columns randomly
+initialized. Token embeddings receive the same width-expansion treatment, and
+byte-to-BPE migration keeps its deterministic byte-derived initialization.
+Shrinking tensors, rank changes and incompatible tokenizer migrations remain
+fail-closed. The transfer report records exact and partial inheritance
+separately.
 
 The bounded architecture DSL can now explore learned absolute positions,
 sinusoidal positions, and RoPE (rotary positional embeddings). RoPE is applied
@@ -131,6 +136,70 @@ invalid domains, malformed SFT messages, duplicate rows, replay-cap violations,
 digest mismatches, or protected-validation overlap stop research health and
 prevent state persistence.
 
+
+## Generalist Free-Speed continuum
+
+The autonomous Generalist continuum now uses a parallel successive-halving
+tournament instead of spending a full training budget on candidates one after
+another.
+
+Each research cycle performs:
+
+1. one planner restores the exact research champion, MATHESIS signals,
+   curriculum memory and persistent auto-data state;
+2. eight candidate genomes run concurrently on standard GitHub CPU runners;
+3. a reducer removes catastrophic held-out regressions and keeps four;
+4. the four survivors receive a larger training/pretraining budget;
+5. a second reducer keeps two finalists;
+6. both finalists run a 20-step SFT budget plus causal pretraining on two
+   independent seeds;
+7. an external reducer reloads the winning checkpoint and recomputes protected
+   validation/canary metrics before research promotion;
+8. the ordinary digest-bound production qualification remains a separate,
+   stricter gate.
+
+The tournament prefers real autoregressive-generation gains first, then
+byte-normalized held-out NLL, parameter efficiency and research score. A matrix
+worker cannot promote itself.
+
+### Weakness-directed curriculum
+
+Held-out per-domain NLL is converted into bounded replay weights. The strongest
+domain stays at weight 1x while the weakest may receive up to 3x replay.
+Domain-balanced replay remains the neutral base, so the adaptation is explicit
+rather than an accidental consequence of historical curriculum frequency.
+Promotion thresholds are unchanged.
+
+### Progressive scaling
+
+Research capacity is no longer fixed at the initial ~100k-parameter scale.
+The planner can propose bounded tiers of approximately 250k, 500k, 1M and 2M
+parameters. The first tiny champion receives an early 250k probe; later tiers
+are explored after several cycles without meaningful champion/score progress.
+Every larger candidate still competes under the same held-out and production
+gates, so adding parameters is never treated as an improvement by itself.
+
+### Autonomous permissive corpus growth
+
+The planner may grow a persistent external text/code corpus without downloading
+model weights. Discovery is restricted to the GitHub HTTPS API. Admission is:
+
+repository search -> SPDX license allowlist -> immutable commit SHA -> bounded
+raw-file quarantine -> UTF-8/printability/information/secret filters -> SHA-256
+deduplication -> approved corpus.
+
+Allowed licenses are explicit permissive/public-domain identifiers such as MIT,
+Apache-2.0, BSD, ISC, CC0, 0BSD and Unlicense. Repositories with missing or
+unclear license metadata are rejected. Each cycle has a small growth budget and
+the persistent corpus has a larger hard cap; both repository-grounded and
+approved external documents are content-deduplicated before causal pretraining.
+
+### Runner efficiency
+
+The Free-Speed workflow uses dependency caching through `setup-python` and
+keeps the expensive candidate stages parallel (8 -> 4 -> 2). Standard
+production qualification and state persistence occur only once in the final
+reducer.
 
 ## Qualification v2 and immutable governance
 
