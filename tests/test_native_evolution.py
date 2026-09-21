@@ -838,3 +838,280 @@ def test_lattice_predictive_and_local_genes_run_causally_with_vectorized_sparse_
     assert len(left["stats"]["expert_usage"]) == cfg.n_experts
     assert sum(left["stats"]["expert_usage"]) == pytest.approx(1.0, abs=1e-5)
     assert lattice_active_parameter_estimate(cfg) < lattice_parameter_count(cfg)
+
+
+
+def test_lattice_elite_archive_preserves_near_winners_for_meta_evolution(tmp_path: Path):
+    pytest.importorskip("torch")
+    from generalist_lm.lattice_evolution import (
+        LatticeMutation,
+        apply_lattice_mutation,
+        root_lattice_genome,
+    )
+    from generalist_lm.lattice_meta import (
+        elite_parent_genomes,
+        update_elite_archive,
+    )
+
+    champion = root_lattice_genome(_tiny_lattice_config())
+    mutation = LatticeMutation(
+        name="test-routing",
+        family="routing",
+        changes={"lattice_mix": 0.28},
+        rationale="test",
+    )
+    candidate = apply_lattice_mutation(champion, mutation)
+
+    row = {
+        "ok": True,
+        "candidate_id": candidate.genome_id,
+        "cycle": 1,
+        "stage": 3,
+        "mutation": mutation.to_dict(),
+        "genome": candidate.to_dict(),
+        "active_parameters": 100.0,
+        "state_bytes": 64.0,
+        "train_seconds": 1.0,
+        "reports": [
+            {
+                "ok": True,
+                "candidate_wins": True,
+                "candidate": {"training": {"final": {"loss": 4.9}}},
+                "baseline": {"training": {"final": {"loss": 5.0}}},
+            },
+            {
+                "ok": True,
+                "candidate_wins": False,
+                "candidate": {"training": {"final": {"loss": 5.1}}},
+                "baseline": {"training": {"final": {"loss": 5.0}}},
+            },
+        ],
+    }
+    archive = update_elite_archive(
+        None,
+        [row],
+        champion_id=champion.genome_id,
+    )
+
+    assert archive["summary"]["count"] == 1
+    assert archive["summary"]["near_winners"] == 1
+    elite = archive["elites"][0]
+    assert elite["win_fraction"] == pytest.approx(0.5)
+    assert elite["seed_count"] == 2
+    parents = elite_parent_genomes(
+        archive,
+        champion_id=champion.genome_id,
+        max_parents=2,
+    )
+    assert [parent.genome_id for parent in parents] == [candidate.genome_id]
+
+
+def test_lattice_swarm_can_mutate_elite_lineage_without_promoting_it(tmp_path: Path):
+    pytest.importorskip("torch")
+    from generalist_lm.lattice_evolution import (
+        LatticeMutation,
+        apply_lattice_mutation,
+        root_lattice_genome,
+    )
+    from generalist_lm.lattice_meta import update_elite_archive
+    from generalist_lm.lattice_swarm import prepare_swarm_plan
+
+    state = tmp_path / "state"
+    state.mkdir()
+    champion = root_lattice_genome(_tiny_lattice_config())
+    (state / "lattice-champion.json").write_text(
+        json.dumps(champion.to_dict()),
+        encoding="utf-8",
+    )
+
+    first_mutation = LatticeMutation(
+        name="test-routing",
+        family="routing",
+        changes={"lattice_mix": 0.28},
+        rationale="test",
+    )
+    elite = apply_lattice_mutation(champion, first_mutation)
+    evidence = {
+        "ok": True,
+        "candidate_id": elite.genome_id,
+        "cycle": 1,
+        "stage": 3,
+        "mutation": first_mutation.to_dict(),
+        "genome": elite.to_dict(),
+        "active_parameters": 100.0,
+        "state_bytes": 64.0,
+        "train_seconds": 1.0,
+        "reports": [
+            {
+                "ok": True,
+                "candidate_wins": True,
+                "candidate": {"training": {"final": {"loss": 4.9}}},
+                "baseline": {"training": {"final": {"loss": 5.0}}},
+            },
+            {
+                "ok": True,
+                "candidate_wins": False,
+                "candidate": {"training": {"final": {"loss": 5.1}}},
+                "baseline": {"training": {"final": {"loss": 5.0}}},
+            },
+        ],
+    }
+    archive = update_elite_archive(
+        None,
+        [evidence],
+        champion_id=champion.genome_id,
+    )
+    (state / "lattice-elite-archive.json").write_text(
+        json.dumps(archive),
+        encoding="utf-8",
+    )
+
+    plan = prepare_swarm_plan(
+        state,
+        tmp_path / "plan.json",
+        cycle=2,
+        mathesis_signals=["symbolic_reasoning_signal"],
+        research={"tag_counts": {"reasoning": 2}},
+        population_size=6,
+        max_total_parameters=3_000_000,
+        max_active_parameter_ratio=2.0,
+    )
+
+    elite_children = [
+        row for row in plan["candidates"]
+        if row["source_parent_kind"] == "elite"
+    ]
+    assert elite_children
+    assert all(row["source_parent_id"] == elite.genome_id for row in elite_children)
+    assert any(row["genome"]["generation"] >= 2 for row in elite_children)
+    assert plan["policy"]["elite_can_self_promote"] is False
+    assert plan["policy"]["elite_archive_is_research_only"] is True
+
+
+
+def test_lattice_migration_gate_requires_repeated_multi_seed_evidence(tmp_path: Path):
+    from generalist_lm.lattice_scale_gate import evaluate_lattice_migration_readiness
+
+    genome_id = "lattice-3-ready"
+    history = tmp_path / "history.jsonl"
+    rows = []
+    for cycle in (1, 2, 3):
+        reports = []
+        for seed in (0, 1):
+            reports.append({
+                "ok": True,
+                "candidate_wins": True,
+                "candidate": {
+                    "active_parameters": 100.0,
+                    "training": {"final": {"loss": 4.8 + seed * 0.01}},
+                },
+                "baseline": {
+                    "active_parameters": 100.0,
+                    "training": {"final": {"loss": 5.0 + seed * 0.01}},
+                },
+            })
+        rows.append({
+            "cycle": cycle,
+            "final_reports": [{
+                "candidate_id": genome_id,
+                "reports": reports,
+            }],
+        })
+    history.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    ready = evaluate_lattice_migration_readiness(
+        history,
+        {"genome_id": genome_id},
+        min_winning_cycles=3,
+        min_seed_wins=6,
+        min_total_seeds=6,
+        min_mean_margin=0.1,
+        min_worst_margin=0.1,
+        max_active_parameter_ratio=1.2,
+    )
+    assert ready["migration_ready"] is True
+    assert ready["evidence"]["winning_cycles"] == 3
+    assert ready["evidence"]["seed_wins"] == 6
+    assert ready["canonical_model_changed"] is False
+
+    not_ready = evaluate_lattice_migration_readiness(
+        history,
+        {"genome_id": genome_id},
+        min_winning_cycles=4,
+    )
+    assert not_ready["migration_ready"] is False
+    assert not_ready["checks"]["winning_cycles"] is False
+
+
+
+def test_lattice_incumbent_revalidation_cannot_promote_itself(tmp_path: Path):
+    pytest.importorskip("torch")
+    from generalist_lm.lattice_swarm import finalize_swarm, prepare_swarm_plan
+
+    state = tmp_path / "state"
+    plan_path = tmp_path / "plan.json"
+    plan = prepare_swarm_plan(
+        state,
+        plan_path,
+        cycle=1,
+        population_size=2,
+        max_total_parameters=3_000_000,
+        max_active_parameter_ratio=2.0,
+    )
+    incumbent = plan["incumbent"]
+    assert incumbent["index"] == 9999
+    assert incumbent["candidate_id"] == plan["champion"]["genome_id"]
+
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    incumbent_result = {
+        "ok": True,
+        "version": "airi-lattice-swarm-v1",
+        "cycle": 1,
+        "stage": 3,
+        "steps": 18,
+        "candidate_index": 9999,
+        "candidate_id": incumbent["candidate_id"],
+        "mutation": incumbent["mutation"],
+        "genome": incumbent["genome"],
+        "reports": [],
+        "all_seed_wins": True,
+        "loss": 1.0,
+        "active_parameters": incumbent["cost"]["active_parameters"],
+        "state_bytes": incumbent["cost"]["state_bytes"],
+        "train_seconds": 1.0,
+        "repeat_seeds": 2,
+        "external_pretrained": False,
+    }
+    (reports_dir / "incumbent.json").write_text(
+        json.dumps(incumbent_result),
+        encoding="utf-8",
+    )
+
+    final = finalize_swarm(
+        state,
+        plan_path,
+        [reports_dir],
+        tmp_path / "final.json",
+    )
+    assert final["promoted"] is False
+    assert final["winner"] is None
+    assert final["champion"]["genome_id"] == incumbent["candidate_id"]
+    assert final["policy"]["candidate_can_self_promote"] is False
+
+
+def test_lattice_migration_readiness_is_strict_json_when_evidence_is_missing(tmp_path: Path):
+    from generalist_lm.lattice_scale_gate import evaluate_lattice_migration_readiness
+
+    result = evaluate_lattice_migration_readiness(
+        tmp_path / "missing-history.jsonl",
+        {"genome_id": "lattice-empty"},
+    )
+    assert result["migration_ready"] is False
+    assert result["evidence"]["mean_margin"] is None
+    assert result["evidence"]["worst_margin"] is None
+    assert result["evidence"]["max_active_parameter_ratio"] is None
+    json.dumps(result, allow_nan=False)

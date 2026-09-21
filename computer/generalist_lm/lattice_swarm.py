@@ -21,6 +21,13 @@ from .lattice_math import (
     pareto_front,
     stability_certificate,
 )
+from .lattice_meta import (
+    elite_parent_genomes,
+    load_elite_archive,
+    mutation_family_feedback,
+    update_elite_archive,
+)
+from .lattice_scale_gate import evaluate_lattice_migration_readiness
 from .native_lattice import AiriLatticeConfig
 
 
@@ -81,27 +88,73 @@ def prepare_swarm_plan(
     root = Path(state_dir).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     champion = _load_champion(root)
-
-    population = generate_lattice_population(
-        champion,
-        count=max(1, int(population_size)),
-        exploration_offset=max(0, int(exploration_offset)),
-        mathesis_signals=mathesis_signals,
-        research=research,
-        max_total_parameters=max(1, int(max_total_parameters)),
-        max_active_parameter_ratio=max(1.0, float(max_active_parameter_ratio)),
+    elite_archive = load_elite_archive(root / "lattice-elite-archive.json")
+    elite_parents = elite_parent_genomes(
+        elite_archive,
+        champion_id=champion.genome_id,
+        max_parents=2,
     )
+    parents = [("champion", champion)] + [
+        ("elite", genome) for genome in elite_parents
+    ]
+
+    total = max(1, int(population_size))
+    base_quota = total // len(parents)
+    remainder = total % len(parents)
     candidates = []
-    for index, (mutation, genome) in enumerate(population):
-        cfg = genome.lattice_config()
-        candidates.append({
-            "index": index,
-            "candidate_id": genome.genome_id,
-            "mutation": mutation.to_dict(),
-            "genome": genome.to_dict(),
-            "cost": architecture_cost_vector(cfg),
-            "stability": stability_certificate(cfg),
-        })
+    seen_genomes: set[str] = set()
+    for parent_index, (parent_kind, parent) in enumerate(parents):
+        quota = base_quota + (1 if parent_index < remainder else 0)
+        if quota <= 0:
+            continue
+        population = generate_lattice_population(
+            parent,
+            count=quota,
+            exploration_offset=max(0, int(exploration_offset)) + parent_index,
+            mathesis_signals=mathesis_signals,
+            research=research,
+            max_total_parameters=max(1, int(max_total_parameters)),
+            max_active_parameter_ratio=max(1.0, float(max_active_parameter_ratio)),
+        )
+        for mutation, genome in population:
+            if genome.genome_id in seen_genomes:
+                continue
+            seen_genomes.add(genome.genome_id)
+            cfg = genome.lattice_config()
+            candidates.append({
+                "index": len(candidates),
+                "candidate_id": genome.genome_id,
+                "mutation": mutation.to_dict(),
+                "genome": genome.to_dict(),
+                "source_parent_id": parent.genome_id,
+                "source_parent_generation": parent.generation,
+                "source_parent_kind": parent_kind,
+                "cost": architecture_cost_vector(cfg),
+                "stability": stability_certificate(cfg),
+            })
+            if len(candidates) >= total:
+                break
+        if len(candidates) >= total:
+            break
+
+    incumbent_cfg = champion.lattice_config()
+    incumbent = {
+        "index": 9999,
+        "candidate_id": champion.genome_id,
+        "mutation": {
+            "name": "incumbent-revalidation",
+            "family": "incumbent",
+            "changes": {},
+            "rationale": "re-validate the current research champion on fresh independent seeds",
+            "mathesis_tags": [],
+        },
+        "genome": champion.to_dict(),
+        "source_parent_id": champion.genome_id,
+        "source_parent_generation": champion.generation,
+        "source_parent_kind": "incumbent",
+        "cost": architecture_cost_vector(incumbent_cfg),
+        "stability": stability_certificate(incumbent_cfg),
+    }
 
     plan = {
         "ok": bool(candidates),
@@ -113,13 +166,27 @@ def prepare_swarm_plan(
             "tag_counts": dict((research or {}).get("tag_counts") or {}),
             "evidence_digest": (research or {}).get("evidence_digest"),
         },
+        "elite_archive": {
+            "summary": dict(elite_archive.get("summary") or {}),
+            "parents": [
+                {
+                    "genome_id": genome.genome_id,
+                    "generation": genome.generation,
+                }
+                for genome in elite_parents
+            ],
+            "family_feedback": mutation_family_feedback(elite_archive),
+        },
         "candidates": candidates,
+        "incumbent": incumbent,
         "matrix": {"include": [{"index": row["index"]} for row in candidates]},
         "policy": {
             "parallel_candidates": True,
             "external_pretrained": False,
             "canonical_native_transformer_unchanged": True,
             "candidate_can_self_promote": False,
+            "elite_can_self_promote": False,
+            "elite_archive_is_research_only": True,
         },
     }
     _atomic_json(Path(output_path), plan)
@@ -129,6 +196,11 @@ def prepare_swarm_plan(
 
 
 def _candidate_from_plan(plan: dict[str, Any], index: int) -> tuple[dict[str, Any], LatticeGenome]:
+    incumbent = plan.get("incumbent")
+    if isinstance(incumbent, dict) and int(incumbent.get("index", -1)) == int(index):
+        genome = LatticeGenome(**dict(incumbent["genome"])).validate()
+        return incumbent, genome
+
     candidates = plan.get("candidates")
     if not isinstance(candidates, list):
         raise ValueError("invalid Lattice swarm plan candidates")
@@ -225,6 +297,7 @@ def run_candidate(
         "candidate_id": row["candidate_id"],
         "mutation": row["mutation"],
         "genome": genome.to_dict(),
+        "source_parent_kind": row.get("source_parent_kind"),
         "reports": reports,
         "all_seed_wins": bool(reports) and all(
             bool(report.get("ok") and report.get("candidate_wins"))
@@ -356,7 +429,21 @@ def finalize_swarm(
     root.mkdir(parents=True, exist_ok=True)
     plan = _load_json(plan_path)
     reports = [row for row in _load_result_files(result_paths) if row.get("ok")]
-    finalists = [row for row in reports if row.get("all_seed_wins")]
+    incumbent_id = str((plan.get("incumbent") or {}).get("candidate_id") or "")
+    finalists = [
+        row for row in reports
+        if row.get("all_seed_wins")
+        and str(row.get("candidate_id") or "") != incumbent_id
+    ]
+
+    archive_path = root / "lattice-elite-archive.json"
+    elite_archive = update_elite_archive(
+        load_elite_archive(archive_path),
+        reports,
+        champion_id=str(plan.get("champion", {}).get("genome_id") or ""),
+        max_elites=12,
+    )
+    _atomic_json(archive_path, elite_archive)
 
     promoted = False
     winner = None
@@ -405,6 +492,20 @@ def finalize_swarm(
         "winner": winner,
         "champion": champion.to_dict(),
         "final_reports": reports,
+        "elite_archive": {
+            "summary": dict(elite_archive.get("summary") or {}),
+            "family_feedback": mutation_family_feedback(elite_archive),
+            "top": [
+                {
+                    "candidate_id": row.get("candidate_id"),
+                    "generation": (row.get("genome") or {}).get("generation"),
+                    "mutation_family": row.get("mutation_family"),
+                    "win_fraction": row.get("win_fraction"),
+                    "mean_margin": row.get("mean_margin"),
+                }
+                for row in list(elite_archive.get("elites") or [])[:5]
+            ],
+        },
         "policy": {
             "external_pretrained": False,
             "candidate_can_self_promote": False,
@@ -412,8 +513,19 @@ def finalize_swarm(
             "equal_budget_transformer_gate_required": True,
             "final_multi_seed_gate_required": True,
             "canonical_native_transformer_unchanged": True,
+            "elite_archive_is_research_only": True,
+            "elite_can_self_promote": False,
         },
     }
+    status["migration_readiness"] = evaluate_lattice_migration_readiness(
+        root / "lattice-history.jsonl",
+        champion.to_dict(),
+        additional_history=[status],
+    )
+    _atomic_json(
+        root / "lattice-migration-readiness.json",
+        status["migration_readiness"],
+    )
     _atomic_json(root / "lattice-status.json", status)
     with (root / "lattice-history.jsonl").open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(status, ensure_ascii=False, sort_keys=True) + "\n")
