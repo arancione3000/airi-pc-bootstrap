@@ -8,6 +8,12 @@ import shutil
 import time
 from typing import Any
 
+from .airi_pc_lab import (
+    build_airi_pc_lab_rows,
+    run_airi_pc_lab_probe,
+    snapshot_airi_pc_lab,
+    summarize_lab_learning,
+)
 from .runtime import GeneralistRuntime
 from .tokenizer import BOS, USER, ASSISTANT
 
@@ -172,6 +178,46 @@ def _neural_diagnostics(runtime) -> dict[str, Any]:
         "heads": heads,
         "connections": connections,
     }
+
+
+def _mobile_airi_pc_lab(status: dict[str, Any], state: Path) -> dict[str, Any]:
+    existing = status.get("airi_pc_lab")
+    if isinstance(existing, dict) and existing.get("version"):
+        return existing
+    persisted = _safe_json(state / "airi-pc-lab-report.json", {})
+    if isinstance(persisted, dict) and persisted.get("version"):
+        return persisted
+
+    snapshot = snapshot_airi_pc_lab(Path.cwd())
+    rows = build_airi_pc_lab_rows(snapshot, max_rows=18)
+    report: dict[str, Any] = {
+        "version": str(snapshot.get("version") or "airi-pc-lab-v1"),
+        "mode": str(snapshot.get("mode") or "read_only_sandbox"),
+        "snapshot": snapshot,
+        "learning": summarize_lab_learning(rows),
+    }
+    try:
+        champion = GeneralistRuntime.from_checkpoint(state / "champion", device="cpu")
+        report["champion"] = run_airi_pc_lab_probe(champion, snapshot)
+    except Exception as exc:
+        report["champion"] = {
+            "ok": False,
+            "tool_call_valid": False,
+            "error": f"{type(exc).__name__}:{exc}",
+        }
+
+    research_path = state / "latest-research"
+    if research_path.is_dir():
+        try:
+            research = GeneralistRuntime.from_checkpoint(research_path, device="cpu")
+            report["research"] = run_airi_pc_lab_probe(research, snapshot)
+        except Exception as exc:
+            report["research"] = {
+                "ok": False,
+                "tool_call_valid": False,
+                "error": f"{type(exc).__name__}:{exc}",
+            }
+    return report
 
 
 def _evolution_summary(status: dict[str, Any], state: Path) -> dict[str, Any]:
@@ -426,8 +472,7 @@ def export_mobile_bundle(
         "promoted_this_cycle": bool(status.get("promoted")),
         "promotion_reason": str(status.get("promotion_reason", "")),
         "evolution": _evolution_summary(status, state),
-        "airi_pc_lab": status.get("airi_pc_lab")
-        or _safe_json(state / "airi-pc-lab-report.json", {}),
+        "airi_pc_lab": _mobile_airi_pc_lab(status, state),
         "slots": slots,
     }
     _write_json(output / "manifest.json", manifest)
