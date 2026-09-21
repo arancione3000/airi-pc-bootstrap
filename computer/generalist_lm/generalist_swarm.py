@@ -40,7 +40,7 @@ from .research_cycle import (
 from .runtime import GeneralistRuntime
 
 
-GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v1"
+GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v2"
 
 
 def _atomic_json(path: Path, payload: Any) -> None:
@@ -192,7 +192,7 @@ def prepare_swarm(
     curriculum_max_rows: int = 4000,
     mathesis_state_dir: str | Path | None = None,
     grow_data: bool = True,
-    data_max_new_bytes: int = 2_000_000,
+    data_max_new_bytes: int = 8_000_000,
     data_max_total_bytes: int = 50_000_000,
     github_token: str | None = None,
 ) -> dict[str, Any]:
@@ -293,18 +293,29 @@ def prepare_swarm(
         current_params,
         max_parameters=max_params,
     )
-    scale_genome = None
+    scale_genomes: list[tuple[str, GeneralistGenome]] = []
     if target is not None and plateau["scale_probe"]:
-        try:
-            scale_genome = progressive_scale_candidate(
-                champion_genome,
-                target_parameters=target,
-                vocab_size=champion_runtime.tokenizer.vocab_size,
-                max_width=max_width,
-                max_layers=max_layers,
-            )
-        except Exception:
-            scale_genome = None
+        for kind, prefer_preserving in (
+            ("progressive_scale", True),
+            ("progressive_scale_balanced", False),
+        ):
+            try:
+                candidate = progressive_scale_candidate(
+                    champion_genome,
+                    target_parameters=target,
+                    vocab_size=champion_runtime.tokenizer.vocab_size,
+                    max_width=max_width,
+                    max_layers=max_layers,
+                    prefer_function_preserving=prefer_preserving,
+                )
+            except Exception:
+                continue
+            if any(
+                existing.genome_id == candidate.genome_id
+                for _existing_kind, existing in scale_genomes
+            ):
+                continue
+            scale_genomes.append((kind, candidate))
 
     generated = generate_challengers(
         champion_genome,
@@ -315,8 +326,7 @@ def prepare_swarm(
     rows: list[tuple[str, GeneralistGenome]] = [
         ("continual", _continual_genome(champion_genome, cycle)),
     ]
-    if scale_genome is not None:
-        rows.append(("progressive_scale", scale_genome))
+    rows.extend(scale_genomes)
     rows.extend(("architecture", genome) for genome in generated)
 
     candidates = _unique_candidates(rows, count=population_size)
@@ -355,8 +365,12 @@ def prepare_swarm(
         "progressive_scaling": {
             "current_parameters": current_params,
             "target_parameters": target,
-            "candidate_generated": scale_genome is not None,
+            "candidate_generated": bool(scale_genomes),
+            "candidate_count": len(scale_genomes),
+            "strategies": [kind for kind, _genome in scale_genomes],
             "tiers": [250_000, 500_000, 1_000_000, 2_000_000],
+            "minimum_scale_budget_multiplier": 1.25,
+            "maximum_scale_budget_multiplier": 1.75,
         },
         "limits": {
             "max_params": int(max_params),
@@ -375,6 +389,8 @@ def prepare_swarm(
             "external_pretrained": False,
             "adaptive_curriculum": True,
             "progressive_scaling": True,
+            "scale_probe_retention": "reserve one safe scale survivor through reductions",
+            "scale_budget_adaptive": True,
             "weight_inheritance": True,
             "automatic_data_growth_fail_closed": True,
         },
@@ -555,6 +571,41 @@ def run_candidate(
         _atomic_json(out_root / "result.json", result)
         return result
 
+    requested_steps = max(1, int(steps))
+    requested_pretrain_steps = max(0, int(pretrain_steps))
+    effective_steps = requested_steps
+    effective_pretrain_steps = requested_pretrain_steps
+    scale_budget_multiplier = 1.0
+    if str(row.get("kind") or "").startswith("progressive_scale"):
+        current_scale_params = int(
+            (plan.get("progressive_scaling") or {}).get("current_parameters")
+            or (plan.get("champion_report") or {}).get("parameters")
+            or 1
+        )
+        candidate_scale_params = int(
+            row.get("estimated_parameters")
+            or estimate_parameter_count(genome.model_config(tokenizer.vocab_size))
+        )
+        ratio = max(
+            1.0,
+            candidate_scale_params / max(1.0, float(current_scale_params)),
+        )
+        scale_budget_multiplier = min(
+            1.75,
+            max(1.25, math.sqrt(ratio)),
+        )
+        effective_steps = max(
+            requested_steps,
+            int(math.ceil(requested_steps * scale_budget_multiplier)),
+        )
+        if requested_pretrain_steps:
+            effective_pretrain_steps = max(
+                requested_pretrain_steps,
+                int(math.ceil(
+                    requested_pretrain_steps * scale_budget_multiplier
+                )),
+            )
+
     reports = []
     runtimes: list[tuple[GeneralistRuntime, dict[str, Any]]] = []
     rotating = canary_rows(int(plan["cycle"]))
@@ -566,7 +617,7 @@ def run_candidate(
         ) % 2_000_000_000
         runtime, report = _train_genome(
             genome,
-            steps=max(1, int(steps)),
+            steps=effective_steps,
             seed=max(1, int(seed)),
             device="cpu",
             replay_rows=replay_rows,
@@ -577,7 +628,7 @@ def run_candidate(
             gradient_accumulation_steps=1,
             precision="fp32",
             pretrain_documents=documents,
-            pretrain_steps=max(0, int(pretrain_steps)),
+            pretrain_steps=effective_pretrain_steps,
         )
         report["canary_cycle"] = int(plan["cycle"])
         report["canary"] = _grouped_validation(
@@ -642,7 +693,7 @@ def run_candidate(
             ),
             "cumulative_steps": (
                 int(source_metadata.get("cumulative_steps", 0) or 0)
-                + int(steps)
+                + int(effective_steps)
             ),
             "production_qualified": False,
         },
@@ -671,10 +722,14 @@ def run_candidate(
         "version": GENERALIST_SWARM_VERSION,
         "cycle": int(plan["cycle"]),
         "stage": int(stage),
-        "steps": int(steps),
+        "steps": int(effective_steps),
+        "requested_steps": int(requested_steps),
+        "pretrain_steps": int(effective_pretrain_steps),
+        "requested_pretrain_steps": int(requested_pretrain_steps),
+        "scale_budget_multiplier": float(scale_budget_multiplier),
         "cumulative_steps": (
             int(source_metadata.get("cumulative_steps", 0) or 0)
-            + int(steps)
+            + int(effective_steps)
         ),
         "continued_from_stage": (
             int(source_metadata["stage"])
@@ -755,17 +810,33 @@ def select_survivors(
     ]
     if not safe:
         safe = rows
-    safe.sort(
-        key=lambda row: (
-            0 if row.get("any_seed_eligible") else 1,
-            -float(row.get("mean_generation_accuracy", 0.0)),
-            float(row.get("mean_nll_per_byte", float("inf"))),
-            int(row.get("parameters", 1 << 60)),
-            -float(row.get("score", 0.0)),
-            int(row["candidate_index"]),
-        )
+    rank_key = lambda row: (
+        0 if row.get("any_seed_eligible") else 1,
+        -float(row.get("mean_generation_accuracy", 0.0)),
+        float(row.get("mean_nll_per_byte", float("inf"))),
+        int(row.get("parameters", 1 << 60)),
+        -float(row.get("score", 0.0)),
+        int(row["candidate_index"]),
     )
-    selected = safe[: max(1, int(survivors))]
+    safe.sort(key=rank_key)
+    survivor_count = max(1, int(survivors))
+    selected = safe[:survivor_count]
+    progressive_rows = [
+        row for row in safe
+        if str(row.get("kind") or "").startswith("progressive_scale")
+    ]
+    protected_progressive_scale = False
+    if (
+        survivor_count >= 2
+        and progressive_rows
+        and not any(
+            str(row.get("kind") or "").startswith("progressive_scale")
+            for row in selected
+        )
+    ):
+        selected[-1] = progressive_rows[0]
+        selected.sort(key=rank_key)
+        protected_progressive_scale = True
     payload = {
         "ok": True,
         "version": GENERALIST_SWARM_VERSION,
@@ -782,6 +853,7 @@ def select_survivors(
                 for row in selected
             ]
         },
+        "protected_progressive_scale": protected_progressive_scale,
     }
     _atomic_json(Path(output_path), payload)
     return payload
@@ -940,6 +1012,8 @@ def finalize_swarm(
             "external_pretrained": False,
             "adaptive_curriculum": True,
             "progressive_scaling_max_parameters": 2_000_000,
+            "scale_probe_retention": "reserve one safe scale survivor through reductions",
+            "scale_budget_adaptive": True,
             "weight_inheritance": "layout-aware Net2Grow + identity residual depth expansion",
             "automatic_data_growth": "permissive SPDX + immutable commit + quarantine + hash + quality filter",
             "continual_learning": {
@@ -996,6 +1070,8 @@ def main(argv=None) -> int:
     prepare.add_argument("--max-width", type=int, default=256)
     prepare.add_argument("--max-layers", type=int, default=6)
     prepare.add_argument("--curriculum-max-rows", type=int, default=4000)
+    prepare.add_argument("--data-max-new-bytes", type=int, default=8_000_000)
+    prepare.add_argument("--data-max-total-bytes", type=int, default=50_000_000)
     prepare.add_argument("--no-data-growth", action="store_true")
 
     worker = sub.add_parser("worker")
@@ -1036,6 +1112,8 @@ def main(argv=None) -> int:
             curriculum_max_rows=args.curriculum_max_rows,
             mathesis_state_dir=args.mathesis_state,
             grow_data=not args.no_data_growth,
+            data_max_new_bytes=args.data_max_new_bytes,
+            data_max_total_bytes=args.data_max_total_bytes,
             github_token=os.environ.get("GITHUB_TOKEN"),
         )
     elif args.cmd == "worker":
