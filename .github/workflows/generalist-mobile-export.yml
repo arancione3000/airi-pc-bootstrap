@@ -8,6 +8,11 @@ on:
       - 'computer/generalist_lm/mobile_export.py'
       - 'computer/generalist_lm/generalist_swarm.py'
       - '.github/workflows/generalist-mobile-export.yml'
+  pull_request:
+    paths:
+      - 'computer/generalist_lm/mobile_export.py'
+      - 'computer/generalist_lm/generalist_swarm.py'
+      - '.github/workflows/generalist-mobile-export.yml'
   workflow_run:
     workflows: ['AIRI Generalist Research Continuum']
     types: [completed]
@@ -70,6 +75,7 @@ jobs:
           retention-days: 7
 
       - name: Publish latest mobile bundle branch
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
