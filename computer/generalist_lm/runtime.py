@@ -100,7 +100,16 @@ class GeneralistRuntime:
         self.model.to(self.device)
         return info
 
-    def _generate_ids(self, prompt_ids: list[int], *, max_new_tokens: int, temperature: float = 0.0, top_k: int | None = None) -> list[int]:
+    def _generate_ids(
+        self,
+        prompt_ids: list[int],
+        *,
+        max_new_tokens: int,
+        temperature: float = 0.0,
+        top_k: int | None = None,
+        top_p: float | None = None,
+        repetition_penalty: float = 1.0,
+    ) -> list[int]:
         context = prompt_ids[-self.config.context_length:]
         tensor = self.torch.tensor([context], dtype=self.torch.long, device=self.device)
         out = self.model.generate(
@@ -109,21 +118,55 @@ class GeneralistRuntime:
             eos_token_id=EOS,
             temperature=temperature,
             top_k=top_k,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
         )[0].tolist()
         return out[len(context):]
 
-    def complete(self, prompt: str, *, max_new_tokens: int = 128, temperature: float = 0.0, top_k: int | None = None) -> str:
+    def complete(
+        self,
+        prompt: str,
+        *,
+        max_new_tokens: int = 128,
+        temperature: float = 0.0,
+        top_k: int | None = None,
+        top_p: float | None = None,
+        repetition_penalty: float = 1.0,
+    ) -> str:
         ids = self.tokenizer.encode(prompt, bos=True)
-        generated = self._generate_ids(ids, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k)
+        generated = self._generate_ids(
+            ids,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
+        )
         return self.tokenizer.decode(generated).split("\x00", 1)[0]
 
     def generate(self, prompt: str, *, max_new_tokens: int = 128) -> str:
         """Benchmark/backend-compatible deterministic text generation."""
         return self.complete(prompt, max_new_tokens=max_new_tokens, temperature=0.0)
 
-    def chat(self, messages: list[dict[str, str]], *, max_new_tokens: int = 192, temperature: float = 0.0) -> str:
+    def chat(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        max_new_tokens: int = 192,
+        temperature: float = 0.0,
+        top_k: int | None = None,
+        top_p: float | None = None,
+        repetition_penalty: float = 1.0,
+    ) -> str:
         ids = self.tokenizer.serialize_messages(messages, add_generation_prompt=True)
-        generated = self._generate_ids(ids, max_new_tokens=max_new_tokens, temperature=temperature)
+        generated = self._generate_ids(
+            ids,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
+        )
         return self.tokenizer.decode(generated)
 
     def complete_code(self, instruction: str, *, language: str = "python", max_new_tokens: int = 256) -> str:

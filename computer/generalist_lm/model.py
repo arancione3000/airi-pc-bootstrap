@@ -319,10 +319,13 @@ class CausalTransformerLM:
                 eos_token_id: int | None = 2,
                 temperature: float = 0.0,
                 top_k: int | None = None,
+                top_p: float | None = None,
+                repetition_penalty: float = 1.0,
                 use_cache: bool = True,
             ):
                 self.eval()
                 out = input_ids
+                prompt_length = int(input_ids.shape[1])
                 past_key_values = None
                 next_input = out[:, -config.context_length:]
 
@@ -340,13 +343,41 @@ class CausalTransformerLM:
                     past_key_values = result["past_key_values"] if use_cache else None
 
                     if temperature is None or float(temperature) <= 0.0:
+                        # Canonical RAW GREEDY: sampling controls intentionally
+                        # cannot alter deterministic evaluation output.
                         next_token = logits.argmax(dim=-1, keepdim=True)
                     else:
+                        penalty = max(1.0, float(repetition_penalty or 1.0))
+                        if penalty > 1.0 and int(out.shape[1]) > prompt_length:
+                            logits = logits.clone()
+                            for batch_index in range(int(out.shape[0])):
+                                repeated = torch.unique(out[batch_index, prompt_length:])
+                                values = logits[batch_index, repeated]
+                                logits[batch_index, repeated] = torch.where(
+                                    values < 0,
+                                    values * penalty,
+                                    values / penalty,
+                                )
                         scaled = logits / max(1e-5, float(temperature))
                         if top_k is not None and 0 < int(top_k) < scaled.shape[-1]:
                             values, _ = torch.topk(scaled, int(top_k))
                             cutoff = values[:, -1].unsqueeze(-1)
                             scaled = scaled.masked_fill(scaled < cutoff, float("-inf"))
+                        if top_p is not None and 0.0 < float(top_p) < 1.0:
+                            sorted_logits, sorted_indices = torch.sort(
+                                scaled,
+                                descending=True,
+                                dim=-1,
+                            )
+                            sorted_probs = torch.softmax(sorted_logits, dim=-1)
+                            cumulative = torch.cumsum(sorted_probs, dim=-1)
+                            remove = cumulative > float(top_p)
+                            remove[..., 1:] = remove[..., :-1].clone()
+                            remove[..., 0] = False
+                            sorted_logits = sorted_logits.masked_fill(remove, float("-inf"))
+                            filtered = torch.full_like(scaled, float("-inf"))
+                            filtered.scatter_(dim=-1, index=sorted_indices, src=sorted_logits)
+                            scaled = filtered
                         probs = torch.softmax(scaled, dim=-1)
                         next_token = torch.multinomial(probs, num_samples=1)
 

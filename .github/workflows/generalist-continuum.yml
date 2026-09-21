@@ -19,7 +19,48 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  bootstrap-gate:
+    runs-on: ubuntu-latest
+    outputs:
+      active: ${{ steps.gate.outputs.active }}
+    steps:
+      - name: Detect active Phase 5 language bootstrap
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/runs?per_page=20"
+          active=0
+          if payload="$(curl --fail-with-body -sS --connect-timeout 10 --max-time 30 \
+            --retry 3 --retry-delay 2 --retry-all-errors \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api}")"; then
+            active="$(jq '
+              [
+                .workflow_runs[]
+                | select(
+                    .status == "pending"
+                    or .status == "queued"
+                    or .status == "in_progress"
+                    or .status == "waiting"
+                    or .status == "requested"
+                  )
+              ] | length
+            ' <<<"${payload}")"
+          fi
+          if (( active > 0 )); then
+            echo "Phase 5 bootstrap owns the Generalist state-write window."
+            echo "active=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "active=false" >> "${GITHUB_OUTPUT}"
+          fi
+
   plan:
+    needs: bootstrap-gate
+    if: needs.bootstrap-gate.outputs.active != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -337,6 +378,39 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+
+          bootstrap_api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/runs"
+          curl_common=(
+            --fail-with-body -sS
+            --connect-timeout 10
+            --max-time 30
+            --retry 3
+            --retry-delay 2
+            --retry-all-errors
+          )
+
+          if bootstrap_payload="$(curl "${curl_common[@]}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${bootstrap_api}?per_page=20")"; then
+            bootstrap_active="$(jq '
+              [
+                .workflow_runs[]
+                | select(
+                    .status == "pending"
+                    or .status == "queued"
+                    or .status == "in_progress"
+                    or .status == "waiting"
+                    or .status == "requested"
+                  )
+              ] | length
+            ' <<<"${bootstrap_payload}")"
+            if (( bootstrap_active > 0 )); then
+              echo "Phase 5 language bootstrap is active; pausing continuum handoff."
+              exit 0
+            fi
+          fi
 
           api_base="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-continuum.yml/runs"
           curl_common=(

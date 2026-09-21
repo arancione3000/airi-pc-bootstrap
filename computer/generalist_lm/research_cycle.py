@@ -188,10 +188,44 @@ def _generation_probe(
         if outputs else 0.0
     )
     similarity = similarity_sum / len(outputs) if outputs else 0.0
+    generated_ids: list[int] = []
+    for item in outputs:
+        generated_ids.extend(tokenizer.encode(str(item.get("output") or "")))
+    unique_ratio = (
+        len(set(generated_ids)) / len(generated_ids)
+        if generated_ids else 0.0
+    )
+    token_counts: dict[int, int] = {}
+    longest_run = 0
+    current_run = 0
+    previous_token = None
+    for token in generated_ids:
+        token_counts[token] = token_counts.get(token, 0) + 1
+        if token == previous_token:
+            current_run += 1
+        else:
+            current_run = 1
+            previous_token = token
+        longest_run = max(longest_run, current_run)
+    dominant_fraction = (
+        max(token_counts.values()) / len(generated_ids)
+        if generated_ids and token_counts else 0.0
+    )
+    repetition_rate = 1.0 - unique_ratio if generated_ids else 0.0
+    pathological_repetition = bool(
+        longest_run >= 8
+        or (len(generated_ids) >= 12 and repetition_rate >= 0.72)
+        or (len(generated_ids) >= 12 and dominant_fraction >= 0.60)
+    )
     return {
         "generation_exact_accuracy": float(accuracy),
         "generation_similarity": float(similarity),
         "generation_nonempty_rate": float(nonempty / len(outputs)) if outputs else 0.0,
+        "generation_repetition_rate": float(repetition_rate),
+        "generation_unique_token_ratio": float(unique_ratio),
+        "generation_longest_repeated_token_run": int(longest_run),
+        "generation_dominant_token_fraction": float(dominant_fraction),
+        "generation_pathological_repetition": pathological_repetition,
         "domain_generation_accuracy": {
             domain: domain_correct.get(domain, 0) / max(1, total)
             for domain, total in sorted(domain_total.items())
@@ -326,6 +360,13 @@ def _research_eligible(
         if float(new_generation_domains[domain]) + 1e-12 < float(old_value):
             return False, f"candidate regressed in autoregressive generation domain: {domain}"
 
+    if bool(candidate.get("generation_pathological_repetition")):
+        return False, "candidate failed autoregressive repetition-collapse gate"
+    if float(candidate.get("generation_repetition_rate", 0.0) or 0.0) > 0.72:
+        return False, "candidate repetition rate exceeded fail-closed limit"
+    if int(candidate.get("generation_longest_repeated_token_run", 0) or 0) >= 8:
+        return False, "candidate repeated-token run exceeded fail-closed limit"
+
     old_similarity = float(champion.get("generation_similarity", 0.0) or 0.0)
     new_similarity = float(candidate.get("generation_similarity", 0.0) or 0.0)
     if new_similarity + 0.03 < old_similarity:
@@ -366,6 +407,11 @@ def _research_eligible(
             if float(new_canary_domains[domain]) > float(old_value) + float(max_domain_regression):
                 return False, f"candidate regressed on rotating canary domain: {domain}"
 
+        if bool(new_canary.get("generation_pathological_repetition")):
+            return False, "candidate rotating canary hit repetition collapse"
+        if int(new_canary.get("generation_longest_repeated_token_run", 0) or 0) >= 8:
+            return False, "candidate rotating canary repeated-token run exceeded limit"
+
         old_canary_generation = float(old_canary.get("generation_exact_accuracy", 0.0))
         new_canary_generation = float(new_canary.get("generation_exact_accuracy", 0.0))
         if new_canary_generation + 1e-12 < old_canary_generation:
@@ -375,7 +421,7 @@ def _research_eligible(
         if old_canary_solved - new_canary_solved:
             return False, "candidate forgot a solved rotating canary item"
 
-    return True, "held-out NLL/byte, rotating canary, generation, and anti-forgetting gates passed"
+    return True, "held-out NLL/byte, rotating canary, generation, anti-repetition, and anti-forgetting gates passed"
 
 def _weaknesses(report: dict[str, Any]) -> list[str]:
     domains = report.get("domain_nll_per_byte") or report.get("domain_loss") or {}

@@ -1,0 +1,232 @@
+name: AIRI Generalist Language Bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_tokens:
+        description: Cumulative causal tokens for this bootstrap rung
+        required: false
+        default: '1000000'
+  push:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/bootstrap_data.py'
+      - 'computer/generalist_lm/bootstrap_training.py'
+      - 'computer/generalist_lm/phase5_diagnostics.py'
+      - 'computer/generalist_lm/model.py'
+      - 'computer/generalist_lm/runtime.py'
+      - 'computer/generalist_lm/research_cycle.py'
+      - 'computer/generalist_lm/generalist_swarm.py'
+      - '.github/workflows/generalist-bootstrap.yml'
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: airi-generalist-language-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONPATH: computer
+      STATE_REPO: /tmp/airi-generalist-phase5-state-repo
+      STATE_DIR: /tmp/airi-generalist-phase5-state-repo/generalist-state
+      CACHE_DIR: /tmp/airi-generalist-phase5-cache
+      TARGET_TOKENS: ${{ github.event.inputs.target_tokens || '1000000' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: computer/mathesis/requirements.txt
+
+      - name: Install CPU bootstrap runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Wait for the active Continuum cycle to finish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-continuum.yml/runs?per_page=30"
+          for _ in $(seq 1 75); do
+            payload="$(curl --fail-with-body -sS --retry 3 --retry-all-errors \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api}")"
+            active="$(jq '
+              [
+                .workflow_runs[]
+                | select(
+                    .status == "pending"
+                    or .status == "queued"
+                    or .status == "in_progress"
+                    or .status == "waiting"
+                    or .status == "requested"
+                  )
+              ] | length
+            ' <<<"${payload}")"
+            if (( active == 0 )); then
+              echo "Continuum is idle; Phase 5 has exclusive state-write window."
+              exit 0
+            fi
+            echo "Continuum still active (${active} run); waiting before bootstrap state snapshot."
+            sleep 20
+          done
+          echo "Timed out waiting for a safe state-write window." >&2
+          exit 1
+
+      - name: Restore latest persistent Generalist state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf "${STATE_REPO}" "${CACHE_DIR}"
+          git clone --quiet --branch generalist-state --single-branch \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "${STATE_REPO}"
+          git -C "${STATE_REPO}" config user.name "AIRI Generalist Phase 5"
+          git -C "${STATE_REPO}" config user.email "airi-generalist@users.noreply.github.com"
+          mkdir -p "${CACHE_DIR}"
+          test -f "${STATE_DIR}/champion/model.pt"
+          test -f "${STATE_DIR}/status.json"
+          printf '{"workflow_run_id":%s,"target_tokens":%s,"started_at":"%s"}\n' \
+            "${GITHUB_RUN_ID}" "${TARGET_TOKENS}" "$(date -u +%FT%TZ)" \
+            > "${STATE_DIR}/bootstrap-data-active.json"
+
+      - name: Run resumable language-first bootstrap segments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OMP_NUM_THREADS: '4'
+          MKL_NUM_THREADS: '4'
+        run: |
+          set -euo pipefail
+          persist_state() {
+            local label="$1"
+            cd "${STATE_REPO}"
+            git add -A generalist-state
+            git add -A generalist-state/bootstrap-data-active.json || true
+            git commit --allow-empty -m "generalist-state: phase5 ${label}"
+            git push --quiet origin HEAD:generalist-state
+            cd "${GITHUB_WORKSPACE}"
+          }
+
+          rung_complete=false
+          for segment in $(seq 1 80); do
+            echo "Phase 5 segment ${segment}; target=${TARGET_TOKENS}"
+            python -m generalist_lm.bootstrap_training \
+              --state-dir "${STATE_DIR}" \
+              --repo-root "${GITHUB_WORKSPACE}" \
+              --cache-dir "${CACHE_DIR}" \
+              --target-tokens "${TARGET_TOKENS}" \
+              --segment-tokens 250000 \
+              --batch-size 32 \
+              --learning-rate 0.0003 \
+              | tee /tmp/phase5-segment.json
+
+            persist_state "target ${TARGET_TOKENS} segment ${segment}"
+
+            rung_complete="$(jq -r '.rung_complete' /tmp/phase5-segment.json)"
+            if [[ "${rung_complete}" == "true" ]]; then
+              break
+            fi
+          done
+
+          echo "RUNG_COMPLETE=${rung_complete}" >> "${GITHUB_ENV}"
+          if [[ "${rung_complete}" == "true" ]]; then
+            test -s "${STATE_DIR}/bootstrap-data/report.json"
+            jq -e '.external_pretrained_weights_used == false and .external_model_distillation_used == false' \
+              "${STATE_DIR}/bootstrap-data/manifest.json"
+            rm -f "${STATE_DIR}/bootstrap-data-active.json"
+            persist_state "target ${TARGET_TOKENS} complete"
+          else
+            persist_state "target ${TARGET_TOKENS} checkpointed"
+          fi
+
+      - name: Upload Phase 5 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AIRI-Generalist-Phase5-Evidence-${{ github.run_number }}
+          path: |
+            ${{ env.STATE_DIR }}/bootstrap-data/manifest.json
+            ${{ env.STATE_DIR }}/bootstrap-data/progress.json
+            ${{ env.STATE_DIR }}/bootstrap-data/before.json
+            ${{ env.STATE_DIR }}/bootstrap-data/after.json
+            ${{ env.STATE_DIR }}/bootstrap-data/report.json
+            ${{ env.STATE_DIR }}/bootstrap-data/airi-pc-lab-after.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Resume an incomplete rung from its persisted checkpoint
+        if: env.RUNG_COMPLETE != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body -sS -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/dispatches" \
+            -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${TARGET_TOKENS}\"}}"
+          echo "NEXT_BOOTSTRAP_TARGET=${TARGET_TOKENS}" >> "${GITHUB_ENV}"
+
+      - name: Continue ladder only when measured benefit justifies it
+        if: env.RUNG_COMPLETE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          report="${STATE_DIR}/bootstrap-data/report.json"
+          current="${TARGET_TOKENS}"
+          minimum_success="$(jq -r '.minimum_success' "${report}")"
+          after_nll="$(jq -r '.after.language_nll' "${report}")"
+          before_nll="$(jq -r '.before.language_nll' "${report}")"
+          multiword="$(jq -r '.after.multiword_output_rate' "${report}")"
+          after_rep="$(jq -r '.after.repetition_rate' "${report}")"
+          before_rep="$(jq -r '.before.repetition_rate' "${report}")"
+          next=""
+
+          if [[ "${current}" -lt 5000000 ]]; then
+            # 1M is a bootstrap diagnostic rung, not permission to give up.
+            next=5000000
+          elif [[ "${current}" -lt 20000000 ]] && \
+               { [[ "${minimum_success}" == "true" ]] || \
+                 awk "BEGIN {exit !(${after_nll} < ${before_nll} - 0.08 && ${after_rep} < ${before_rep})}"; }; then
+            next=20000000
+          elif [[ "${minimum_success}" == "true" && "${current}" -lt 50000000 ]] && \
+               awk "BEGIN {exit !(${after_nll} < ${before_nll} - 0.25 && ${multiword} >= 0.50)}"; then
+            next=50000000
+          fi
+
+          if [[ -n "${next}" ]]; then
+            curl --fail-with-body -sS -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/dispatches" \
+              -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${next}\"}}"
+            echo "NEXT_BOOTSTRAP_TARGET=${next}" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Resume Continuum when bootstrap ladder pauses
+        if: env.NEXT_BOOTSTRAP_TARGET == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body -sS -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-continuum.yml/dispatches" \
+            -d '{"ref":"main"}'

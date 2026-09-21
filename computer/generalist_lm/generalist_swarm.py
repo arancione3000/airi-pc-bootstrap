@@ -860,6 +860,18 @@ def run_candidate(
         float(item["report"].get("generation_nonempty_rate", 0.0) or 0.0)
         for item in valid
     ]
+    generation_repetition_rates = [
+        float(item["report"].get("generation_repetition_rate", 0.0) or 0.0)
+        for item in valid
+    ]
+    generation_longest_runs = [
+        int(item["report"].get("generation_longest_repeated_token_run", 0) or 0)
+        for item in valid
+    ]
+    degeneration_failures = [
+        bool(item["report"].get("generation_pathological_repetition"))
+        for item in valid
+    ]
     regressions = [
         _domain_regression(plan["champion_report"], item["report"])
         for item in valid
@@ -895,6 +907,9 @@ def run_candidate(
         "mean_generation_accuracy": mean(generations),
         "mean_generation_similarity": mean(generation_similarities),
         "mean_generation_nonempty_rate": mean(generation_nonempty_rates),
+        "mean_generation_repetition_rate": mean(generation_repetition_rates),
+        "max_generation_repeated_token_run": max(generation_longest_runs, default=0),
+        "any_generation_pathological_repetition": any(degeneration_failures),
         "pretrain_budget_multiplier": (
             float(effective_pretrain_steps / requested_pretrain_steps)
             if requested_pretrain_steps
@@ -965,6 +980,7 @@ def select_survivors(
     safe = [
         row for row in rows
         if float(row.get("worst_domain_regression", float("inf"))) <= 0.18
+        and not bool(row.get("any_generation_pathological_repetition"))
     ]
     if not safe:
         safe = rows
@@ -973,6 +989,7 @@ def select_survivors(
         -float(row.get("mean_generation_accuracy", 0.0)),
         -float(row.get("mean_generation_similarity", 0.0)),
         -float(row.get("mean_generation_nonempty_rate", 0.0)),
+        float(row.get("mean_generation_repetition_rate", 1.0)),
         float(row.get("mean_nll_per_byte", float("inf"))),
         int(row.get("parameters", 1 << 60)),
         -float(row.get("score", 0.0)),
@@ -1049,6 +1066,7 @@ def finalize_swarm(
                 -float(pair[1].get("mean_generation_accuracy", 0.0)),
                 -float(pair[1].get("mean_generation_similarity", 0.0)),
                 -float(pair[1].get("mean_generation_nonempty_rate", 0.0)),
+                float(pair[1].get("mean_generation_repetition_rate", 1.0)),
                 float(pair[1].get("worst_domain_regression", float("inf"))),
                 float(pair[1].get("mean_nll_per_byte", float("inf"))),
                 int(pair[1].get("parameters", 1 << 60)),
@@ -1082,6 +1100,15 @@ def finalize_swarm(
                 "mean_generation_nonempty_rate": float(
                     research_row.get("mean_generation_nonempty_rate", 0.0) or 0.0
                 ),
+                "mean_generation_repetition_rate": float(
+                    research_row.get("mean_generation_repetition_rate", 0.0) or 0.0
+                ),
+                "max_generation_repeated_token_run": int(
+                    research_row.get("max_generation_repeated_token_run", 0) or 0
+                ),
+                "any_generation_pathological_repetition": bool(
+                    research_row.get("any_generation_pathological_repetition")
+                ),
                 "worst_domain_regression": float(
                     research_row.get("worst_domain_regression", 0.0) or 0.0
                 ),
@@ -1107,6 +1134,7 @@ def finalize_swarm(
                 -float(pair[1].get("mean_generation_accuracy", 0.0)),
                 -float(pair[1].get("mean_generation_similarity", 0.0)),
                 -float(pair[1].get("mean_generation_nonempty_rate", 0.0)),
+                float(pair[1].get("mean_generation_repetition_rate", 1.0)),
                 float(pair[1].get("mean_nll_per_byte", float("inf"))),
                 int(pair[1].get("parameters", 1 << 60)),
             )
