@@ -19,10 +19,22 @@ PARAMETER_TIERS = (
 
 
 def next_parameter_tier(current: int, *, cap: int = 7_000_000) -> int | None:
-    for tier in PARAMETER_TIERS:
-        if int(current) < tier <= int(cap):
-            return int(tier)
-    return None
+    tiers = next_parameter_tiers(current, cap=cap, limit=1)
+    return tiers[0] if tiers else None
+
+
+def next_parameter_tiers(
+    current: int,
+    *,
+    cap: int = 7_000_000,
+    limit: int = 2,
+) -> list[int]:
+    out = [
+        int(tier)
+        for tier in PARAMETER_TIERS
+        if int(current) < tier <= int(cap)
+    ]
+    return out[: max(0, int(limit))]
 
 
 def _with_id(parent: ArchitectureSpec, updates: dict[str, Any]) -> ArchitectureSpec:
@@ -104,6 +116,14 @@ def structural_mutations(
             ),
             "local_attention_every": 2 if parent.n_layers >= 4 else 0,
         })
+        rows.insert(2, {
+            "norm_type": "rmsnorm",
+            "norm_placement": "pre",
+            "position_encoding": "rope",
+            "ff_variant": "swiglu",
+            "attention_type": "gqa",
+            "n_kv_heads": max(1, parent.n_heads // 2),
+        })
 
     out: list[ArchitectureSpec] = []
     seen: set[str] = set()
@@ -180,11 +200,18 @@ def proposal_set(
             "bounded Architecture-IR mutation prompted by observed weaknesses",
         ))
 
-    target = next_parameter_tier(
+    targets = next_parameter_tiers(
         parent.parameter_estimate(vocab_size=parent.target_vocab_size),
         cap=int(parameter_cap),
+        limit=2,
     )
-    if target is not None:
+    modern = _with_id(parent, {
+        "norm_type": "rmsnorm",
+        "norm_placement": "pre",
+        "position_encoding": "rope",
+        "ff_variant": "swiglu",
+    })
+    for target in targets:
         try:
             scaled = scaled_descendant(
                 parent,
@@ -193,19 +220,15 @@ def proposal_set(
             proposals.append((
                 "capacity_scale",
                 scaled,
-                f"next bounded parameter tier {target}",
+                f"bounded parameter tier {target}",
             ))
         except Exception:
             pass
 
-        # Couple one scale probe with the modernized baseline rather than
-        # assuming the current architecture is the best shape to enlarge.
-        modern = _with_id(parent, {
-            "norm_type": "rmsnorm",
-            "norm_placement": "pre",
-            "position_encoding": "rope",
-            "ff_variant": "swiglu",
-        })
+        # Couple each bounded scale probe with a conservative modernized
+        # baseline. If the nearest tier has already failed under the same
+        # parent, negative-memory filtering can advance to the next tier
+        # instead of rediscovering the same topology forever.
         try:
             scaled_modern = scaled_descendant(
                 modern,
