@@ -1,5 +1,19 @@
 {
-  "bootstrapped": false,
+  "adaptive_curriculum": {
+    "domain_weights": {
+      "coding": 1.5235690942697206,
+      "data": 2.233511022552989,
+      "language": 3.0,
+      "reasoning": 2.1121490166384556,
+      "structured": 1.0825704331187755,
+      "tools": 1.0
+    }
+  },
+  "automatic_data_growth": {
+    "ok": false,
+    "reason": "ValueError:GitHub metadata response exceeded budget",
+    "skipped": false
+  },
   "champion": {
     "code_adapter": false,
     "context_length": 128,
@@ -25,14 +39,14 @@
   "champion_report": {
     "bits_per_byte": 2.326702808301014,
     "canary": {
-      "bits_per_byte": 2.965658912095679,
+      "bits_per_byte": 2.9622635173203595,
       "domain_bits_per_byte": {
-        "coding": 3.8113719015924357,
-        "data": 4.453475150998751,
-        "language": 6.429161120694203,
-        "reasoning": 4.847376417988089,
-        "structured": 3.892098554460418,
-        "tools": 1.6061347147290024
+        "coding": 3.807382483402401,
+        "data": 4.354574578483383,
+        "language": 6.513136534285253,
+        "reasoning": 5.5981084814006286,
+        "structured": 3.8509466476776093,
+        "tools": 1.5653399203661194
       },
       "domain_generation_accuracy": {
         "coding": 0.0,
@@ -43,20 +57,20 @@
         "tools": 0.0
       },
       "domain_loss": {
-        "coding": 4.015599365234375,
-        "data": 2.645926066807338,
-        "language": 4.051231731068004,
-        "reasoning": 2.799954414367676,
-        "structured": 3.0350217819213867,
-        "tools": 1.4783001258725026
+        "coding": 4.0113961791992185,
+        "data": 2.5871666499546597,
+        "language": 4.104147477583452,
+        "reasoning": 3.2335942586263022,
+        "structured": 3.0029319127400718,
+        "tools": 1.440752248295018
       },
       "domain_nll_per_byte": {
-        "coding": 2.641841687654194,
-        "data": 3.086913744608561,
-        "language": 4.4563549041748045,
-        "reasoning": 3.359945297241211,
-        "structured": 2.6977971394856772,
-        "tools": 1.11328774911386
+        "coding": 2.6390764336836967,
+        "data": 3.0183610916137695,
+        "language": 4.5145622253417965,
+        "reasoning": 3.8803131103515627,
+        "structured": 2.669272811324508,
+        "tools": 1.085010952419705
       },
       "domain_token_accuracy": {
         "coding": 0.28,
@@ -72,49 +86,49 @@
       "generation_probe": [
         {
           "domain": "language",
-          "item": "language:7025a678fe80336e",
+          "item": "language:60b7b7e8c8a1aed7",
           "ok": false,
           "output": "11",
-          "target": "CANARY0066"
+          "target": "CANARY0067"
         },
         {
           "domain": "coding",
-          "item": "coding:79ae07f2b14516bc",
+          "item": "coding:56e852cd1449abca",
           "ok": false,
           "output": "def  +++ +  x):1",
-          "target": "def canary_sub_66(x):\n    return x - 3"
+          "target": "def canary_sub_67(x):\n    return x - 4"
         },
         {
           "domain": "data",
-          "item": "data:d794cc7cb4348c13",
+          "item": "data:1d886c944df7061b",
           "ok": false,
           "output": "1",
-          "target": "175945"
+          "target": "176338"
         },
         {
           "domain": "reasoning",
-          "item": "reasoning:97d4f00d26612cee",
+          "item": "reasoning:c25ab9cecb9ffbf6",
           "ok": false,
           "output": "11111111",
-          "target": "58662"
+          "target": "58793"
         },
         {
           "domain": "tools",
-          "item": "tools:35ee7e44be19a4c4",
+          "item": "tools:fa7f686512188eae",
           "ok": false,
-          "output": "<tool_call>{\":\":{\"\":\"\"\":\":\":\":\":\":{\"\":\":\":\":1111111111111111111111",
-          "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"58646*3\"}}</tool_call>"
+          "output": "<tool_call>{\":{\":\":\":\":\":\":{\":\":\":{\"\":\":\":\":1111111111111111111111",
+          "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"58777*4\"}}</tool_call>"
         },
         {
           "domain": "structured",
-          "item": "structured:286a5585c924f498",
+          "item": "structured:704c20f5a8dc25d8",
           "ok": false,
           "output": "11111111111",
-          "target": "{\"canary\":66,\"value\":58646}"
+          "target": "{\"canary\":67,\"value\":58777}"
         }
       ],
-      "loss": 2.5618773503090018,
-      "nll_per_byte": 2.0556381134215944,
+      "loss": 2.5589442466621968,
+      "nll_per_byte": 2.0532846051061937,
       "solved_items": [],
       "target_token_accuracy": 0.44776119402985076,
       "target_tokens": 134,
@@ -122,7 +136,7 @@
       "validation_target_bytes": 167,
       "validation_target_tokens": 134
     },
-    "canary_cycle": 66,
+    "canary_cycle": 67,
     "domain_bits_per_byte": {
       "coding": 3.0236824045084525,
       "data": 4.843641780328073,
@@ -223,37 +237,30 @@
   },
   "curriculum_memory": {
     "added": 8,
-    "cycle": 66,
+    "cycle": 67,
     "domains": {
-      "coding": 73,
-      "data": 125,
-      "language": 66,
-      "reasoning": 132,
-      "structured": 66,
-      "tools": 66
+      "coding": 74,
+      "data": 127,
+      "language": 67,
+      "reasoning": 134,
+      "structured": 67,
+      "tools": 67
     },
-    "max_rows": 1200,
+    "max_rows": 4000,
     "ok": true,
-    "stored": 528,
+    "stored": 536,
     "validation_overlap": []
   },
-  "cycle": 66,
+  "cycle": 67,
   "grounded_pretraining": {
     "corpus": {
-      "bytes_read": 499985,
-      "chars_emitted": 507696,
-      "digest": "b5c232f410439716dc51b9cfb079f118d124ab23aba3c420b5a2a27cee684753",
-      "documents": 206,
-      "enabled": true,
-      "excluded_budget": 134,
-      "excluded_protected": 69,
-      "excluded_sensitive": 0,
-      "files": 122
+      "automatic_data_growth": false,
+      "enabled": true
     },
     "steps": 4
   },
   "mathesis": {
-    "curriculum_cursor": 369,
+    "curriculum_cursor": 383,
     "mathesis_generation": 15,
     "ok": true,
     "policy": "persisted MATHESIS metadata is untrusted; current verifier re-proof is required before mathematics may influence generalist curriculum/architecture, and generalist promotion remains independently benchmark-gated",
@@ -267,36 +274,39 @@
     "verifier_available": true
   },
   "ok": true,
+  "plateau": {
+    "generation_exact_accuracy": 0.0,
+    "history_rows": 8,
+    "plateau": true,
+    "same_champion_cycles": 8,
+    "scale_probe": true,
+    "score_span": 0.0,
+    "under_initial_tier": true
+  },
   "policy": {
+    "adaptive_curriculum": true,
     "architecture_weight_transfer": {
       "byte_to_bpe_embedding_migration": true,
       "enabled": true,
-      "exact_name_and_shape_only": true
+      "exact_name_and_shape": true,
+      "safe_prefix_expansion": true
     },
+    "automatic_data_growth": "permissive SPDX + immutable commit + quarantine + hash + quality filter",
+    "candidate_can_self_promote": false,
     "continual_learning": {
-      "curriculum_max_rows": 1200,
+      "curriculum_max_rows": 4000,
       "domain_balanced_base_replay": true,
       "enabled": true,
       "full_replay": true,
       "gradient_accumulation_steps": 1,
       "precision": "fp32"
     },
-    "grounded_pretraining": {
-      "corpus_digest": "b5c232f410439716dc51b9cfb079f118d124ab23aba3c420b5a2a27cee684753",
-      "enabled": true,
-      "protected_exam_sources_excluded": true,
-      "steps_per_candidate": 4
-    },
-    "max_domain_regression": 0.1,
-    "minimum_loss_gain": 0.02,
+    "external_pretrained": false,
+    "external_reducer": true,
+    "parallel_swarm": "8->4->2",
     "production_qualification_separate": true,
+    "progressive_scaling_max_parameters": 2000000,
     "research_only": true,
-    "research_resource_budget": {
-      "max_context": 512,
-      "max_layers": 4,
-      "max_params": 2000000,
-      "max_width": 192
-    },
     "rotating_canary": {
       "domains": 6,
       "enabled": true,
@@ -307,15 +317,27 @@
         "byte-v1",
         "bpe-v1"
       ],
-      "bpe_max_training_bytes": 256000,
-      "bpe_vocab_size": 384,
+      "bpe_vocab_size": 512,
       "comparison_metric": "nll_per_byte",
       "protected_eval_rows_excluded_from_tokenizer_training": true
-    }
+    },
+    "weight_inheritance": "exact + safe expansion prefixes"
+  },
+  "progressive_scaling": {
+    "candidate_generated": true,
+    "current_parameters": 115328,
+    "target_parameters": 250000,
+    "tiers": [
+      250000,
+      500000,
+      1000000,
+      2000000
+    ]
   },
   "promoted": false,
+  "promotion_reason": "no finalist passed every independent research gate",
   "rotating_canary": {
-    "cycle": 66,
+    "cycle": 67,
     "domains": [
       "language",
       "coding",
@@ -335,528 +357,33 @@
   ],
   "trials": [
     {
-      "eligible": false,
-      "genome": {
-        "code_adapter": false,
-        "context_length": 128,
-        "d_ff": 128,
-        "d_model": 64,
-        "data_adapter": false,
-        "dropout": 0.0,
-        "ff_variant": "swiglu",
-        "generation": 3,
-        "genome_id": "generalist-3-continual-e3c172dc",
-        "learning_rate": 0.003,
-        "n_heads": 4,
-        "n_layers": 2,
-        "norm_type": "layernorm",
-        "parent_id": "generalist-2-0-57f3721a",
-        "position_encoding": "learned",
-        "reasoning_depth": 1,
-        "retrieval_adapter": false,
-        "symbolic_adapter": false,
-        "tokenizer_version": "bpe-v1",
-        "tool_protocol": "tool-json-v1"
-      },
-      "kind": "continual_learning",
-      "reason": "candidate regressed in byte-normalized validation domain: coding",
-      "report": {
-        "bits_per_byte": 2.166853665454466,
-        "canary": {
-          "bits_per_byte": 2.5636279833200493,
-          "domain_bits_per_byte": {
-            "coding": 3.7507572499161315,
-            "data": 4.361284653589447,
-            "language": 6.693819581076031,
-            "reasoning": 4.44311757610911,
-            "structured": 4.421620040306628,
-            "tools": 0.6282950035242006
-          },
-          "domain_generation_accuracy": {
-            "coding": 0.0,
-            "data": 0.0,
-            "language": 0.0,
-            "reasoning": 0.0,
-            "structured": 0.0,
-            "tools": 0.0
-          },
-          "domain_loss": {
-            "coding": 3.9517367553710936,
-            "data": 2.5911532810756137,
-            "language": 4.218001972545277,
-            "reasoning": 2.5664453506469727,
-            "structured": 3.4479376475016275,
-            "tools": 0.5782880939421107
-          },
-          "domain_nll_per_byte": {
-            "coding": 2.5998268127441406,
-            "data": 3.023012161254883,
-            "language": 4.639802169799805,
-            "reasoning": 3.0797344207763673,
-            "structured": 3.064833464445891,
-            "tools": 0.4355009102527006
-          },
-          "domain_token_accuracy": {
-            "coding": 0.32,
-            "data": 0.2857142857142857,
-            "language": 0.18181818181818182,
-            "reasoning": 0.16666666666666666,
-            "structured": 0.20833333333333334,
-            "tools": 0.8852459016393442
-          },
-          "finite": true,
-          "generated_solved_items": [],
-          "generation_exact_accuracy": 0.0,
-          "generation_probe": [
-            {
-              "domain": "language",
-              "item": "language:7025a678fe80336e",
-              "ok": false,
-              "output": "CCCLEEEERD2",
-              "target": "CANARY0066"
-            },
-            {
-              "domain": "coding",
-              "item": "coding:79ae07f2b14516bc",
-              "ok": false,
-              "output": "def offents\":true\":true}",
-              "target": "def canary_sub_66(x):\n    return x - 3"
-            },
-            {
-              "domain": "data",
-              "item": "data:d794cc7cb4348c13",
-              "ok": false,
-              "output": "1",
-              "target": "175945"
-            },
-            {
-              "domain": "reasoning",
-              "item": "reasoning:97d4f00d26612cee",
-              "ok": false,
-              "output": "122",
-              "target": "58662"
-            },
-            {
-              "domain": "tools",
-              "item": "tools:35ee7e44be19a4c4",
-              "ok": false,
-              "output": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"1522+55\"}}</tool_call>",
-              "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"58646*3\"}}</tool_call>"
-            },
-            {
-              "domain": "structured",
-              "item": "structured:286a5585c924f498",
-              "ok": false,
-              "output": "{\":5,\"ok\":true}",
-              "target": "{\"canary\":66,\"value\":58646}"
-            }
-          ],
-          "loss": 2.2145838950996968,
-          "nll_per_byte": 1.7769715086428706,
-          "solved_items": [],
-          "target_token_accuracy": 0.5373134328358209,
-          "target_tokens": 134,
-          "tokenizer_version": "bpe-v1",
-          "validation_target_bytes": 167,
-          "validation_target_tokens": 134
+      "all_seed_eligible": false,
+      "any_seed_eligible": false,
+      "best_nll_per_byte": 1.5407858455882353,
+      "candidate_id": "generalist-3-1-a7d5d2a5",
+      "candidate_index": 3,
+      "checkpoint_dir": "best-checkpoint",
+      "corpus": {
+        "bytes": 2049457,
+        "documents": 443,
+        "external": {
+          "documents": 8,
+          "skipped": 0,
+          "total_bytes": 434900
         },
-        "canary_cycle": 66,
-        "continual_learning": true,
-        "domain_bits_per_byte": {
-          "coding": 3.3619931839838784,
-          "data": 3.569204383670351,
-          "language": 8.076943684117497,
-          "reasoning": 4.829433222334071,
-          "structured": 2.0033377475005008,
-          "tools": 1.1465374588109434
-        },
-        "domain_generation_accuracy": {
-          "coding": 0.0,
-          "data": 0.0,
-          "language": 0.0,
-          "reasoning": 0.0,
-          "structured": 0.0,
-          "tools": 0.0
-        },
-        "domain_loss": {
-          "coding": 3.673984836887669,
-          "data": 1.6493226369222005,
-          "language": 5.391158492476852,
-          "reasoning": 2.4665848581414473,
-          "structured": 1.5985137584597566,
-          "tools": 1.0687603128367458
-        },
-        "domain_nll_per_byte": {
-          "coding": 2.3303560965401786,
-          "data": 2.473983955383301,
-          "language": 5.5985107421875,
-          "reasoning": 3.347508021763393,
-          "structured": 1.3886079113892835,
-          "tools": 0.7947192069811698
-        },
-        "domain_token_accuracy": {
-          "coding": 0.2702702702702703,
-          "data": 0.4,
-          "language": 0.07407407407407407,
-          "reasoning": 0.2631578947368421,
-          "structured": 0.7325581395348837,
-          "tools": 0.7551724137931034
-        },
-        "finite": true,
-        "generated_solved_items": [],
-        "generation_exact_accuracy": 0.0,
-        "generation_probe": [
-          {
-            "domain": "language",
-            "item": "language:69dcd673152135b7",
-            "ok": false,
-            "output": "CCCCLE",
-            "target": "orange"
-          },
-          {
-            "domain": "coding",
-            "item": "coding:9f36f220338cd9ff",
-            "ok": false,
-            "output": "12",
-            "target": "def sub(a, b):\n    return a - b"
-          },
-          {
-            "domain": "data",
-            "item": "data:5bd96918425fd195",
-            "ok": false,
-            "output": "2",
-            "target": "20"
-          },
-          {
-            "domain": "reasoning",
-            "item": "reasoning:d206563c75c2d4bd",
-            "ok": false,
-            "output": "1222",
-            "target": "144"
-          },
-          {
-            "domain": "tools",
-            "item": "tools:169b024c50474998",
-            "ok": false,
-            "output": "<tool_call>{\":\"call>{\"arguuments\":\"c{\":{\":{\"expression\":\"1522+55\"}}</tool",
-            "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
-          },
-          {
-            "domain": "structured",
-            "item": "structured:b4833d19223b3d60",
-            "ok": false,
-            "output": "CCCCL",
-            "target": "{\"count\":2}"
-          }
-        ],
-        "loss": 1.9569183126853331,
-        "nll_per_byte": 1.5019485088957458,
-        "parameters": 115328,
-        "pretraining": {
-          "best_step_loss": 5.663451194763184,
-          "blocks": 2437,
-          "corpus_bytes": 499499,
-          "corpus_sha256": "2b14c2a621fb836998b96cf65348510f5f408ebeda331fac6193422034f7e311",
-          "documents": 206,
-          "eval_blocks": 128,
-          "final_loss": 5.4980495274066925,
-          "initial_loss": 6.158552378416061,
-          "loss_improvement": 0.6605028510093689,
-          "ok": true,
-          "steps": 4
-        },
-        "score": 39.96873280954052,
-        "solved_items": [],
-        "target_token_accuracy": 0.593065693430657,
-        "target_tokens": 548,
-        "tokenizer_version": "bpe-v1",
-        "training": {
-          "best_step_loss": 0.6242150664329529,
-          "effective_batch_size": 4,
-          "final_loss": 0.9946455955505371,
-          "gradient_accumulation_steps": 1,
-          "initial_loss": 2.3148961067199707,
-          "loss_improvement": 1.3202505111694336,
-          "micro_batch_size": 4,
-          "ok": true,
-          "precision": "fp32",
-          "steps": 20
-        },
-        "validation_target_bytes": 714,
-        "validation_target_tokens": 548
-      }
-    },
-    {
-      "eligible": false,
-      "genome": {
-        "code_adapter": false,
-        "context_length": 256,
-        "d_ff": 128,
-        "d_model": 64,
-        "data_adapter": true,
-        "dropout": 0.0,
-        "ff_variant": "swiglu",
-        "generation": 3,
-        "genome_id": "generalist-3-0-c84ca7b1",
-        "learning_rate": 0.003,
-        "n_heads": 4,
-        "n_layers": 2,
-        "norm_type": "layernorm",
-        "parent_id": "generalist-2-0-57f3721a",
-        "position_encoding": "learned",
-        "reasoning_depth": 1,
-        "retrieval_adapter": false,
-        "symbolic_adapter": false,
-        "tokenizer_version": "bpe-v1",
-        "tool_protocol": "tool-json-v1"
-      },
-      "kind": "architecture",
-      "reason": "candidate regressed in byte-normalized validation domain: language",
-      "report": {
-        "bits_per_byte": 2.1128874712757733,
-        "canary": {
-          "bits_per_byte": 2.3960783407885007,
-          "domain_bits_per_byte": {
-            "coding": 3.1944565915767154,
-            "data": 3.7151864222034785,
-            "language": 6.277586343941136,
-            "reasoning": 4.282704542135144,
-            "structured": 3.468999015727308,
-            "tools": 0.97052114874053
-          },
-          "domain_generation_accuracy": {
-            "coding": 0.0,
-            "data": 0.0,
-            "language": 0.0,
-            "reasoning": 0.0,
-            "structured": 0.0,
-            "tools": 0.0
-          },
-          "domain_loss": {
-            "coding": 3.36562744140625,
-            "data": 2.20728942326137,
-            "language": 3.9557193409312856,
-            "reasoning": 2.4737871487935386,
-            "structured": 2.705092748006185,
-            "tools": 0.8932759644555264
-          },
-          "domain_nll_per_byte": {
-            "coding": 2.214228579872533,
-            "data": 2.5751709938049316,
-            "language": 4.351291275024414,
-            "reasoning": 2.968544578552246,
-            "structured": 2.404526887116609,
-            "tools": 0.6727139979232977
-          },
-          "domain_token_accuracy": {
-            "coding": 0.44,
-            "data": 0.2857142857142857,
-            "language": 0.2727272727272727,
-            "reasoning": 0.16666666666666666,
-            "structured": 0.2916666666666667,
-            "tools": 0.819672131147541
-          },
-          "finite": true,
-          "generated_solved_items": [],
-          "generation_exact_accuracy": 0.0,
-          "generation_probe": [
-            {
-              "domain": "language",
-              "item": "language:7025a678fe80336e",
-              "ok": false,
-              "output": "CCCCCCCCLEEEE",
-              "target": "CANARY0066"
-            },
-            {
-              "domain": "coding",
-              "item": "coding:79ae07f2b14516bc",
-              "ok": false,
-              "output": "def offset_33(x):\n    return     33",
-              "target": "def canary_sub_66(x):\n    return x - 3"
-            },
-            {
-              "domain": "data",
-              "item": "data:d794cc7cb4348c13",
-              "ok": false,
-              "output": "15",
-              "target": "175945"
-            },
-            {
-              "domain": "reasoning",
-              "item": "reasoning:97d4f00d26612cee",
-              "ok": false,
-              "output": "133",
-              "target": "58662"
-            },
-            {
-              "domain": "tools",
-              "item": "tools:35ee7e44be19a4c4",
-              "ok": false,
-              "output": "<tool_call>{\":\":\":\":\":\":\":\":\":\":\":{\":\":\":\":\"1333333333333333333333",
-              "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"58646*3\"}}</tool_call>"
-            },
-            {
-              "domain": "structured",
-              "item": "structured:286a5585c924f498",
-              "ok": false,
-              "output": "{\"cle\"ccalcalcalcalcalcalcalcalcalcal",
-              "target": "{\"canary\":66,\"value\":58646}"
-            }
-          ],
-          "loss": 2.069846537575793,
-          "nll_per_byte": 1.660834946318301,
-          "solved_items": [],
-          "target_token_accuracy": 0.5522388059701493,
-          "target_tokens": 134,
-          "tokenizer_version": "bpe-v1",
-          "validation_target_bytes": 167,
-          "validation_target_tokens": 134
-        },
-        "canary_cycle": 66,
-        "domain_bits_per_byte": {
-          "coding": 2.842751529735024,
-          "data": 4.744410267330405,
-          "language": 7.829745029453833,
-          "reasoning": 4.695135409928321,
-          "structured": 2.289491751697203,
-          "tools": 1.1992592184565105
-        },
-        "domain_generation_accuracy": {
-          "coding": 0.0,
-          "data": 0.0,
-          "language": 0.0,
-          "reasoning": 0.0,
-          "structured": 0.0,
-          "tools": 0.0
-        },
-        "domain_loss": {
-          "coding": 3.106557760152731,
-          "data": 2.192383066813151,
-          "language": 5.226159554940683,
-          "reasoning": 2.3979935897024056,
-          "structured": 1.82684326171875,
-          "tools": 1.1179056101831897
-        },
-        "domain_nll_per_byte": {
-          "coding": 1.9704452078683035,
-          "data": 3.2885746002197265,
-          "language": 5.42716569166917,
-          "reasoning": 3.2544198717389787,
-          "structured": 1.5869547526041667,
-          "tools": 0.8312631460336538
-        },
-        "domain_token_accuracy": {
-          "coding": 0.46846846846846846,
-          "data": 0.3333333333333333,
-          "language": 0.07407407407407407,
-          "reasoning": 0.3157894736842105,
-          "structured": 0.5465116279069767,
-          "tools": 0.7689655172413793
-        },
-        "finite": true,
-        "generated_solved_items": [],
-        "generation_exact_accuracy": 0.0,
-        "generation_probe": [
-          {
-            "domain": "language",
-            "item": "language:69dcd673152135b7",
-            "ok": false,
-            "output": "CCCCCC",
-            "target": "orange"
-          },
-          {
-            "domain": "coding",
-            "item": "coding:9f36f220338cd9ff",
-            "ok": false,
-            "output": "def ok\":\n    return",
-            "target": "def sub(a, b):\n    return a - b"
-          },
-          {
-            "domain": "data",
-            "item": "data:5bd96918425fd195",
-            "ok": false,
-            "output": "13",
-            "target": "20"
-          },
-          {
-            "domain": "reasoning",
-            "item": "reasoning:d206563c75c2d4bd",
-            "ok": false,
-            "output": "133333",
-            "target": "144"
-          },
-          {
-            "domain": "tools",
-            "item": "tools:169b024c50474998",
-            "ok": false,
-            "output": "<tool_call>{\":\":\":\":\":\":\":\":\":\":\":\":\":{\":\":\":\":\"13333333333333",
-            "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
-          },
-          {
-            "domain": "structured",
-            "item": "structured:b4833d19223b3d60",
-            "ok": false,
-            "output": "{\"cle\"cccle\":1",
-            "target": "{\"count\":2}"
-          }
-        ],
-        "loss": 1.9081806266394845,
-        "nll_per_byte": 1.4645419935552346,
-        "parameters": 123520,
-        "pretraining": {
-          "best_step_loss": 5.539616107940674,
-          "blocks": 1219,
-          "corpus_bytes": 499499,
-          "corpus_sha256": "2b14c2a621fb836998b96cf65348510f5f408ebeda331fac6193422034f7e311",
-          "documents": 206,
-          "eval_blocks": 128,
-          "final_loss": 5.45194436609745,
-          "initial_loss": 6.032012388110161,
-          "loss_improvement": 0.5800680220127106,
-          "ok": true,
-          "steps": 4
-        },
-        "score": 40.57536688004168,
-        "solved_items": [],
-        "target_token_accuracy": 0.6113138686131386,
-        "target_tokens": 548,
-        "tokenizer_version": "bpe-v1",
-        "training": {
-          "best_step_loss": 1.039629578590393,
-          "effective_batch_size": 4,
-          "final_loss": 1.1636964082717896,
-          "gradient_accumulation_steps": 1,
-          "initial_loss": 2.609445095062256,
-          "loss_improvement": 1.4457486867904663,
-          "micro_batch_size": 4,
-          "ok": true,
-          "precision": "fp32",
-          "steps": 20
-        },
-        "validation_target_bytes": 714,
-        "validation_target_tokens": 548,
-        "weight_transfer": {
-          "copied_parameters": 131712,
-          "copied_tensors": 20,
-          "derived_bpe_rows": 0,
-          "parameter_fraction": 0.8893690579083837,
-          "policy": "exact name and exact shape only",
-          "shared_token_rows": 0,
-          "source_tensors": 21,
-          "source_tokenizer": "bpe-v1",
-          "source_unmatched_tensors": [
-            "position_embedding.weight"
-          ],
-          "target_parameters": 148096,
-          "target_tensors": 21,
-          "target_tokenizer": "bpe-v1",
-          "tokenizer_identical": true,
-          "vocabulary_migrated": false
+        "repository": {
+          "bytes_read": 1615694,
+          "chars_emitted": 1631914,
+          "digest": "6d154bde733b0555afea5a6ac1347e153085d32e72611d560f8d2c5ee1ab19e1",
+          "documents": 435,
+          "excluded_budget": 1,
+          "excluded_protected": 71,
+          "excluded_sensitive": 0,
+          "files": 255
         }
-      }
-    },
-    {
-      "eligible": false,
+      },
+      "cycle": 67,
+      "external_pretrained": false,
       "genome": {
         "code_adapter": false,
         "context_length": 128,
@@ -880,248 +407,1075 @@
         "tool_protocol": "tool-json-v1"
       },
       "kind": "architecture",
-      "reason": "candidate regressed in byte-normalized validation domain: language",
-      "report": {
-        "bits_per_byte": 2.0067835215293495,
-        "canary": {
-          "bits_per_byte": 2.5242117182790373,
-          "domain_bits_per_byte": {
-            "coding": 3.360661783990497,
-            "data": 4.497518761333711,
-            "language": 6.803845000414089,
-            "reasoning": 4.222150689041435,
-            "structured": 4.4543895891231164,
-            "tools": 0.7090780997795503
-          },
-          "domain_generation_accuracy": {
-            "coding": 0.0,
-            "data": 0.0,
-            "language": 0.0,
-            "reasoning": 0.0,
-            "structured": 0.0,
-            "tools": 0.0
-          },
-          "domain_loss": {
-            "coding": 3.540738525390625,
-            "data": 2.672093527657645,
-            "language": 4.287332708185369,
-            "reasoning": 2.438809871673584,
-            "structured": 3.4734910329182944,
-            "tools": 0.6526415465308018
-          },
-          "domain_nll_per_byte": {
-            "coding": 2.329433240388569,
-            "data": 3.1174424489339194,
-            "language": 4.716065979003906,
-            "reasoning": 2.926571846008301,
-            "structured": 3.0875475848162615,
-            "tools": 0.49149548565899887
-          },
-          "domain_token_accuracy": {
-            "coding": 0.4,
-            "data": 0.0,
-            "language": 0.18181818181818182,
-            "reasoning": 0.3333333333333333,
-            "structured": 0.2916666666666667,
-            "tools": 0.8524590163934426
-          },
-          "finite": true,
-          "generated_solved_items": [],
-          "generation_exact_accuracy": 0.0,
-          "generation_probe": [
-            {
-              "domain": "language",
-              "item": "language:7025a678fe80336e",
-              "ok": false,
-              "output": "CCCLEEEEEEEEE",
-              "target": "CANARY0066"
+      "mean_generation_accuracy": 0.0,
+      "mean_nll_per_byte": 1.5624874339384192,
+      "ok": true,
+      "parameters": 115328,
+      "reports": [
+        {
+          "eligible": false,
+          "reason": "candidate regressed in byte-normalized validation domain: coding",
+          "report": {
+            "bits_per_byte": 2.285501646286503,
+            "canary": {
+              "bits_per_byte": 2.6270983227383686,
+              "domain_bits_per_byte": {
+                "coding": 3.6215864756772818,
+                "data": 3.7043593117459603,
+                "language": 7.036292898908883,
+                "reasoning": 5.918449145514765,
+                "structured": 4.548754507775374,
+                "tools": 0.6926838132444436
+              },
+              "domain_generation_accuracy": {
+                "coding": 0.0,
+                "data": 0.0,
+                "language": 0.0,
+                "reasoning": 0.0,
+                "structured": 0.0,
+                "tools": 0.0
+              },
+              "domain_loss": {
+                "coding": 3.81564453125,
+                "data": 2.2008567537580217,
+                "language": 4.433805985884233,
+                "reasoning": 3.418630282084147,
+                "structured": 3.5470759073893228,
+                "tools": 0.6375521050124872
+              },
+              "domain_nll_per_byte": {
+                "coding": 2.5102924547697367,
+                "data": 2.567666212717692,
+                "language": 4.877186584472656,
+                "reasoning": 4.102356338500977,
+                "structured": 3.1529563621238426,
+                "tools": 0.48013183216989774
+              },
+              "domain_token_accuracy": {
+                "coding": 0.28,
+                "data": 0.2857142857142857,
+                "language": 0.18181818181818182,
+                "reasoning": 0.0,
+                "structured": 0.20833333333333334,
+                "tools": 0.8688524590163934
+              },
+              "finite": true,
+              "generated_solved_items": [],
+              "generation_exact_accuracy": 0.0,
+              "generation_probe": [
+                {
+                  "domain": "language",
+                  "item": "language:60b7b7e8c8a1aed7",
+                  "ok": false,
+                  "output": "CCCCCCCCCCCCC",
+                  "target": "CANARY0067"
+                },
+                {
+                  "domain": "coding",
+                  "item": "coding:56e852cd1449abca",
+                  "ok": false,
+                  "output": "def f  ++++            +++",
+                  "target": "def canary_sub_67(x):\n    return x - 4"
+                },
+                {
+                  "domain": "data",
+                  "item": "data:1d886c944df7061b",
+                  "ok": false,
+                  "output": "1",
+                  "target": "176338"
+                },
+                {
+                  "domain": "reasoning",
+                  "item": "reasoning:c25ab9cecb9ffbf6",
+                  "ok": false,
+                  "output": "111",
+                  "target": "58793"
+                },
+                {
+                  "domain": "tools",
+                  "item": "tools:fa7f686512188eae",
+                  "ok": false,
+                  "output": "<tool_call>{\"name\":\"calcalall>{\"call>{\":{\"expression\":\"1111+33\"}}</tool_call>",
+                  "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"58777*4\"}}</tool_call>"
+                },
+                {
+                  "domain": "structured",
+                  "item": "structured:704c20f5a8dc25d8",
+                  "ok": false,
+                  "output": "cle\":1144",
+                  "target": "{\"canary\":67,\"value\":58777}"
+                }
+              ],
+              "loss": 2.269412595834305,
+              "nll_per_byte": 1.8209657954598615,
+              "solved_items": [],
+              "target_token_accuracy": 0.5149253731343284,
+              "target_tokens": 134,
+              "tokenizer_version": "bpe-v1",
+              "validation_target_bytes": 167,
+              "validation_target_tokens": 134
             },
-            {
-              "domain": "coding",
-              "item": "coding:79ae07f2b14516bc",
-              "ok": false,
-              "output": "def offffffok\":\n    return + ++ +  +",
-              "target": "def canary_sub_66(x):\n    return x - 3"
+            "canary_cycle": 67,
+            "domain_bits_per_byte": {
+              "coding": 3.2893731224504035,
+              "data": 4.317604637509431,
+              "language": 8.379458732769196,
+              "reasoning": 4.961894849683409,
+              "structured": 2.020065106716734,
+              "tools": 1.3479814891984412
             },
-            {
-              "domain": "data",
-              "item": "data:d794cc7cb4348c13",
-              "ok": false,
-              "output": "3",
-              "target": "175945"
+            "domain_generation_accuracy": {
+              "coding": 0.0,
+              "data": 0.0,
+              "language": 0.0,
+              "reasoning": 0.0,
+              "structured": 0.0,
+              "tools": 0.0
             },
-            {
-              "domain": "reasoning",
-              "item": "reasoning:97d4f00d26612cee",
-              "ok": false,
-              "output": "38",
-              "target": "58662"
+            "domain_loss": {
+              "coding": 3.5946256620389923,
+              "data": 1.995156987508138,
+              "language": 5.593079743561922,
+              "reasoning": 2.5342383133737663,
+              "structured": 1.6118609406227289,
+              "tools": 1.2565390751279633
             },
-            {
-              "domain": "tools",
-              "item": "tools:35ee7e44be19a4c4",
-              "ok": false,
-              "output": "<tool_call>{\"name\":\"calcalator\",\"arguments\":{\"ression\":\":\"1555+15\"}}</tool_call>",
-              "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"58646*3\"}}</tool_call>"
+            "domain_nll_per_byte": {
+              "coding": 2.280019705636161,
+              "data": 2.992735481262207,
+              "language": 5.80819819523738,
+              "reasoning": 3.4393234252929688,
+              "structured": 1.4002024332682292,
+              "tools": 0.9343495686848958
             },
-            {
-              "domain": "structured",
-              "item": "structured:286a5585c924f498",
-              "ok": false,
-              "output": "{\":5,\"ok\":true}",
-              "target": "{\"canary\":66,\"value\":58646}"
+            "domain_token_accuracy": {
+              "coding": 0.25225225225225223,
+              "data": 0.3333333333333333,
+              "language": 0.037037037037037035,
+              "reasoning": 0.3684210526315789,
+              "structured": 0.6627906976744186,
+              "tools": 0.7275862068965517
+            },
+            "finite": true,
+            "generated_solved_items": [],
+            "generation_exact_accuracy": 0.0,
+            "generation_probe": [
+              {
+                "domain": "language",
+                "item": "language:69dcd673152135b7",
+                "ok": false,
+                "output": "{\":true\"",
+                "target": "orange"
+              },
+              {
+                "domain": "coding",
+                "item": "coding:9f36f220338cd9ff",
+                "ok": false,
+                "output": "44",
+                "target": "def sub(a, b):\n    return a - b"
+              },
+              {
+                "domain": "data",
+                "item": "data:5bd96918425fd195",
+                "ok": false,
+                "output": "1",
+                "target": "20"
+              },
+              {
+                "domain": "reasoning",
+                "item": "reasoning:d206563c75c2d4bd",
+                "ok": false,
+                "output": "1111",
+                "target": "144"
+              },
+              {
+                "domain": "tools",
+                "item": "tools:169b024c50474998",
+                "ok": false,
+                "output": "<tool_call>{\":\":{\":\":\"calcalall>{\"call>{\":{\"expression\":\"1111+33\"}}</tool",
+                "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
+              },
+              {
+                "domain": "structured",
+                "item": "structured:b4833d19223b3d60",
+                "ok": false,
+                "output": "{\":true\":true\":tr",
+                "target": "{\"count\":2}"
+              }
+            ],
+            "loss": 2.0640710983833257,
+            "nll_per_byte": 1.584189022288603,
+            "parameters": 115328,
+            "pretraining": {
+              "best_step_loss": 5.446105003356934,
+              "blocks": 9807,
+              "corpus_bytes": 2049457,
+              "corpus_sha256": "8c78c926926a1dfc3088186eb8846e7b24664c44d51709fd409971ef4baa52c6",
+              "documents": 443,
+              "eval_blocks": 128,
+              "final_loss": 5.356529489159584,
+              "initial_loss": 5.928698360919952,
+              "loss_improvement": 0.5721688717603683,
+              "ok": true,
+              "steps": 4
+            },
+            "score": 38.696744358927326,
+            "solved_items": [],
+            "target_token_accuracy": 0.5638686131386861,
+            "target_tokens": 548,
+            "tokenizer_version": "bpe-v1",
+            "training": {
+              "best_step_loss": 0.810063898563385,
+              "effective_batch_size": 4,
+              "final_loss": 1.2860050201416016,
+              "gradient_accumulation_steps": 1,
+              "initial_loss": 2.508395195007324,
+              "loss_improvement": 1.2223901748657227,
+              "micro_batch_size": 4,
+              "ok": true,
+              "precision": "fp32",
+              "steps": 20
+            },
+            "validation_target_bytes": 714,
+            "validation_target_tokens": 548,
+            "weight_transfer": {
+              "copied_parameters": 139904,
+              "copied_tensors": 21,
+              "derived_bpe_rows": 0,
+              "embedding_width_migrated": false,
+              "parameter_fraction": 1.0,
+              "partial_prefix_parameters": 0,
+              "partial_prefix_tensors": [],
+              "policy": "exact tensors plus safe prefix inheritance for expansions",
+              "shared_token_rows": 0,
+              "source_tensors": 21,
+              "source_tokenizer": "bpe-v1",
+              "source_unmatched_tensors": [],
+              "target_parameters": 139904,
+              "target_tensors": 21,
+              "target_tokenizer": "bpe-v1",
+              "tokenizer_identical": true,
+              "vocabulary_migrated": false
             }
-          ],
-          "loss": 2.1805342489214086,
-          "nll_per_byte": 1.7496502356614896,
-          "solved_items": [],
-          "target_token_accuracy": 0.5447761194029851,
-          "target_tokens": 134,
-          "tokenizer_version": "bpe-v1",
-          "validation_target_bytes": 167,
-          "validation_target_tokens": 134
-        },
-        "canary_cycle": 66,
-        "domain_bits_per_byte": {
-          "coding": 2.505291111106105,
-          "data": 3.976378675446757,
-          "language": 7.85793790727995,
-          "reasoning": 5.269572794834978,
-          "structured": 1.956339440479748,
-          "tools": 1.2381943690214172
-        },
-        "domain_generation_accuracy": {
-          "coding": 0.0,
-          "data": 0.0,
-          "language": 0.0,
-          "reasoning": 0.0,
-          "structured": 0.0,
-          "tools": 0.0
-        },
-        "domain_loss": {
-          "coding": 2.737781146625141,
-          "data": 1.8374771118164062,
-          "language": 5.244977597837095,
-          "reasoning": 2.691381755628084,
-          "structured": 1.5610126229219659,
-          "tools": 1.154199534449084
-        },
-        "domain_nll_per_byte": {
-          "coding": 1.7365354701450892,
-          "data": 2.7562156677246095,
-          "language": 5.446707505446214,
-          "reasoning": 3.6525895254952565,
-          "structured": 1.3560311673867582,
-          "tools": 0.8582509358723959
-        },
-        "domain_token_accuracy": {
-          "coding": 0.4954954954954955,
-          "data": 0.3333333333333333,
-          "language": 0.037037037037037035,
-          "reasoning": 0.05263157894736842,
-          "structured": 0.686046511627907,
-          "tools": 0.7275862068965517
-        },
-        "finite": true,
-        "generated_solved_items": [],
-        "generation_exact_accuracy": 0.0,
-        "generation_probe": [
-          {
-            "domain": "language",
-            "item": "language:69dcd673152135b7",
-            "ok": false,
-            "output": "def offf",
-            "target": "orange"
           },
-          {
-            "domain": "coding",
-            "item": "coding:9f36f220338cd9ff",
-            "ok": false,
-            "output": "def  + + +  + + +  + +",
-            "target": "def sub(a, b):\n    return a - b"
-          },
-          {
-            "domain": "data",
-            "item": "data:5bd96918425fd195",
-            "ok": false,
-            "output": "3",
-            "target": "20"
-          },
-          {
-            "domain": "reasoning",
-            "item": "reasoning:d206563c75c2d4bd",
-            "ok": false,
-            "output": "3",
-            "target": "144"
-          },
-          {
-            "domain": "tools",
-            "item": "tools:169b024c50474998",
-            "ok": false,
-            "output": "<tool_call>{\"ok\":\":\":\"calcalator\",\"arguments\":{\"expression\":\"1555+15\"}}</tool",
-            "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
-          },
-          {
-            "domain": "structured",
-            "item": "structured:b4833d19223b3d60",
-            "ok": false,
-            "output": "def ok\":\n    return +",
-            "target": "{\"count\":2}"
-          }
-        ],
-        "loss": 1.8123565451072081,
-        "nll_per_byte": 1.390996339942227,
-        "parameters": 115328,
-        "pretraining": {
-          "best_step_loss": 5.455442905426025,
-          "blocks": 2437,
-          "corpus_bytes": 499499,
-          "corpus_sha256": "2b14c2a621fb836998b96cf65348510f5f408ebeda331fac6193422034f7e311",
-          "documents": 206,
-          "eval_blocks": 128,
-          "final_loss": 5.504568785429001,
-          "initial_loss": 6.148019805550575,
-          "loss_improvement": 0.6434510201215744,
-          "ok": true,
-          "steps": 4
+          "seed": 517159162
         },
-        "score": 41.823453503734925,
-        "solved_items": [],
-        "target_token_accuracy": 0.6058394160583942,
-        "target_tokens": 548,
-        "tokenizer_version": "bpe-v1",
-        "training": {
-          "best_step_loss": 0.708961546421051,
-          "effective_batch_size": 4,
-          "final_loss": 1.0382682085037231,
-          "gradient_accumulation_steps": 1,
-          "initial_loss": 2.1968204975128174,
-          "loss_improvement": 1.1585522890090942,
-          "micro_batch_size": 4,
-          "ok": true,
-          "precision": "fp32",
-          "steps": 20
-        },
-        "validation_target_bytes": 714,
-        "validation_target_tokens": 548,
-        "weight_transfer": {
-          "copied_parameters": 139904,
-          "copied_tensors": 21,
-          "derived_bpe_rows": 0,
-          "parameter_fraction": 1.0,
-          "policy": "exact name and exact shape only",
-          "shared_token_rows": 0,
-          "source_tensors": 21,
-          "source_tokenizer": "bpe-v1",
-          "source_unmatched_tensors": [],
-          "target_parameters": 139904,
-          "target_tensors": 21,
-          "target_tokenizer": "bpe-v1",
-          "tokenizer_identical": true,
-          "vocabulary_migrated": false
+        {
+          "eligible": false,
+          "reason": "candidate regressed in byte-normalized validation domain: language",
+          "report": {
+            "bits_per_byte": 2.222884098502055,
+            "canary": {
+              "bits_per_byte": 2.5967187800138114,
+              "domain_bits_per_byte": {
+                "coding": 3.5399425820046986,
+                "data": 3.3358383271301513,
+                "language": 7.157730261441474,
+                "reasoning": 5.324010512450484,
+                "structured": 4.0927398846847804,
+                "tools": 0.8693556029316658
+              },
+              "domain_generation_accuracy": {
+                "coding": 0.0,
+                "data": 0.0,
+                "language": 0.0,
+                "reasoning": 0.0,
+                "structured": 0.0,
+                "tools": 0.0
+              },
+              "domain_loss": {
+                "coding": 3.7296258544921876,
+                "data": 1.9819087982177734,
+                "language": 4.5103277726606885,
+                "reasoning": 3.0752690633138022,
+                "structured": 3.1914800008138022,
+                "tools": 0.8001623310026575
+              },
+              "domain_nll_per_byte": {
+                "coding": 2.45370122006065,
+                "data": 2.312226931254069,
+                "language": 4.9613605499267575,
+                "reasoning": 3.6903228759765625,
+                "structured": 2.836871111834491,
+                "tools": 0.6025913850760755
+              },
+              "domain_token_accuracy": {
+                "coding": 0.24,
+                "data": 0.42857142857142855,
+                "language": 0.18181818181818182,
+                "reasoning": 0.0,
+                "structured": 0.375,
+                "tools": 0.8524590163934426
+              },
+              "finite": true,
+              "generated_solved_items": [],
+              "generation_exact_accuracy": 0.0,
+              "generation_probe": [
+                {
+                  "domain": "language",
+                  "item": "language:60b7b7e8c8a1aed7",
+                  "ok": false,
+                  "output": "CCCLEEEEEEEEE",
+                  "target": "CANARY0067"
+                },
+                {
+                  "domain": "coding",
+                  "item": "coding:56e852cd1449abca",
+                  "ok": false,
+                  "output": "deffffffffoffffffff   +++",
+                  "target": "def canary_sub_67(x):\n    return x - 4"
+                },
+                {
+                  "domain": "data",
+                  "item": "data:1d886c944df7061b",
+                  "ok": false,
+                  "output": "1",
+                  "target": "176338"
+                },
+                {
+                  "domain": "reasoning",
+                  "item": "reasoning:c25ab9cecb9ffbf6",
+                  "ok": false,
+                  "output": "188",
+                  "target": "58793"
+                },
+                {
+                  "domain": "tools",
+                  "item": "tools:fa7f686512188eae",
+                  "ok": false,
+                  "output": "<tool_call>{\"name\":\"calcall>{\"call>{\":88ol_call>{\":8888\":\":\"name\":\":{\":\":\":",
+                  "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"58777*4\"}}</tool_call>"
+                },
+                {
+                  "domain": "structured",
+                  "item": "structured:704c20f5a8dc25d8",
+                  "ok": false,
+                  "output": "{\":8",
+                  "target": "{\"canary\":67,\"value\":58777}"
+                }
+              ],
+              "loss": 2.243169300591768,
+              "nll_per_byte": 1.799908301073634,
+              "solved_items": [],
+              "target_token_accuracy": 0.5373134328358209,
+              "target_tokens": 134,
+              "tokenizer_version": "bpe-v1",
+              "validation_target_bytes": 167,
+              "validation_target_tokens": 134
+            },
+            "canary_cycle": 67,
+            "domain_bits_per_byte": {
+              "coding": 3.1167737712843406,
+              "data": 4.1411749280536725,
+              "language": 8.777399281312553,
+              "reasoning": 5.44675227002786,
+              "structured": 2.105856807194846,
+              "tools": 1.249603941501254
+            },
+            "domain_generation_accuracy": {
+              "coding": 0.0,
+              "data": 0.0,
+              "language": 0.0,
+              "reasoning": 0.0,
+              "structured": 0.0,
+              "tools": 0.0
+            },
+            "domain_loss": {
+              "coding": 3.406009158572635,
+              "data": 1.913629150390625,
+              "language": 5.858695136176215,
+              "reasoning": 2.7818744057103206,
+              "structured": 1.680316304051599,
+              "tools": 1.1648351208917025
+            },
+            "domain_nll_per_byte": {
+              "coding": 2.1603829520089284,
+              "data": 2.8704437255859374,
+              "language": 6.084029564490685,
+              "reasoning": 3.7754009791782925,
+              "structured": 1.4596687085700757,
+              "tools": 0.8661594488681891
+            },
+            "domain_token_accuracy": {
+              "coding": 0.24324324324324326,
+              "data": 0.3333333333333333,
+              "language": 0.037037037037037035,
+              "reasoning": 0.15789473684210525,
+              "structured": 0.6395348837209303,
+              "tools": 0.7551724137931034
+            },
+            "finite": true,
+            "generated_solved_items": [],
+            "generation_exact_accuracy": 0.0,
+            "generation_probe": [
+              {
+                "domain": "language",
+                "item": "language:69dcd673152135b7",
+                "ok": false,
+                "output": "18",
+                "target": "orange"
+              },
+              {
+                "domain": "coding",
+                "item": "coding:9f36f220338cd9ff",
+                "ok": false,
+                "output": "68",
+                "target": "def sub(a, b):\n    return a - b"
+              },
+              {
+                "domain": "data",
+                "item": "data:5bd96918425fd195",
+                "ok": false,
+                "output": "6",
+                "target": "20"
+              },
+              {
+                "domain": "reasoning",
+                "item": "reasoning:d206563c75c2d4bd",
+                "ok": false,
+                "output": "6888",
+                "target": "144"
+              },
+              {
+                "domain": "tools",
+                "item": "tools:169b024c50474998",
+                "ok": false,
+                "output": "<tool_call>{\"name\":{\":1888",
+                "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
+              },
+              {
+                "domain": "structured",
+                "item": "structured:b4833d19223b3d60",
+                "ok": false,
+                "output": "18",
+                "target": "{\"count\":2}"
+              }
+            ],
+            "loss": 2.007520244069343,
+            "nll_per_byte": 1.5407858455882353,
+            "parameters": 115328,
+            "pretraining": {
+              "best_step_loss": 5.311540603637695,
+              "blocks": 9807,
+              "corpus_bytes": 2049457,
+              "corpus_sha256": "8c78c926926a1dfc3088186eb8846e7b24664c44d51709fd409971ef4baa52c6",
+              "documents": 443,
+              "eval_blocks": 128,
+              "final_loss": 5.312854841351509,
+              "initial_loss": 5.927212223410606,
+              "loss_improvement": 0.6143573820590973,
+              "ok": true,
+              "steps": 4
+            },
+            "score": 39.35778654855437,
+            "solved_items": [],
+            "target_token_accuracy": 0.5656934306569343,
+            "target_tokens": 548,
+            "tokenizer_version": "bpe-v1",
+            "training": {
+              "best_step_loss": 0.8715859651565552,
+              "effective_batch_size": 4,
+              "final_loss": 1.2994694709777832,
+              "gradient_accumulation_steps": 1,
+              "initial_loss": 2.584308385848999,
+              "loss_improvement": 1.2848389148712158,
+              "micro_batch_size": 4,
+              "ok": true,
+              "precision": "fp32",
+              "steps": 20
+            },
+            "validation_target_bytes": 714,
+            "validation_target_tokens": 548,
+            "weight_transfer": {
+              "copied_parameters": 139904,
+              "copied_tensors": 21,
+              "derived_bpe_rows": 0,
+              "embedding_width_migrated": false,
+              "parameter_fraction": 1.0,
+              "partial_prefix_parameters": 0,
+              "partial_prefix_tensors": [],
+              "policy": "exact tensors plus safe prefix inheritance for expansions",
+              "shared_token_rows": 0,
+              "source_tensors": 21,
+              "source_tokenizer": "bpe-v1",
+              "source_unmatched_tensors": [],
+              "target_parameters": 139904,
+              "target_tensors": 21,
+              "target_tokenizer": "bpe-v1",
+              "tokenizer_identical": true,
+              "vocabulary_migrated": false
+            }
+          },
+          "seed": 517160159
         }
-      }
+      ],
+      "score": 39.35778654855437,
+      "stage": 3,
+      "steps": 20,
+      "version": "airi-generalist-free-speed-v1",
+      "worst_domain_regression": 1.3646944486177892
+    },
+    {
+      "all_seed_eligible": false,
+      "any_seed_eligible": false,
+      "best_nll_per_byte": 1.4197598839340424,
+      "candidate_id": "generalist-3-3-b0195abc",
+      "candidate_index": 5,
+      "checkpoint_dir": "best-checkpoint",
+      "corpus": {
+        "bytes": 2049457,
+        "documents": 443,
+        "external": {
+          "documents": 8,
+          "skipped": 0,
+          "total_bytes": 434900
+        },
+        "repository": {
+          "bytes_read": 1615694,
+          "chars_emitted": 1631914,
+          "digest": "6d154bde733b0555afea5a6ac1347e153085d32e72611d560f8d2c5ee1ab19e1",
+          "documents": 435,
+          "excluded_budget": 1,
+          "excluded_protected": 71,
+          "excluded_sensitive": 0,
+          "files": 255
+        }
+      },
+      "cycle": 67,
+      "external_pretrained": false,
+      "genome": {
+        "code_adapter": false,
+        "context_length": 128,
+        "d_ff": 128,
+        "d_model": 64,
+        "data_adapter": false,
+        "dropout": 0.0,
+        "ff_variant": "swiglu",
+        "generation": 3,
+        "genome_id": "generalist-3-3-b0195abc",
+        "learning_rate": 0.003,
+        "n_heads": 4,
+        "n_layers": 3,
+        "norm_type": "layernorm",
+        "parent_id": "generalist-2-0-57f3721a",
+        "position_encoding": "learned",
+        "reasoning_depth": 1,
+        "retrieval_adapter": false,
+        "symbolic_adapter": false,
+        "tokenizer_version": "bpe-v1",
+        "tool_protocol": "tool-json-v1"
+      },
+      "kind": "architecture",
+      "mean_generation_accuracy": 0.0,
+      "mean_nll_per_byte": 1.500915399118632,
+      "ok": true,
+      "parameters": 156544,
+      "reports": [
+        {
+          "eligible": false,
+          "reason": "candidate regressed in byte-normalized validation domain: language",
+          "report": {
+            "bits_per_byte": 2.2824458623999258,
+            "canary": {
+              "bits_per_byte": 2.6282804758692433,
+              "domain_bits_per_byte": {
+                "coding": 3.416437169733387,
+                "data": 3.93377063869508,
+                "language": 6.974092415122754,
+                "reasoning": 5.351513427631982,
+                "structured": 4.687398920522842,
+                "tools": 0.7708312350337112
+              },
+              "domain_generation_accuracy": {
+                "coding": 0.0,
+                "data": 0.0,
+                "language": 0.0,
+                "reasoning": 0.0,
+                "structured": 0.0,
+                "tools": 0.0
+              },
+              "domain_loss": {
+                "coding": 3.5995025634765625,
+                "data": 2.337156023297991,
+                "language": 4.394611358642578,
+                "reasoning": 3.0911553700764975,
+                "structured": 3.6551895141601562,
+                "tools": 0.7094796602843237
+              },
+              "domain_nll_per_byte": {
+                "coding": 2.3680937917608964,
+                "data": 2.7266820271809897,
+                "language": 4.834072494506836,
+                "reasoning": 3.709386444091797,
+                "structured": 3.249057345920139,
+                "tools": 0.5342994972511574
+              },
+              "domain_token_accuracy": {
+                "coding": 0.28,
+                "data": 0.2857142857142857,
+                "language": 0.18181818181818182,
+                "reasoning": 0.0,
+                "structured": 0.125,
+                "tools": 0.8688524590163934
+              },
+              "finite": true,
+              "generated_solved_items": [],
+              "generation_exact_accuracy": 0.0,
+              "generation_probe": [
+                {
+                  "domain": "language",
+                  "item": "language:60b7b7e8c8a1aed7",
+                  "ok": false,
+                  "output": "CCCLEEEERD11",
+                  "target": "CANARY0067"
+                },
+                {
+                  "domain": "coding",
+                  "item": "coding:56e852cd1449abca",
+                  "ok": false,
+                  "output": "def offfoffofoffoffofo_111",
+                  "target": "def canary_sub_67(x):\n    return x - 4"
+                },
+                {
+                  "domain": "data",
+                  "item": "data:1d886c944df7061b",
+                  "ok": false,
+                  "output": "1",
+                  "target": "176338"
+                },
+                {
+                  "domain": "reasoning",
+                  "item": "reasoning:c25ab9cecb9ffbf6",
+                  "ok": false,
+                  "output": "1",
+                  "target": "58793"
+                },
+                {
+                  "domain": "tools",
+                  "item": "tools:fa7f686512188eae",
+                  "ok": false,
+                  "output": "<tool_call>{\"name\":\"calcalulor\",\"arguments\":{\"expression\":\"1111+11111111111122",
+                  "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"58777*4\"}}</tool_call>"
+                },
+                {
+                  "domain": "structured",
+                  "item": "structured:704c20f5a8dc25d8",
+                  "ok": false,
+                  "output": "14",
+                  "target": "{\"canary\":67,\"value\":58777}"
+                }
+              ],
+              "loss": 2.2704337959858907,
+              "nll_per_byte": 1.8217852015695173,
+              "solved_items": [],
+              "target_token_accuracy": 0.5,
+              "target_tokens": 134,
+              "tokenizer_version": "bpe-v1",
+              "validation_target_bytes": 167,
+              "validation_target_tokens": 134
+            },
+            "canary_cycle": 67,
+            "domain_bits_per_byte": {
+              "coding": 2.900644247116791,
+              "data": 3.7830998944790295,
+              "language": 8.229673591605685,
+              "reasoning": 4.259489007025954,
+              "structured": 2.501538035555865,
+              "tools": 1.4435026643617168
+            },
+            "domain_generation_accuracy": {
+              "coding": 0.0,
+              "data": 0.0,
+              "language": 0.0,
+              "reasoning": 0.0,
+              "structured": 0.0,
+              "tools": 0.0
+            },
+            "domain_loss": {
+              "coding": 3.169822899070946,
+              "data": 1.748163350423177,
+              "language": 5.493101897063078,
+              "reasoning": 2.175491533781353,
+              "structured": 1.9960403442382812,
+              "tools": 1.3455804232893318
+            },
+            "domain_nll_per_byte": {
+              "coding": 2.0105733816964286,
+              "data": 2.622245025634766,
+              "language": 5.70437504695012,
+              "reasoning": 2.9524527958461215,
+              "structured": 1.733934036409012,
+              "tools": 1.000559801933093
+            },
+            "domain_token_accuracy": {
+              "coding": 0.43243243243243246,
+              "data": 0.3333333333333333,
+              "language": 0.07407407407407407,
+              "reasoning": 0.3684210526315789,
+              "structured": 0.627906976744186,
+              "tools": 0.7310344827586207
+            },
+            "finite": true,
+            "generated_solved_items": [],
+            "generation_exact_accuracy": 0.0,
+            "generation_probe": [
+              {
+                "domain": "language",
+                "item": "language:69dcd673152135b7",
+                "ok": false,
+                "output": "CCCCCC",
+                "target": "orange"
+              },
+              {
+                "domain": "coding",
+                "item": "coding:9f36f220338cd9ff",
+                "ok": false,
+                "output": "def offfofffffff f offfff",
+                "target": "def sub(a, b):\n    return a - b"
+              },
+              {
+                "domain": "data",
+                "item": "data:5bd96918425fd195",
+                "ok": false,
+                "output": "11",
+                "target": "20"
+              },
+              {
+                "domain": "reasoning",
+                "item": "reasoning:d206563c75c2d4bd",
+                "ok": false,
+                "output": "111",
+                "target": "144"
+              },
+              {
+                "domain": "tools",
+                "item": "tools:169b024c50474998",
+                "ok": false,
+                "output": "<tool_call>{\":truments\":\"calcalulor\",\"arguments\":{\"expression\":\"1111+111111111",
+                "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
+              },
+              {
+                "domain": "structured",
+                "item": "structured:b4833d19223b3d60",
+                "ok": false,
+                "output": "",
+                "target": "{\"count\":2}"
+              }
+            ],
+            "loss": 2.061311373745438,
+            "nll_per_byte": 1.5820709143032212,
+            "parameters": 156544,
+            "pretraining": {
+              "best_step_loss": 5.426109790802002,
+              "blocks": 9807,
+              "corpus_bytes": 2049457,
+              "corpus_sha256": "8c78c926926a1dfc3088186eb8846e7b24664c44d51709fd409971ef4baa52c6",
+              "documents": 443,
+              "eval_blocks": 128,
+              "final_loss": 5.343894615769386,
+              "initial_loss": 5.97571574151516,
+              "loss_improvement": 0.6318211257457733,
+              "ok": true,
+              "steps": 4
+            },
+            "score": 38.72844670467772,
+            "solved_items": [],
+            "target_token_accuracy": 0.5985401459854015,
+            "target_tokens": 548,
+            "tokenizer_version": "bpe-v1",
+            "training": {
+              "best_step_loss": 0.9510313272476196,
+              "effective_batch_size": 4,
+              "final_loss": 1.1482465267181396,
+              "gradient_accumulation_steps": 1,
+              "initial_loss": 2.5606610774993896,
+              "loss_improvement": 1.41241455078125,
+              "micro_batch_size": 4,
+              "ok": true,
+              "precision": "fp32",
+              "steps": 20
+            },
+            "validation_target_bytes": 714,
+            "validation_target_tokens": 548,
+            "weight_transfer": {
+              "copied_parameters": 139904,
+              "copied_tensors": 21,
+              "derived_bpe_rows": 0,
+              "embedding_width_migrated": false,
+              "parameter_fraction": 0.7724381625441696,
+              "partial_prefix_parameters": 0,
+              "partial_prefix_tensors": [],
+              "policy": "exact tensors plus safe prefix inheritance for expansions",
+              "shared_token_rows": 0,
+              "source_tensors": 21,
+              "source_tokenizer": "bpe-v1",
+              "source_unmatched_tensors": [],
+              "target_parameters": 181120,
+              "target_tensors": 29,
+              "target_tokenizer": "bpe-v1",
+              "tokenizer_identical": true,
+              "vocabulary_migrated": false
+            }
+          },
+          "seed": 1675570038
+        },
+        {
+          "eligible": false,
+          "reason": "candidate regressed in byte-normalized validation domain: language",
+          "report": {
+            "bits_per_byte": 2.0482805438047333,
+            "canary": {
+              "bits_per_byte": 2.734498674689605,
+              "domain_bits_per_byte": {
+                "coding": 3.6180234296338907,
+                "data": 4.65937553233412,
+                "language": 7.718032126929056,
+                "reasoning": 6.344289746285217,
+                "structured": 4.675194318208102,
+                "tools": 0.692445738297827
+              },
+              "domain_generation_accuracy": {
+                "coding": 0.0,
+                "data": 0.0,
+                "language": 0.0,
+                "reasoning": 0.0,
+                "structured": 0.0,
+                "tools": 0.0
+              },
+              "domain_loss": {
+                "coding": 3.8118905639648437,
+                "data": 2.768256868634905,
+                "language": 4.863392916592685,
+                "reasoning": 3.664605458577474,
+                "structured": 3.6456724802652993,
+                "tools": 0.6373329787957863
+              },
+              "domain_nll_per_byte": {
+                "coding": 2.507822739450555,
+                "data": 3.229633013407389,
+                "language": 5.349732208251953,
+                "reasoning": 4.397526550292969,
+                "structured": 3.2405977602358216,
+                "tools": 0.4799668111918885
+              },
+              "domain_token_accuracy": {
+                "coding": 0.24,
+                "data": 0.42857142857142855,
+                "language": 0.18181818181818182,
+                "reasoning": 0.0,
+                "structured": 0.16666666666666666,
+                "tools": 0.8688524590163934
+              },
+              "finite": true,
+              "generated_solved_items": [],
+              "generation_exact_accuracy": 0.0,
+              "generation_probe": [
+                {
+                  "domain": "language",
+                  "item": "language:60b7b7e8c8a1aed7",
+                  "ok": false,
+                  "output": "CCCLEEWORD33",
+                  "target": "CANARY0067"
+                },
+                {
+                  "domain": "coding",
+                  "item": "coding:56e852cd1449abca",
+                  "ok": false,
+                  "output": "de_call_call_calcall>",
+                  "target": "def canary_sub_67(x):\n    return x - 4"
+                },
+                {
+                  "domain": "data",
+                  "item": "data:1d886c944df7061b",
+                  "ok": false,
+                  "output": "1",
+                  "target": "176338"
+                },
+                {
+                  "domain": "reasoning",
+                  "item": "reasoning:c25ab9cecb9ffbf6",
+                  "ok": false,
+                  "output": "3",
+                  "target": "58793"
+                },
+                {
+                  "domain": "tools",
+                  "item": "tools:fa7f686512188eae",
+                  "ok": false,
+                  "output": "<tool_call>{\"name\":\"calcalcalcalcall>",
+                  "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"58777*4\"}}</tool_call>"
+                },
+                {
+                  "domain": "structured",
+                  "item": "structured:704c20f5a8dc25d8",
+                  "ok": false,
+                  "output": "de_callcol_calcalcalcalcall>",
+                  "target": "{\"canary\":67,\"value\":58777}"
+                }
+              ],
+              "loss": 2.362190132710471,
+              "nll_per_byte": 1.8954100466060066,
+              "solved_items": [],
+              "target_token_accuracy": 0.5074626865671642,
+              "target_tokens": 134,
+              "tokenizer_version": "bpe-v1",
+              "validation_target_bytes": 167,
+              "validation_target_tokens": 134
+            },
+            "canary_cycle": 67,
+            "domain_bits_per_byte": {
+              "coding": 2.80562044789652,
+              "data": 4.687277905886021,
+              "language": 8.62925416670767,
+              "reasoning": 5.125501650621798,
+              "structured": 2.4720800410559822,
+              "tools": 0.9840062265355141
+            },
+            "domain_generation_accuracy": {
+              "coding": 0.0,
+              "data": 0.0,
+              "language": 0.0,
+              "reasoning": 0.0,
+              "structured": 0.0,
+              "tools": 0.0
+            },
+            "domain_loss": {
+              "coding": 3.065980928438204,
+              "data": 2.1659823099772137,
+              "language": 5.759811966507523,
+              "reasoning": 2.6177988554302014,
+              "structured": 1.972535066826399,
+              "tools": 0.917254638671875
+            },
+            "domain_nll_per_byte": {
+              "coding": 1.9447079031808037,
+              "data": 3.2489734649658204,
+              "language": 5.981343195988582,
+              "reasoning": 3.552727018083845,
+              "structured": 1.7135153105764678,
+              "tools": 0.6820611415765224
+            },
+            "domain_token_accuracy": {
+              "coding": 0.45045045045045046,
+              "data": 0.3333333333333333,
+              "language": 0.037037037037037035,
+              "reasoning": 0.21052631578947367,
+              "structured": 0.5348837209302325,
+              "tools": 0.7827586206896552
+            },
+            "finite": true,
+            "generated_solved_items": [],
+            "generation_exact_accuracy": 0.0,
+            "generation_probe": [
+              {
+                "domain": "language",
+                "item": "language:69dcd673152135b7",
+                "ok": false,
+                "output": "333",
+                "target": "orange"
+              },
+              {
+                "domain": "coding",
+                "item": "coding:9f36f220338cd9ff",
+                "ok": false,
+                "output": "def scall_call>",
+                "target": "def sub(a, b):\n    return a - b"
+              },
+              {
+                "domain": "data",
+                "item": "data:5bd96918425fd195",
+                "ok": false,
+                "output": "3",
+                "target": "20"
+              },
+              {
+                "domain": "reasoning",
+                "item": "reasoning:d206563c75c2d4bd",
+                "ok": false,
+                "output": "3333",
+                "target": "144"
+              },
+              {
+                "domain": "tools",
+                "item": "tools:169b024c50474998",
+                "ok": false,
+                "output": "<tool_call>{\":\"arguments\"calcalcall>{\":\":{\":{\"expression\":\"1333+33\"}}</tool",
+                "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
+              },
+              {
+                "domain": "structured",
+                "item": "structured:b4833d19223b3d60",
+                "ok": false,
+                "output": "3",
+                "target": "{\"count\":2}"
+              }
+            ],
+            "loss": 1.8498331334469091,
+            "nll_per_byte": 1.4197598839340424,
+            "parameters": 156544,
+            "pretraining": {
+              "best_step_loss": 5.3458476066589355,
+              "blocks": 9807,
+              "corpus_bytes": 2049457,
+              "corpus_sha256": "8c78c926926a1dfc3088186eb8846e7b24664c44d51709fd409971ef4baa52c6",
+              "documents": 443,
+              "eval_blocks": 128,
+              "final_loss": 5.3390249609947205,
+              "initial_loss": 5.952268660068512,
+              "loss_improvement": 0.6132436990737915,
+              "ok": true,
+              "steps": 4
+            },
+            "score": 41.32625797503903,
+            "solved_items": [],
+            "target_token_accuracy": 0.6076642335766423,
+            "target_tokens": 548,
+            "tokenizer_version": "bpe-v1",
+            "training": {
+              "best_step_loss": 0.7348222136497498,
+              "effective_batch_size": 4,
+              "final_loss": 1.2612621784210205,
+              "gradient_accumulation_steps": 1,
+              "initial_loss": 2.521608829498291,
+              "loss_improvement": 1.2603466510772705,
+              "micro_batch_size": 4,
+              "ok": true,
+              "precision": "fp32",
+              "steps": 20
+            },
+            "validation_target_bytes": 714,
+            "validation_target_tokens": 548,
+            "weight_transfer": {
+              "copied_parameters": 139904,
+              "copied_tensors": 21,
+              "derived_bpe_rows": 0,
+              "embedding_width_migrated": false,
+              "parameter_fraction": 0.7724381625441696,
+              "partial_prefix_parameters": 0,
+              "partial_prefix_tensors": [],
+              "policy": "exact tensors plus safe prefix inheritance for expansions",
+              "shared_token_rows": 0,
+              "source_tensors": 21,
+              "source_tokenizer": "bpe-v1",
+              "source_unmatched_tensors": [],
+              "target_parameters": 181120,
+              "target_tensors": 29,
+              "target_tokenizer": "bpe-v1",
+              "tokenizer_identical": true,
+              "vocabulary_migrated": false
+            }
+          },
+          "seed": 1675571035
+        }
+      ],
+      "score": 41.32625797503903,
+      "stage": 3,
+      "steps": 20,
+      "version": "airi-generalist-free-speed-v1",
+      "worst_domain_regression": 1.2620080801156854
     }
   ],
-  "updated_at": 1789971029.3794856
+  "updated_at": 1789975706.5958931,
+  "version": "airi-generalist-free-speed-v1",
+  "winner": null
 }
