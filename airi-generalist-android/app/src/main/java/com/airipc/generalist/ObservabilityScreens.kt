@@ -328,8 +328,9 @@ private fun NeuralFlow(neural: NeuralDiagnostics) {
                     )
                 }
                 val magnitude = component.rmsWeight.coerceAtLeast(0.000001)
-                val radius = (10f + magnitude.coerceAtMost(0.08) * 260f)
-                    .coerceIn(11f, 28f)
+                val radius = (
+                    10.0 + magnitude.coerceAtMost(0.08) * 260.0
+                ).coerceIn(11.0, 28.0).toFloat()
                 drawCircle(
                     color = primary.copy(alpha = 0.82f),
                     radius = radius,
