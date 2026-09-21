@@ -209,7 +209,11 @@ def progressive_scale_candidate(
             max(1, int(max_layers)) + 1,
         ):
             for ratio in (2.0, 3.0, 4.0):
-                ff = max(width, int(round(width * ratio / 32.0)) * 32)
+                ff = max(
+                    champion.d_ff,
+                    width,
+                    int(round(width * ratio / 32.0)) * 32,
+                )
                 try:
                     cfg = GeneralistLMConfig(
                         vocab_size=int(vocab_size),
