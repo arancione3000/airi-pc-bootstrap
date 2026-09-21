@@ -186,3 +186,260 @@ def test_cli_exposes_scalable_learning_commands(tmp_path: Path):
         str(tmp_path / "adapter"),
     ])
     assert args.cmd == "lora-transformers"
+
+
+
+class _FakeResponse:
+    def __init__(self, blob: bytes, url: str):
+        self._blob = blob
+        self._url = url
+        self._offset = 0
+
+    def read(self, size: int = -1) -> bytes:
+        if size is None or size < 0:
+            size = len(self._blob) - self._offset
+        chunk = self._blob[self._offset:self._offset + size]
+        self._offset += len(chunk)
+        return chunk
+
+    def geturl(self) -> str:
+        return self._url
+
+    def close(self) -> None:
+        return None
+
+
+def test_progressive_scaling_builds_larger_bounded_generalist():
+    from generalist_lm.evolution import (
+        GeneralistGenome,
+        progressive_scale_candidate,
+        progressive_scale_target,
+    )
+    from generalist_lm.model import estimate_parameter_count
+
+    champion = GeneralistGenome(
+        generation=3,
+        parent_id="p",
+        genome_id="g",
+        context_length=128,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=128,
+        retrieval_adapter=False,
+        symbolic_adapter=False,
+        code_adapter=False,
+        data_adapter=False,
+        reasoning_depth=1,
+    ).validate()
+    current = estimate_parameter_count(champion.model_config())
+    target = progressive_scale_target(current, max_parameters=2_000_000)
+    assert target == 250_000
+
+    candidate = progressive_scale_candidate(
+        champion,
+        target_parameters=target,
+        max_width=256,
+        max_layers=6,
+    )
+    params = estimate_parameter_count(candidate.model_config())
+    assert params > current
+    assert params <= 2_000_000
+    assert candidate.parent_id == champion.genome_id
+    assert candidate.generation == champion.generation + 1
+
+
+def test_adaptive_curriculum_weights_weak_domains_more_heavily():
+    from collections import Counter
+
+    from generalist_lm.evolution import GeneralistGenome
+    from generalist_lm.research_cycle import (
+        _training_rows_for_genome,
+        adaptive_domain_weights,
+    )
+
+    report = {
+        "domain_nll_per_byte": {
+            "language": 5.0,
+            "coding": 2.0,
+            "data": 2.5,
+            "reasoning": 3.0,
+            "tools": 2.2,
+            "structured": 2.1,
+        }
+    }
+    weights = adaptive_domain_weights(report)
+    assert weights["language"] == pytest.approx(3.0)
+    assert weights["coding"] == pytest.approx(1.0)
+
+    genome = GeneralistGenome(
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        retrieval_adapter=False,
+        symbolic_adapter=False,
+        code_adapter=False,
+        data_adapter=False,
+        reasoning_depth=1,
+    ).validate()
+    rows = _training_rows_for_genome(
+        genome,
+        domain_weights=weights,
+    )
+    counts = Counter(row.domain for row in rows)
+    assert counts["language"] > counts["coding"]
+
+
+def test_progressive_weight_inheritance_copies_overlap_and_embeddings():
+    torch = pytest.importorskip("torch")
+    from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
+    from generalist_lm.research_cycle import _transfer_compatible_weights
+    from generalist_lm.tokenizer import ByteTokenizer
+
+    source_cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        dropout=0.0,
+    ).validate()
+    target_cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=64,
+        n_heads=4,
+        n_layers=1,
+        d_ff=128,
+        dropout=0.0,
+    ).validate()
+    source = CausalTransformerLM(source_cfg)
+    target = CausalTransformerLM(target_cfg)
+    with torch.no_grad():
+        source.token_embedding.weight.fill_(0.125)
+        source.blocks[0].attn.qkv.weight.fill_(0.25)
+
+    report = _transfer_compatible_weights(
+        source,
+        target,
+        source_tokenizer=ByteTokenizer(),
+        target_tokenizer=ByteTokenizer(),
+    )
+    assert report["embedding_width_migrated"] is True
+    assert report["partial_prefix_tensors"]
+    assert torch.allclose(
+        target.token_embedding.weight[:, :32],
+        source.token_embedding.weight,
+    )
+    assert torch.allclose(
+        target.blocks[0].attn.qkv.weight[:96, :32],
+        source.blocks[0].attn.qkv.weight,
+    )
+
+
+def test_generalist_data_growth_admits_only_permissive_immutable_text(tmp_path: Path):
+    import json
+    from urllib.error import HTTPError
+
+    from generalist_lm.generalist_data_growth import grow_generalist_data
+
+    commit = "a" * 40
+    payloads = {
+        "search": {
+            "items": [{"full_name": "example/corpus"}],
+        },
+        "repo": {
+            "default_branch": "main",
+            "license": {"spdx_id": "MIT"},
+        },
+        "branch": {
+            "commit": {"sha": commit},
+        },
+        "tree": {
+            "tree": [
+                {
+                    "type": "blob",
+                    "path": "data/sample.txt",
+                    "size": 1500,
+                }
+            ]
+        },
+    }
+    raw_text = (
+        "This is a permissively licensed language corpus example with enough "
+        "ordinary text to pass the bounded AIRI quality filter. "
+    ).encode("utf-8") * 16
+
+    def opener(request, timeout):
+        del timeout
+        url = request.full_url
+        if "search/repositories" in url:
+            return _FakeResponse(json.dumps(payloads["search"]).encode(), url)
+        if url.endswith("/repos/example/corpus"):
+            return _FakeResponse(json.dumps(payloads["repo"]).encode(), url)
+        if "/branches/main" in url:
+            return _FakeResponse(json.dumps(payloads["branch"]).encode(), url)
+        if "/git/trees/" in url:
+            return _FakeResponse(json.dumps(payloads["tree"]).encode(), url)
+        if url.startswith("https://raw.githubusercontent.com/"):
+            return _FakeResponse(raw_text, url)
+        raise AssertionError(url)
+
+    result = grow_generalist_data(
+        tmp_path,
+        signals=["language_gap"],
+        max_new_bytes=100_000,
+        max_total_bytes=200_000,
+        max_repositories=1,
+        max_files_per_repo=2,
+        opener=opener,
+    )
+    assert result["ok"] is True
+    assert result["added_files"] == 1
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    row = manifest["files"][0]
+    assert row["spdx"] == "MIT"
+    assert row["commit"] == commit
+    assert row["source_url"].startswith(
+        "https://raw.githubusercontent.com/example/corpus/"
+        + commit
+    )
+    assert (tmp_path / "approved").is_dir()
+    assert list((tmp_path / "approved").iterdir())
+
+
+def test_generalist_data_growth_rejects_unknown_license(tmp_path: Path):
+    import json
+
+    from generalist_lm.generalist_data_growth import grow_generalist_data
+
+    def opener(request, timeout):
+        del timeout
+        url = request.full_url
+        if "search/repositories" in url:
+            return _FakeResponse(
+                json.dumps({"items": [{"full_name": "example/closed"}]}).encode(),
+                url,
+            )
+        if url.endswith("/repos/example/closed"):
+            return _FakeResponse(
+                json.dumps({
+                    "default_branch": "main",
+                    "license": {"spdx_id": "NOASSERTION"},
+                }).encode(),
+                url,
+            )
+        raise AssertionError(url)
+
+    result = grow_generalist_data(
+        tmp_path,
+        max_new_bytes=100_000,
+        max_total_bytes=100_000,
+        max_repositories=1,
+        opener=opener,
+    )
+    assert result["added_files"] == 0
+    assert any("license" in row["reason"] for row in result["rejected"])
