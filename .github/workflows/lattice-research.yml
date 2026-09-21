@@ -42,7 +42,7 @@ jobs:
         env:
           PYTHONPATH: computer
         run: |
-          python -m compileall -q             computer/generalist_lm/native_lattice.py             computer/generalist_lm/lattice_math.py             computer/generalist_lm/lattice_evolution.py             computer/generalist_lm/lattice_lab.py             computer/generalist_lm/lattice_swarm.py
+          python -m compileall -q             computer/generalist_lm/native_lattice.py             computer/generalist_lm/lattice_math.py             computer/generalist_lm/lattice_evolution.py             computer/generalist_lm/lattice_lab.py             computer/generalist_lm/lattice_meta.py             computer/generalist_lm/lattice_swarm.py
           python -m pytest -q tests/test_native_evolution.py -k 'lattice_swarm or airi_lattice'
 
   plan:
