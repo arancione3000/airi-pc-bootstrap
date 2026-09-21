@@ -12,6 +12,8 @@ from typing import Any, Iterable, Sequence
 
 from .airi_pc_lab import (
     build_airi_pc_lab_rows,
+    load_verified_lab_experiences,
+    record_verified_lab_experience,
     run_airi_pc_lab_probe,
     snapshot_airi_pc_lab,
     summarize_lab_learning,
@@ -267,13 +269,18 @@ def prepare_swarm(
 
     lab_snapshot = snapshot_airi_pc_lab(Path.cwd())
     lab_rows = build_airi_pc_lab_rows(lab_snapshot, max_rows=18)
-    lab_learning = summarize_lab_learning(lab_rows)
+    lab_experience_rows = load_verified_lab_experiences(root, max_rows=32)
+    lab_training_rows = [*lab_rows, *lab_experience_rows]
+    lab_learning = summarize_lab_learning(
+        lab_training_rows,
+        verified_experience_rows=len(lab_experience_rows),
+    )
 
     memory = CurriculumMemory(root, max_rows=curriculum_max_rows)
     curriculum = memory.expand(
         cycle,
         signals=signals,
-        extra_rows=lab_rows,
+        extra_rows=lab_training_rows,
     )
     domain_weights = adaptive_domain_weights(champion_report)
 
@@ -1193,12 +1200,23 @@ def finalize_swarm(
         "capabilities": [],
         "denied_capabilities": [],
     }
+    champion_lab_probe = run_airi_pc_lab_probe(
+        champion_runtime,
+        lab_snapshot,
+    )
+    champion_experience = record_verified_lab_experience(
+        root,
+        champion_lab_probe,
+        cycle=cycle,
+        source="champion",
+    )
     airi_pc_lab_report = {
         "version": str(lab_snapshot.get("version") or "airi-pc-lab-v1"),
         "mode": str(lab_snapshot.get("mode") or "read_only_sandbox"),
         "snapshot": lab_snapshot,
         "learning": lab_plan.get("learning") or {},
-        "champion": run_airi_pc_lab_probe(champion_runtime, lab_snapshot),
+        "champion": champion_lab_probe,
+        "champion_experience": champion_experience,
     }
     latest_runtime_path = root / "latest-research"
     if latest_runtime_path.is_dir():
@@ -1207,9 +1225,18 @@ def finalize_swarm(
                 latest_runtime_path,
                 device="cpu",
             )
-            airi_pc_lab_report["research"] = run_airi_pc_lab_probe(
+            research_probe = run_airi_pc_lab_probe(
                 latest_runtime,
                 lab_snapshot,
+            )
+            airi_pc_lab_report["research"] = research_probe
+            airi_pc_lab_report["research_experience"] = (
+                record_verified_lab_experience(
+                    root,
+                    research_probe,
+                    cycle=cycle,
+                    source="latest_research",
+                )
             )
         except Exception as exc:
             airi_pc_lab_report["research"] = {
