@@ -75,6 +75,23 @@ def _batch(blocks: list[list[int]], indices: list[int], *, device):
     return ids, labels
 
 
+def _effective_bootstrap_target(
+    requested_target: int,
+    persisted_progress: dict[str, Any] | None,
+) -> int:
+    """Never shrink an already-started cumulative bootstrap rung.
+
+    Push-triggered workflow invocations historically defaulted to 1M tokens.
+    After a 5M rung completed, those maintenance runs could rebuild the
+    displayed manifest at 1M even though the persisted candidate/progress still
+    represented 5M.  The cumulative target is part of state and therefore must
+    be monotonic.
+    """
+    requested = max(100_000, int(requested_target))
+    persisted = int((persisted_progress or {}).get("target_tokens", 0) or 0)
+    return max(requested, persisted)
+
+
 def _learning_rate(
     *,
     base_lr: float,
@@ -252,6 +269,9 @@ def run_segment(
     champion_model_path = root / "champion" / "model.pt"
     base_model_sha = _sha256_file(champion_model_path)
 
+    persisted_progress = _load_json(progress_path, {}) if progress_path.is_file() else {}
+    target_tokens = _effective_bootstrap_target(target_tokens, persisted_progress)
+
     previous_manifest = _load_json(manifest_path) if manifest_path.is_file() else None
     bundle = build_bootstrap_bundle(
         champion_runtime.tokenizer,
@@ -259,6 +279,11 @@ def run_segment(
         target_tokens=int(target_tokens),
         previous_manifest=previous_manifest,
     )
+    if int(bundle.manifest.get("actual_selected_tokens", 0) or 0) < int(target_tokens * 0.95):
+        raise RuntimeError(
+            "bootstrap corpus coverage is below 95% of cumulative target: "
+            f"selected={bundle.manifest.get('actual_selected_tokens')} target={target_tokens}"
+        )
     _atomic_json(manifest_path, bundle.manifest)
 
     if not before_path.is_file():
