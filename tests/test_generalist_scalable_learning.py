@@ -665,3 +665,93 @@ def test_generalist_swarm_finalize_handles_no_eligible_finalist(tmp_path: Path):
     assert result["champion"]["genome_id"] == genome.genome_id
     assert "no finalist" in result["promotion_reason"]
     assert result["policy"]["candidate_can_self_promote"] is False
+
+
+
+def test_generalist_data_growth_skips_oversized_repository_tree(tmp_path: Path):
+    import json
+
+    from generalist_lm.generalist_data_growth import grow_generalist_data
+
+    big_commit = "b" * 40
+    good_commit = "c" * 40
+    raw_text = (
+        "A compact permissive corpus with useful natural language and code-like "
+        "tokens for bounded autonomous pretraining. "
+    ).encode("utf-8") * 20
+
+    def opener(request, timeout):
+        del timeout
+        url = request.full_url
+        if "search/repositories" in url:
+            return _FakeResponse(
+                json.dumps({
+                    "items": [
+                        {"full_name": "example/huge"},
+                        {"full_name": "example/good"},
+                    ]
+                }).encode(),
+                url,
+            )
+        if url.endswith("/repos/example/huge"):
+            return _FakeResponse(
+                json.dumps({
+                    "default_branch": "main",
+                    "license": {"spdx_id": "MIT"},
+                }).encode(),
+                url,
+            )
+        if url.endswith("/repos/example/good"):
+            return _FakeResponse(
+                json.dumps({
+                    "default_branch": "main",
+                    "license": {"spdx_id": "Apache-2.0"},
+                }).encode(),
+                url,
+            )
+        if "/repos/example/huge/branches/main" in url:
+            return _FakeResponse(
+                json.dumps({"commit": {"sha": big_commit}}).encode(),
+                url,
+            )
+        if "/repos/example/good/branches/main" in url:
+            return _FakeResponse(
+                json.dumps({"commit": {"sha": good_commit}}).encode(),
+                url,
+            )
+        if f"/repos/example/huge/git/trees/{big_commit}" in url:
+            raise ValueError("GitHub metadata response exceeded budget:16000000")
+        if f"/repos/example/good/git/trees/{good_commit}" in url:
+            return _FakeResponse(
+                json.dumps({
+                    "truncated": False,
+                    "tree": [{
+                        "type": "blob",
+                        "path": "corpus/sample.txt",
+                        "size": len(raw_text),
+                    }],
+                }).encode(),
+                url,
+            )
+        if url.startswith(
+            f"https://raw.githubusercontent.com/example/good/{good_commit}/"
+        ):
+            return _FakeResponse(raw_text, url)
+        raise AssertionError(url)
+
+    result = grow_generalist_data(
+        tmp_path,
+        max_new_bytes=100_000,
+        max_total_bytes=200_000,
+        max_repositories=2,
+        max_files_per_repo=2,
+        opener=opener,
+    )
+    assert result["ok"] is True
+    assert result["added_files"] == 1
+    assert result["repositories_used"] == 1
+    assert any(
+        row["repo"] == "example/huge"
+        and row["reason"] == "metadata_tree:ValueError"
+        for row in result["rejected"]
+    )
