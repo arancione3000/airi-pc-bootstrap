@@ -16,7 +16,7 @@ from typing import Any
 from .curriculum import ResearchRow, train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
 from .corpus import repository_corpus
-from .bpe_tokenizer import BPETokenizer, train_bpe
+from .bpe_tokenizer import BPETokenizer, extend_bpe, train_bpe
 from .evolution import GeneralistGenome, generate_challengers
 from .mathesis_bridge import mathesis_signals
 from .model import CausalTransformerLM, estimate_parameter_count, parameter_count
@@ -550,8 +550,21 @@ def _tokenizer_for_genome(
     if genome.tokenizer_version == "byte-v1":
         return ByteTokenizer()
     if genome.tokenizer_version == "bpe-v1":
+        texts = _tokenizer_training_texts(replay_rows, pretrain_documents)
+        if (
+            source_runtime is not None
+            and isinstance(source_runtime.tokenizer, BPETokenizer)
+            and source_runtime.tokenizer.version == "bpe-v1"
+        ):
+            return extend_bpe(
+                source_runtime.tokenizer,
+                texts,
+                vocab_size=max(BYTE_VOCAB_SIZE, int(bpe_vocab_size)),
+                min_frequency=2,
+                max_bytes=max(8_192, int(bpe_max_bytes)),
+            )
         return train_bpe(
-            _tokenizer_training_texts(replay_rows, pretrain_documents),
+            texts,
             vocab_size=max(BYTE_VOCAB_SIZE, int(bpe_vocab_size)),
             min_frequency=2,
             max_bytes=max(8_192, int(bpe_max_bytes)),
@@ -818,8 +831,32 @@ def _transfer_compatible_weights(
                 dtype=migrated.dtype,
             )
 
+        bpe_prefix_extended = bool(
+            isinstance(source_tokenizer, BPETokenizer)
+            and isinstance(target_tokenizer, BPETokenizer)
+            and len(target_tokenizer.merges) >= len(source_tokenizer.merges)
+            and target_tokenizer.merges[: len(source_tokenizer.merges)]
+                == source_tokenizer.merges
+        )
+        if bpe_prefix_extended:
+            preserved = min(
+                int(source_embed.shape[0]),
+                int(target_embed.shape[0]),
+                int(source_tokenizer.vocab_size),
+            )
+            migrated[:preserved] = source_embed[:preserved].to(
+                device=migrated.device,
+                dtype=migrated.dtype,
+            )
+            shared_token_rows = max(shared_token_rows, preserved)
+
         if isinstance(target_tokenizer, BPETokenizer):
-            for token_id in range(BYTE_VOCAB_SIZE, int(target_embed.shape[0])):
+            start_id = (
+                int(source_tokenizer.vocab_size)
+                if bpe_prefix_extended
+                else BYTE_VOCAB_SIZE
+            )
+            for token_id in range(start_id, int(target_embed.shape[0])):
                 raw = target_tokenizer.token_bytes(token_id)
                 byte_rows = [
                     BYTE_OFFSET + value
