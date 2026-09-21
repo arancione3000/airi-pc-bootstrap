@@ -688,6 +688,8 @@ larger corpora and budgets.
 The canonical Native Transformer therefore remains unchanged by ordinary
 Lattice research wins.
 
+The elite archive itself is persisted with the Lattice research state, so failed-but-promising lineages survive across independent scheduled runs instead of being forgotten when a GitHub Actions VM exits.
+
 Useful commands:
 
 ```bash
