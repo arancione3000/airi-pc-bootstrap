@@ -107,6 +107,9 @@ data class AiriPcLabReport(
     val mode: String,
     val trainingRows: Int,
     val trainingDomains: Map<String, Int>,
+    val verifiedExperienceRows: Int,
+    val championExperienceStored: Boolean,
+    val researchExperienceStored: Boolean,
     val capabilities: List<String>,
     val deniedCapabilities: List<String>,
     val modules: List<LabModule>,
@@ -313,6 +316,15 @@ internal fun parseAiriPcLabReport(raw: JSONObject?): AiriPcLabReport {
         mode = raw?.optString("mode").orEmpty(),
         trainingRows = learning?.optInt("training_rows") ?: 0,
         trainingDomains = intMap(learning, "domains"),
+        verifiedExperienceRows = learning?.optInt("verified_experience_rows") ?: 0,
+        championExperienceStored = raw
+            ?.optJSONObject("champion_experience")
+            ?.optBoolean("stored")
+            ?: false,
+        researchExperienceStored = raw
+            ?.optJSONObject("research_experience")
+            ?.optBoolean("stored")
+            ?: false,
         capabilities = stringList(snapshot, "capabilities"),
         deniedCapabilities = stringList(snapshot, "denied_capabilities"),
         modules = modules,
