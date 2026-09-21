@@ -8,8 +8,10 @@ import pytest
 from generalist_lm.architecture_ir import ArchitectureSpec
 from generalist_lm.architecture_mutations import (
     next_parameter_tier,
+    proposal_set,
     structural_mutations,
 )
+from generalist_lm.architecture_search import prioritize_architecture_proposals
 from generalist_lm.data_quality import assess_text
 from generalist_lm.evolution import GeneralistGenome
 from generalist_lm.internet_quarantine import (
@@ -69,6 +71,32 @@ def test_parameter_ladder_reaches_multi_million_scale():
     assert next_parameter_tier(1_250_000) == 3_000_000
     assert next_parameter_tier(3_000_000) == 7_000_000
     assert next_parameter_tier(7_000_000) is None
+
+
+def test_capacity_proposals_cannot_be_crowded_out_by_micro_mutations():
+    parent = ArchitectureSpec(
+        architecture_id="tiny-parent",
+        generation=2,
+        parent_id=None,
+        context_length=128,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=128,
+        tokenizer_version="bpe-v1",
+        target_vocab_size=384,
+    ).validate()
+    proposals = proposal_set(
+        parent,
+        signals=["language_collapse"],
+        parameter_cap=7_000_000,
+        max_candidates=16,
+    )
+    ordered = prioritize_architecture_proposals(proposals)
+    kinds = [row["kind"] for row in ordered]
+    assert kinds[:2] == ["capacity_plus_structure", "capacity_scale"]
+    assert ordered[0]["parameter_estimate"] > parent.parameter_estimate()
+    assert ordered[1]["parameter_estimate"] > parent.parameter_estimate()
 
 
 def test_quality_filter_rejects_repetition_without_external_llm():
