@@ -56,6 +56,62 @@ def _phase5_signals(state_dir: Path) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+def _negative_architecture_memory(
+    state_dir: Path,
+    *,
+    parent_fingerprint: str,
+) -> tuple[set[str], dict[str, Any]]:
+    """Remember failed topologies only for the same parent architecture.
+
+    An exact topology can become useful after the champion changes, so failures
+    are not globally blacklisted forever. Under the same parent, however, the
+    autonomous loop must not continuously rediscover the same failed brain.
+    """
+    root = state_dir / "architecture-research"
+    fingerprints: set[str] = set()
+    sources: list[str] = []
+
+    last_plan = _read(root / "last-plan.json", {})
+    previous_parent = (
+        (last_plan.get("architecture_parent") or {}).get("fingerprint")
+        if isinstance(last_plan, dict)
+        else None
+    )
+    if previous_parent == parent_fingerprint:
+        leaderboard = _read(root / "leaderboard.json", {})
+        for row in leaderboard.get("entries") or []:
+            if bool(row.get("all_seed_eligible")):
+                continue
+            fingerprint = str(row.get("fingerprint") or "").strip()
+            if fingerprint:
+                fingerprints.add(fingerprint)
+        for row in last_plan.get("static_rejections") or []:
+            fingerprint = str(row.get("fingerprint") or "").strip()
+            if fingerprint:
+                fingerprints.add(fingerprint)
+        if fingerprints:
+            sources.append("previous_same_parent_cycle")
+
+    rejected_root = root / "rejected"
+    if rejected_root.is_dir():
+        for path in sorted(rejected_root.glob("*.json")):
+            row = _read(path, {})
+            if str(row.get("parent_fingerprint") or "") != parent_fingerprint:
+                continue
+            fingerprint = str(row.get("fingerprint") or "").strip()
+            if fingerprint:
+                fingerprints.add(fingerprint)
+                sources.append(path.name)
+
+    return fingerprints, {
+        "parent_fingerprint": parent_fingerprint,
+        "rejected_fingerprints": sorted(fingerprints),
+        "count": len(fingerprints),
+        "sources": sorted(set(sources)),
+        "scope": "same-parent topology failures only",
+    }
+
+
 def prioritize_architecture_proposals(
     proposals: Iterable[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -140,12 +196,21 @@ def prepare_architecture_search(
                 "promotion_authority": False,
             }]
 
-    proposals = proposal_set(
+    negative_fingerprints, negative_memory = _negative_architecture_memory(
+        root,
+        parent_fingerprint=parent.fingerprint(),
+    )
+    raw_proposals = proposal_set(
         parent,
         signals=signals,
         parameter_cap=int(parameter_cap),
-        max_candidates=max(4, int(population_size) * 2),
+        max_candidates=max(8, int(population_size) * 3),
     )
+    proposals = [
+        proposal
+        for proposal in raw_proposals
+        if str(proposal.get("fingerprint") or "") not in negative_fingerprints
+    ]
 
     verified_proposals: list[dict[str, Any]] = []
     rejected_static: list[dict[str, Any]] = []
@@ -233,6 +298,12 @@ def prepare_architecture_search(
         "architecture_parent": architecture_manifest(parent),
         "architecture_proposals": verified_proposals,
         "architecture_static_rejections": rejected_static,
+        "architecture_negative_memory": negative_memory,
+        "architecture_proposals_skipped_by_memory": [
+            proposal
+            for proposal in raw_proposals
+            if str(proposal.get("fingerprint") or "") in negative_fingerprints
+        ],
         "mathesis_architecture_hypotheses": mathesis_hypotheses,
         "candidates": candidates,
         "matrix": {
@@ -251,6 +322,7 @@ def prepare_architecture_search(
         "architecture_policy": {
             "same_budget_control_required": True,
             "capacity_slots_reserved": True,
+            "same_parent_negative_memory": True,
             "static_verifier_required": True,
             "external_pretrained_weights": False,
             "arbitrary_generated_python": False,
@@ -385,6 +457,10 @@ def finalize_architecture_search(
             "all_seed_eligible": bool(row.get("all_seed_eligible")),
             "any_seed_eligible": bool(row.get("any_seed_eligible")),
             "score": float(row.get("score", 0.0) or 0.0),
+            "stage": int(row.get("stage", 0) or 0),
+            "steps": int(row.get("steps", 0) or 0),
+            "pretrain_steps": int(row.get("pretrain_steps", 0) or 0),
+            "cumulative_steps": int(row.get("cumulative_steps", 0) or 0),
         })
 
         if not row.get("all_seed_eligible"):
@@ -395,7 +471,15 @@ def finalize_architecture_search(
             )[:120]
             _atomic_json(
                 architecture_root / "rejected" / f"{safe_id}.json",
-                leaderboard[-1],
+                {
+                    **leaderboard[-1],
+                    "cycle": int(plan.get("cycle", 0) or 0),
+                    "parent_fingerprint": str(
+                        ((plan.get("architecture_parent") or {}).get("fingerprint"))
+                        or ""
+                    ),
+                    "rejection_scope": "same-parent topology memory",
+                },
             )
 
     leaderboard_payload = {
@@ -418,6 +502,10 @@ def finalize_architecture_search(
             "architecture_parent": plan.get("architecture_parent"),
             "architecture_proposals": plan.get("architecture_proposals") or [],
             "static_rejections": plan.get("architecture_static_rejections") or [],
+            "negative_memory": plan.get("architecture_negative_memory") or {},
+            "proposals_skipped_by_memory": (
+                plan.get("architecture_proposals_skipped_by_memory") or []
+            ),
             "mathesis_hypotheses": plan.get("mathesis_architecture_hypotheses") or [],
         },
     )
