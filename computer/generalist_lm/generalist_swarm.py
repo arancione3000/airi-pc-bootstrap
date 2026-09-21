@@ -194,10 +194,10 @@ def prepare_swarm(
     output_path: str | Path,
     *,
     population_size: int = 8,
-    max_params: int = 2_000_000,
+    max_params: int = 7_000_000,
     max_context: int = 512,
-    max_width: int = 256,
-    max_layers: int = 6,
+    max_width: int = 384,
+    max_layers: int = 10,
     curriculum_max_rows: int = 4000,
     mathesis_state_dir: str | Path | None = None,
     grow_data: bool = True,
@@ -416,7 +416,7 @@ def prepare_swarm(
             "candidate_generated": bool(scale_genomes),
             "candidate_count": len(scale_genomes),
             "strategies": [kind for kind, _genome in scale_genomes],
-            "tiers": [250_000, 500_000, 1_000_000, 2_000_000],
+            "tiers": [250_000, 500_000, 1_250_000, 3_000_000, 7_000_000],
             "minimum_scale_budget_multiplier": 1.25,
             "maximum_scale_budget_multiplier": 1.75,
         },
@@ -1326,7 +1326,7 @@ def finalize_swarm(
             "production_qualification_separate": True,
             "external_pretrained": False,
             "adaptive_curriculum": True,
-            "progressive_scaling_max_parameters": 2_000_000,
+            "progressive_scaling_max_parameters": 7_000_000,
             "scale_probe_retention": "reserve one safe scale survivor through reductions",
             "scale_budget_adaptive": True,
             "adaptive_pretraining_budget": {
@@ -1391,10 +1391,10 @@ def main(argv=None) -> int:
     prepare.add_argument("output")
     prepare.add_argument("--mathesis-state")
     prepare.add_argument("--population-size", type=int, default=8)
-    prepare.add_argument("--max-params", type=int, default=2_000_000)
+    prepare.add_argument("--max-params", type=int, default=7_000_000)
     prepare.add_argument("--max-context", type=int, default=512)
-    prepare.add_argument("--max-width", type=int, default=256)
-    prepare.add_argument("--max-layers", type=int, default=6)
+    prepare.add_argument("--max-width", type=int, default=384)
+    prepare.add_argument("--max-layers", type=int, default=10)
     prepare.add_argument("--curriculum-max-rows", type=int, default=4000)
     prepare.add_argument("--data-max-new-bytes", type=int, default=8_000_000)
     prepare.add_argument("--data-max-total-bytes", type=int, default=50_000_000)

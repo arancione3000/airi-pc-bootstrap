@@ -686,9 +686,15 @@ def test_generalist_data_growth_skips_oversized_repository_tree(tmp_path: Path):
     big_commit = "b" * 40
     good_commit = "c" * 40
     raw_text = (
-        "A compact permissive corpus with useful natural language and code-like "
-        "tokens for bounded autonomous pretraining. "
-    ).encode("utf-8") * 20
+        "A compact permissive corpus can teach syntax, vocabulary, structure, and "
+        "reasoning without importing pretrained model weights. The sample describes "
+        "gardens, rivers, libraries, algorithms, weather, music, history, geometry, "
+        "machines, languages, experiments, evidence, hypotheses, tables, programs, "
+        "stories, questions, answers, causes, effects, comparisons, and explanations. "
+        "Each sentence contributes different semantic material so the quarantine can "
+        "distinguish useful prose from boilerplate repetition while keeping the corpus "
+        "small enough for bounded autonomous pretraining."
+    ).encode("utf-8")
 
     def opener(request, timeout):
         del timeout
@@ -1040,7 +1046,17 @@ def test_generalist_data_growth_prioritizes_useful_domains_and_skips_quotes(tmp_
     raw_by_path = {
         "quotes/tiny.yaml": ("quote: tiny motivational phrase\n" * 40).encode(),
         "math/proofs.txt": (
-            "Theorem proof algebra reasoning implication contradiction. " * 40
+            "A theorem starts from explicit assumptions and derives a conclusion. "
+            "An algebraic proof preserves equality when the same operation is applied "
+            "to both sides. Contradiction assumes the negation and derives an impossibility. "
+            "Induction proves a base case and then a general successor step. "
+            "Geometry can connect parallel lines, angles, distance, area, and similarity. "
+            "Number theory studies divisibility, primes, congruences, and integer structure. "
+            "A counterexample is sufficient to disprove a universal proposition. "
+            "Logical implication differs from equivalence because the reverse direction "
+            "requires its own argument. Definitions constrain every later inference, while "
+            "lemmas isolate reusable intermediate results. A rigorous proof records the "
+            "chain of justified transformations rather than relying on an unexplained answer."
         ).encode(),
         "datasets/table.csv": (
             "name,value,category\nalpha,1,a\nbeta,2,b\ngamma,3,c\n" * 30

@@ -11,8 +11,11 @@ from typing import Any, Callable, Iterable
 from urllib.parse import quote, quote_plus, urlparse
 from urllib.request import Request, urlopen
 
+from .data_quality import assess_text, hamming_distance, simhash64
+from .phase5_diagnostics import protected_bootstrap_texts
 
-GENERALIST_DATA_GROWTH_VERSION = "generalist-data-growth-v3"
+
+GENERALIST_DATA_GROWTH_VERSION = "generalist-data-growth-v4"
 
 PERMISSIVE_SPDX = {
     "MIT",
@@ -51,6 +54,8 @@ class GrowthFile:
     bytes: int
     domain: str
     source_url: str
+    quality_score: float = 1.0
+    simhash64: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -341,6 +346,15 @@ def grow_generalist_data(
         (str(row.get("repo")), str(row.get("commit")), str(row.get("path")))
         for row in existing.values()
     }
+    existing_simhashes = [
+        int(row["simhash64"])
+        for row in existing.values()
+        if isinstance(row.get("simhash64"), int)
+    ]
+    protected_eval = {
+        text for text in protected_bootstrap_texts()
+        if len(text) >= 12
+    }
     repo_file_counts: dict[str, int] = {}
     repo_byte_counts: dict[str, int] = {}
     for row in existing.values():
@@ -530,6 +544,48 @@ def grow_generalist_data(
                 rejected.append({"repo": full_name, "path": path, "reason": reason})
                 continue
 
+            domain = _domain_for(path)
+            quality_score = 1.0
+            content_simhash = None
+            if domain in {"general", "language-it", "reasoning"}:
+                assessment = assess_text(
+                    _text,
+                    min_chars=24,
+                    max_chars=max(20_000, int(max_file_bytes) * 2),
+                )
+                quality_score = float(assessment.score)
+                if not assessment.accepted:
+                    qpath.unlink(missing_ok=True)
+                    rejected.append({
+                        "repo": full_name,
+                        "path": path,
+                        "reason": "quality_v4:" + ",".join(assessment.reasons),
+                    })
+                    continue
+
+                normalized = " ".join(_text.casefold().split())
+                if any(protected in normalized for protected in protected_eval):
+                    qpath.unlink(missing_ok=True)
+                    rejected.append({
+                        "repo": full_name,
+                        "path": path,
+                        "reason": "protected_eval_contamination",
+                    })
+                    continue
+
+                content_simhash = simhash64(_text)
+                if any(
+                    hamming_distance(content_simhash, previous) <= 3
+                    for previous in existing_simhashes
+                ):
+                    qpath.unlink(missing_ok=True)
+                    rejected.append({
+                        "repo": full_name,
+                        "path": path,
+                        "reason": "near_duplicate",
+                    })
+                    continue
+
             target = approved / safe_name
             shutil.move(str(qpath), str(target))
             record = GrowthFile(
@@ -539,10 +595,14 @@ def grow_generalist_data(
                 spdx=spdx,
                 sha256=digest,
                 bytes=len(raw),
-                domain=_domain_for(path),
+                domain=domain,
                 source_url=raw_url,
+                quality_score=quality_score,
+                simhash64=content_simhash,
             )
             added.append(record)
+            if content_simhash is not None:
+                existing_simhashes.append(content_simhash)
             bytes_added += len(raw)
             accepted_repo += 1
             accepted_repo_bytes += len(raw)
@@ -562,7 +622,10 @@ def grow_generalist_data(
             "immutable_commit_required": True,
             "sha256_dedup": True,
             "quality_filter": True,
+            "near_duplicate_filter": True,
+            "protected_eval_contamination_filter": True,
             "secret_filter": True,
+            "external_model_quality_judge": False,
             "external_pretrained": False,
         },
     }

@@ -1,0 +1,506 @@
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+from typing import Any, Iterable
+
+from dataclasses import replace
+
+from .architecture_ir import ArchitectureSpec, architecture_id, architecture_manifest
+from .architecture_mutations import proposal_set
+from .architecture_verifier import verify_architecture
+from .evolution import GeneralistGenome
+from .generalist_swarm import (
+    finalize_swarm,
+    prepare_swarm,
+    run_candidate,
+    select_survivors,
+)
+from .mathesis_bridge import mathesis_architecture_hypotheses
+from .meta_controller import decide_next_action
+from .model import estimate_parameter_count
+
+
+ARCHITECTURE_SEARCH_VERSION = "airi-architecture-search-v1"
+
+
+def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    tmp.replace(path)
+
+
+def _read(path: Path, default: Any):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default
+
+
+def _phase5_signals(state_dir: Path) -> list[str]:
+    status = _read(state_dir / "status.json", {})
+    phase5 = status.get("phase5_bootstrap") or {}
+    after = phase5.get("after") or {}
+    out: list[str] = []
+    if after.get("pathological_repetition"):
+        out.extend(["language_collapse", "autoregressive_collapse"])
+    if float(after.get("repetition_rate", 0.0) or 0.0) >= 0.65:
+        out.append("language_collapse")
+    if phase5 and not bool(phase5.get("minimum_success")):
+        out.append("language_gap")
+    return list(dict.fromkeys(out))
+
+
+def prepare_architecture_search(
+    state_dir: str | Path,
+    output_path: str | Path,
+    *,
+    repo_root: str | Path,
+    mathesis_state_dir: str | Path | None = None,
+    population_size: int = 8,
+    parameter_cap: int = 7_000_000,
+    max_context: int = 512,
+    max_width: int = 384,
+    max_layers: int = 10,
+) -> dict[str, Any]:
+    root = Path(state_dir).expanduser().resolve()
+    output = Path(output_path).expanduser().resolve()
+    decision = decide_next_action(root, parameter_cap=int(parameter_cap))
+
+    base_path = output.with_suffix(".base.json")
+    base = prepare_swarm(
+        root,
+        base_path,
+        population_size=max(8, int(population_size)),
+        max_params=int(parameter_cap),
+        max_context=int(max_context),
+        max_width=int(max_width),
+        max_layers=int(max_layers),
+        curriculum_max_rows=5000,
+        mathesis_state_dir=mathesis_state_dir,
+        grow_data=False,
+    )
+
+    signals = list(base.get("signals") or [])
+    signals.extend(_phase5_signals(root))
+    signals = list(dict.fromkeys(str(row) for row in signals))
+    base["signals"] = signals
+
+    champion = GeneralistGenome(**dict(base["champion"])).validate()
+    current_vocab = int(
+        (base.get("progressive_tokenizer") or {}).get("current_vocab_size")
+        or 384
+    )
+    parent = ArchitectureSpec.from_genome(
+        champion,
+        target_vocab_size=current_vocab,
+    )
+
+    mathesis_hypotheses: list[dict[str, Any]] = []
+    if mathesis_state_dir and Path(mathesis_state_dir).exists():
+        try:
+            mathesis_hypotheses = mathesis_architecture_hypotheses(
+                mathesis_state_dir,
+                observed_signals=signals,
+            )
+        except Exception as exc:
+            mathesis_hypotheses = [{
+                "ok": False,
+                "reason": f"{type(exc).__name__}:{exc}",
+                "promotion_authority": False,
+            }]
+
+    proposals = proposal_set(
+        parent,
+        signals=signals,
+        parameter_cap=int(parameter_cap),
+        max_candidates=max(4, int(population_size) * 2),
+    )
+
+    verified_proposals: list[dict[str, Any]] = []
+    rejected_static: list[dict[str, Any]] = []
+    for proposal in proposals:
+        spec = ArchitectureSpec.from_dict(dict(proposal["architecture"]))
+        verification = verify_architecture(
+            spec,
+            vocab_size=current_vocab,
+            batch_size=1,
+            sequence_length=min(20, spec.context_length - 1),
+            max_parameters=int(parameter_cap),
+        )
+        enriched = {
+            **proposal,
+            "static_verification": verification.report,
+        }
+        if verification.ok:
+            verified_proposals.append(enriched)
+        else:
+            rejected_static.append(enriched)
+
+    candidates: list[dict[str, Any]] = []
+
+    # Same-topology control: gains must beat simply continuing the current
+    # architecture under the exact same training budget, but the experiment
+    # receives its own lineage identity/checkpoint metadata.
+    control_generation = int(parent.generation) + 1
+    control_spec = replace(
+        parent,
+        generation=control_generation,
+        parent_id=parent.architecture_id,
+        architecture_id=architecture_id(
+            parent.architecture_id,
+            control_generation,
+            parent.canonical_payload(),
+        ),
+    ).validate()
+    control = control_spec.to_genome()
+    candidates.append({
+        "index": 0,
+        "kind": "architecture_control",
+        "genome": control.to_dict(),
+        "candidate_id": control.genome_id,
+        "estimated_parameters": estimate_parameter_count(
+            control.model_config(current_vocab)
+        ),
+        "architecture": control_spec.to_dict(),
+        "architecture_fingerprint": control_spec.fingerprint(),
+        "hypothesis": "same topology, equal training budget control",
+    })
+
+    seen = {parent.fingerprint()}
+    for proposal in verified_proposals:
+        spec = ArchitectureSpec.from_dict(dict(proposal["architecture"]))
+        if spec.fingerprint() in seen:
+            continue
+        seen.add(spec.fingerprint())
+        genome = spec.to_genome()
+        candidates.append({
+            "index": len(candidates),
+            "kind": f"architecture_{proposal['kind']}",
+            "genome": genome.to_dict(),
+            "candidate_id": genome.genome_id,
+            "estimated_parameters": spec.parameter_estimate(
+                vocab_size=current_vocab
+            ),
+            "architecture": spec.to_dict(),
+            "architecture_fingerprint": spec.fingerprint(),
+            "hypothesis": proposal["hypothesis"],
+            "falsification": proposal["falsification"],
+        })
+        if len(candidates) >= max(2, int(population_size)):
+            break
+
+    run_search = (
+        decision.get("action") == "architecture_search"
+        and len(candidates) >= 2
+    )
+
+    base.update({
+        "version": ARCHITECTURE_SEARCH_VERSION,
+        "run_search": bool(run_search),
+        "meta_controller": decision,
+        "architecture_parent": architecture_manifest(parent),
+        "architecture_proposals": verified_proposals,
+        "architecture_static_rejections": rejected_static,
+        "mathesis_architecture_hypotheses": mathesis_hypotheses,
+        "candidates": candidates,
+        "matrix": {
+            "include": [
+                {"index": int(row["index"])}
+                for row in candidates
+            ]
+        },
+        "limits": {
+            **dict(base.get("limits") or {}),
+            "max_params": int(parameter_cap),
+            "max_context": int(max_context),
+            "max_width": int(max_width),
+            "max_layers": int(max_layers),
+        },
+        "architecture_policy": {
+            "same_budget_control_required": True,
+            "static_verifier_required": True,
+            "external_pretrained_weights": False,
+            "arbitrary_generated_python": False,
+            "mathesis_can_propose": True,
+            "mathesis_can_promote": False,
+            "promotion_uses_existing_generalist_gates": True,
+            "parameter_cap": int(parameter_cap),
+        },
+    })
+    _atomic_json(output, base)
+    try:
+        base_path.unlink()
+    except FileNotFoundError:
+        pass
+    return base
+
+
+def run_architecture_candidate(
+    plan_path: str | Path,
+    state_dir: str | Path,
+    repo_root: str | Path,
+    output_dir: str | Path,
+    *,
+    candidate_index: int,
+    stage: int,
+    steps: int,
+    pretrain_steps: int,
+    repeat_seeds: int = 1,
+    source_checkpoint: str | Path | None = None,
+) -> dict[str, Any]:
+    plan = _read(Path(plan_path), {})
+    if not plan.get("run_search"):
+        return {"ok": False, "reason": "meta_controller_did_not_request_search"}
+    return run_candidate(
+        plan_path,
+        state_dir,
+        repo_root,
+        output_dir,
+        candidate_index=int(candidate_index),
+        stage=int(stage),
+        steps=int(steps),
+        repeat_seeds=int(repeat_seeds),
+        pretrain_steps=int(pretrain_steps),
+        max_repo_bytes=20_000_000,
+        max_external_bytes=50_000_000,
+        source_checkpoint=source_checkpoint,
+    )
+
+
+def _result_rows(paths: Iterable[str | Path]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[Path] = set()
+    for raw in paths:
+        path = Path(raw)
+        candidates = (
+            [path]
+            if path.is_file()
+            else list(path.rglob("result.json"))
+        )
+        for item in candidates:
+            if item in seen or not item.is_file():
+                continue
+            seen.add(item)
+            try:
+                row = json.loads(item.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if isinstance(row, dict):
+                row = dict(row)
+                row["_result_path"] = str(item)
+                rows.append(row)
+    return rows
+
+
+def finalize_architecture_search(
+    state_dir: str | Path,
+    plan_path: str | Path,
+    result_paths: Iterable[str | Path],
+    output_path: str | Path,
+) -> dict[str, Any]:
+    root = Path(state_dir).expanduser().resolve()
+    plan = _read(Path(plan_path), {})
+    result_paths = list(result_paths)
+
+    base_result = finalize_swarm(
+        root,
+        plan_path,
+        result_paths,
+        output_path,
+    )
+
+    rows = [row for row in _result_rows(result_paths) if row.get("ok")]
+    rank = sorted(
+        rows,
+        key=lambda row: (
+            0 if row.get("all_seed_eligible") else 1,
+            bool(row.get("any_generation_pathological_repetition")),
+            -float(row.get("mean_generation_similarity", 0.0) or 0.0),
+            float(row.get("mean_generation_repetition_rate", 1.0) or 1.0),
+            float(row.get("mean_nll_per_byte", float("inf"))),
+            int(row.get("parameters", 1 << 60)),
+        ),
+    )
+
+    architecture_root = root / "architecture-research"
+    architecture_root.mkdir(parents=True, exist_ok=True)
+
+    leaderboard = []
+    for position, row in enumerate(rank, start=1):
+        genome = GeneralistGenome(**dict(row["genome"])).validate()
+        spec = ArchitectureSpec.from_genome(
+            genome,
+            target_vocab_size=int(row.get("tokenizer_vocab_size", 384) or 384),
+        )
+        leaderboard.append({
+            "rank": position,
+            "candidate_id": row.get("candidate_id"),
+            "kind": row.get("kind"),
+            "architecture": spec.to_dict(),
+            "fingerprint": spec.fingerprint(),
+            "parameters": int(row.get("parameters", 0) or 0),
+            "mean_nll_per_byte": float(row.get("mean_nll_per_byte", 0.0) or 0.0),
+            "mean_generation_similarity": float(
+                row.get("mean_generation_similarity", 0.0) or 0.0
+            ),
+            "mean_generation_repetition_rate": float(
+                row.get("mean_generation_repetition_rate", 0.0) or 0.0
+            ),
+            "pathological_repetition": bool(
+                row.get("any_generation_pathological_repetition")
+            ),
+            "all_seed_eligible": bool(row.get("all_seed_eligible")),
+            "any_seed_eligible": bool(row.get("any_seed_eligible")),
+            "score": float(row.get("score", 0.0) or 0.0),
+        })
+
+        if not row.get("all_seed_eligible"):
+            safe_id = str(row.get("candidate_id") or f"candidate-{position}")
+            safe_id = "".join(
+                char if char.isalnum() or char in "-_" else "_"
+                for char in safe_id
+            )[:120]
+            _atomic_json(
+                architecture_root / "rejected" / f"{safe_id}.json",
+                leaderboard[-1],
+            )
+
+    leaderboard_payload = {
+        "schema": 1,
+        "version": ARCHITECTURE_SEARCH_VERSION,
+        "cycle": int(plan.get("cycle", 0) or 0),
+        "meta_controller": plan.get("meta_controller"),
+        "mathesis_hypotheses": plan.get("mathesis_architecture_hypotheses") or [],
+        "entries": leaderboard,
+        "winner_promoted": bool(base_result.get("promoted")),
+        "promotion_reason": base_result.get("promotion_reason") or base_result.get("reason"),
+        "existing_generalist_gates_preserved": True,
+    }
+    _atomic_json(architecture_root / "leaderboard.json", leaderboard_payload)
+    _atomic_json(
+        architecture_root / "last-plan.json",
+        {
+            "cycle": plan.get("cycle"),
+            "signals": plan.get("signals") or [],
+            "architecture_parent": plan.get("architecture_parent"),
+            "architecture_proposals": plan.get("architecture_proposals") or [],
+            "static_rejections": plan.get("architecture_static_rejections") or [],
+            "mathesis_hypotheses": plan.get("mathesis_architecture_hypotheses") or [],
+        },
+    )
+
+    champion_raw = _read(root / "champion-genome.json", {})
+    if champion_raw:
+        champion = GeneralistGenome(**champion_raw).validate()
+        champion_cfg = _read(root / "champion" / "config.json", {})
+        champion_vocab = int(champion_cfg.get("vocab_size", 384) or 384)
+        champion_spec = ArchitectureSpec.from_genome(
+            champion,
+            target_vocab_size=champion_vocab,
+        )
+        _atomic_json(
+            architecture_root / "champion-architecture.json",
+            architecture_manifest(champion_spec),
+        )
+
+    history_row = {
+        "cycle": int(plan.get("cycle", 0) or 0),
+        "evaluated": len(leaderboard),
+        "promoted": bool(base_result.get("promoted")),
+        "best_candidate": leaderboard[0] if leaderboard else None,
+    }
+    history_path = architecture_root / "experiments.jsonl"
+    with history_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(history_row, ensure_ascii=False, sort_keys=True) + "\n")
+
+    base_result["architecture_search"] = leaderboard_payload
+    _atomic_json(Path(output_path), base_result)
+    return base_result
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="AIRI autonomous architecture search")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    prep = sub.add_parser("prepare")
+    prep.add_argument("state_dir")
+    prep.add_argument("output")
+    prep.add_argument("--repo-root", required=True)
+    prep.add_argument("--mathesis-state")
+    prep.add_argument("--population-size", type=int, default=8)
+    prep.add_argument("--parameter-cap", type=int, default=7_000_000)
+
+    worker = sub.add_parser("worker")
+    worker.add_argument("plan")
+    worker.add_argument("state_dir")
+    worker.add_argument("repo_root")
+    worker.add_argument("output_dir")
+    worker.add_argument("--index", type=int, required=True)
+    worker.add_argument("--stage", type=int, required=True)
+    worker.add_argument("--steps", type=int, required=True)
+    worker.add_argument("--pretrain-steps", type=int, required=True)
+    worker.add_argument("--repeat-seeds", type=int, default=1)
+    worker.add_argument("--source-checkpoint")
+
+    select = sub.add_parser("select")
+    select.add_argument("output")
+    select.add_argument("results", nargs="+")
+    select.add_argument("--survivors", type=int, required=True)
+
+    final = sub.add_parser("finalize")
+    final.add_argument("state_dir")
+    final.add_argument("plan")
+    final.add_argument("output")
+    final.add_argument("results", nargs="+")
+
+    args = parser.parse_args(argv)
+    if args.cmd == "prepare":
+        result = prepare_architecture_search(
+            args.state_dir,
+            args.output,
+            repo_root=args.repo_root,
+            mathesis_state_dir=args.mathesis_state,
+            population_size=args.population_size,
+            parameter_cap=args.parameter_cap,
+        )
+    elif args.cmd == "worker":
+        result = run_architecture_candidate(
+            args.plan,
+            args.state_dir,
+            args.repo_root,
+            args.output_dir,
+            candidate_index=args.index,
+            stage=args.stage,
+            steps=args.steps,
+            pretrain_steps=args.pretrain_steps,
+            repeat_seeds=args.repeat_seeds,
+            source_checkpoint=args.source_checkpoint,
+        )
+    elif args.cmd == "select":
+        result = select_survivors(
+            args.results,
+            args.output,
+            survivors=args.survivors,
+        )
+    elif args.cmd == "finalize":
+        result = finalize_architecture_search(
+            args.state_dir,
+            args.plan,
+            args.results,
+            args.output,
+        )
+    else:
+        raise AssertionError(args.cmd)
+
+    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -293,8 +293,38 @@ fun NeuralScreen(
                     Text("${a.nLayers} layer · ${a.nHeads} head/layer · d_model ${a.dModel} · d_ff ${a.dFf}")
                     Text("head_dim ${a.headDim} · ctx ${a.contextLength} · vocab ${a.vocabSize}")
                     Text(
-                        "${a.normType} · ${a.positionEncoding} · ${a.ffVariant}",
+                        "${a.normType} ${a.normPlacement}-norm · " +
+                            "${a.positionEncoding} · ${a.ffVariant}",
                         style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        buildString {
+                            append(a.attentionType.uppercase())
+                            append(" · KV heads ")
+                            append(a.nKvHeads)
+                            if (a.localAttentionWindow > 0) {
+                                append(" · local window ")
+                                append(a.localAttentionWindow)
+                                append(" / global ogni ")
+                                append(a.localAttentionEvery)
+                                append(" layer")
+                            } else {
+                                append(" · global attention")
+                            }
+                            append(
+                                if (a.tiedEmbeddingLmHead) {
+                                    " · tied embeddings"
+                                } else {
+                                    " · untied embeddings"
+                                }
+                            )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "Architecture ID: ${slot.id}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary,
                     )
                 }
             }

@@ -30,29 +30,39 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/runs?per_page=20"
+          curl_common=(
+            --fail-with-body -sS
+            --connect-timeout 10
+            --max-time 30
+            --retry 3
+            --retry-delay 2
+            --retry-all-errors
+          )
           active=0
-          if payload="$(curl --fail-with-body -sS --connect-timeout 10 --max-time 30 \
-            --retry 3 --retry-delay 2 --retry-all-errors \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${api}")"; then
-            active="$(jq '
-              [
-                .workflow_runs[]
-                | select(
-                    .status == "pending"
-                    or .status == "queued"
-                    or .status == "in_progress"
-                    or .status == "waiting"
-                    or .status == "requested"
-                  )
-              ] | length
-            ' <<<"${payload}")"
-          fi
+          for workflow in generalist-bootstrap.yml generalist-architecture-search.yml; do
+            api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?per_page=20"
+            if payload="$(curl "${curl_common[@]}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api}")"; then
+              count="$(jq '
+                [
+                  .workflow_runs[]
+                  | select(
+                      .status == "pending"
+                      or .status == "queued"
+                      or .status == "in_progress"
+                      or .status == "waiting"
+                      or .status == "requested"
+                    )
+                ] | length
+              ' <<<"${payload}")"
+              active="$((active + count))"
+            fi
+          done
           if (( active > 0 )); then
-            echo "Phase 5 bootstrap owns the Generalist state-write window."
+            echo "Bootstrap/Architecture Search owns the Generalist state-write window."
             echo "active=true" >> "${GITHUB_OUTPUT}"
           else
             echo "active=false" >> "${GITHUB_OUTPUT}"
@@ -127,7 +137,7 @@ jobs:
           rm -rf "${BUNDLE}"
           mkdir -p "${BUNDLE}"
 
-          python -m generalist_lm.generalist_swarm prepare             "${STATE_DIR}" "${BUNDLE}/plan.json"             --mathesis-state "${MATHESIS_STATE_DIR}"             --population-size 8             --max-params 2000000             --max-context 512             --max-width 256             --max-layers 6             --curriculum-max-rows 4000             --data-max-new-bytes 8000000             --data-max-total-bytes 50000000
+          python -m generalist_lm.generalist_swarm prepare             "${STATE_DIR}" "${BUNDLE}/plan.json"             --mathesis-state "${MATHESIS_STATE_DIR}"             --population-size 8             --max-params 7000000             --max-context 512             --max-width 384             --max-layers 10             --curriculum-max-rows 4000             --data-max-new-bytes 8000000             --data-max-total-bytes 50000000
 
           cp -a "${STATE_DIR}" "${BUNDLE}/state"
           matrix="$(jq -c '.matrix' "${BUNDLE}/plan.json")"
