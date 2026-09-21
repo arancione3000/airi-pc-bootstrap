@@ -184,23 +184,23 @@
     },
     "version": "airi-pc-lab-v1"
   },
-  "cycle": 89,
+  "cycle": 93,
   "evolution": {
     "curriculum_memory": {
-      "added": 20,
-      "cycle": 89,
+      "added": 10,
+      "cycle": 93,
       "domains": {
-        "coding": 104,
-        "data": 171,
-        "language": 107,
-        "reasoning": 178,
-        "structured": 89,
-        "tools": 91
+        "coding": 108,
+        "data": 179,
+        "language": 119,
+        "reasoning": 186,
+        "structured": 93,
+        "tools": 95
       },
       "extra_rows_considered": 10,
       "max_rows": 4000,
       "ok": true,
-      "stored": 740,
+      "stored": 780,
       "validation_overlap": []
     },
     "data_growth": {
@@ -376,21 +376,21 @@
     "latest_research": {
       "all_seed_eligible": false,
       "any_seed_eligible": false,
-      "candidate_id": "generalist-3-0-c84ca7b1",
-      "cycle": 89,
+      "candidate_id": "generalist-3-4-b0195abc",
+      "cycle": 93,
       "external_pretrained": false,
       "kind": "architecture",
       "language_bridge_rows": 32,
       "mean_generation_accuracy": 0.0,
-      "mean_generation_nonempty_rate": 0.8333333333333334,
-      "mean_generation_similarity": 0.23320577687783045,
-      "mean_nll_per_byte": 1.7597633217865565,
-      "parameters": 123520,
+      "mean_generation_nonempty_rate": 0.9166666666666667,
+      "mean_generation_similarity": 0.21747400109469076,
+      "mean_nll_per_byte": 1.8076277822818396,
+      "parameters": 156544,
       "research_only": true,
-      "score": 36.32900883345798,
+      "score": 35.7564812963444,
       "stage": 3,
       "tokenizer_vocab_size": 384,
-      "worst_domain_regression": 0.2897889927455357
+      "worst_domain_regression": 0.4572794778006415
     },
     "plateau": {
       "generation_exact_accuracy": 0.0,
@@ -496,7 +496,7 @@
     ]
   },
   "generalist_version": "airi-generalist-free-speed-v4",
-  "generated_at": 1790007481,
+  "generated_at": 1790014797,
   "promoted_this_cycle": false,
   "promotion_reason": "no finalist passed every independent research gate",
   "schema": 1,
@@ -504,7 +504,7 @@
     "champion": {
       "all_seed_eligible": true,
       "context_length": 128,
-      "cycle": 89,
+      "cycle": 93,
       "files": {
         "config.json": {
           "bytes": 270,
@@ -728,31 +728,31 @@
         "kind": "aggregated_checkpoint_weights",
         "note": "This is a truthful aggregate view of checkpoint weights and model topology, not a claim to display every biological-style neuron."
       },
-      "nll_per_byte": 1.8816254237912735,
+      "nll_per_byte": 1.8816252702437106,
       "onnx_max_abs_error": 1.9073486328125e-06,
       "parameters": 115328,
       "path": "champion",
       "research_only": false,
-      "score": 34.70252130699776,
+      "score": 34.702523156129686,
       "tokenizer_version": "bpe-v1",
       "tokenizer_vocab_size": 384
     },
     "research": {
       "all_seed_eligible": false,
-      "context_length": 256,
-      "cycle": 89,
+      "context_length": 128,
+      "cycle": 93,
       "files": {
         "config.json": {
           "bytes": 270,
-          "sha256": "df7a6b6f981be30151287c155f73554ae88218eea454c431c1b38d52e07b5bf5"
+          "sha256": "b9f3739808531bc1b1474deb9d7dc14f75e2a90cb166b025e768e8a8a6514250"
         },
         "metadata.json": {
           "bytes": 376,
-          "sha256": "e6ec486b8b68e69928a51bb04dc745ba5b3bf8744b7fee57a0024bc115c253e4"
+          "sha256": "231a60d019fd96a230a0dfb05a072c11811f4637825840a329b4bca14d54db10"
         },
         "model.onnx": {
-          "bytes": 622433,
-          "sha256": "559906ea89cb3d4eb3dbcb7d75fa43b8a8b3fc91d07d3f26e5eba5c1e2979cad"
+          "bytes": 768523,
+          "sha256": "414e2b1946f3abab7ffbdf9df131a73877a84e52fc7f5087904dcc138c032873"
         },
         "tokenizer.json": {
           "bytes": 4183,
@@ -760,19 +760,19 @@
         }
       },
       "generation_exact_accuracy": 0.0,
-      "generation_nonempty_rate": 0.8333333333333334,
-      "generation_similarity": 0.23320577687783045,
-      "id": "generalist-3-0-c84ca7b1",
+      "generation_nonempty_rate": 0.9166666666666667,
+      "generation_similarity": 0.21747400109469076,
+      "id": "generalist-3-4-b0195abc",
       "name": "research",
       "neural": {
         "architecture": {
-          "context_length": 256,
+          "context_length": 128,
           "d_ff": 128,
           "d_model": 64,
           "ff_variant": "swiglu",
           "head_dim": 16,
           "n_heads": 4,
-          "n_layers": 2,
+          "n_layers": 3,
           "norm_type": "layernorm",
           "position_encoding": "learned",
           "tied_embedding_lm_head": true,
@@ -783,74 +783,98 @@
           {
             "id": "embedding",
             "label": "Embedding",
-            "max_abs_weight": 0.2689601480960846,
-            "mean_abs_weight": 0.08534258604049683,
+            "max_abs_weight": 0.2697601616382599,
+            "mean_abs_weight": 0.0865626831849416,
             "parameters": 24576,
-            "rms_weight": 0.10425123318545808
+            "rms_weight": 0.10560404964768401
           },
           {
             "id": "position_embedding",
             "label": "Position Embedding",
-            "max_abs_weight": 0.14573980867862701,
-            "mean_abs_weight": 0.0167272686958313,
-            "parameters": 16384,
-            "rms_weight": 0.025575199631254326
+            "max_abs_weight": 0.14632928371429443,
+            "mean_abs_weight": 0.028347842395305634,
+            "parameters": 8192,
+            "rms_weight": 0.03597154261807729
           },
           {
             "id": "layer_0_attention",
             "label": "Layer 0 Attention",
-            "max_abs_weight": 0.1581757664680481,
-            "mean_abs_weight": 0.024657876696437597,
+            "max_abs_weight": 0.15514378249645233,
+            "mean_abs_weight": 0.024657615460455418,
             "parameters": 16384,
-            "rms_weight": 0.031211100755501483
+            "rms_weight": 0.03121668932698766
           },
           {
             "id": "layer_0_norm",
             "label": "Layer 0 Norm",
-            "max_abs_weight": 1.140219807624817,
-            "mean_abs_weight": 0.5119346296414733,
+            "max_abs_weight": 1.1364938020706177,
+            "mean_abs_weight": 0.5122570064850152,
             "parameters": 256,
-            "rms_weight": 0.7113937700332921
+            "rms_weight": 0.7121189767326672
           },
           {
             "id": "layer_0_ffn",
             "label": "Layer 0 Ffn",
-            "max_abs_weight": 0.19395016133785248,
-            "mean_abs_weight": 0.03488678236802419,
+            "max_abs_weight": 0.1939329355955124,
+            "mean_abs_weight": 0.035006084789832435,
             "parameters": 24576,
-            "rms_weight": 0.043505766326542204
+            "rms_weight": 0.04363376864407646
           },
           {
             "id": "layer_1_attention",
             "label": "Layer 1 Attention",
-            "max_abs_weight": 0.14022529125213623,
-            "mean_abs_weight": 0.025249052792787552,
+            "max_abs_weight": 0.14304624497890472,
+            "mean_abs_weight": 0.025148571934551,
             "parameters": 16384,
-            "rms_weight": 0.0318722067988488
+            "rms_weight": 0.03170531491065929
           },
           {
             "id": "layer_1_norm",
             "label": "Layer 1 Norm",
-            "max_abs_weight": 1.050750970840454,
-            "mean_abs_weight": 0.498904827516526,
+            "max_abs_weight": 1.0528398752212524,
+            "mean_abs_weight": 0.4994865753687918,
             "parameters": 256,
-            "rms_weight": 0.6885963149476361
+            "rms_weight": 0.6886237915357999
           },
           {
             "id": "layer_1_ffn",
             "label": "Layer 1 Ffn",
-            "max_abs_weight": 0.16126613318920135,
-            "mean_abs_weight": 0.02958434820175171,
+            "max_abs_weight": 0.1694411188364029,
+            "mean_abs_weight": 0.02964041692515214,
             "parameters": 24576,
-            "rms_weight": 0.03701630641918722
+            "rms_weight": 0.037102795423334015
+          },
+          {
+            "id": "layer_2_attention",
+            "label": "Layer 2 Attention",
+            "max_abs_weight": 0.0810488909482956,
+            "mean_abs_weight": 0.01422436733264476,
+            "parameters": 16384,
+            "rms_weight": 0.019126716270787512
+          },
+          {
+            "id": "layer_2_norm",
+            "label": "Layer 2 Norm",
+            "max_abs_weight": 1.0192443132400513,
+            "mean_abs_weight": 0.501691501471214,
+            "parameters": 256,
+            "rms_weight": 0.7048980420141678
+          },
+          {
+            "id": "layer_2_ffn",
+            "label": "Layer 2 Ffn",
+            "max_abs_weight": 0.07970796525478363,
+            "mean_abs_weight": 0.013297250028699636,
+            "parameters": 24576,
+            "rms_weight": 0.017986714771890087
           },
           {
             "id": "final_norm",
             "label": "Final Norm",
-            "max_abs_weight": 1.2013907432556152,
-            "mean_abs_weight": 0.6590647548437119,
+            "max_abs_weight": 1.1999894380569458,
+            "mean_abs_weight": 0.6588314697146416,
             "parameters": 128,
-            "rms_weight": 0.8423025665695236
+            "rms_weight": 0.8409427997766935
           }
         ],
         "connections": [
@@ -892,6 +916,21 @@
           {
             "from": "layer_1_ffn",
             "kind": "residual_flow",
+            "to": "layer_2_attention"
+          },
+          {
+            "from": "layer_2_attention",
+            "kind": "residual_flow",
+            "to": "layer_2_norm"
+          },
+          {
+            "from": "layer_2_norm",
+            "kind": "residual_flow",
+            "to": "layer_2_ffn"
+          },
+          {
+            "from": "layer_2_ffn",
+            "kind": "residual_flow",
             "to": "final_norm"
           }
         ],
@@ -899,80 +938,112 @@
           {
             "head": 0,
             "layer": 0,
-            "max_abs_weight": 0.13686484098434448,
-            "mean_abs_weight": 0.026052400469779968,
+            "max_abs_weight": 0.1514245867729187,
+            "mean_abs_weight": 0.02617058716714382,
             "parameters": 3072,
-            "rms_weight": 0.032775137573480606
+            "rms_weight": 0.03305510804057121
           },
           {
             "head": 1,
             "layer": 0,
-            "max_abs_weight": 0.1581757664680481,
-            "mean_abs_weight": 0.0254165381193161,
+            "max_abs_weight": 0.15514378249645233,
+            "mean_abs_weight": 0.02486853487789631,
             "parameters": 3072,
-            "rms_weight": 0.032217979431152344
+            "rms_weight": 0.03157741203904152
           },
           {
             "head": 2,
             "layer": 0,
-            "max_abs_weight": 0.10930436849594116,
-            "mean_abs_weight": 0.024819454178214073,
+            "max_abs_weight": 0.10105665773153305,
+            "mean_abs_weight": 0.025141561403870583,
             "parameters": 3072,
-            "rms_weight": 0.030983496457338333
+            "rms_weight": 0.031230205669999123
           },
           {
             "head": 3,
             "layer": 0,
-            "max_abs_weight": 0.12209756672382355,
-            "mean_abs_weight": 0.026112502440810204,
+            "max_abs_weight": 0.118903748691082,
+            "mean_abs_weight": 0.026172049343585968,
             "parameters": 3072,
-            "rms_weight": 0.03342144936323166
+            "rms_weight": 0.03356990963220596
           },
           {
             "head": 0,
             "layer": 1,
-            "max_abs_weight": 0.12057076394557953,
-            "mean_abs_weight": 0.026994362473487854,
+            "max_abs_weight": 0.12122774124145508,
+            "mean_abs_weight": 0.026956280693411827,
             "parameters": 3072,
-            "rms_weight": 0.03393152356147766
+            "rms_weight": 0.03383537754416466
           },
           {
             "head": 1,
             "layer": 1,
-            "max_abs_weight": 0.1120719239115715,
-            "mean_abs_weight": 0.0244803074747324,
+            "max_abs_weight": 0.10601558536291122,
+            "mean_abs_weight": 0.024486033245921135,
             "parameters": 3072,
-            "rms_weight": 0.030821366235613823
+            "rms_weight": 0.03065238520503044
           },
           {
             "head": 2,
             "layer": 1,
-            "max_abs_weight": 0.14022529125213623,
-            "mean_abs_weight": 0.027598178014159203,
+            "max_abs_weight": 0.14304624497890472,
+            "mean_abs_weight": 0.027297936379909515,
             "parameters": 3072,
-            "rms_weight": 0.03498911112546921
+            "rms_weight": 0.03464692085981369
           },
           {
             "head": 3,
             "layer": 1,
-            "max_abs_weight": 0.1294405460357666,
-            "mean_abs_weight": 0.02611362747848034,
+            "max_abs_weight": 0.12097308039665222,
+            "mean_abs_weight": 0.02600289136171341,
             "parameters": 3072,
-            "rms_weight": 0.0326688289642334
+            "rms_weight": 0.03258354216814041
+          },
+          {
+            "head": 0,
+            "layer": 2,
+            "max_abs_weight": 0.07368776947259903,
+            "mean_abs_weight": 0.017111847177147865,
+            "parameters": 3072,
+            "rms_weight": 0.021422404795885086
+          },
+          {
+            "head": 1,
+            "layer": 2,
+            "max_abs_weight": 0.0810488909482956,
+            "mean_abs_weight": 0.017260823398828506,
+            "parameters": 3072,
+            "rms_weight": 0.021635448560118675
+          },
+          {
+            "head": 2,
+            "layer": 2,
+            "max_abs_weight": 0.07542567700147629,
+            "mean_abs_weight": 0.01791975647211075,
+            "parameters": 3072,
+            "rms_weight": 0.0226071085780859
+          },
+          {
+            "head": 3,
+            "layer": 2,
+            "max_abs_weight": 0.07518992573022842,
+            "mean_abs_weight": 0.017254121601581573,
+            "parameters": 3072,
+            "rms_weight": 0.02157673053443432
           }
         ],
         "kind": "aggregated_checkpoint_weights",
         "note": "This is a truthful aggregate view of checkpoint weights and model topology, not a claim to display every biological-style neuron."
       },
-      "nll_per_byte": 1.7597633217865565,
-      "onnx_max_abs_error": 2.034008502960205e-06,
-      "parameters": 123520,
+      "nll_per_byte": 1.8076277822818396,
+      "onnx_max_abs_error": 1.1920928955078125e-06,
+      "parameters": 156544,
       "path": "research",
       "research_only": true,
-      "score": 36.32900883345798,
+      "score": 35.7564812963444,
       "tokenizer_version": "bpe-v1",
       "tokenizer_vocab_size": 384
     }
   },
-  "state_sha": "0bb6a8a2fb2795d13794e0425e8600d9d2a3f197"
+  "state_sha": "86012edc3d1329fcf5376f93d4abc5584fd0bf9f"
 }
