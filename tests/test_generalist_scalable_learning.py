@@ -503,7 +503,7 @@ def test_generalist_swarm_reducer_prefers_safe_generation_and_nll(tmp_path: Path
         folder.mkdir()
         payload = {
             "ok": True,
-            "version": "airi-generalist-free-speed-v1",
+            "version": "airi-generalist-free-speed-v2",
             "cycle": 1,
             "stage": 1,
             "steps": 3,
@@ -953,3 +953,154 @@ def test_generalist_cumulative_stage1_bootstraps_without_source_checkpoint(
     )
     assert metadata["previous_stage"] is None
     assert metadata["cumulative_steps"] == 1
+
+
+def test_progressive_scaling_can_prefer_function_preserving_growth():
+    from generalist_lm.evolution import GeneralistGenome, progressive_scale_candidate
+    from generalist_lm.model import estimate_parameter_count
+
+    champion = GeneralistGenome(
+        generation=3,
+        parent_id="p",
+        genome_id="preserve-source",
+        context_length=128,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=128,
+        retrieval_adapter=False,
+        symbolic_adapter=False,
+        code_adapter=False,
+        data_adapter=False,
+        reasoning_depth=1,
+    ).validate()
+    current = estimate_parameter_count(champion.model_config())
+    candidate = progressive_scale_candidate(
+        champion,
+        target_parameters=250_000,
+        max_width=256,
+        max_layers=6,
+        prefer_function_preserving=True,
+    )
+    assert estimate_parameter_count(candidate.model_config()) > current
+    assert candidate.d_model == champion.d_model
+    assert candidate.n_layers >= champion.n_layers
+    assert candidate.d_ff >= champion.d_ff
+
+
+def test_generalist_swarm_reducer_reserves_one_safe_scale_probe(tmp_path: Path):
+    from generalist_lm.generalist_swarm import select_survivors
+
+    root = tmp_path / "scale-results"
+    root.mkdir()
+    rows = [
+        (0, "architecture", 3.0),
+        (1, "architecture", 3.1),
+        (2, "progressive_scale", 3.4),
+    ]
+    for index, kind, nll in rows:
+        folder = root / str(index)
+        folder.mkdir()
+        payload = {
+            "ok": True,
+            "version": "airi-generalist-free-speed-v2",
+            "cycle": 1,
+            "stage": 1,
+            "steps": 3,
+            "candidate_index": index,
+            "candidate_id": f"scale-{index}",
+            "kind": kind,
+            "genome": {},
+            "reports": [],
+            "all_seed_eligible": True,
+            "any_seed_eligible": True,
+            "mean_nll_per_byte": nll,
+            "best_nll_per_byte": nll,
+            "mean_generation_accuracy": 0.0,
+            "worst_domain_regression": 0.02,
+            "parameters": 100_000 + index * 50_000,
+            "score": 10.0,
+            "corpus": {},
+            "checkpoint_dir": "best-checkpoint",
+            "external_pretrained": False,
+        }
+        (folder / "result.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    result = select_survivors([root], tmp_path / "selected.json", survivors=2)
+    selected = [row["index"] for row in result["selected"]]
+    assert 0 in selected
+    assert 2 in selected
+    assert result["protected_progressive_scale"] is True
+
+
+def test_generalist_data_growth_prioritizes_useful_domains_and_skips_quotes(tmp_path: Path):
+    from generalist_lm.generalist_data_growth import grow_generalist_data
+
+    commit = "d" * 40
+    raw_by_path = {
+        "quotes/tiny.yaml": ("quote: tiny motivational phrase\n" * 40).encode(),
+        "math/proofs.txt": (
+            "Theorem proof algebra reasoning implication contradiction. " * 40
+        ).encode(),
+        "datasets/table.csv": (
+            "name,value,category\nalpha,1,a\nbeta,2,b\ngamma,3,c\n" * 30
+        ).encode(),
+        "src/algorithm.py": (
+            "def binary_search(items, target):\n    return target in items\n" * 30
+        ).encode(),
+    }
+
+    def opener(request, timeout):
+        del timeout
+        url = request.full_url
+        if "search/repositories" in url:
+            return _FakeResponse(
+                json.dumps({"items": [{"full_name": "example/balanced"}]}).encode(),
+                url,
+            )
+        if url.endswith("/repos/example/balanced"):
+            return _FakeResponse(
+                json.dumps({
+                    "default_branch": "main",
+                    "license": {"spdx_id": "MIT"},
+                }).encode(),
+                url,
+            )
+        if "/branches/main" in url:
+            return _FakeResponse(json.dumps({"commit": {"sha": commit}}).encode(), url)
+        if "/git/trees/" in url:
+            return _FakeResponse(
+                json.dumps({
+                    "truncated": False,
+                    "tree": [
+                        {"type": "blob", "path": path, "size": len(raw)}
+                        for path, raw in raw_by_path.items()
+                    ],
+                }).encode(),
+                url,
+            )
+        prefix = f"https://raw.githubusercontent.com/example/balanced/{commit}/"
+        if url.startswith(prefix):
+            path = url[len(prefix):]
+            return _FakeResponse(raw_by_path[path], url)
+        raise AssertionError(url)
+
+    result = grow_generalist_data(
+        tmp_path,
+        signals=["reasoning_gap", "data_gap", "coding_gap"],
+        max_new_bytes=500_000,
+        max_total_bytes=500_000,
+        max_repositories=1,
+        max_files_per_repo=4,
+        opener=opener,
+    )
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    paths = {row["path"] for row in manifest["files"]}
+    assert "quotes/tiny.yaml" not in paths
+    assert "math/proofs.txt" in paths
+    assert "datasets/table.csv" in paths
+    assert "src/algorithm.py" in paths
+    assert result["domain_files"]["reasoning"] >= 1
+    assert result["domain_files"]["data"] >= 1
+    assert result["domain_files"]["code"] >= 1
+    assert result["desired_domains"][:3] == ["reasoning", "data", "code"]
