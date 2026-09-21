@@ -580,8 +580,32 @@ def _transfer_compatible_weights(
 
     shared_token_rows = 0
     derived_bpe_rows = 0
+    embedding_width_migrated = False
     source_embed = source.get("token_embedding.weight")
     target_embed = target.get("token_embedding.weight")
+
+    if (
+        tokenizer_identical
+        and source_embed is not None
+        and target_embed is not None
+        and source_embed.ndim == 2
+        and target_embed.ndim == 2
+        and int(target_embed.shape[0]) == int(source_embed.shape[0])
+        and int(target_embed.shape[1]) > int(source_embed.shape[1])
+    ):
+        migrated = target_embed.detach().clone()
+        migrated[:, : int(source_embed.shape[1])] = source_embed.detach().to(
+            device=migrated.device,
+            dtype=migrated.dtype,
+        )
+        copied["token_embedding.weight"] = migrated
+        if (
+            "lm_head.weight" in target
+            and tuple(target["lm_head.weight"].shape) == tuple(migrated.shape)
+        ):
+            copied["lm_head.weight"] = migrated.clone()
+        copied_params += int(source_embed.numel())
+        embedding_width_migrated = True
     if (
         source_embed is not None
         and target_embed is not None
@@ -650,7 +674,10 @@ def _transfer_compatible_weights(
         "tokenizer_identical": tokenizer_identical,
         "shared_token_rows": shared_token_rows,
         "derived_bpe_rows": derived_bpe_rows,
-        "vocabulary_migrated": bool(shared_token_rows or derived_bpe_rows),
+        "embedding_width_migrated": embedding_width_migrated,
+        "vocabulary_migrated": bool(
+            shared_token_rows or derived_bpe_rows or embedding_width_migrated
+        ),
         "partial_prefix_tensors": sorted(partial_tensors),
         "partial_prefix_parameters": sum(
             int(source[name].numel()) for name in partial_tensors
