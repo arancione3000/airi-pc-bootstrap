@@ -192,12 +192,16 @@ jobs:
           after_nll="$(jq -r '.after.language_nll' "${report}")"
           before_nll="$(jq -r '.before.language_nll' "${report}")"
           multiword="$(jq -r '.after.multiword_output_rate' "${report}")"
+          after_rep="$(jq -r '.after.repetition_rate' "${report}")"
+          before_rep="$(jq -r '.before.repetition_rate' "${report}")"
           next=""
 
-          if [[ "${minimum_success}" == "true" && "${current}" -lt 5000000 ]]; then
+          if [[ "${current}" -lt 5000000 ]]; then
+            # 1M is a bootstrap diagnostic rung, not permission to give up.
             next=5000000
-          elif [[ "${minimum_success}" == "true" && "${current}" -lt 20000000 ]] && \
-               awk "BEGIN {exit !(${after_nll} < ${before_nll} - 0.15)}"; then
+          elif [[ "${current}" -lt 20000000 ]] && \
+               { [[ "${minimum_success}" == "true" ]] || \
+                 awk "BEGIN {exit !(${after_nll} < ${before_nll} - 0.08 && ${after_rep} < ${before_rep})}"; }; then
             next=20000000
           elif [[ "${minimum_success}" == "true" && "${current}" -lt 50000000 ]] && \
                awk "BEGIN {exit !(${after_nll} < ${before_nll} - 0.25 && ${multiword} >= 0.50)}"; then
