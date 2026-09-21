@@ -117,8 +117,9 @@ def _generation_probe(
 ) -> dict[str, Any]:
     """Probe real autoregressive decoding on held-out examples.
 
-    Two deterministic examples per domain (first + last when available) keep
-    the loop bounded while exposing progress that exact-match alone cannot see.
+    Exactly one deterministic row per domain preserves the persisted health
+    contract. Language deliberately uses the compositional held-out row so
+    partial similarity measures sentence generation rather than word copying.
     Exact match remains the strict promotion signal; similarity is an additional
     fail-closed/tie-breaking diagnostic.
     """
@@ -129,9 +130,7 @@ def _generation_probe(
     selected: list[ResearchRow] = []
     for domain in sorted(grouped):
         items = grouped[domain]
-        selected.append(items[0])
-        if len(items) > 1:
-            selected.append(items[-1])
+        selected.append(items[-1] if domain == "language" else items[0])
 
     runtime = GeneralistRuntime(model, model.config, tokenizer, device=device)
     solved: list[str] = []
