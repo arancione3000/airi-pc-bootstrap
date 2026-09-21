@@ -1349,13 +1349,13 @@ def test_generalist_phase4_language_bridge_is_deterministic_and_grounded():
 
 
 def test_generalist_phase4_bpe_refreshes_only_until_target_vocab():
+    from dataclasses import replace
     from types import SimpleNamespace
 
     from generalist_lm.bpe_tokenizer import train_bpe
     from generalist_lm.research_cycle import _tokenizer_for_genome, research_seed
 
-    genome = research_seed()
-    genome.tokenizer_version = "bpe-v1"
+    genome = replace(research_seed(), tokenizer_version="bpe-v1").validate()
     source = train_bpe(
         ["language learning improves with repeated natural sentences. " * 20],
         vocab_size=300,
