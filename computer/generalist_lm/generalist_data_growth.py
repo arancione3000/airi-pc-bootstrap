@@ -12,7 +12,7 @@ from urllib.parse import quote, quote_plus, urlparse
 from urllib.request import Request, urlopen
 
 
-GENERALIST_DATA_GROWTH_VERSION = "generalist-data-growth-v2"
+GENERALIST_DATA_GROWTH_VERSION = "generalist-data-growth-v3"
 
 PERMISSIVE_SPDX = {
     "MIT",
@@ -28,7 +28,7 @@ PERMISSIVE_SPDX = {
 _ALLOWED_SUFFIXES = {
     ".txt", ".md", ".rst", ".json", ".jsonl", ".csv",
     ".py", ".js", ".ts", ".tsx", ".java", ".c", ".h",
-    ".cpp", ".hpp", ".rs", ".go", ".sql", ".yaml", ".yml", ".toml",
+    ".cpp", ".hpp", ".rs", ".go", ".sql", ".tex", ".yaml", ".yml", ".toml",
 }
 
 _CODE_SUFFIXES = {
@@ -153,6 +153,8 @@ def _domain_for(path: str) -> str:
     lower = path.lower()
     if suffix in _CODE_SUFFIXES:
         return "code"
+    if suffix == ".tex":
+        return "reasoning"
     if (
         suffix in {".csv", ".json", ".jsonl", ".sql"}
         or any(token in lower for token in ("dataset", "data/", "tables/", "records/"))
@@ -206,7 +208,7 @@ def _rank_entries(
 ) -> list[dict[str, Any]]:
     preferred_suffixes = {
         ".txt", ".md", ".rst", ".py", ".js", ".ts", ".java",
-        ".c", ".cpp", ".rs", ".go", ".sql", ".csv", ".jsonl",
+        ".c", ".cpp", ".rs", ".go", ".sql", ".tex", ".csv", ".jsonl",
     }
     buckets: dict[str, list[dict[str, Any]]] = {}
     for entry in entries:
@@ -235,30 +237,33 @@ def _rank_entries(
 
 
 def _candidate_queries(signals: Iterable[str] | None) -> list[str]:
+    """Return short, license-qualified discovery queries.
+
+    GitHub repository search behaves much better when topical terms are compact.
+    Putting the SPDX qualifier into discovery also prevents most of the API
+    budget being wasted on repositories that will later fail closed.
+    """
     signal_set = {str(row).lower() for row in (signals or ())}
     queries: list[str] = []
     if "reasoning_gap" in signal_set or "symbolic_reasoning_signal" in signal_set:
         queries.extend([
-            "mathematics proofs textbook corpus",
-            "logic reasoning educational text dataset",
+            "reasoning dataset license:mit",
+            "mathematics proofs license:mit",
         ])
     if "data_gap" in signal_set:
         queries.extend([
-            "structured data csv json dataset examples",
-            "data analysis examples csv json",
+            "csv dataset license:mit",
+            "json dataset license:mit",
         ])
     if "coding_gap" in signal_set:
-        queries.extend([
-            "programming algorithms examples source code",
-            "code corpus permissive algorithms",
-        ])
+        queries.append("algorithms license:mit")
     if "language_gap" in signal_set:
-        queries.append("italian public domain text corpus")
+        queries.append("italian corpus license:mit")
     queries.extend([
-        "public domain books plain text corpus",
-        "educational text corpus permissive license",
-        "programming algorithms examples source code",
-        "structured data csv json dataset examples",
+        "text corpus license:mit",
+        "educational corpus license:apache-2.0",
+        "algorithms license:mit",
+        "dataset license:cc0-1.0",
     ])
     return list(dict.fromkeys(queries))[:8]
 
@@ -272,10 +277,13 @@ def _search_repositories(
 ) -> list[dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
     for query in queries:
-        bounded_query = f"{query} size:<500000 fork:false archived:false"
+        qualifier = "" if "license:" in query.lower() else " license:mit"
+        bounded_query = (
+            f"{query}{qualifier} size:<100000 fork:false archived:false"
+        )
         url = (
             "https://api.github.com/search/repositories?"
-            f"q={quote_plus(bounded_query)}&sort=updated&order=desc&per_page={max(1, min(per_query, 10))}"
+            f"q={quote_plus(bounded_query)}&sort=stars&order=desc&per_page={max(1, min(per_query, 10))}"
         )
         payload = _request_json(url, token=token, opener=opener)
         for item in payload.get("items", []):
