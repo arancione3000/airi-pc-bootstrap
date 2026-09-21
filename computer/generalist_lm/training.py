@@ -269,6 +269,7 @@ def train_sft(
         "gradient_accumulation_steps": accumulation,
         "effective_batch_size": batch_size * accumulation,
         "precision": precision,
+        "learning_rate": float(learning_rate),
         "initial_loss": initial_loss,
         "final_loss": final_loss,
         "best_step_loss": min(losses),
