@@ -636,7 +636,10 @@ def _capacity_budget_multiplier(
         normalized_kind.startswith("progressive_scale")
         or normalized_kind == "architecture_capacity_scale"
         or normalized_kind == "architecture_capacity_plus_structure"
-        or candidate >= int(current * 1.35)
+        or (
+            current >= 10_000
+            and candidate >= int(current * 1.35)
+        )
     )
     if not is_capacity_probe:
         return 1.0
