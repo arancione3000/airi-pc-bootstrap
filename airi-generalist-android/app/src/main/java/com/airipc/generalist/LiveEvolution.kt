@@ -8,10 +8,10 @@ import java.util.concurrent.TimeUnit
 
 private const val ACTIONS_BASE =
     "https://api.github.com/repos/arancione3000/airi-pc-bootstrap/actions"
-private const val CONTINUUM_RUNS =
-    "$ACTIONS_BASE/workflows/generalist-continuum.yml/runs?branch=main&per_page=1"
-private const val BOOTSTRAP_RUNS =
-    "$ACTIONS_BASE/workflows/generalist-bootstrap.yml/runs?branch=main&per_page=1"
+private const val MAIN_RUNS =
+    "$ACTIONS_BASE/runs?branch=main&per_page=30"
+private const val CONTINUUM_NAME = "AIRI Generalist Research Continuum"
+private const val BOOTSTRAP_NAME = "AIRI Generalist Language Bootstrap"
 private const val STATE_BRANCH = "generalist-state"
 private const val STATE_ROOT = "generalist-state"
 
@@ -105,10 +105,19 @@ class LiveEvolutionRepository {
 
     suspend fun fetch(): LiveEvolutionSnapshot = withContext(Dispatchers.IO) {
         val stateRevision = github.resolveBranchSha(STATE_BRANCH)
-        val runs = github.getJson(CONTINUUM_RUNS)
+        val runs = github.getJson(MAIN_RUNS)
         val array = runs.getJSONArray("workflow_runs")
-        check(array.length() > 0) { "Nessun Continuum trovato" }
-        val run = array.getJSONObject(0)
+
+        fun latestRun(name: String): JSONObject? {
+            for (index in 0 until array.length()) {
+                val candidate = array.getJSONObject(index)
+                if (candidate.optString("name") == name) return candidate
+            }
+            return null
+        }
+
+        val run = latestRun(CONTINUUM_NAME)
+            ?: error("Nessun Continuum trovato")
         val runId = run.getLong("id")
         val jobsRaw = github.getJson("$ACTIONS_BASE/runs/$runId/jobs?per_page=100")
         val jobsArray = jobsRaw.getJSONArray("jobs")
@@ -126,10 +135,7 @@ class LiveEvolutionRepository {
             }
         }
 
-        val bootstrapRun = github.getJsonOrNull(BOOTSTRAP_RUNS)
-            ?.optJSONArray("workflow_runs")
-            ?.takeIf { it.length() > 0 }
-            ?.getJSONObject(0)
+        val bootstrapRun = latestRun(BOOTSTRAP_NAME)
             ?.let { raw ->
                 BootstrapRun(
                     runId = raw.optLong("id"),
