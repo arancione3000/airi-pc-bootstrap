@@ -1487,3 +1487,70 @@ def test_curriculum_memory_accepts_verified_extra_lab_rows(tmp_path):
     stored = memory.rows()
     prompts = [row.messages[1]["content"] if len(row.messages) > 1 else "" for row in stored]
     assert any("AIRI-PC Lab" in prompt for prompt in prompts)
+
+
+def test_airi_pc_lab_verified_experience_round_trip(tmp_path):
+    from generalist_lm.airi_pc_lab import (
+        load_verified_lab_experiences,
+        record_verified_lab_experience,
+    )
+
+    probe = {
+        "ok": True,
+        "tool_call_valid": True,
+        "tool": "lab_describe_task_flow",
+        "arguments": {},
+        "tool_result": {
+            "flow": [
+                "task_engine:start",
+                "bounded_operation",
+                "verification_engine",
+                "judge",
+                "experience_record",
+            ],
+            "mutation": False,
+            "production_promotion": False,
+        },
+    }
+    stored = record_verified_lab_experience(
+        tmp_path,
+        probe,
+        cycle=9,
+        source="champion",
+    )
+    assert stored["stored"] is True
+
+    rows = load_verified_lab_experiences(tmp_path)
+    assert len(rows) == 1
+    assert rows[0].domain == "tools"
+    assert rows[0].messages[-1]["role"] == "assistant"
+    assert "Verified AIRI-PC Lab result" in rows[0].messages[-1]["content"]
+
+    duplicate = record_verified_lab_experience(
+        tmp_path,
+        probe,
+        cycle=9,
+        source="champion",
+    )
+    assert duplicate["stored"] is False
+    assert duplicate["reason"] == "duplicate"
+
+
+def test_airi_pc_lab_does_not_store_failed_probe(tmp_path):
+    from generalist_lm.airi_pc_lab import (
+        load_verified_lab_experiences,
+        record_verified_lab_experience,
+    )
+
+    result = record_verified_lab_experience(
+        tmp_path,
+        {
+            "ok": False,
+            "tool_call_valid": False,
+            "error": "invalid tool JSON",
+        },
+        cycle=9,
+        source="champion",
+    )
+    assert result["stored"] is False
+    assert load_verified_lab_experiences(tmp_path) == []
