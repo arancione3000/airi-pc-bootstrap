@@ -174,9 +174,13 @@ jobs:
         with:
           name: generalist-plan
           path: /tmp/plan
-      - name: Medium-budget survivor trial
+      - uses: actions/download-artifact@v4
+        with:
+          name: generalist-stage1-${{ matrix.index }}
+          path: /tmp/previous
+      - name: Continue survivor to cumulative 8-step budget
         run: |
-          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 2 --steps 8 --repeat-seeds 1 --pretrain-steps 2             --max-repo-bytes 10000000 --max-external-bytes 20000000
+          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 2 --steps 5 --repeat-seeds 1 --pretrain-steps 1             --source-checkpoint /tmp/previous/best-checkpoint             --max-repo-bytes 10000000 --max-external-bytes 20000000
       - uses: actions/upload-artifact@v4
         with:
           name: generalist-stage2-${{ matrix.index }}
@@ -226,9 +230,13 @@ jobs:
         with:
           name: generalist-plan
           path: /tmp/plan
-      - name: Multi-seed final trial
+      - uses: actions/download-artifact@v4
+        with:
+          name: generalist-stage2-${{ matrix.index }}
+          path: /tmp/previous
+      - name: Continue finalist to cumulative 20-step multi-seed budget
         run: |
-          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 3 --steps 20 --repeat-seeds 2 --pretrain-steps 4             --max-repo-bytes 20000000 --max-external-bytes 50000000
+          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 3 --steps 12 --repeat-seeds 2 --pretrain-steps 2             --source-checkpoint /tmp/previous/best-checkpoint             --max-repo-bytes 20000000 --max-external-bytes 50000000
       - uses: actions/upload-artifact@v4
         with:
           name: generalist-stage3-${{ matrix.index }}
