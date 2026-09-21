@@ -540,7 +540,13 @@ def _tokenizer_for_genome(
     bpe_max_bytes: int = 256_000,
 ):
     if source_runtime is not None and source_runtime.tokenizer.version == genome.tokenizer_version:
-        return source_runtime.tokenizer
+        # Byte tokenization is fixed. BPE may grow progressively as more
+        # approved corpus becomes available; once a stage has the requested
+        # vocabulary size its tokenizer is frozen and reused cumulatively.
+        if genome.tokenizer_version != "bpe-v1":
+            return source_runtime.tokenizer
+        if int(getattr(source_runtime.tokenizer, "vocab_size", 0) or 0) >= int(bpe_vocab_size):
+            return source_runtime.tokenizer
     if genome.tokenizer_version == "byte-v1":
         return ByteTokenizer()
     if genome.tokenizer_version == "bpe-v1":
