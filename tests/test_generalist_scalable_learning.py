@@ -1289,3 +1289,26 @@ def test_generalist_external_corpus_preserves_manifest_domains(tmp_path: Path):
     assert len(external) == 1
     assert external[0].domain == "data"
     assert report["external"]["domain_documents"]["data"] == 1
+
+
+def test_generalist_language_weakness_weights_general_and_language_autodata():
+    from generalist_lm.research_cycle import _pretraining_domain_weights
+
+    weights = _pretraining_domain_weights({
+        "language": 3.0,
+        "coding": 1.5,
+        "data": 2.0,
+        "reasoning": 2.25,
+    })
+    assert weights["general"] == pytest.approx(3.0)
+    assert weights["language-it"] == pytest.approx(3.0)
+    assert weights["code"] == pytest.approx(1.5)
+
+
+def test_generalist_language_gap_expands_license_first_discovery():
+    from generalist_lm.generalist_data_growth import _candidate_queries
+
+    queries = _candidate_queries(["language_gap"])
+    assert any(query.startswith("natural language corpus") for query in queries)
+    assert any(query.startswith("italian corpus") for query in queries)
+    assert all("license:" in query for query in queries)
