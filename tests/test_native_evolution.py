@@ -1044,3 +1044,74 @@ def test_lattice_migration_gate_requires_repeated_multi_seed_evidence(tmp_path: 
     )
     assert not_ready["migration_ready"] is False
     assert not_ready["checks"]["winning_cycles"] is False
+
+
+
+def test_lattice_incumbent_revalidation_cannot_promote_itself(tmp_path: Path):
+    pytest.importorskip("torch")
+    from generalist_lm.lattice_swarm import finalize_swarm, prepare_swarm_plan
+
+    state = tmp_path / "state"
+    plan_path = tmp_path / "plan.json"
+    plan = prepare_swarm_plan(
+        state,
+        plan_path,
+        cycle=1,
+        population_size=2,
+        max_total_parameters=3_000_000,
+        max_active_parameter_ratio=2.0,
+    )
+    incumbent = plan["incumbent"]
+    assert incumbent["index"] == 9999
+    assert incumbent["candidate_id"] == plan["champion"]["genome_id"]
+
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    incumbent_result = {
+        "ok": True,
+        "version": "airi-lattice-swarm-v1",
+        "cycle": 1,
+        "stage": 3,
+        "steps": 18,
+        "candidate_index": 9999,
+        "candidate_id": incumbent["candidate_id"],
+        "mutation": incumbent["mutation"],
+        "genome": incumbent["genome"],
+        "reports": [],
+        "all_seed_wins": True,
+        "loss": 1.0,
+        "active_parameters": incumbent["cost"]["active_parameters"],
+        "state_bytes": incumbent["cost"]["state_bytes"],
+        "train_seconds": 1.0,
+        "repeat_seeds": 2,
+        "external_pretrained": False,
+    }
+    (reports_dir / "incumbent.json").write_text(
+        json.dumps(incumbent_result),
+        encoding="utf-8",
+    )
+
+    final = finalize_swarm(
+        state,
+        plan_path,
+        [reports_dir],
+        tmp_path / "final.json",
+    )
+    assert final["promoted"] is False
+    assert final["winner"] is None
+    assert final["champion"]["genome_id"] == incumbent["candidate_id"]
+    assert final["policy"]["candidate_can_self_promote"] is False
+
+
+def test_lattice_migration_readiness_is_strict_json_when_evidence_is_missing(tmp_path: Path):
+    from generalist_lm.lattice_scale_gate import evaluate_lattice_migration_readiness
+
+    result = evaluate_lattice_migration_readiness(
+        tmp_path / "missing-history.jsonl",
+        {"genome_id": "lattice-empty"},
+    )
+    assert result["migration_ready"] is False
+    assert result["evidence"]["mean_margin"] is None
+    assert result["evidence"]["worst_margin"] is None
+    assert result["evidence"]["max_active_parameter_ratio"] is None
+    json.dumps(result, allow_nan=False)
