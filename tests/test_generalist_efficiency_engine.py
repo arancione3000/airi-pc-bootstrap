@@ -319,3 +319,23 @@ def test_persisted_specialist_keeps_distillation_gate_evidence(tmp_path: Path):
     assert saved["any_generation_pathological_repetition"] is False
     assert saved["worst_domain_regression"] == pytest.approx(0.02)
     assert saved["genome"]["genome_id"] == GeneralistGenome().genome_id
+
+
+
+def test_unique_candidates_keeps_distinct_learned_weight_lineages():
+    from generalist_lm.generalist_swarm import _unique_candidates
+
+    genome = GeneralistGenome().validate()
+    rows = [
+        ("continual", genome),
+        ("language_fusion", genome),
+        ("specialist_fusion", genome),
+        ("architecture", genome),
+    ]
+    candidates = _unique_candidates(rows, count=8)
+    kinds = [row["kind"] for row in candidates]
+    assert "continual" in kinds
+    assert "language_fusion" in kinds
+    assert "specialist_fusion" in kinds
+    # Ordinary architecture duplicate shares the topology-only lineage.
+    assert kinds.count("architecture") == 0
