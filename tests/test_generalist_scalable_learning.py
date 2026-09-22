@@ -1176,6 +1176,65 @@ def test_generalist_weaknesses_routes_language_gap():
     assert "coding_gap" in signals
 
 
+def test_generalist_weaknesses_routes_autoregressive_collapse():
+    from generalist_lm.research_cycle import _weaknesses
+
+    signals = _weaknesses({
+        "domain_nll_per_byte": {
+            "language": 2.0,
+            "coding": 1.8,
+            "data": 1.7,
+        },
+        "generation_pathological_repetition": True,
+        "generation_repetition_rate": 0.81,
+        "generation_longest_repeated_token_run": 14,
+        "generation_unique_token_ratio": 0.18,
+    })
+    assert "language_collapse" in signals
+    assert "autoregressive_collapse" in signals
+
+
+def test_generalist_weaknesses_routes_canary_only_collapse():
+    from generalist_lm.research_cycle import _weaknesses
+
+    signals = _weaknesses({
+        "domain_nll_per_byte": {
+            "coding": 2.0,
+            "data": 1.9,
+            "reasoning": 1.8,
+        },
+        "generation_repetition_rate": 0.20,
+        "generation_unique_token_ratio": 0.70,
+        "canary": {
+            "generation_pathological_repetition": True,
+            "generation_repetition_rate": 0.88,
+            "generation_longest_repeated_token_run": 28,
+            "generation_unique_token_ratio": 0.11,
+        },
+    })
+    assert "language_collapse" in signals
+    assert "autoregressive_collapse" in signals
+
+
+def test_generalist_weaknesses_does_not_invent_collapse_when_generation_is_healthy():
+    from generalist_lm.research_cycle import _weaknesses
+
+    signals = _weaknesses({
+        "domain_nll_per_byte": {
+            "language": 3.0,
+            "coding": 2.5,
+            "data": 2.0,
+        },
+        "generation_pathological_repetition": False,
+        "generation_repetition_rate": 0.22,
+        "generation_longest_repeated_token_run": 3,
+        "generation_unique_token_ratio": 0.62,
+    })
+    assert "language_gap" in signals
+    assert "language_collapse" not in signals
+    assert "autoregressive_collapse" not in signals
+
+
 def test_generalist_language_curriculum_has_compositional_targets():
     from generalist_lm.curriculum import train_rows, validation_rows
 
