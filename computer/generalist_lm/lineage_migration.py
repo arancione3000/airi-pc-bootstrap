@@ -324,6 +324,10 @@ def migrate_live_lineage(
         cycle,
         target_vocab_size=migrated.tokenizer.vocab_size,
     )
+    lineage_architecture = ArchitectureSpec.from_genome(
+        lineage_genome,
+        target_vocab_size=migrated.tokenizer.vocab_size,
+    )
     staging = root / ".lineage-migration-candidate"
     shutil.rmtree(staging, ignore_errors=True)
     migrated.save_checkpoint(
@@ -346,25 +350,36 @@ def migrate_live_lineage(
         char if char.isalnum() or char in "-_" else "_"
         for char in str(candidate_id)
     )[:80]
-    history_root = (
-        root
-        / "lineage-history"
-        / f"cycle-{max(1, int(cycle)):06d}-{safe_id or 'architecture'}"
-    )
-    shutil.rmtree(history_root, ignore_errors=True)
-    history_root.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(Path(source["checkpoint"]), history_root / "checkpoint")
+    # Keep exactly one full previous checkpoint in the working tree. Git commit
+    # history preserves older snapshots, while duplicating every large model in
+    # the current state branch would grow storage without bound.
+    rollback_root = root / "lineage-rollback"
+    shutil.rmtree(rollback_root, ignore_errors=True)
+    rollback_root.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(Path(source["checkpoint"]), rollback_root / "checkpoint")
     for extra in (
         root / "bootstrap-data" / "progress.json",
         root / "status.json",
         root / "lineage.json",
     ):
         if extra.is_file():
-            shutil.copy2(extra, history_root / extra.name)
-    report["rollback_available"] = True
-    report["rollback_checkpoint"] = str(
-        history_root.relative_to(root) / "checkpoint"
+            shutil.copy2(extra, rollback_root / extra.name)
+
+    history_root = root / "lineage-history"
+    history_root.mkdir(parents=True, exist_ok=True)
+    _atomic_json(
+        history_root / f"cycle-{max(1, int(cycle)):06d}-{safe_id or 'architecture'}.json",
+        {
+            "cycle": int(cycle),
+            "candidate_id": str(candidate_id),
+            "source_model_sha256": source_model_sha,
+            "tokens_processed": int(source.get("tokens_processed", 0) or 0),
+            "source_checkpoint": str(source["checkpoint_rel"]),
+            "rollback_checkpoint": "lineage-rollback/checkpoint",
+        },
     )
+    report["rollback_available"] = True
+    report["rollback_checkpoint"] = "lineage-rollback/checkpoint"
 
     if bool(source["bootstrap_active"]):
         active_path = Path(source["checkpoint"])
@@ -443,7 +458,7 @@ def migrate_live_lineage(
         "active_checkpoint": active_rel,
         "active_model_sha256": migrated_model_sha,
         "active_genome": lineage_genome.to_dict(),
-        "active_architecture": architecture_manifest(architecture),
+        "active_architecture": architecture_manifest(lineage_architecture),
         "tokens_processed": int(source.get("tokens_processed", 0) or 0),
         "target_tokens": int(source.get("target_tokens", 0) or 0),
         "optimizer_state_preserved": not bool(source["bootstrap_active"]),
