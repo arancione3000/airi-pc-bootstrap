@@ -136,6 +136,33 @@ def _web_tool_rows(specs: Iterable[tuple[str, str]]) -> list[ResearchRow]:
     return rows
 
 
+def _runtime_tool_rows(specs: Iterable[tuple[str, dict]]) -> list[ResearchRow]:
+    """Mechanically labeled examples for the real read-only Airi-PC tool surface."""
+    prompts = {
+        "file_read": "Read the workspace text file {path}.",
+        "file_search": "Search the workspace for {query}.",
+        "project_analyze": "Inspect the project structure at {path}.",
+        "memory_search": "Search verified AIRI memory for {query}.",
+    }
+    rows: list[ResearchRow] = []
+    for name, arguments in specs:
+        if name not in prompts:
+            raise ValueError(name)
+        prompt = prompts[name].format(**arguments)
+        target = (
+            '<tool_call>{"name":'
+            + json.dumps(name, ensure_ascii=False)
+            + ',"arguments":'
+            + json.dumps(arguments, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            + '}</tool_call>'
+        )
+        rows.append(ResearchRow("tools", [
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": target},
+        ]))
+    return rows
+
+
 def _structured_rows(values: Iterable[int]) -> list[ResearchRow]:
     return [
         ResearchRow("structured", [
@@ -167,6 +194,16 @@ def _generated_train_rows() -> list[ResearchRow]:
         ("search", "Italian open data portal"),
         ("read", "https://en.wikipedia.org/wiki/Artificial_intelligence"),
     ]))
+    rows.extend(_runtime_tool_rows([
+        ("file_read", {"path": "README.md"}),
+        ("file_read", {"path": "docs/ARCHITECTURE.md"}),
+        ("file_search", {"query": "GeneralistAgent", "path": "computer"}),
+        ("file_search", {"query": "verification", "path": "computer/control_plane"}),
+        ("project_analyze", {"path": "."}),
+        ("project_analyze", {"path": "computer/generalist_lm"}),
+        ("memory_search", {"query": "safe task lifecycle", "limit": 5}),
+        ("memory_search", {"query": "verified tool use", "limit": 3}),
+    ]))
     rows.extend(_structured_rows(range(11, 17)))
     return rows
 
@@ -188,6 +225,12 @@ def _generated_validation_rows() -> list[ResearchRow]:
         ("search", "current Linux kernel release"),
         ("search", "European Space Agency news"),
         ("read", "https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)"),
+    ]))
+    rows.extend(_runtime_tool_rows([
+        ("file_read", {"path": "docs/DEVELOPER.md"}),
+        ("file_search", {"query": "qualification", "path": "computer/generalist_lm"}),
+        ("project_analyze", {"path": "computer/control_plane"}),
+        ("memory_search", {"query": "verified lifecycle result", "limit": 4}),
     ]))
     rows.extend(_structured_rows(range(21, 25)))
     return rows
