@@ -141,7 +141,9 @@ def test_phase5_conversation_rescue_separates_unique_corpus_from_training_budget
     assert _bootstrap_corpus_target(20_000_000) == 5_000_000
     assert _bootstrap_corpus_target(50_000_000) == 5_000_000
     assert _bootstrap_corpus_target(100_000_000) == 20_000_000
-    assert _bootstrap_corpus_target(500_000_000) == 20_000_000
+    assert _bootstrap_corpus_target(250_000_000) == 40_000_000
+    assert _bootstrap_corpus_target(500_000_000) == 60_000_000
+    assert _bootstrap_corpus_target(1_000_000_000) == 100_000_000
 
 
 def test_phase5_conversation_rescue_has_explicit_capacity_rungs():
@@ -152,6 +154,7 @@ def test_phase5_conversation_rescue_has_explicit_capacity_rungs():
     assert _bootstrap_capacity_target(100_000_000) == 7_000_000
     assert _bootstrap_capacity_target(250_000_000) == 12_000_000
     assert _bootstrap_capacity_target(500_000_000) == 20_000_000
+    assert _bootstrap_capacity_target(1_000_000_000) == 32_000_000
 
 
 def test_phase5_capacity_growth_builds_a_larger_compatible_runtime():
