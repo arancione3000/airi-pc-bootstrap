@@ -23,9 +23,11 @@ from generalist_lm.internet_quarantine import (
     quarantine_records,
 )
 from generalist_lm.meta_controller import decide_next_action
+from generalist_lm.pretraining import CorpusDocument
 from generalist_lm.generalist_swarm import (
     GENERALIST_SWARM_VERSION,
     _capacity_budget_multiplier,
+    _language_rescue_weights,
     select_survivors,
 )
 
@@ -339,6 +341,50 @@ def test_meta_controller_routes_language_collapse_to_architecture_search(tmp_pat
     assert decision["action"] == "architecture_search"
     assert decision["observations"]["next_parameter_tier"] == 250_000
     assert decision["permissions"]["may_weaken_promotion_gates"] is False
+
+
+def test_language_rescue_assigns_majority_pretraining_mass_to_natural_text():
+    documents = [
+        CorpusDocument("general:a", "General prose sentence long enough.", "a", 35, "general"),
+        CorpusDocument("language:b", "Italian and English language material.", "b", 38, "language"),
+        CorpusDocument("dialogue:c", "Natural human dialogue response example.", "c", 39, "dialogue"),
+        CorpusDocument("code:d", "def f(x): return x + 1", "d", 24, "code"),
+        CorpusDocument("data:e", "1,2,3,4,5", "e", 9, "data"),
+        CorpusDocument("reasoning:f", "If A then B; A, therefore B.", "f", 31, "reasoning"),
+    ]
+    task, pretrain, report = _language_rescue_weights(
+        {
+            "language": 3.0,
+            "coding": 1.8,
+            "data": 2.4,
+            "reasoning": 2.2,
+            "structured": 1.1,
+            "tools": 1.0,
+        },
+        documents,
+        {"language_gap", "language_collapse"},
+    )
+    assert report["enabled"] is True
+    assert task["language"] >= 3.0
+    assert pretrain is not None
+    natural = sum(
+        weight
+        for domain, weight in pretrain.items()
+        if domain in {"general", "language", "dialogue"}
+    )
+    assert natural >= 0.67
+    assert abs(sum(pretrain.values()) - 1.0) < 1e-9
+
+
+def test_language_rescue_is_inactive_without_language_signals():
+    task, pretrain, report = _language_rescue_weights(
+        {"language": 1.2, "coding": 1.5},
+        [],
+        {"coding_gap"},
+    )
+    assert task == {"language": 1.2, "coding": 1.5}
+    assert pretrain is None
+    assert report["enabled"] is False
 
 
 def test_gqa_local_attention_and_postnorm_pass_real_verifier():
