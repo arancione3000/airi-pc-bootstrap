@@ -716,6 +716,33 @@ def test_generalist_swarm_plan_imports_completed_phase5_language_fusion(tmp_path
     assert plan["policy"]["automatic_best_of_both_fusion"] is True
 
 
+def test_language_fusion_retention_gate_preserves_language_gains():
+    from generalist_lm.generalist_swarm import _language_fusion_retention_gate
+
+    baseline = {
+        "language_nll": 2.4,
+        "multiword_output_rate": 0.70,
+        "repetition_rate": 0.25,
+        "pathological_repetition": False,
+    }
+    retained = {
+        "language_nll": 2.45,
+        "multiword_output_rate": 0.65,
+        "repetition_rate": 0.30,
+        "pathological_repetition": False,
+    }
+    ok, reasons = _language_fusion_retention_gate(baseline, retained)
+    assert ok, reasons
+
+    forgotten = dict(retained)
+    forgotten["multiword_output_rate"] = 0.40
+    forgotten["pathological_repetition"] = True
+    ok, reasons = _language_fusion_retention_gate(baseline, forgotten)
+    assert not ok
+    assert any("multi-word" in reason for reason in reasons)
+    assert any("pathological" in reason for reason in reasons)
+
+
 def test_generalist_swarm_reducer_protects_safe_language_fusion(tmp_path: Path):
     from generalist_lm.generalist_swarm import select_survivors
 
