@@ -19,7 +19,7 @@ from .airi_pc_lab import (
     summarize_lab_learning,
 )
 from .corpus import repository_corpus
-from .curriculum import DOMAINS, ResearchRow, validation_rows
+from .curriculum import DOMAINS, ResearchRow, train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
 from .evolution import (
     GeneralistGenome,
@@ -28,6 +28,7 @@ from .evolution import (
     progressive_scale_candidate,
     progressive_scale_target,
 )
+from .distillation import DistillationPrompt, distill_prompts
 from .efficiency_engine import (
     active_learning_weights,
     efficiency_bonus,
@@ -279,6 +280,89 @@ def _phase5_language_fusion_candidate(
         return None
 
 
+def _internal_distillation_rows(
+    root: Path,
+    teacher: dict[str, Any] | None,
+    *,
+    max_rows: int = 12,
+) -> tuple[list[ResearchRow], dict[str, Any]]:
+    """Distill only from a strong persisted specialist and only on train rows."""
+    if not isinstance(teacher, dict):
+        return [], {"enabled": False, "reason": "no persisted specialist teacher"}
+    island = str(teacher.get("island") or "")
+    summary = teacher.get("summary") or {}
+    if island not in {"language", "coding", "reasoning"}:
+        return [], {
+            "enabled": False,
+            "reason": "tool/efficiency specialists use verified replay rather than free-form distillation",
+        }
+    if not bool(summary.get("all_seed_eligible")):
+        return [], {"enabled": False, "reason": "specialist has not passed all-seed research gates"}
+    if bool(summary.get("any_generation_pathological_repetition", True)):
+        return [], {"enabled": False, "reason": "specialist still has pathological repetition"}
+    if float(summary.get("mean_generation_similarity", 0.0) or 0.0) < 0.45:
+        return [], {"enabled": False, "reason": "specialist generation similarity is below 0.45"}
+    if float(summary.get("mean_generation_repetition_rate", 1.0) or 1.0) > 0.45:
+        return [], {"enabled": False, "reason": "specialist repetition rate is above 0.45"}
+
+    checkpoint = root / str(teacher.get("checkpoint") or "")
+    try:
+        runtime = GeneralistRuntime.from_checkpoint(checkpoint, device="cpu")
+    except Exception as exc:
+        return [], {
+            "enabled": False,
+            "reason": f"teacher checkpoint unavailable:{type(exc).__name__}:{exc}",
+        }
+
+    domain_map = {
+        "language": {"language"},
+        "coding": {"coding"},
+        "reasoning": {"reasoning", "data"},
+    }
+    prompts: list[DistillationPrompt] = []
+    for row in train_rows():
+        if row.domain not in domain_map[island]:
+            continue
+        user = next(
+            (
+                str(message.get("content", ""))
+                for message in row.messages
+                if str(message.get("role", "")) == "user"
+            ),
+            "",
+        ).strip()
+        if not user:
+            continue
+        prompts.append(DistillationPrompt(domain=row.domain, prompt=user))
+        if len(prompts) >= max(1, min(24, int(max_rows))):
+            break
+
+    examples, report = distill_prompts(
+        runtime,
+        prompts,
+        max_new_tokens=128,
+        max_output_chars=4000,
+    )
+    rows = [
+        ResearchRow(
+            prompts[index].domain,
+            list(example.messages),
+        )
+        for index, example in enumerate(examples)
+        if index < len(prompts)
+    ]
+    return rows, {
+        "enabled": True,
+        "teacher_island": island,
+        "teacher_candidate_id": summary.get("candidate_id"),
+        "accepted": len(rows),
+        "requested": len(prompts),
+        "research_only": True,
+        "promotion_bypass": False,
+        "distillation_report": report,
+    }
+
+
 def _persisted_specialist_candidate(
     root: Path,
     *,
@@ -410,6 +494,16 @@ def prepare_swarm(
         lab_training_rows,
         verified_experience_rows=len(lab_experience_rows),
     )
+    specialist_fusion = _persisted_specialist_candidate(
+        root,
+        champion_id=champion_genome.genome_id,
+        max_params=int(max_params),
+    )
+    distilled_rows, distillation_report = _internal_distillation_rows(
+        root,
+        specialist_fusion,
+        max_rows=12,
+    )
 
     self_play = self_play_policy(
         champion_report,
@@ -425,7 +519,7 @@ def prepare_swarm(
     curriculum = memory.expand(
         cycle,
         signals=signals,
-        extra_rows=[*lab_training_rows, *self_play_rows],
+        extra_rows=[*lab_training_rows, *self_play_rows, *distilled_rows],
     )
     domain_weights = active_learning_weights(
         champion_report,
@@ -492,11 +586,6 @@ def prepare_swarm(
         champion_genome,
         vocab_size=champion_runtime.tokenizer.vocab_size,
         target_ratio=0.72,
-    )
-    specialist_fusion = _persisted_specialist_candidate(
-        root,
-        champion_id=champion_genome.genome_id,
-        max_params=int(max_params),
     )
     generated = generate_challengers(
         champion_genome,
@@ -639,6 +728,7 @@ def prepare_swarm(
             **dict(self_play),
             "cycle_report": self_play_report,
         },
+        "internal_distillation": distillation_report,
         "compression": {
             "enabled": compressed_genome is not None,
             "candidate_id": (
@@ -740,6 +830,7 @@ def prepare_swarm(
             "max_active_experts": 1,
             "compression_research": True,
             "verified_self_play": bool(self_play.get("enabled")),
+            "internal_distillation": bool(distillation_report.get("enabled")),
             "corpus_language_bridge": True,
             "progressive_bpe_vocab": 1024,
         },
@@ -1619,6 +1710,10 @@ def _persist_specialist_checkpoints(
             "research_only": True,
             "production_qualified": False,
             "external_pretrained": False,
+            "all_seed_eligible": bool(row.get("all_seed_eligible")),
+            "any_generation_pathological_repetition": bool(
+                row.get("any_generation_pathological_repetition")
+            ),
             "genome": dict(row.get("genome") or {}),
         }
         destination = specialists_root / island
@@ -2063,6 +2158,7 @@ def finalize_swarm(
             **dict(specialist_state or {}),
         },
         "self_play": plan.get("self_play") or {},
+        "internal_distillation": plan.get("internal_distillation") or {},
         "compression": plan.get("compression") or {},
         "rotating_canary": {
             "cycle": cycle,
