@@ -202,6 +202,8 @@ def _phase5_success(before: dict[str, Any], after: dict[str, Any]) -> tuple[bool
         reasons.append("non-empty rate is below 70%")
     if float(after.get("word_output_rate", 0.0)) < 0.40:
         reasons.append("fewer than 40% of held-out prompts produce word-like output")
+    if float(after.get("multiword_output_rate", 0.0)) < 0.40:
+        reasons.append("fewer than 40% of held-out prompts produce multi-word output")
     return (not reasons), reasons
 
 
