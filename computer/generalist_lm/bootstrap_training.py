@@ -50,7 +50,8 @@ PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v3"
 PHASE5_SFT_GUARD_VERSION = "phase5-sft-guard-v2"
 PHASE5_ANTICOLLAPSE_VERSION = "phase5-anticollapse-v2"
 PHASE5_CAPACITY_GROWTH_VERSION = "phase5-capacity-growth-v2"
-PHASE5_MAX_UNIQUE_CORPUS_TOKENS = 5_000_000
+PHASE5_BASE_UNIQUE_CORPUS_TOKENS = 5_000_000
+PHASE5_MAX_UNIQUE_CORPUS_TOKENS = 20_000_000
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -81,18 +82,20 @@ def _sha256_file(path: Path) -> str:
 
 
 def _bootstrap_corpus_target(training_target_tokens: int) -> int:
-    """Bound unique-source selection while allowing honest multi-epoch training.
+    """Keep the live lineage small until the 100M fast-track rung.
 
-    The currently reviewed Tatoeba/OASST source set contains roughly five
-    million usable tokens. Larger Phase-5 rungs therefore mean additional
-    optimization passes over the same pinned corpus, not fabricated unique
-    data. A future source expansion can raise this explicit ceiling.
+    The existing 20M checkpoint stays on its pinned five-million-token corpus.
+    Once that same checkpoint advances to 100M optimization tokens, expand the
+    unique reviewed corpus to twenty million tokens.  This gives the 7M model
+    substantially more unique language without replacing the live lineage.
     """
-    return min(
-        max(100_000, int(training_target_tokens)),
-        PHASE5_MAX_UNIQUE_CORPUS_TOKENS,
+    target = max(100_000, int(training_target_tokens))
+    ceiling = (
+        PHASE5_MAX_UNIQUE_CORPUS_TOKENS
+        if target >= 100_000_000
+        else PHASE5_BASE_UNIQUE_CORPUS_TOKENS
     )
-
+    return min(target, ceiling)
 
 def _bootstrap_capacity_target(training_target_tokens: int) -> int | None:
     """Capacity ladder paired with cumulative language optimization.
