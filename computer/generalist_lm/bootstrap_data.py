@@ -207,7 +207,7 @@ def _web_chunks(text: str, *, max_chars: int = 1800) -> list[str]:
     if not cleaned:
         return []
     paragraphs = [
-        re.sub(r"\\s+", " ", part).strip()
+        re.sub(r"\s+", " ", part).strip()
         for part in re.split(r"\\n\\s*\\n+", cleaned)
         if part.strip()
     ]
@@ -216,7 +216,7 @@ def _web_chunks(text: str, *, max_chars: int = 1800) -> list[str]:
         if len(paragraph) <= max_chars:
             out.append(paragraph)
             continue
-        sentences = re.split(r"(?<=[.!?])\\s+", paragraph)
+        sentences = re.split(r"(?<=[.!?])\s+", paragraph)
         current = ""
         for sentence in sentences:
             sentence = sentence.strip()
