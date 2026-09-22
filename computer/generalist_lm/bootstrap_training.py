@@ -47,6 +47,7 @@ from .research_cycle import (
     _transfer_compatible_weights,
 )
 from .runtime import GeneralistRuntime
+from .lineage_migration import refresh_live_lineage_manifest
 from .tokenizer import PAD
 from .training import causal_training_objective, train_sft
 
@@ -1491,8 +1492,18 @@ def run_segment(
         _atomic_json(bootstrap_root / "report.json", report)
 
     _atomic_json(progress_path, progress)
+    lineage_manifest = refresh_live_lineage_manifest(
+        root,
+        reason=(
+            "phase5_rung_complete"
+            if rung_complete
+            else "phase5_segment_checkpoint"
+        ),
+    )
     return {
         "ok": True,
+        "lineage_id": lineage_manifest.get("lineage_id"),
+        "active_lineage_checkpoint": lineage_manifest.get("active_checkpoint"),
         "version": PHASE5_BOOTSTRAP_VERSION,
         "target_tokens": target_tokens,
         "tokens_processed": int(progress["tokens_processed"]),
