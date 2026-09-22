@@ -23,9 +23,19 @@ from .curriculum import DOMAINS, ResearchRow, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
 from .evolution import (
     GeneralistGenome,
+    compression_candidate,
     generate_challengers,
     progressive_scale_candidate,
     progressive_scale_target,
+)
+from .efficiency_engine import (
+    active_learning_weights,
+    efficiency_bonus,
+    efficiency_profile,
+    island_schedule,
+    island_weights,
+    self_play_policy,
+    sparse_expert_plan,
 )
 from .generalist_data_growth import grow_generalist_data
 from .language_bridge import build_language_bridge_rows
@@ -365,7 +375,15 @@ def prepare_swarm(
         signals=signals,
         extra_rows=lab_training_rows,
     )
-    domain_weights = adaptive_domain_weights(champion_report)
+    domain_weights = active_learning_weights(
+        champion_report,
+        base_weights=adaptive_domain_weights(champion_report),
+        verified_tool_experiences=len(lab_experience_rows),
+    )
+    self_play = self_play_policy(
+        champion_report,
+        verified_tool_experiences=len(lab_experience_rows),
+    )
 
     data_report: dict[str, Any] = {
         "ok": True,
@@ -422,6 +440,11 @@ def prepare_swarm(
                 continue
             scale_genomes.append((kind, candidate))
 
+    compressed_genome = compression_candidate(
+        champion_genome,
+        vocab_size=champion_runtime.tokenizer.vocab_size,
+        target_ratio=0.72,
+    )
     generated = generate_challengers(
         champion_genome,
         signals=signals,
@@ -440,9 +463,23 @@ def prepare_swarm(
         rows.append(("language_fusion", language_fusion["genome"]))
     rows.append(("continual", _continual_genome(champion_genome, cycle)))
     rows.extend(scale_genomes)
+    if compressed_genome is not None:
+        rows.append(("compression", compressed_genome))
     rows.extend(("architecture", genome) for genome in generated)
 
     candidates = _unique_candidates(rows, count=population_size)
+    scheduled_islands = island_schedule(len(candidates), signals=signals)
+    for idx, candidate in enumerate(candidates):
+        kind = str(candidate.get("kind") or "")
+        if kind == "language_fusion":
+            island = "language"
+        elif kind == "compression" or kind.startswith("progressive_scale"):
+            island = "efficiency"
+        else:
+            island = scheduled_islands[idx]
+        candidate["island"] = island
+        candidate["domain_weights"] = island_weights(domain_weights, island)
+        candidate["sparse_expert_role"] = island
     if language_fusion is not None:
         fusion_genome = language_fusion["genome"]
         fusion_evidence = {
@@ -477,6 +514,19 @@ def prepare_swarm(
         )
         offset += 1
 
+    scheduled_islands = island_schedule(len(candidates), signals=signals)
+    for idx, candidate in enumerate(candidates):
+        kind = str(candidate.get("kind") or "")
+        if kind == "language_fusion":
+            island = "language"
+        elif kind == "compression" or kind.startswith("progressive_scale"):
+            island = "efficiency"
+        else:
+            island = str(candidate.get("island") or scheduled_islands[idx])
+        candidate["island"] = island
+        candidate["domain_weights"] = island_weights(domain_weights, island)
+        candidate["sparse_expert_role"] = island
+
     champion_vocab_size = int(getattr(champion_runtime.tokenizer, "vocab_size", 0) or 0)
     bpe_growth_target = champion_vocab_size
     if (
@@ -503,6 +553,23 @@ def prepare_swarm(
         },
         "curriculum": curriculum,
         "domain_weights": domain_weights,
+        "active_learning": {
+            "enabled": True,
+            "domain_weights": domain_weights,
+            "verified_tool_experiences": len(lab_experience_rows),
+            "policy": "allocate bounded extra replay to measured weak domains",
+        },
+        "sparse_experts": sparse_expert_plan(
+            available_islands=sorted({str(row.get("island") or "") for row in candidates}),
+        ),
+        "self_play": self_play,
+        "compression": {
+            "enabled": compressed_genome is not None,
+            "candidate_id": (
+                compressed_genome.genome_id if compressed_genome is not None else None
+            ),
+            "policy": "smaller same-width inherited candidate must pass normal gates",
+        },
         "data_growth": data_report,
         "plateau": plateau,
         "progressive_tokenizer": {
@@ -581,6 +648,12 @@ def prepare_swarm(
             "automatic_data_growth_fail_closed": True,
             "airi_pc_lab_read_only": True,
             "airi_pc_lab_training": True,
+            "active_learning": True,
+            "evolution_islands": ["language", "coding", "reasoning", "tools", "efficiency"],
+            "system_sparse_experts": True,
+            "max_active_experts": 1,
+            "compression_research": True,
+            "verified_self_play": bool(self_play.get("enabled")),
             "corpus_language_bridge": True,
             "progressive_bpe_vocab": 1024,
         },
@@ -1101,7 +1174,7 @@ def run_candidate(
 
     task_domain_weights, pretraining_domain_weights, rescue_report = (
         _language_rescue_weights(
-            dict(plan.get("domain_weights") or {}),
+            dict(row.get("domain_weights") or plan.get("domain_weights") or {}),
             documents,
             signals,
         )
@@ -1155,6 +1228,16 @@ def run_candidate(
             report,
             int(report["parameters"]),
         )
+        report["island"] = str(row.get("island") or "efficiency")
+        report["efficiency"] = efficiency_profile(
+            runtime.config,
+            report,
+        )
+        report["efficiency_bonus"] = efficiency_bonus(report["efficiency"])
+        report["score"] = float(report["score"]) + float(report["efficiency_bonus"])
+        if isinstance(report.get("fitness"), dict):
+            report["fitness"]["efficiency_bonus"] = float(report["efficiency_bonus"])
+            report["fitness"]["score_with_efficiency"] = float(report["score"])
         eligible, reason = _research_eligible(
             plan["champion_report"],
             report,
@@ -1302,6 +1385,8 @@ def run_candidate(
         "candidate_index": int(candidate_index),
         "candidate_id": genome.genome_id,
         "kind": row.get("kind"),
+        "island": str(row.get("island") or "efficiency"),
+        "domain_weights": dict(row.get("domain_weights") or {}),
         "genome": genome.to_dict(),
         "reports": reports,
         "all_seed_eligible": all(item["eligible"] for item in reports),
@@ -1325,6 +1410,8 @@ def run_candidate(
         "mean_fitness_score": float(mean(fitness_scores)),
         "best_fitness_score": float(max(fitness_scores)),
         "fitness": dict(best_report.get("fitness") or {}),
+        "efficiency": dict(best_report.get("efficiency") or {}),
+        "efficiency_bonus": float(best_report.get("efficiency_bonus", 0.0) or 0.0),
         "corpus": corpus_report,
         "checkpoint_dir": "best-checkpoint",
         "external_pretrained": False,
@@ -1774,7 +1861,11 @@ def finalize_swarm(
         "curriculum_memory": plan.get("curriculum"),
         "adaptive_curriculum": {
             "domain_weights": plan.get("domain_weights") or {},
+            "active_learning": plan.get("active_learning") or {},
         },
+        "sparse_experts": plan.get("sparse_experts") or {},
+        "self_play": plan.get("self_play") or {},
+        "compression": plan.get("compression") or {},
         "rotating_canary": {
             "cycle": cycle,
             "domains": [row.domain for row in rotating],
