@@ -184,33 +184,61 @@
     },
     "version": "airi-pc-lab-v1"
   },
-  "cycle": 115,
+  "cycle": 116,
   "evolution": {
     "curriculum_memory": {
       "added": 10,
-      "cycle": 115,
+      "cycle": 116,
       "domains": {
-        "coding": 130,
-        "data": 223,
-        "language": 185,
-        "reasoning": 230,
-        "structured": 115,
-        "tools": 117
+        "coding": 131,
+        "data": 225,
+        "language": 188,
+        "reasoning": 232,
+        "structured": 116,
+        "tools": 118
       },
       "extra_rows_considered": 10,
-      "max_rows": 5000,
+      "max_rows": 4000,
       "ok": true,
-      "stored": 1000,
+      "stored": 1010,
       "validation_overlap": []
     },
     "data_growth": {
       "added_bytes": 0,
       "added_files": 0,
-      "desired_domains": [],
-      "domain_bytes": {},
-      "domain_files": {},
-      "queries": [],
-      "rejection_counts": {},
+      "desired_domains": [
+        "reasoning",
+        "data",
+        "language-it",
+        "general",
+        "code"
+      ],
+      "domain_bytes": {
+        "code": 7210611,
+        "data": 14314555,
+        "general": 4203121,
+        "reasoning": 39544
+      },
+      "domain_files": {
+        "code": 501,
+        "data": 292,
+        "general": 387,
+        "reasoning": 8
+      },
+      "queries": [
+        "reasoning dataset license:mit",
+        "mathematics proofs license:mit",
+        "csv dataset license:mit",
+        "json dataset license:mit",
+        "natural language corpus license:mit",
+        "italian corpus license:mit",
+        "text corpus license:mit",
+        "educational corpus license:apache-2.0"
+      ],
+      "rejection_counts": {
+        "persistent_repo_cap": 13,
+        "secret_like_content": 10
+      },
       "repositories_used": 0,
       "top_repositories": [
         {
@@ -333,15 +361,15 @@
           "repo": "yohasebe/wp2txt"
         }
       ],
-      "total_bytes": 0,
-      "total_files": 0,
-      "version": null
+      "total_bytes": 25767831,
+      "total_files": 1188,
+      "version": "generalist-data-growth-v4"
     },
     "domain_weights": {
       "coding": 1.581488366999585,
-      "data": 2.369967102462194,
+      "data": 2.3699668640311633,
       "language": 3.0,
-      "reasoning": 2.235179145322497,
+      "reasoning": 2.2351793156303765,
       "structured": 1.091704699231064,
       "tools": 1.0
     },
@@ -349,23 +377,23 @@
       "all_seed_eligible": false,
       "any_generation_pathological_repetition": true,
       "any_seed_eligible": false,
-      "candidate_id": "airi-arch-4-21e14f863939",
-      "cycle": 115,
+      "candidate_id": "generalist-3-0-6c718c7e",
+      "cycle": 116,
       "external_pretrained": false,
-      "kind": "architecture_capacity_plus_structure",
+      "kind": "architecture",
       "language_bridge_rows": 32,
-      "max_generation_repeated_token_run": 18,
+      "max_generation_repeated_token_run": 20,
       "mean_generation_accuracy": 0.0,
-      "mean_generation_nonempty_rate": 1.0,
-      "mean_generation_repetition_rate": 0.44396551724137934,
-      "mean_generation_similarity": 0.2196730174372451,
-      "mean_nll_per_byte": 1.5612048263069969,
-      "parameters": 1254336,
+      "mean_generation_nonempty_rate": 0.8333333333333334,
+      "mean_generation_repetition_rate": 0.805126404494382,
+      "mean_generation_similarity": 0.21631390606776968,
+      "mean_nll_per_byte": 1.8401804798054244,
+      "parameters": 123520,
       "research_only": true,
-      "score": 39.1443117463058,
+      "score": 35.643468797437166,
       "stage": 3,
       "tokenizer_vocab_size": 384,
-      "worst_domain_regression": 0.8942106613005052
+      "worst_domain_regression": 0.6466704777308871
     },
     "plateau": {
       "generation_exact_accuracy": 0.0,
@@ -468,13 +496,11 @@
       "reasoning_gap",
       "symbolic_reasoning_signal",
       "research_curriculum_signal",
-      "deep_symbolic_signal",
-      "language_collapse",
-      "autoregressive_collapse"
+      "deep_symbolic_signal"
     ]
   },
   "generalist_version": "airi-generalist-free-speed-v4",
-  "generated_at": 1790059346,
+  "generated_at": 1790061210,
   "promoted_this_cycle": false,
   "promotion_reason": "no finalist passed every independent research gate",
   "schema": 1,
@@ -482,7 +508,7 @@
     "champion": {
       "all_seed_eligible": true,
       "context_length": 128,
-      "cycle": 115,
+      "cycle": 116,
       "files": {
         "config.json": {
           "bytes": 430,
@@ -659,7 +685,7 @@
             "max_abs_weight": 0.1364440768957138,
             "mean_abs_weight": 0.024278515949845314,
             "parameters": 3072,
-            "rms_weight": 0.03081079013645649
+            "rms_weight": 0.03081079199910164
           },
           {
             "head": 2,
@@ -668,7 +694,7 @@
             "max_abs_weight": 0.10939045250415802,
             "mean_abs_weight": 0.024038532748818398,
             "parameters": 3072,
-            "rms_weight": 0.029946373775601387
+            "rms_weight": 0.029946375638246536
           },
           {
             "head": 3,
@@ -677,7 +703,7 @@
             "max_abs_weight": 0.11839597672224045,
             "mean_abs_weight": 0.02543315477669239,
             "parameters": 3072,
-            "rms_weight": 0.0325818806886673
+            "rms_weight": 0.032581876963377
           },
           {
             "head": 0,
@@ -704,7 +730,7 @@
             "max_abs_weight": 0.14151355624198914,
             "mean_abs_weight": 0.02646651305258274,
             "parameters": 3072,
-            "rms_weight": 0.03366565704345703
+            "rms_weight": 0.03366565331816673
           },
           {
             "head": 3,
@@ -719,31 +745,31 @@
         "kind": "aggregated_checkpoint_weights",
         "note": "This is a truthful aggregate view of checkpoint weights and model topology, not a claim to display every biological-style neuron."
       },
-      "nll_per_byte": 1.8816252702437106,
-      "onnx_max_abs_error": 1.9073486328125e-06,
+      "nll_per_byte": 1.8816254237912735,
+      "onnx_max_abs_error": 2.86102294921875e-06,
       "parameters": 115328,
       "path": "champion",
       "research_only": false,
-      "score": 34.702523156129686,
+      "score": 34.70252130699776,
       "tokenizer_version": "bpe-v1",
       "tokenizer_vocab_size": 384
     },
     "research": {
       "all_seed_eligible": false,
-      "context_length": 128,
-      "cycle": 115,
+      "context_length": 256,
+      "cycle": 116,
       "files": {
         "config.json": {
-          "bytes": 426,
-          "sha256": "ee043156ebde150a546041d40cb129a6a7ca87d8547100aed8b676c8d99b9591"
+          "bytes": 430,
+          "sha256": "68299ddbcbb0d1c479a16725f8f21bc3a4a177a3eb5e5c0318a2c6d9b3b610b8"
         },
         "metadata.json": {
-          "bytes": 379,
-          "sha256": "3c9c68305d2306770fcd5cf9e437d929c7e052384efa09e71fc33c6ed1c8c57f"
+          "bytes": 377,
+          "sha256": "d9dc0f54ec3e1964b143ba7b62cd2998c31516b285ec2752e04c79e80686b6cb"
         },
         "model.onnx": {
-          "bytes": 5534050,
-          "sha256": "f7d4d219281b9e8c404fa0d4b937b520f12e6ff28f50231f7a71cccb7e005271"
+          "bytes": 717862,
+          "sha256": "5020f03f67ea8489268c6edb85592bb655959cd21f9cb9339dc669bcd91c996a"
         },
         "tokenizer.json": {
           "bytes": 4183,
@@ -751,26 +777,26 @@
         }
       },
       "generation_exact_accuracy": 0.0,
-      "generation_nonempty_rate": 1.0,
-      "generation_similarity": 0.2196730174372451,
-      "id": "airi-arch-4-21e14f863939",
+      "generation_nonempty_rate": 0.8333333333333334,
+      "generation_similarity": 0.21631390606776968,
+      "id": "generalist-3-0-6c718c7e",
       "name": "research",
       "neural": {
         "architecture": {
           "attention_type": "mha",
-          "context_length": 128,
-          "d_ff": 768,
-          "d_model": 192,
+          "context_length": 256,
+          "d_ff": 128,
+          "d_model": 64,
           "ff_variant": "swiglu",
-          "head_dim": 48,
+          "head_dim": 16,
           "local_attention_every": 0,
           "local_attention_window": 0,
           "n_heads": 4,
           "n_kv_heads": 4,
           "n_layers": 2,
           "norm_placement": "pre",
-          "norm_type": "rmsnorm",
-          "position_encoding": "rope",
+          "norm_type": "layernorm",
+          "position_encoding": "learned",
           "tied_embedding_lm_head": true,
           "type": "decoder_only_causal_transformer",
           "vocab_size": 384
@@ -779,71 +805,84 @@
           {
             "id": "embedding",
             "label": "Embedding",
-            "max_abs_weight": 0.287181556224823,
-            "mean_abs_weight": 0.04332037766774496,
-            "parameters": 73728,
-            "rms_weight": 0.06416862002305981
+            "max_abs_weight": 0.26979920268058777,
+            "mean_abs_weight": 0.08615160981814067,
+            "parameters": 24576,
+            "rms_weight": 0.10520674693293292
+          },
+          {
+            "id": "position_embedding",
+            "label": "Position Embedding",
+            "max_abs_weight": 0.13351589441299438,
+            "mean_abs_weight": 0.016276217997074127,
+            "parameters": 16384,
+            "rms_weight": 0.025286723253209235
           },
           {
             "id": "layer_0_attention",
             "label": "Layer 0 Attention",
-            "max_abs_weight": 0.09687050431966782,
-            "mean_abs_weight": 0.016926188435819414,
-            "parameters": 147456,
-            "rms_weight": 0.021264384961895658
+            "max_abs_weight": 0.15082649886608124,
+            "mean_abs_weight": 0.02476880419999361,
+            "parameters": 16384,
+            "rms_weight": 0.03131472601153347
           },
           {
             "id": "layer_0_norm",
             "label": "Layer 0 Norm",
-            "max_abs_weight": 1.0327457189559937,
-            "mean_abs_weight": 0.9996540149052938,
-            "parameters": 384,
-            "rms_weight": 0.9997297160138718
+            "max_abs_weight": 1.1384230852127075,
+            "mean_abs_weight": 0.5119631299749017,
+            "parameters": 256,
+            "rms_weight": 0.7113738091945792
           },
           {
             "id": "layer_0_ffn",
             "label": "Layer 0 Ffn",
-            "max_abs_weight": 0.10481035709381104,
-            "mean_abs_weight": 0.017545260764934397,
-            "parameters": 442368,
-            "rms_weight": 0.022008886020552884
+            "max_abs_weight": 0.19906681776046753,
+            "mean_abs_weight": 0.034926277895768486,
+            "parameters": 24576,
+            "rms_weight": 0.04350515399636466
           },
           {
             "id": "layer_1_attention",
             "label": "Layer 1 Attention",
-            "max_abs_weight": 0.10895271599292755,
-            "mean_abs_weight": 0.017051157852013905,
-            "parameters": 147456,
-            "rms_weight": 0.021383336628129645
+            "max_abs_weight": 0.1377357840538025,
+            "mean_abs_weight": 0.02492721239104867,
+            "parameters": 16384,
+            "rms_weight": 0.0314135117710679
           },
           {
             "id": "layer_1_norm",
             "label": "Layer 1 Norm",
-            "max_abs_weight": 1.0215790271759033,
-            "mean_abs_weight": 0.9925185839335123,
-            "parameters": 384,
-            "rms_weight": 0.9925494397434734
+            "max_abs_weight": 1.0509974956512451,
+            "mean_abs_weight": 0.4979215320199728,
+            "parameters": 256,
+            "rms_weight": 0.6870108870963093
           },
           {
             "id": "layer_1_ffn",
             "label": "Layer 1 Ffn",
-            "max_abs_weight": 0.10080400854349136,
-            "mean_abs_weight": 0.01705612959685149,
-            "parameters": 442368,
-            "rms_weight": 0.021374977833412283
+            "max_abs_weight": 0.1652206927537918,
+            "mean_abs_weight": 0.029422881702582043,
+            "parameters": 24576,
+            "rms_weight": 0.03683113211334909
           },
           {
             "id": "final_norm",
             "label": "Final Norm",
-            "max_abs_weight": 1.050831913948059,
-            "mean_abs_weight": 1.0245629946390789,
-            "parameters": 192,
-            "rms_weight": 1.0245891817744817
+            "max_abs_weight": 1.2011442184448242,
+            "mean_abs_weight": 0.6597387567162514,
+            "parameters": 128,
+            "rms_weight": 0.8412329163169978
           }
         ],
         "connections": [
           {
             "from": "embedding",
+            "kind": "residual_flow",
+            "to": "position_embedding"
+          },
+          {
+            "from": "position_embedding",
             "kind": "residual_flow",
             "to": "layer_0_attention"
           },
@@ -883,87 +922,87 @@
             "head": 0,
             "kind": "mha_qkv",
             "layer": 0,
-            "max_abs_weight": 0.09617108106613159,
-            "mean_abs_weight": 0.01733017899096012,
-            "parameters": 27648,
-            "rms_weight": 0.021706927567720413
+            "max_abs_weight": 0.14174671471118927,
+            "mean_abs_weight": 0.026341581717133522,
+            "parameters": 3072,
+            "rms_weight": 0.03325576335191727
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 0,
-            "max_abs_weight": 0.08900921046733856,
-            "mean_abs_weight": 0.01703435368835926,
-            "parameters": 27648,
-            "rms_weight": 0.021436290815472603
+            "max_abs_weight": 0.15082649886608124,
+            "mean_abs_weight": 0.025255965068936348,
+            "parameters": 3072,
+            "rms_weight": 0.03194725140929222
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 0,
-            "max_abs_weight": 0.09687050431966782,
-            "mean_abs_weight": 0.017156580463051796,
-            "parameters": 27648,
-            "rms_weight": 0.02155986800789833
+            "max_abs_weight": 0.10620350390672684,
+            "mean_abs_weight": 0.025228528305888176,
+            "parameters": 3072,
+            "rms_weight": 0.03131702169775963
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 0,
-            "max_abs_weight": 0.09599479287862778,
-            "mean_abs_weight": 0.016963087022304535,
-            "parameters": 27648,
-            "rms_weight": 0.02133146859705448
+            "max_abs_weight": 0.13161911070346832,
+            "mean_abs_weight": 0.025940455496311188,
+            "parameters": 3072,
+            "rms_weight": 0.033211950212717056
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 1,
-            "max_abs_weight": 0.10020613670349121,
-            "mean_abs_weight": 0.017257222905755043,
-            "parameters": 27648,
-            "rms_weight": 0.021680183708667755
+            "max_abs_weight": 0.11758492141962051,
+            "mean_abs_weight": 0.02677338570356369,
+            "parameters": 3072,
+            "rms_weight": 0.03351076319813728
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 1,
-            "max_abs_weight": 0.08941075950860977,
-            "mean_abs_weight": 0.017319699749350548,
-            "parameters": 27648,
-            "rms_weight": 0.0217429306358099
+            "max_abs_weight": 0.10689299553632736,
+            "mean_abs_weight": 0.024387182667851448,
+            "parameters": 3072,
+            "rms_weight": 0.030597863718867302
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 1,
-            "max_abs_weight": 0.10895271599292755,
-            "mean_abs_weight": 0.0173149686306715,
-            "parameters": 27648,
-            "rms_weight": 0.021635709330439568
+            "max_abs_weight": 0.1377357840538025,
+            "mean_abs_weight": 0.026837052777409554,
+            "parameters": 3072,
+            "rms_weight": 0.034117646515369415
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 1,
-            "max_abs_weight": 0.10196207463741302,
-            "mean_abs_weight": 0.017278261482715607,
-            "parameters": 27648,
-            "rms_weight": 0.021701805293560028
+            "max_abs_weight": 0.12558113038539886,
+            "mean_abs_weight": 0.025825953111052513,
+            "parameters": 3072,
+            "rms_weight": 0.032314199954271317
           }
         ],
         "kind": "aggregated_checkpoint_weights",
         "note": "This is a truthful aggregate view of checkpoint weights and model topology, not a claim to display every biological-style neuron."
       },
-      "nll_per_byte": 1.5612048263069969,
-      "onnx_max_abs_error": 4.76837158203125e-06,
-      "parameters": 1254336,
+      "nll_per_byte": 1.8401804798054244,
+      "onnx_max_abs_error": 1.1920928955078125e-06,
+      "parameters": 123520,
       "path": "research",
       "research_only": true,
-      "score": 39.1443117463058,
+      "score": 35.643468797437166,
       "tokenizer_version": "bpe-v1",
       "tokenizer_vocab_size": 384
     }
   },
-  "state_sha": "ebaebcdb1aedca03ef6ddf14369b80b0adb37164"
+  "state_sha": "345b66db6b8cadcfbb420a10bb94a484fc0d9a01"
 }
