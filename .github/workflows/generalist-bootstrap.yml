@@ -173,7 +173,34 @@ jobs:
             git add -A generalist-state
             git add -A generalist-state/bootstrap-data-active.json || true
             git commit --allow-empty -m "generalist-state: phase5 ${label}"
-            git push --quiet origin HEAD:generalist-state
+
+            # Architecture/Continuum may have completed a state-only commit
+            # after this long training segment took its snapshot.  Preserve
+            # those non-bootstrap updates and replay the Phase-5 checkpoint on
+            # top instead of losing the trained segment to non-fast-forward.
+            local pushed=false
+            for attempt in $(seq 1 8); do
+              git fetch --quiet origin generalist-state
+              remote_sha="$(git rev-parse origin/generalist-state)"
+              if ! git merge-base --is-ancestor "${remote_sha}" HEAD; then
+                echo "generalist-state advanced during Phase-5 compute; rebasing checkpoint (attempt ${attempt})."
+                if ! GIT_EDITOR=true git rebase origin/generalist-state; then
+                  git rebase --abort || true
+                  echo "Phase-5 state reconciliation conflicted; refusing an unsafe overwrite." >&2
+                  exit 1
+                fi
+              fi
+              if git push --quiet origin HEAD:generalist-state; then
+                pushed=true
+                break
+              fi
+              echo "generalist-state advanced during push; retrying reconciliation."
+              sleep 2
+            done
+            if [[ "${pushed}" != "true" ]]; then
+              echo "Could not transactionally persist Phase-5 checkpoint after retries." >&2
+              exit 1
+            fi
             cd "${GITHUB_WORKSPACE}"
           }
 
