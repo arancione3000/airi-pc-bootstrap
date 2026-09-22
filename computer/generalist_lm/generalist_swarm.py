@@ -61,7 +61,10 @@ from .research_cycle import (
     research_seed,
 )
 from .runtime import GeneralistRuntime
-from .verified_self_play import generate_verified_self_play_rows
+from .verified_self_play import (
+    generate_verified_multiagent_rows,
+    generate_verified_self_play_rows,
+)
 
 
 GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v5"
@@ -517,12 +520,28 @@ def prepare_swarm(
         champion_report,
         verified_tool_experiences=len(lab_experience_rows),
     )
-    self_play_rows, self_play_report = generate_verified_self_play_rows(
+    self_play_solver = champion_runtime
+    self_play_solver_source = "champion"
+    if bool(self_play.get("enabled")) and specialist_fusion is not None:
+        try:
+            self_play_solver = GeneralistRuntime.from_checkpoint(
+                root / str(specialist_fusion["checkpoint"]),
+                device="cpu",
+            )
+            self_play_solver_source = (
+                "specialist:" + str(specialist_fusion.get("island") or "unknown")
+            )
+        except Exception:
+            self_play_solver = champion_runtime
+            self_play_solver_source = "champion_fallback"
+    self_play_rows, self_play_report = generate_verified_multiagent_rows(
         champion_runtime,
+        self_play_solver,
         self_play,
         cycle=cycle,
         max_tasks=12,
     )
+    self_play_report["solver_source"] = self_play_solver_source
     memory = CurriculumMemory(root, max_rows=curriculum_max_rows)
     curriculum = memory.expand(
         cycle,
