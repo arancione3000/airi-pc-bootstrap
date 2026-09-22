@@ -23,6 +23,7 @@ from generalist_lm.bootstrap_data import (
 from generalist_lm.bootstrap_training import (
     _anti_collapse_rescue_gate,
     _anti_collapse_weights,
+    _assisted_capacity_target,
     _bootstrap_capacity_target,
     _bootstrap_corpus_target,
     _effective_bootstrap_target,
@@ -201,6 +202,57 @@ def test_phase5_conversation_rescue_has_explicit_capacity_rungs():
     assert _bootstrap_capacity_target(250_000_000) == 12_000_000
     assert _bootstrap_capacity_target(500_000_000) == 20_000_000
     assert _bootstrap_capacity_target(1_000_000_000) == 32_000_000
+
+
+def test_current_airi_lineage_receives_one_time_50m_capacity_assist():
+    progress = {
+        "lineage_id": "airi-5d3d25177d2e83f7",
+        "assisted_capacity_growth_completed": False,
+    }
+    assert _assisted_capacity_target(progress, current_parameters=7_021_248) == 50_000_000
+    assert _assisted_capacity_target(progress, current_parameters=49_000_000) is None
+
+    completed = dict(progress)
+    completed["assisted_capacity_growth_completed"] = True
+    assert _assisted_capacity_target(completed, current_parameters=7_021_248) is None
+
+    other = dict(progress)
+    other["lineage_id"] = "future-airi-lineage"
+    assert _assisted_capacity_target(other, current_parameters=7_021_248) is None
+
+
+def test_50m_assist_has_a_same_width_function_preserving_candidate():
+    from generalist_lm.evolution import GeneralistGenome, progressive_scale_candidate
+    from generalist_lm.model import estimate_parameter_count
+
+    live = GeneralistGenome(
+        generation=4,
+        parent_id="generalist-3-scale-56d0056e",
+        genome_id="generalist-4-scale-367e26e1",
+        context_length=128,
+        d_model=96,
+        n_heads=4,
+        n_layers=12,
+        d_ff=1888,
+        dropout=0.0,
+        learning_rate=0.0001875,
+        tokenizer_version="bpe-v1",
+        reasoning_depth=1,
+    ).validate()
+    grown = progressive_scale_candidate(
+        live,
+        target_parameters=50_000_000,
+        vocab_size=384,
+        max_width=512,
+        max_layers=12,
+        prefer_function_preserving=True,
+    )
+    parameters = estimate_parameter_count(grown.model_config(384))
+
+    assert grown.d_model == live.d_model
+    assert grown.n_layers >= live.n_layers
+    assert grown.d_ff >= live.d_ff
+    assert 49_000_000 <= parameters <= 51_000_000
 
 
 def test_phase5_capacity_growth_builds_a_larger_compatible_runtime():
