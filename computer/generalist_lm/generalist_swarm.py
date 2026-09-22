@@ -2051,13 +2051,17 @@ def finalize_swarm(
         )
     else:
         shutil.rmtree(root / "specialists", ignore_errors=True)
+        shutil.rmtree(root / "latest-research", ignore_errors=True)
+        shutil.rmtree(
+            root / "architecture-research" / "incumbent",
+            ignore_errors=True,
+        )
         specialist_state = {
             "mode": "single_lineage_evidence_only",
             "max_active_experts": 1,
             "specialists": {},
             "research_only": True,
         }
-        shutil.rmtree(root / "latest-research", ignore_errors=True)
 
     # Optionally persist the best Stage-3 research checkpoint independently from the
     # production champion. This is explicitly research-only: the Android lab
