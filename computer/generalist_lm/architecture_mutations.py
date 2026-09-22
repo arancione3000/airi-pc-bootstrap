@@ -143,6 +143,8 @@ def structural_mutations(
             "norm_placement": "pre",
             "position_encoding": "rope",
             "ff_variant": "swiglu",
+            "moe_experts": 1,
+            "moe_top_k": 1,
             "attention_type": "gqa",
             "n_kv_heads": max(1, parent.n_heads // 2),
         })
@@ -235,6 +237,8 @@ def proposal_set(
         "norm_placement": "pre",
         "position_encoding": "rope",
         "ff_variant": "swiglu",
+        "moe_experts": 1,
+        "moe_top_k": 1,
     })
     for target in targets:
         try:
