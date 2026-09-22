@@ -18,6 +18,8 @@ from generalist_lm.bootstrap_data import (
 from generalist_lm.bootstrap_training import (
     _anti_collapse_rescue_gate,
     _anti_collapse_weights,
+    _bootstrap_capacity_target,
+    _bootstrap_corpus_target,
     _effective_bootstrap_target,
     _filter_protected_replay,
 )
@@ -42,6 +44,20 @@ def test_phase5_cumulative_target_never_shrinks_on_maintenance_run():
     assert _effective_bootstrap_target(1_000_000, {"target_tokens": 5_000_000}) == 5_000_000
     assert _effective_bootstrap_target(20_000_000, {"target_tokens": 5_000_000}) == 20_000_000
     assert _effective_bootstrap_target(1_000_000, {}) == 1_000_000
+
+
+def test_phase5_conversation_rescue_separates_unique_corpus_from_training_budget():
+    assert _bootstrap_corpus_target(1_000_000) == 1_000_000
+    assert _bootstrap_corpus_target(5_000_000) == 5_000_000
+    assert _bootstrap_corpus_target(20_000_000) == 5_000_000
+    assert _bootstrap_corpus_target(50_000_000) == 5_000_000
+
+
+def test_phase5_conversation_rescue_has_explicit_capacity_rungs():
+    assert _bootstrap_capacity_target(5_000_000) is None
+    assert _bootstrap_capacity_target(19_999_999) is None
+    assert _bootstrap_capacity_target(20_000_000) == 1_250_000
+    assert _bootstrap_capacity_target(50_000_000) == 3_000_000
 
 def test_phase5_holdout_suite_is_explicit_and_protected():
     assert len(PHASE5_PROBES) == 7
