@@ -279,6 +279,47 @@ def _phase5_language_fusion_candidate(
         return None
 
 
+def _persisted_specialist_candidate(
+    root: Path,
+    *,
+    champion_id: str,
+    max_params: int,
+) -> dict[str, Any] | None:
+    specialists = root / "specialists"
+    rows: list[dict[str, Any]] = []
+    for island in ("language", "coding", "reasoning", "tools", "efficiency"):
+        folder = specialists / island
+        summary_path = folder / "summary.json"
+        if not summary_path.is_file() or not (folder / "model.pt").is_file():
+            continue
+        try:
+            summary = _load_json(summary_path)
+            genome = GeneralistGenome(**dict(summary.get("genome") or {})).validate()
+        except Exception:
+            continue
+        if genome.genome_id == champion_id:
+            continue
+        if int(summary.get("parameters", 0) or 0) > int(max_params):
+            continue
+        if not bool(summary.get("research_only", True)):
+            continue
+        rows.append({
+            "island": island,
+            "checkpoint": str(Path("specialists") / island),
+            "summary": summary,
+            "genome": genome,
+        })
+    if not rows:
+        return None
+    rows.sort(
+        key=lambda row: (
+            -float((row["summary"] or {}).get("mean_fitness_score", 0.0) or 0.0),
+            int((row["summary"] or {}).get("parameters", 1 << 60) or (1 << 60)),
+        )
+    )
+    return rows[0]
+
+
 def prepare_swarm(
     state_dir: str | Path,
     output_path: str | Path,
@@ -452,6 +493,11 @@ def prepare_swarm(
         vocab_size=champion_runtime.tokenizer.vocab_size,
         target_ratio=0.72,
     )
+    specialist_fusion = _persisted_specialist_candidate(
+        root,
+        champion_id=champion_genome.genome_id,
+        max_params=int(max_params),
+    )
     generated = generate_challengers(
         champion_genome,
         signals=signals,
@@ -469,6 +515,8 @@ def prepare_swarm(
         # weights rather than replacing them with a fresh continual copy.
         rows.append(("language_fusion", language_fusion["genome"]))
     rows.append(("continual", _continual_genome(champion_genome, cycle)))
+    if specialist_fusion is not None:
+        rows.append(("specialist_fusion", specialist_fusion["genome"]))
     rows.extend(scale_genomes)
     if compressed_genome is not None:
         rows.append(("compression", compressed_genome))
@@ -480,6 +528,8 @@ def prepare_swarm(
         kind = str(candidate.get("kind") or "")
         if kind == "language_fusion":
             island = "language"
+        elif kind == "specialist_fusion" and specialist_fusion is not None:
+            island = str(specialist_fusion["island"])
         elif kind == "compression" or kind.startswith("progressive_scale"):
             island = "efficiency"
         else:
@@ -500,6 +550,20 @@ def prepare_swarm(
             candidate["initial_checkpoint"] = str(language_fusion["checkpoint"])
             candidate["initial_checkpoint_mode"] = "language_fusion"
             candidate["fusion_evidence"] = fusion_evidence
+            break
+    if specialist_fusion is not None:
+        specialist_genome = specialist_fusion["genome"]
+        for candidate in candidates:
+            if candidate.get("candidate_id") != specialist_genome.genome_id:
+                continue
+            candidate["initial_checkpoint"] = str(specialist_fusion["checkpoint"])
+            candidate["initial_checkpoint_mode"] = "specialist_fusion"
+            candidate["specialist_evidence"] = dict(specialist_fusion["summary"])
+            candidate["island"] = str(specialist_fusion["island"])
+            candidate["domain_weights"] = island_weights(
+                domain_weights,
+                candidate["island"],
+            )
             break
     # If a duplicate collapsed the population, rotate deeper into the standard
     # mutation library until the requested matrix is full.
@@ -526,6 +590,8 @@ def prepare_swarm(
         kind = str(candidate.get("kind") or "")
         if kind == "language_fusion":
             island = "language"
+        elif kind == "specialist_fusion" and specialist_fusion is not None:
+            island = str(specialist_fusion["island"])
         elif kind == "compression" or kind.startswith("progressive_scale"):
             island = "efficiency"
         else:
@@ -612,6 +678,16 @@ def prepare_swarm(
         },
         "converged_champion": {
             "language_fusion_available": language_fusion is not None,
+            "specialist_fusion_available": specialist_fusion is not None,
+            "specialist_teacher": (
+                {
+                    "island": specialist_fusion["island"],
+                    "checkpoint": specialist_fusion["checkpoint"],
+                    "summary": specialist_fusion["summary"],
+                }
+                if specialist_fusion is not None
+                else None
+            ),
             "language_teacher": (
                 {
                     key: value
@@ -1543,6 +1619,7 @@ def _persist_specialist_checkpoints(
             "research_only": True,
             "production_qualified": False,
             "external_pretrained": False,
+            "genome": dict(row.get("genome") or {}),
         }
         destination = specialists_root / island
         existing_summary = (
