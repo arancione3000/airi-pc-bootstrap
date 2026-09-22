@@ -296,11 +296,16 @@ class GeneralistController(context: Context) : Closeable {
                     }
 
                     var slotName = _state.value.selectedSlot
-                    if (!fetched.manifest.slots.containsKey(slotName)) {
+                    val liveSlot = fetched.manifest.slots["champion"]
+                    val researchSlot = fetched.manifest.slots["research"]
+                    if (
+                        !fetched.manifest.slots.containsKey(slotName) ||
+                        (slotName == "research" && sameModelArtifact(liveSlot, researchSlot))
+                    ) {
                         slotName = "champion"
                     }
                     val slot = fetched.manifest.slots[slotName]
-                        ?: error("Bundle champion non disponibile")
+                        ?: error("Bundle AIRI Live non disponibile")
                     val key = slot.files["model.onnx"]?.sha256
                         ?: error("Hash modello mancante")
 
@@ -381,7 +386,7 @@ class GeneralistController(context: Context) : Closeable {
     }
 
     private fun labelFor(slot: String) =
-        if (slot == "research") "Latest Research" else "Champion"
+        if (slot == "research") "Research Snapshot" else "AIRI Live"
 
     override fun close() {
         scope.cancel()
@@ -542,22 +547,29 @@ private fun ModelPanel(
 ) {
     val manifest = state.manifest
     val selected = manifest?.slots?.get(state.selectedSlot)
+    val hasDistinctResearch = manifest?.let {
+        val live = it.slots["champion"]
+        val research = it.slots["research"]
+        research != null && !sameModelArtifact(live, research)
+    } == true
     Card {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 FilterChip(
                     selected = state.selectedSlot == "champion",
                     onClick = { onSelectSlot("champion") },
-                    label = { Text("Champion") },
+                    label = { Text("AIRI Live") },
                     enabled = manifest?.slots?.containsKey("champion") != false,
                 )
-                Spacer(Modifier.width(8.dp))
-                FilterChip(
-                    selected = state.selectedSlot == "research",
-                    onClick = { onSelectSlot("research") },
-                    label = { Text("Latest Research") },
-                    enabled = manifest?.slots?.containsKey("research") == true,
-                )
+                if (hasDistinctResearch) {
+                    Spacer(Modifier.width(8.dp))
+                    FilterChip(
+                        selected = state.selectedSlot == "research",
+                        onClick = { onSelectSlot("research") },
+                        label = { Text("Research Snapshot") },
+                        enabled = true,
+                    )
+                }
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onClear) { Text("Pulisci chat") }
             }
@@ -712,17 +724,17 @@ private fun ChatPanel(
         state.comparison?.let { comparison ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(10.dp)) {
-                    Text("Stesso prompt · Champion vs Latest Research", fontWeight = FontWeight.Bold)
+                    Text("Stesso prompt · AIRI Live vs Research Snapshot", fontWeight = FontWeight.Bold)
                     Text("Prompt: ${comparison.prompt}", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(4.dp))
-                    Text("Champion · ${comparison.championMs} ms", fontWeight = FontWeight.SemiBold)
+                    Text("AIRI Live · ${comparison.championMs} ms", fontWeight = FontWeight.SemiBold)
                     Text(if (comparison.champion.text.isEmpty()) "∅" else comparison.champion.text)
                     Text(
                         "${comparison.champion.generatedTokenIds.size} tok · rep ${fmt(comparison.champion.repetitionRate)} · H ${fmt(comparison.champion.meanEntropy)}",
                         style = MaterialTheme.typography.labelSmall,
                     )
                     Spacer(Modifier.height(5.dp))
-                    Text("Latest Research · ${comparison.researchMs} ms", fontWeight = FontWeight.SemiBold)
+                    Text("Research Snapshot · ${comparison.researchMs} ms", fontWeight = FontWeight.SemiBold)
                     Text(if (comparison.research.text.isEmpty()) "∅" else comparison.research.text)
                     Text(
                         "${comparison.research.generatedTokenIds.size} tok · rep ${fmt(comparison.research.repetitionRate)} · H ${fmt(comparison.research.meanEntropy)}",
@@ -765,9 +777,13 @@ private fun ChatPanel(
                 !state.loadingModel &&
                 !state.generating &&
                 !state.comparing &&
-                state.manifest?.slots?.containsKey("research") == true,
+                state.manifest?.let {
+                    val live = it.slots["champion"]
+                    val research = it.slots["research"]
+                    research != null && !sameModelArtifact(live, research)
+                } == true,
         ) {
-            Text(if (state.comparing) "Confronto…" else "Confronta Champion / Latest Research")
+            Text(if (state.comparing) "Confronto…" else "Confronta AIRI Live / Research Snapshot")
         }
     }
 }
