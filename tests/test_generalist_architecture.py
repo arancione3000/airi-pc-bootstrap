@@ -114,6 +114,44 @@ def test_parameter_ladder_exposes_multiple_future_tiers():
     ]
 
 
+def test_parameter_ladder_keeps_capacity_headroom_after_50m():
+    assert next_parameter_tiers(50_000_000, cap=67_500_000, limit=3) == [64_000_000]
+    assert next_parameter_tiers(64_000_000, cap=96_000_000, limit=3) == [
+        80_000_000,
+        96_000_000,
+    ]
+
+
+def test_capacity_proposals_can_scale_a_12_layer_live_airi():
+    parent = ArchitectureSpec(
+        architecture_id="airi-50m-parent",
+        generation=5,
+        parent_id="previous",
+        context_length=128,
+        d_model=96,
+        n_heads=4,
+        n_layers=12,
+        d_ff=13_000,
+        tokenizer_version="bpe-v1",
+        target_vocab_size=384,
+    ).validate()
+    proposals = proposal_set(
+        parent,
+        signals=["reasoning_gap"],
+        parameter_cap=67_500_000,
+        max_candidates=24,
+        max_width=512,
+        max_layers=14,
+    )
+    capacity = [
+        row for row in proposals
+        if row["kind"] in {"capacity_scale", "capacity_plus_structure"}
+    ]
+    assert capacity
+    assert any(int(row["parameter_estimate"]) > 50_000_000 for row in capacity)
+    assert all(int(row["parameter_estimate"]) <= 67_500_000 for row in capacity)
+
+
 def test_capacity_probes_receive_more_training_budget():
     assert _capacity_budget_multiplier(
         "architecture_control",
