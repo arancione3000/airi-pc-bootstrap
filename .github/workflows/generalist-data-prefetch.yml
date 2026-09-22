@@ -1,0 +1,98 @@
+name: AIRI Generalist 100M Data Prefetch
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/generalist-data-prefetch.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: airi-generalist-data-prefetch
+  cancel-in-progress: true
+
+jobs:
+  prefetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: computer
+      STATE_REPO: /tmp/airi-generalist-prefetch-state
+      STATE_DIR: /tmp/airi-generalist-prefetch-state/generalist-state
+      CACHE_DIR: /tmp/airi-generalist-phase5-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: computer/mathesis/requirements.txt
+
+      - name: Install bounded data runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check 'datasets>=3.6,<5'
+
+      - name: Restore reusable 100M corpus cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CACHE_DIR }}
+          key: airi-generalist-phase5-data-v2-${{ runner.os }}-100000000
+
+      - name: Read current live AIRI tokenizer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf "${STATE_REPO}"
+          git clone --quiet --branch generalist-state --single-branch \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "${STATE_REPO}"
+          test -d "${STATE_DIR}/bootstrap-data/candidate"
+          test -s "${STATE_DIR}/bootstrap-data/manifest.json"
+
+      - name: Prefetch and cache the 100M-rung unique corpus
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from generalist_lm.bootstrap_data import build_bootstrap_bundle
+          from generalist_lm.runtime import GeneralistRuntime
+
+          state = Path('/tmp/airi-generalist-prefetch-state/generalist-state')
+          cache = Path('/tmp/airi-generalist-phase5-cache')
+          runtime = GeneralistRuntime.from_checkpoint(
+              state / 'bootstrap-data' / 'candidate',
+              device='cpu',
+          )
+          previous = json.loads(
+              (state / 'bootstrap-data' / 'manifest.json').read_text(encoding='utf-8')
+          )
+          bundle = build_bootstrap_bundle(
+              runtime.tokenizer,
+              cache_dir=cache,
+              target_tokens=20_000_000,
+              previous_manifest=previous,
+          )
+          selected = int(bundle.manifest.get('actual_selected_tokens', 0) or 0)
+          assert selected >= 19_000_000, selected
+          print(json.dumps({
+              'ok': True,
+              'selected_tokens': selected,
+              'tokenizer_version': runtime.tokenizer.version,
+              'tokenizer_vocab_size': runtime.tokenizer.vocab_size,
+              'sources': [row.get('id') for row in bundle.manifest.get('sources', [])],
+          }, indent=2, sort_keys=True))
+          PY
+
+      - name: Verify cached streamed shards exist
+        run: |
+          set -euo pipefail
+          find "${CACHE_DIR}" -maxdepth 1 -type f -name 'fineweb*.jsonl.gz' -print
+          test "$(find "${CACHE_DIR}" -maxdepth 1 -type f -name 'fineweb*.jsonl.gz' | wc -l)" -ge 2
