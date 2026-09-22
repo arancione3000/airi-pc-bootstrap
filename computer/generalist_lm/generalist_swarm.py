@@ -1962,6 +1962,7 @@ def finalize_swarm(
     output_path: str | Path,
     *,
     allow_direct_promotion: bool = True,
+    persist_research_checkpoints: bool = True,
 ) -> dict[str, Any]:
     root = Path(state_dir).expanduser().resolve()
     plan = _load_json(plan_path)
@@ -1975,13 +1976,23 @@ def finalize_swarm(
         for path, row in scanned
         if row.get("all_seed_eligible")
     ]
-    specialist_state = _persist_specialist_checkpoints(
-        root,
-        scanned,
-        cycle=int(plan["cycle"]),
-    )
+    if persist_research_checkpoints:
+        specialist_state = _persist_specialist_checkpoints(
+            root,
+            scanned,
+            cycle=int(plan["cycle"]),
+        )
+    else:
+        shutil.rmtree(root / "specialists", ignore_errors=True)
+        specialist_state = {
+            "mode": "single_lineage_evidence_only",
+            "max_active_experts": 1,
+            "specialists": {},
+            "research_only": True,
+        }
+        shutil.rmtree(root / "latest-research", ignore_errors=True)
 
-    # Persist the best Stage-3 research checkpoint independently from the
+    # Optionally persist the best Stage-3 research checkpoint independently from the
     # production champion. This is explicitly research-only: the Android lab
     # can inspect cycle-to-cycle progress without bypassing promotion gates.
     latest_research_summary = None
@@ -2006,8 +2017,9 @@ def finalize_swarm(
         )
         if research_checkpoint.is_dir():
             latest_root = root / "latest-research"
-            shutil.rmtree(latest_root, ignore_errors=True)
-            shutil.copytree(research_checkpoint, latest_root)
+            if persist_research_checkpoints:
+                shutil.rmtree(latest_root, ignore_errors=True)
+                shutil.copytree(research_checkpoint, latest_root)
             latest_research_summary = {
                 "candidate_id": str(research_row.get("candidate_id") or ""),
                 "kind": research_row.get("kind"),
@@ -2053,7 +2065,11 @@ def finalize_swarm(
                 "external_pretrained": False,
                 "research_only": True,
             }
-            _atomic_json(latest_root / "research-summary.json", latest_research_summary)
+            if persist_research_checkpoints:
+                _atomic_json(
+                    latest_root / "research-summary.json",
+                    latest_research_summary,
+                )
 
     promoted = False
     winner_summary = None
@@ -2141,6 +2157,7 @@ def finalize_swarm(
                 "nll_per_byte": verified.get("nll_per_byte"),
                 "checkpoint_dir": str(winner.get("checkpoint_dir") or "best-checkpoint"),
                 "result_path": str(result_path),
+                "genome": genome.to_dict(),
             }
             if allow_direct_promotion:
                 _save_champion(root, genome, runtime, verified)
@@ -2321,6 +2338,7 @@ def finalize_swarm(
             "parallel_swarm": "8->4->2",
             "candidate_can_self_promote": False,
             "direct_research_checkpoint_promotion": bool(allow_direct_promotion),
+            "persistent_research_checkpoints": bool(persist_research_checkpoints),
             "single_lineage_migration_required": not bool(allow_direct_promotion),
             "external_reducer": True,
             "production_qualification_separate": True,
