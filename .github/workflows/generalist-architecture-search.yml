@@ -191,7 +191,9 @@ jobs:
 
   stage2:
     needs: [plan, reduce1]
-    if: needs.plan.outputs.run_search == 'true'
+    # A dead/cancelled Stage-1 runner must not poison the whole experiment.
+    # reduce1 already consumed only valid uploaded reports.
+    if: ${{ always() && needs.plan.result == 'success' && needs.reduce1.result == 'success' && needs.plan.outputs.run_search == 'true' }}
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -244,7 +246,9 @@ jobs:
 
   stage3:
     needs: [plan, reduce2]
-    if: needs.plan.outputs.run_search == 'true'
+    # Same fault-tolerance rule after Stage 2: continue with whatever the
+    # successful reducer could prove, independent of failed sibling workers.
+    if: ${{ always() && needs.plan.result == 'success' && needs.reduce2.result == 'success' && needs.plan.outputs.run_search == 'true' }}
     strategy:
       fail-fast: false
       max-parallel: 2
