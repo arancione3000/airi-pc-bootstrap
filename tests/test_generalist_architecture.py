@@ -760,3 +760,17 @@ def test_structural_mutations_include_recurrent_and_internal_moe_lanes():
     assert moe
     assert all(row.moe_experts >= 2 and row.moe_top_k >= 1 for row in moe)
     assert len({row.fingerprint() for row in mutations}) == len(mutations)
+
+
+def test_generic_architecture_run_yields_only_to_active_explicit_handoff():
+    workflow = Path(
+        ".github/workflows/generalist-architecture-search.yml"
+    ).read_text(encoding="utf-8")
+
+    assert '"${FORCE_SEARCH}" != "true"' in workflow
+    assert 'select(.event == "workflow_dispatch")' in workflow
+    assert 'select(.id != $current_id)' in workflow
+    assert "explicit_active > 0" in workflow
+    assert "explicit_live_lineage_handoff_owns_architecture_window" in workflow
+    assert "generic search yields to it" in workflow
+    assert '"${EVENT_NAME}" == "push"' not in workflow
