@@ -30,7 +30,7 @@ concurrency:
 jobs:
   bootstrap:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 330
     env:
       PYTHONPATH: computer
       STATE_REPO: /tmp/airi-generalist-phase5-state-repo
@@ -227,7 +227,7 @@ jobs:
             -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${TARGET_TOKENS}\"}}"
           echo "NEXT_BOOTSTRAP_TARGET=${TARGET_TOKENS}" >> "${GITHUB_ENV}"
 
-      - name: Continue ladder only when measured benefit justifies it
+      - name: Continue bounded 100M conversational bootstrap ladder
         if: env.RUNG_COMPLETE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -246,20 +246,20 @@ jobs:
           next=""
 
           if [[ "${current}" -lt 5000000 ]]; then
-            # 1M is a bootstrap diagnostic rung, not permission to give up.
+            # 1M is a diagnostic rung, never the terminal language budget.
             next=5000000
-          elif [[ "${current}" -lt 20000000 ]] && \
-               { [[ "${minimum_success}" == "true" ]] || \
-                 [[ "${pathological}" == "true" ]] || \
-                 [[ "${model_parameters}" -lt 1000000 ]] || \
-                 awk "BEGIN {exit !(${after_nll} < ${before_nll} - 0.08 && ${after_rep} < ${before_rep})}"; }; then
-            # Conversation rescue rung: bootstrap_training grows the candidate
-            # toward ~1.25M parameters and performs repeated optimization passes
-            # over the pinned ~5M-token reviewed corpus.
+          elif [[ "${current}" -lt 20000000 ]]; then
+            # First capacity rescue: ~1.25M parameters.
             next=20000000
-          elif [[ "${minimum_success}" == "true" && "${current}" -lt 50000000 ]] && \
-               awk "BEGIN {exit !(${after_nll} < ${before_nll} - 0.25 && ${multiword} >= 0.50)}"; then
+          elif [[ "${current}" -lt 50000000 ]]; then
+            # Continue the explicitly requested bounded rescue even when the
+            # candidate is still research-only. Promotion gates remain fail-closed.
             next=50000000
+          elif [[ "${current}" -lt 100000000 ]]; then
+            # Final requested language-bootstrap rung: ~7M parameters and
+            # 100M cumulative causal tokens seen. The manifest still reports
+            # unique source tokens separately from repeated optimization passes.
+            next=100000000
           fi
 
           if [[ -n "${next}" ]]; then
