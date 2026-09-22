@@ -95,7 +95,10 @@ def read(path):
 
 def search(query:str,path='.',limit=100,regex:bool=False,case_sensitive:bool=False):
     r=safe_path(path); out=[]; flags=0 if case_sensitive else re.IGNORECASE; pattern=re.compile(query,flags) if regex else None; needle=query if case_sensitive else query.casefold()
-    for p in r.rglob('*'):
+    # Filesystem traversal order is not stable across runners/filesystems.
+    # A coding agent needs repeatable search results so ranking, tests and
+    # downstream patches do not depend on incidental directory enumeration.
+    for p in sorted(r.rglob('*'), key=lambda item: str(item.relative_to(r))):
         if not p.is_file() or '.git' in p.parts or '.venv' in p.parts or '__pycache__' in p.parts: continue
         try: lines=p.read_text(errors='replace').splitlines()
         except Exception: continue
