@@ -23,6 +23,7 @@ from generalist_lm.bootstrap_training import (
     _effective_bootstrap_target,
     _filter_protected_replay,
     _grow_bootstrap_runtime,
+    _phase5_success,
 )
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
 from generalist_lm.pretraining import CorpusDocument
@@ -90,6 +91,29 @@ def test_phase5_capacity_growth_builds_a_larger_compatible_runtime():
     assert grown.config.to_dict() == grown_genome.model_config(
         grown.tokenizer.vocab_size
     ).to_dict()
+
+
+def test_phase5_success_requires_multiword_output():
+    before = {
+        "language_nll": 4.0,
+        "repetition_rate": 0.50,
+    }
+    almost = {
+        "language_nll": 3.5,
+        "pathological_repetition": False,
+        "repetition_rate": 0.40,
+        "non_empty_rate": 1.0,
+        "word_output_rate": 1.0,
+        "multiword_output_rate": 0.20,
+    }
+    ok, reasons = _phase5_success(before, almost)
+    assert not ok
+    assert any("multi-word" in reason for reason in reasons)
+
+    conversational = dict(almost)
+    conversational["multiword_output_rate"] = 0.60
+    ok, reasons = _phase5_success(before, conversational)
+    assert ok, reasons
 
 def test_phase5_holdout_suite_is_explicit_and_protected():
     assert len(PHASE5_PROBES) == 7
