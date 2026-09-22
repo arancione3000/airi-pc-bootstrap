@@ -896,6 +896,10 @@ def run_segment(
     optimizer_path = bootstrap_root / "optimizer.pt"
     manifest_path = bootstrap_root / "manifest.json"
     before_path = bootstrap_root / "before.json"
+    after_path = bootstrap_root / "after.json"
+    language_guard_path = bootstrap_root / "language-guard.json"
+    segment_guard_path = bootstrap_root / "segment-guard-last.json"
+    segment_best_dir = bootstrap_root / ".segment-best"
     bootstrap_root.mkdir(parents=True, exist_ok=True)
 
     status = _load_json(root / "status.json")
@@ -1193,6 +1197,47 @@ def run_segment(
     if optimizer_path.is_file():
         optimizer.load_state_dict(torch.load(optimizer_path, map_location="cpu", weights_only=True))
 
+    segment_language_before = evaluate_phase5_language(runtime)
+    guard_payload = _load_json(language_guard_path) if language_guard_path.is_file() else {}
+    guard_anchor = (
+        dict(guard_payload.get("report") or {})
+        if isinstance(guard_payload, dict)
+        else {}
+    )
+    if not guard_anchor:
+        historical = _load_json(after_path) if after_path.is_file() else {}
+        if (
+            isinstance(historical, dict)
+            and historical
+            and _language_quality(historical) > _language_quality(segment_language_before)
+        ):
+            guard_anchor = historical
+            guard_source = "best_completed_rung"
+        else:
+            guard_anchor = segment_language_before
+            guard_source = "current_live_lineage"
+        _atomic_json(
+            language_guard_path,
+            {
+                "schema": 1,
+                "version": "phase5-segment-language-guard-v1",
+                "source": guard_source,
+                "report": guard_anchor,
+                "created_at_unix": int(time.time()),
+            },
+        )
+
+    progress_before_segment = copy.deepcopy(progress)
+    consecutive_rejections = int(
+        progress.get("segment_guard_consecutive_rejections", 0) or 0
+    )
+    segment_lr_scale = max(
+        0.125,
+        min(1.0, float(progress.get("segment_guard_lr_scale", 1.0) or 1.0)),
+    )
+    retry_seed_offset = int(consecutive_rejections) * 1_000_003
+    shutil.rmtree(segment_best_dir, ignore_errors=True)
+
     processed_before_segment = int(progress.get("tokens_processed", 0) or 0)
     segment_budget = max(1, int(segment_tokens))
     eval_every_steps = max(8, int(eval_every_steps))
@@ -1215,13 +1260,13 @@ def run_segment(
         )
         progress["curriculum_stage"] = stage
         train_blocks = stage_blocks[stage]
-        rng = random.Random(5_000_000 + step)
+        rng = random.Random(5_000_000 + step + retry_seed_offset)
         indices = [rng.randrange(len(train_blocks)) for _ in range(max(1, int(batch_size)))]
         ids, labels = _batch(train_blocks, indices, device=runtime.device)
         optimizer.zero_grad(set_to_none=True)
 
         lr = _learning_rate(
-            base_lr=float(base_learning_rate),
+            base_lr=float(base_learning_rate) * segment_lr_scale,
             processed_tokens=int(progress["tokens_processed"]),
             target_tokens=target_tokens,
             warmup_tokens=min(100_000, max(20_000, target_tokens // 10)),
@@ -1268,9 +1313,9 @@ def run_segment(
                 best_loss = float(last_validation_loss)
                 bad_eval_count = 0
                 runtime.save_checkpoint(
-                    bootstrap_root / "best",
+                    segment_best_dir,
                     metadata={
-                        "role": "phase5_language_bootstrap_best",
+                        "role": "phase5_language_bootstrap_segment_best",
                         "validation_loss": best_loss,
                         "tokens_processed": int(progress["tokens_processed"]),
                     },
@@ -1293,6 +1338,120 @@ def run_segment(
                 break
             runtime.model.train()
 
+    segment_language_after = evaluate_phase5_language(runtime)
+    segment_accepted, segment_guard = _segment_language_gate(
+        segment_language_before,
+        segment_language_after,
+        guard_anchor,
+    )
+    attempted_tokens = int(progress["tokens_processed"]) - processed_before_segment
+    attempted_steps = int(progress["steps"]) - int(
+        progress_before_segment.get("steps", 0) or 0
+    )
+    segment_guard.update({
+        "attempted_tokens": int(attempted_tokens),
+        "attempted_steps": int(attempted_steps),
+        "learning_rate_scale": float(segment_lr_scale),
+        "consecutive_rejections_before": int(consecutive_rejections),
+    })
+    _atomic_json(segment_guard_path, segment_guard)
+
+    if not segment_accepted:
+        # candidate_dir and optimizer.pt still contain the exact pre-segment
+        # state because they are written only after this gate passes.
+        shutil.rmtree(segment_best_dir, ignore_errors=True)
+        progress = progress_before_segment
+        history = list(progress.get("segment_guard_rejections") or [])
+        history.append({
+            "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
+            "attempted_tokens": int(attempted_tokens),
+            "attempted_steps": int(attempted_steps),
+            "before_quality": float(segment_guard["before_quality"]),
+            "after_quality": float(segment_guard["after_quality"]),
+            "recovery_mode": bool(segment_guard["recovery_mode"]),
+            "reasons": list(segment_guard.get("local_reasons") or [])
+                + list(segment_guard.get("after_anchor_violations") or []),
+            "learning_rate_scale": float(segment_lr_scale),
+        })
+        progress["segment_guard_rejections"] = history[-32:]
+        progress["segment_guard_consecutive_rejections"] = int(
+            consecutive_rejections + 1
+        )
+        progress["segment_guard_lr_scale"] = max(
+            0.125,
+            float(segment_lr_scale) * 0.5,
+        )
+        progress["segment_guard_last_accepted"] = False
+        progress["segment_guard_recovery_mode"] = bool(
+            segment_guard.get("recovery_mode")
+        )
+        progress["early_stopped"] = False
+        progress["rung_complete"] = False
+        progress["updated_at_unix"] = int(time.time())
+        _atomic_json(progress_path, progress)
+        lineage_manifest = refresh_live_lineage_manifest(
+            root,
+            reason="phase5_segment_language_guard_rollback",
+        )
+        return {
+            "ok": True,
+            "lineage_id": lineage_manifest.get("lineage_id"),
+            "active_lineage_checkpoint": lineage_manifest.get("active_checkpoint"),
+            "version": PHASE5_BOOTSTRAP_VERSION,
+            "target_tokens": target_tokens,
+            "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
+            "segment_tokens_processed": 0,
+            "steps": int(progress.get("steps", 0) or 0),
+            "rung_complete": False,
+            "early_stopped": False,
+            "segment_rejected": True,
+            "segment_guard_path": str(segment_guard_path),
+            "next_learning_rate_scale": float(progress["segment_guard_lr_scale"]),
+        }
+
+    if segment_best_dir.is_dir():
+        shutil.rmtree(bootstrap_root / "best", ignore_errors=True)
+        segment_best_dir.rename(bootstrap_root / "best")
+
+    progress["segment_guard_consecutive_rejections"] = 0
+    progress["segment_guard_lr_scale"] = min(
+        1.0,
+        max(0.125, float(segment_lr_scale) * 1.20),
+    )
+    progress["segment_guard_last_accepted"] = True
+    progress["segment_guard_recovery_mode"] = bool(segment_guard.get("recovery_mode"))
+    accepted_history = list(progress.get("segment_guard_acceptances") or [])
+    accepted_history.append({
+        "tokens_processed": int(progress["tokens_processed"]),
+        "segment_tokens": int(attempted_tokens),
+        "before_quality": float(segment_guard["before_quality"]),
+        "after_quality": float(segment_guard["after_quality"]),
+        "recovery_mode": bool(segment_guard["recovery_mode"]),
+        "learning_rate_scale": float(segment_lr_scale),
+    })
+    progress["segment_guard_acceptances"] = accepted_history[-32:]
+
+    if _language_quality(segment_language_after) > _language_quality(guard_anchor) + 0.005:
+        runtime.save_checkpoint(
+            bootstrap_root / "language-guard-best",
+            metadata={
+                "role": "phase5_language_guard_best",
+                "tokens_processed": int(progress["tokens_processed"]),
+                "language_quality": float(_language_quality(segment_language_after)),
+            },
+        )
+        _atomic_json(
+            language_guard_path,
+            {
+                "schema": 1,
+                "version": "phase5-segment-language-guard-v1",
+                "source": "accepted_segment_improvement",
+                "report": segment_language_after,
+                "tokens_processed": int(progress["tokens_processed"]),
+                "updated_at_unix": int(time.time()),
+            },
+        )
+
     runtime.save_checkpoint(
         candidate_dir,
         metadata={
@@ -1301,6 +1460,7 @@ def run_segment(
             "base_champion_model_sha256": base_model_sha,
             "tokens_processed": int(progress["tokens_processed"]),
             "target_tokens": target_tokens,
+            "segment_language_guard": True,
         },
     )
     torch.save(optimizer.state_dict(), optimizer_path)
