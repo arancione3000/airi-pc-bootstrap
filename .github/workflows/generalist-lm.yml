@@ -119,12 +119,15 @@ jobs:
           text = Path(".github/workflows/generalist-continuum.yml").read_text(
               encoding="utf-8"
           )
+          push_only_cancel = (
+              "cancel-in-progress: $" + "{{ github.event_name == 'push' }}"
+          )
           required = [
               "actions: write",
               "Hand off to the next autonomous Free-Speed cycle",
               "actions/workflows/generalist-continuum.yml/dispatches",
               "Another Generalist continuum run is already queued/running",
-              "cancel-in-progress: ${{ github.event_name == 'push' }}",
+              push_only_cancel,
           ]
           missing = [item for item in required if item not in text]
           assert not missing, f"Free-Speed continuity contract missing: {missing}"
