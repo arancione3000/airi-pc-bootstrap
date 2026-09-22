@@ -12,16 +12,22 @@ from generalist_lm.bootstrap_data import (
     _oasst_conversations,
     _parse_oasst,
 )
-from generalist_lm.bootstrap_training import _effective_bootstrap_target
+from generalist_lm.bootstrap_training import (
+    _effective_bootstrap_target,
+    _filter_protected_replay,
+)
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
 from generalist_lm.phase5_diagnostics import (
     PHASE5_PROBES,
     degeneration_gate,
     evaluate_phase5_language,
+    evaluate_sft_validation,
     protected_bootstrap_texts,
+    sft_validation_gate,
 )
 from generalist_lm.runtime import GeneralistRuntime
 from generalist_lm.tokenizer import ByteTokenizer
+from generalist_lm.training import SFTExample
 
 
 
@@ -109,6 +115,98 @@ def test_degeneration_gate_rejects_repeated_token_collapse():
     ok, reason = degeneration_gate(before, after)
     assert not ok
     assert "repetition" in reason
+
+
+def test_sft_gate_compares_against_pre_sft_baseline_instead_of_rejecting_existing_pathology():
+    before = {
+        "pathological_repetition": True,
+        "repetition_rate": 0.70,
+        "token_entropy": 3.0,
+        "unique_token_ratio": 0.25,
+        "longest_repeated_token_run": 9,
+        "language_nll": 2.0,
+        "non_empty_rate": 1.0,
+    }
+    stable = {
+        "pathological_repetition": True,
+        "repetition_rate": 0.71,
+        "token_entropy": 2.9,
+        "unique_token_ratio": 0.24,
+        "longest_repeated_token_run": 9,
+        "language_nll": 1.95,
+        "non_empty_rate": 1.0,
+    }
+    ok, reasons = sft_validation_gate(before, stable)
+    assert ok, reasons
+
+    regressed = dict(stable)
+    regressed["repetition_rate"] = 0.80
+    ok, reasons = sft_validation_gate(before, regressed)
+    assert not ok
+    assert any("repetition" in reason for reason in reasons)
+
+
+def test_replay_filter_structurally_excludes_phase5_and_sft_holdouts():
+    normal = SFTExample([
+        {"role": "user", "content": "Tell me about rain."},
+        {"role": "assistant", "content": "Rain falls from clouds."},
+    ])
+    heldout = SFTExample([
+        {"role": "user", "content": "A held out prompt."},
+        {"role": "assistant", "content": "A held out answer."},
+    ])
+    phase5 = SFTExample([
+        {"role": "user", "content": "Ciao"},
+        {"role": "assistant", "content": "Ciao!"},
+    ])
+    rows, filtered = _filter_protected_replay(
+        [normal, heldout, phase5, normal],
+        heldout_sft=[heldout],
+    )
+    assert filtered == 2
+    assert len(rows) == 1
+    assert rows[0].messages == normal.messages
+
+
+def test_sft_validation_metrics_use_separate_heldout_examples():
+    pytest.importorskip("torch")
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        dropout=0.0,
+        tokenizer_version="byte-v1",
+    ).validate()
+    runtime = GeneralistRuntime(
+        CausalTransformerLM(cfg),
+        cfg,
+        tokenizer=ByteTokenizer(),
+        device="cpu",
+    )
+    examples = [
+        SFTExample([
+            {"role": "user", "content": "Say a short greeting."},
+            {"role": "assistant", "content": "Hi there."},
+        ]),
+        SFTExample([
+            {"role": "user", "content": "Name one fruit."},
+            {"role": "assistant", "content": "Apple."},
+        ]),
+    ]
+    report = evaluate_sft_validation(
+        runtime,
+        examples,
+        max_examples=2,
+        max_new_tokens=4,
+    )
+    assert report["suite"] == "phase5-sft-heldout-v1"
+    assert report["suite_training_excluded"] is True
+    assert report["prompt_count"] == 2
+    assert "repetition_rate" in report
+    assert "language_nll" in report
 
 
 def test_phase5_diagnostics_run_on_real_local_generalist_model():
