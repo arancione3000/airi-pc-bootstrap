@@ -19,7 +19,7 @@ from .airi_pc_lab import (
     snapshot_airi_pc_lab,
     run_airi_pc_lab_probe,
 )
-from .bootstrap_data import build_bootstrap_bundle, write_bootstrap_replay
+from .bootstrap_data import build_bootstrap_bundle, load_bootstrap_replay, write_bootstrap_replay
 from .curriculum import train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
 from .evolution import GeneralistGenome, progressive_scale_candidate
@@ -175,6 +175,31 @@ def _batch(blocks: list[list[int]], indices: list[int], *, device):
     labels = ids.clone()
     labels[labels == PAD] = -100
     return ids, labels
+
+
+def _bootstrap_fast_resume_allowed(
+    previous_manifest: dict[str, Any] | None,
+    replay_manifest: dict[str, Any] | None,
+    tokenizer,
+    corpus_target_tokens: int,
+) -> bool:
+    """Allow packed-block fast resume only with exact persisted identities."""
+    manifest = previous_manifest if isinstance(previous_manifest, dict) else {}
+    replay = replay_manifest if isinstance(replay_manifest, dict) else {}
+    return bool(
+        int(manifest.get("target_tokens", 0) or 0) == int(corpus_target_tokens)
+        and int(manifest.get("actual_selected_tokens", 0) or 0)
+            >= int(corpus_target_tokens * 0.95)
+        and str(manifest.get("tokenizer_version") or "")
+            == str(tokenizer.version)
+        and int(manifest.get("tokenizer_vocab_size", 0) or 0)
+            == int(tokenizer.vocab_size)
+        and manifest.get("external_pretrained_weights_used") is False
+        and manifest.get("external_model_distillation_used") is False
+        and replay.get("available") is True
+        and str(replay.get("source_manifest_sha256") or "")
+            == str(manifest.get("manifest_content_sha256") or "")
+    )
 
 
 def _effective_bootstrap_target(
@@ -768,26 +793,60 @@ def run_segment(
 
     previous_manifest = _load_json(manifest_path) if manifest_path.is_file() else None
     corpus_target_tokens = _bootstrap_corpus_target(target_tokens)
-    bundle = build_bootstrap_bundle(
+    bundle = None
+    replay_manifest: dict[str, Any] = {}
+
+    # Fast resume is allowed only when every persisted identity matches the
+    # current reviewed corpus/tokenizer contract.  This avoids reconstructing
+    # the full 20M-token text bundle on every intermediate 100M segment.
+    replay_bundle = load_bootstrap_replay(bootstrap_root)
+    reusable_manifest = _bootstrap_fast_resume_allowed(
+        previous_manifest,
+        replay_bundle.manifest,
         champion_runtime.tokenizer,
-        cache_dir=cache,
-        target_tokens=int(corpus_target_tokens),
-        previous_manifest=previous_manifest,
+        corpus_target_tokens,
     )
-    if int(bundle.manifest.get("actual_selected_tokens", 0) or 0) < int(corpus_target_tokens * 0.95):
-        raise RuntimeError(
-            "bootstrap corpus coverage is below 95% of reviewed unique-corpus target: "
-            f"selected={bundle.manifest.get('actual_selected_tokens')} "
-            f"target={corpus_target_tokens}"
+    if reusable_manifest:
+        replay_manifest = dict(replay_bundle.manifest)
+        replay_manifest.pop("available", None)
+
+    def _materialize_bundle():
+        nonlocal bundle, previous_manifest, replay_manifest
+        if bundle is not None:
+            return bundle
+        built = build_bootstrap_bundle(
+            champion_runtime.tokenizer,
+            cache_dir=cache,
+            target_tokens=int(corpus_target_tokens),
+            previous_manifest=previous_manifest,
         )
-    _atomic_json(manifest_path, bundle.manifest)
-    replay_manifest = write_bootstrap_replay(
-        bundle,
-        champion_runtime.tokenizer,
-        output_dir=bootstrap_root,
-        max_tokens=min(1_000_000, max(250_000, int(target_tokens // 4))),
-        max_sft_conversations=512,
-    )
+        if int(built.manifest.get("actual_selected_tokens", 0) or 0) < int(corpus_target_tokens * 0.95):
+            raise RuntimeError(
+                "bootstrap corpus coverage is below 95% of reviewed unique-corpus target: "
+                f"selected={built.manifest.get('actual_selected_tokens')} "
+                f"target={corpus_target_tokens}"
+            )
+        if reusable_manifest:
+            previous_digest = str((previous_manifest or {}).get("manifest_content_sha256") or "")
+            rebuilt_digest = str(built.manifest.get("manifest_content_sha256") or "")
+            if previous_digest != rebuilt_digest:
+                raise RuntimeError(
+                    "reviewed bootstrap manifest changed during fast resume; refusing stale packed blocks"
+                )
+        bundle = built
+        previous_manifest = built.manifest
+        _atomic_json(manifest_path, built.manifest)
+        replay_manifest = write_bootstrap_replay(
+            built,
+            champion_runtime.tokenizer,
+            output_dir=bootstrap_root,
+            max_tokens=min(1_000_000, max(250_000, int(target_tokens // 4))),
+            max_sft_conversations=512,
+        )
+        return bundle
+
+    if not reusable_manifest:
+        _materialize_bundle()
 
     if not before_path.is_file():
         _atomic_json(before_path, evaluate_phase5_language(champion_runtime))
@@ -912,7 +971,12 @@ def run_segment(
     # every resumable segment.  Cache the exact fixed-width token blocks in the
     # job-local data cache.  The cache identity includes the reviewed manifest,
     # tokenizer and context length, so stale data fails closed and is rebuilt.
-    manifest_identity = str(bundle.manifest.get("manifest_content_sha256") or "")
+    manifest_for_blocks = bundle.manifest if bundle is not None else (previous_manifest or {})
+    manifest_identity = str(manifest_for_blocks.get("manifest_content_sha256") or "")
+    if not manifest_identity:
+        _materialize_bundle()
+        manifest_for_blocks = bundle.manifest
+        manifest_identity = str(manifest_for_blocks.get("manifest_content_sha256") or "")
     packed_cache_root = cache / "phase5-packed-blocks-v1"
     packed_cache_root.mkdir(parents=True, exist_ok=True)
     packed_cache_base = {
@@ -952,6 +1016,8 @@ def run_segment(
             packed_cache_hits[stage] = False
 
     missing_stages = [stage for stage in stage_names if stage not in stage_blocks]
+    if missing_stages:
+        _materialize_bundle()
     if "A_frequent_word_contexts" in missing_stages:
         documents = _frequent_word_documents(bundle.train_documents)
         packed = pack_causal_blocks(
@@ -1006,6 +1072,7 @@ def run_segment(
     )
     packed_cache_hits["validation"] = validation_blocks is not None
     if validation_blocks is None:
+        _materialize_bundle()
         validation_blocks = pack_causal_blocks(
             bundle.validation_documents,
             runtime.tokenizer,
@@ -1032,6 +1099,13 @@ def run_segment(
     }
 
     progress["bootstrap_replay"] = replay_manifest
+    progress["fast_resume"] = {
+        "reused_verified_manifest_and_replay": bool(reusable_manifest),
+        "full_bundle_materialized": bool(bundle is not None),
+        "all_packed_blocks_hit": bool(
+            all(bool(value) for value in packed_cache_hits.values())
+        ),
+    }
     progress["curriculum_schedule"] = [
         "A_frequent_word_contexts",
         "B_short_sentence_completion",
@@ -1232,6 +1306,9 @@ def run_segment(
     )
 
     if needs_sft:
+        # Held-out SFT validation is intentionally excluded from the compact
+        # replay, so reconstruct the reviewed bundle once at the final rung.
+        _materialize_bundle()
         progress["curriculum_stage"] = "D_to_F_supervised_replay"
         if sft_guard_migration:
             causal_best_dir = bootstrap_root / "best"
