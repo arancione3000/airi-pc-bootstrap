@@ -1,5 +1,5 @@
 {
-  "last_cycle": 122,
+  "last_cycle": 123,
   "rows": [
     {
       "domain": "language",
@@ -15097,6 +15097,172 @@
         },
         {
           "content": "134",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "language",
+      "id": "939a8436ff9e5cf81893531c",
+      "messages": [
+        {
+          "content": "Reply with exactly CYCLEWORD123 and nothing else.",
+          "role": "user"
+        },
+        {
+          "content": "CYCLEWORD123",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "coding",
+      "id": "627dd7d90fbf26798a6a2fea",
+      "messages": [
+        {
+          "content": "Return only Python code defining offset_123(x) that returns x + 133.",
+          "role": "user"
+        },
+        {
+          "content": "def offset_123(x):\n    return x + 133",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "data",
+      "id": "a7acc3963b6fc8225e448953",
+      "messages": [
+        {
+          "content": "Mean of 3091,3097,3103? Number only.",
+          "role": "user"
+        },
+        {
+          "content": "3097",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "reasoning",
+      "id": "c060d27a08c13d0da7e38336",
+      "messages": [
+        {
+          "content": "What is 163*130? Number only.",
+          "role": "user"
+        },
+        {
+          "content": "21190",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "tools",
+      "id": "0e35c73e9789aa7aa42be4ae",
+      "messages": [
+        {
+          "content": "Use calculator for 3091+136.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"3091+136\"}}</tool_call>",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "structured",
+      "id": "5505451dc46861e68fd65c0e",
+      "messages": [
+        {
+          "content": "Return exactly this JSON object: {\"cycle\":123,\"ok\":true}",
+          "role": "user"
+        },
+        {
+          "content": "{\"cycle\":123,\"ok\":true}",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "language",
+      "id": "a8afb942b5401661ab160494",
+      "messages": [
+        {
+          "content": "Write one grammatical sentence using exactly these content words: subject=agent123; verb=checks; object=report123.",
+          "role": "user"
+        },
+        {
+          "content": "Agent123 checks report123.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "language",
+      "id": "e0e083ac1775045e4276a075",
+      "messages": [
+        {
+          "content": "Write one grammatical sentence using exactly these content words: subject=system123; verb=stores; object=result123.",
+          "role": "user"
+        },
+        {
+          "content": "System123 stores result123.",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "data",
+      "id": "eb16371a9775a7ca6b12e680",
+      "messages": [
+        {
+          "content": "Sum of 3092,3094,3096,3098? Number only.",
+          "role": "user"
+        },
+        {
+          "content": "12380",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "reasoning",
+      "id": "d9e140f16928fe780d1b45cc",
+      "messages": [
+        {
+          "content": "Sequence 123,126,129,132. Next term only.",
+          "role": "user"
+        },
+        {
+          "content": "135",
+          "role": "assistant"
+        }
+      ]
+    },
+    {
+      "domain": "coding",
+      "id": "adf5443f44ab9aeb85d67f15",
+      "messages": [
+        {
+          "content": "Available tools are strictly allowlisted. If a tool is required, output exactly <tool_call>{\"name\":\"tool_name\",\"arguments\":{...}}</tool_call>. Never invent tool names. Tool specifications: {\"lab_describe_task_flow\": {\"description\": \"Return the sandboxed AIRI-PC task lifecycle and verification flow. This is descriptive only and cannot run a real task.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, \"lab_inspect_module\": {\"description\": \"Inspect classes/functions/docstrings for one allowlisted AIRI-PC Control Plane module.\", \"schema\": {\"additionalProperties\": false, \"properties\": {\"module\": {\"enum\": [\"task_engine\", \"experience\", \"judge\", \"verification_engine\", \"model_router\", \"mcp_tasks\", \"generalist_agent_bridge\", \"local_agent\"], \"type\": \"string\"}}, \"required\": [\"module\"], \"type\": \"object\"}}, \"lab_list_capabilities\": {\"description\": \"List the read-only AIRI-PC Lab modules and allowed sandbox capabilities. It never executes host actions.\", \"schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}}",
+          "role": "system"
+        },
+        {
+          "content": "Inspect AIRI-PC Lab module generalist_agent_bridge before using it.",
+          "role": "user"
+        },
+        {
+          "content": "<tool_call>{\"name\":\"lab_inspect_module\",\"arguments\":{\"module\":\"generalist_agent_bridge\"}}</tool_call>",
+          "role": "assistant"
+        },
+        {
+          "content": "{\"doc\":\"\",\"name\":\"generalist_agent_bridge\",\"path\":\"computer/control_plane/generalist_agent_bridge.py\",\"symbols\":[{\"doc\":\"\",\"kind\":\"function\",\"name\":\"tool_specs\"},{\"doc\":\"\",\"kind\":\"function\",\"name\":\"execute_readonly_tool\"},{\"doc\":\"\",\"kind\":\"function\",\"name\":\"execute_generalist_tool\"},{\"doc\":\"\",\"kind\":\"function\",\"name\":\"run_generalist_agent\"}]}",
+          "role": "tool"
+        },
+        {
+          "content": "generalist_agent_bridge is available only through the read-only lab. Key symbols: tool_specs, execute_readonly_tool, execute_generalist_tool, run_generalist_agent.",
           "role": "assistant"
         }
       ]
