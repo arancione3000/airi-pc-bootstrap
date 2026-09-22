@@ -1277,9 +1277,16 @@ def test_generalist_adaptive_pretraining_budget_scales_but_stays_bounded():
         stage=3,
         scale_multiplier=1.44,
     )
+    saturated = _adaptive_pretrain_steps(
+        8,
+        corpus_bytes=20_000_000,
+        stage=3,
+        scale_multiplier=2.25,
+    )
     assert tiny == 1
     assert large > tiny
-    assert large <= 24
+    assert large <= 48
+    assert saturated == 48
 
 
 def test_generalist_swarm_reducer_prefers_partial_generation_before_nll(tmp_path: Path):

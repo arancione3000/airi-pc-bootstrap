@@ -22,6 +22,8 @@ from .airi_pc_lab import (
 from .bootstrap_data import build_bootstrap_bundle, write_bootstrap_replay
 from .curriculum import train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
+from .evolution import GeneralistGenome, progressive_scale_candidate
+from .model import CausalTransformerLM, parameter_count
 from .phase5_diagnostics import (
     degeneration_gate,
     evaluate_phase5_language,
@@ -37,15 +39,18 @@ from .research_cycle import (
     _research_eligible,
     _research_score,
     _save_champion,
+    _transfer_compatible_weights,
 )
 from .runtime import GeneralistRuntime
 from .tokenizer import PAD
 from .training import causal_training_objective, train_sft
 
 
-PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v1"
-PHASE5_SFT_GUARD_VERSION = "phase5-sft-guard-v1"
-PHASE5_ANTICOLLAPSE_VERSION = "phase5-anticollapse-v1"
+PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v2"
+PHASE5_SFT_GUARD_VERSION = "phase5-sft-guard-v2"
+PHASE5_ANTICOLLAPSE_VERSION = "phase5-anticollapse-v2"
+PHASE5_CAPACITY_GROWTH_VERSION = "phase5-capacity-growth-v1"
+PHASE5_MAX_UNIQUE_CORPUS_TOKENS = 5_000_000
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -73,6 +78,71 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _bootstrap_corpus_target(training_target_tokens: int) -> int:
+    """Bound unique-source selection while allowing honest multi-epoch training.
+
+    The currently reviewed Tatoeba/OASST source set contains roughly five
+    million usable tokens. Larger Phase-5 rungs therefore mean additional
+    optimization passes over the same pinned corpus, not fabricated unique
+    data. A future source expansion can raise this explicit ceiling.
+    """
+    return min(
+        max(100_000, int(training_target_tokens)),
+        PHASE5_MAX_UNIQUE_CORPUS_TOKENS,
+    )
+
+
+def _bootstrap_capacity_target(training_target_tokens: int) -> int | None:
+    """Capacity ladder paired with the expensive language-bootstrap rungs."""
+    target = max(0, int(training_target_tokens))
+    if target >= 50_000_000:
+        return 3_000_000
+    if target >= 20_000_000:
+        return 1_250_000
+    return None
+
+
+def _grow_bootstrap_runtime(
+    base_genome: GeneralistGenome,
+    runtime: GeneralistRuntime,
+    *,
+    target_parameters: int,
+) -> tuple[GeneralistGenome, GeneralistRuntime, dict[str, Any]]:
+    """Grow a Phase-5 candidate before long training and retain compatible weights."""
+    source_parameters = parameter_count(runtime.model)
+    target = max(source_parameters + 1, int(target_parameters))
+    grown_genome = progressive_scale_candidate(
+        base_genome,
+        target_parameters=target,
+        vocab_size=runtime.tokenizer.vocab_size,
+        max_width=384,
+        max_layers=10,
+        prefer_function_preserving=False,
+    )
+    config = grown_genome.model_config(runtime.tokenizer.vocab_size)
+    model = CausalTransformerLM(config)
+    transfer = _transfer_compatible_weights(
+        runtime.model,
+        model,
+        source_tokenizer=runtime.tokenizer,
+        target_tokenizer=runtime.tokenizer,
+    )
+    grown = GeneralistRuntime(
+        model,
+        config,
+        tokenizer=runtime.tokenizer,
+        device="cpu",
+    )
+    return grown_genome, grown, {
+        "version": PHASE5_CAPACITY_GROWTH_VERSION,
+        "requested_parameters": int(target_parameters),
+        "source_parameters": int(source_parameters),
+        "parameters": int(parameter_count(model)),
+        "genome": grown_genome.to_dict(),
+        "weight_transfer": transfer,
+    }
 
 
 def _batch(blocks: list[list[int]], indices: list[int], *, device):
@@ -132,6 +202,8 @@ def _phase5_success(before: dict[str, Any], after: dict[str, Any]) -> tuple[bool
         reasons.append("non-empty rate is below 70%")
     if float(after.get("word_output_rate", 0.0)) < 0.40:
         reasons.append("fewer than 40% of held-out prompts produce word-like output")
+    if float(after.get("multiword_output_rate", 0.0)) < 0.40:
+        reasons.append("fewer than 40% of held-out prompts produce multi-word output")
     return (not reasons), reasons
 
 
@@ -221,8 +293,8 @@ def _anti_collapse_weights(
     if stage == "A_frequent_word_contexts":
         return 0.0, 1.20
     if stage == "B_short_sentence_completion":
-        return 0.035, 1.50
-    return 0.060, 1.75
+        return 0.050, 1.60
+    return 0.100, 2.00
 
 
 def _anti_collapse_rescue_gate(
@@ -519,18 +591,30 @@ def _run_guarded_sft(
         max_examples=24,
         max_new_tokens=32,
     )
-    sft_anti_collapse_weight = (
-        0.04
-        if bool(before.get("pathological_repetition"))
-        or float(before.get("repetition_rate", 0.0) or 0.0) >= 0.60
-        else 0.0
+    collapsed = bool(before.get("pathological_repetition")) or (
+        float(before.get("repetition_rate", 0.0) or 0.0) >= 0.60
     )
-    sft_eos_loss_weight = 1.50 if sft_anti_collapse_weight > 0.0 else 1.0
-    attempts = (
-        {"steps": 80, "learning_rate": 5e-5},
-        {"steps": 40, "learning_rate": 3e-5},
-        {"steps": 20, "learning_rate": 1.5e-5},
-    )
+    parameters = parameter_count(runtime.model)
+    sft_anti_collapse_weight = 0.08 if collapsed else 0.0
+    sft_eos_loss_weight = 1.75 if collapsed else 1.0
+    if int(target_tokens) >= 20_000_000 or parameters >= 750_000:
+        attempts = (
+            {"steps": 800, "learning_rate": 5e-5},
+            {"steps": 400, "learning_rate": 3e-5},
+            {"steps": 160, "learning_rate": 1.5e-5},
+        )
+    elif parameters >= 250_000:
+        attempts = (
+            {"steps": 320, "learning_rate": 5e-5},
+            {"steps": 160, "learning_rate": 3e-5},
+            {"steps": 80, "learning_rate": 1.5e-5},
+        )
+    else:
+        attempts = (
+            {"steps": 120, "learning_rate": 5e-5},
+            {"steps": 60, "learning_rate": 3e-5},
+            {"steps": 30, "learning_rate": 1.5e-5},
+        )
     reports: list[dict[str, Any]] = []
     best_score = float("-inf")
     best_index: int | None = None
@@ -653,16 +737,18 @@ def run_segment(
     target_tokens = _effective_bootstrap_target(target_tokens, persisted_progress)
 
     previous_manifest = _load_json(manifest_path) if manifest_path.is_file() else None
+    corpus_target_tokens = _bootstrap_corpus_target(target_tokens)
     bundle = build_bootstrap_bundle(
         champion_runtime.tokenizer,
         cache_dir=cache,
-        target_tokens=int(target_tokens),
+        target_tokens=int(corpus_target_tokens),
         previous_manifest=previous_manifest,
     )
-    if int(bundle.manifest.get("actual_selected_tokens", 0) or 0) < int(target_tokens * 0.95):
+    if int(bundle.manifest.get("actual_selected_tokens", 0) or 0) < int(corpus_target_tokens * 0.95):
         raise RuntimeError(
-            "bootstrap corpus coverage is below 95% of cumulative target: "
-            f"selected={bundle.manifest.get('actual_selected_tokens')} target={target_tokens}"
+            "bootstrap corpus coverage is below 95% of reviewed unique-corpus target: "
+            f"selected={bundle.manifest.get('actual_selected_tokens')} "
+            f"target={corpus_target_tokens}"
         )
     _atomic_json(manifest_path, bundle.manifest)
     replay_manifest = write_bootstrap_replay(
@@ -689,6 +775,8 @@ def run_segment(
         "completed_rungs": [],
         "sft_completed_rungs": [],
     })
+    progress["schema"] = 1
+    progress["version"] = PHASE5_BOOTSTRAP_VERSION
     if str(progress.get("base_champion_model_sha256")) != base_model_sha:
         # A completed previous rung may have promoted the candidate to champion.
         # Otherwise fail closed rather than training on a stale base.
@@ -698,6 +786,18 @@ def run_segment(
 
     progress["target_tokens"] = max(int(progress.get("target_tokens", 0) or 0), int(target_tokens))
     target_tokens = int(progress["target_tokens"])
+    progress["unique_corpus_target_tokens"] = int(corpus_target_tokens)
+    progress["optimization_passes_target"] = float(
+        target_tokens / max(1, corpus_target_tokens)
+    )
+
+    candidate_genome = champion_genome
+    capacity_genome_raw = progress.get("capacity_genome")
+    if isinstance(capacity_genome_raw, dict):
+        try:
+            candidate_genome = GeneralistGenome(**capacity_genome_raw).validate()
+        except Exception:
+            candidate_genome = champion_genome
 
     if candidate_dir.is_dir():
         runtime = GeneralistRuntime.from_checkpoint(candidate_dir, device="cpu")
@@ -714,6 +814,39 @@ def run_segment(
                 "role": "phase5_language_bootstrap_candidate",
                 "production_qualified": False,
                 "base_champion_model_sha256": base_model_sha,
+            },
+        )
+
+    desired_capacity = _bootstrap_capacity_target(target_tokens)
+    applied_capacity = int(progress.get("capacity_target_parameters", 0) or 0)
+    if desired_capacity is not None and applied_capacity < int(desired_capacity):
+        candidate_genome, runtime, growth = _grow_bootstrap_runtime(
+            candidate_genome,
+            runtime,
+            target_parameters=int(desired_capacity),
+        )
+        progress["capacity_target_parameters"] = int(desired_capacity)
+        progress["capacity_genome"] = candidate_genome.to_dict()
+        history = list(progress.get("capacity_growth_history") or [])
+        history.append({
+            **growth,
+            "training_target_tokens": int(target_tokens),
+            "tokens_processed_before_growth": int(progress.get("tokens_processed", 0) or 0),
+        })
+        progress["capacity_growth_history"] = history
+        progress["best_validation_loss"] = None
+        progress["bad_eval_count"] = 0
+        optimizer_path.unlink(missing_ok=True)
+        shutil.rmtree(bootstrap_root / "best", ignore_errors=True)
+        shutil.rmtree(bootstrap_root / "pre-sft", ignore_errors=True)
+        shutil.rmtree(bootstrap_root / "pre-anticollapse", ignore_errors=True)
+        runtime.save_checkpoint(
+            candidate_dir,
+            metadata={
+                "role": "phase5_language_bootstrap_candidate",
+                "production_qualified": False,
+                "base_champion_model_sha256": base_model_sha,
+                "capacity_growth": growth,
             },
         )
 
@@ -845,7 +978,12 @@ def run_segment(
                 bad_eval_count += 1
             progress["best_validation_loss"] = best_loss
             progress["bad_eval_count"] = bad_eval_count
-            minimum_before_early_stop = min(600_000, int(target_tokens * 0.60))
+            # A freshly grown network needs a substantial fraction of the
+            # rescue rung before plateau logic is allowed to stop it.
+            minimum_before_early_stop = max(
+                600_000,
+                int(target_tokens * 0.75),
+            )
             if (
                 bad_eval_count >= 4
                 and int(progress["tokens_processed"]) >= minimum_before_early_stop
@@ -882,12 +1020,18 @@ def run_segment(
         )
     )
     if rescue_due:
+        rescue_steps = (
+            512 if parameter_count(runtime.model) >= 750_000
+            else 256 if parameter_count(runtime.model) >= 250_000
+            else 128
+        )
         runtime, rescue_report = _run_anti_collapse_rescue(
             runtime,
             stage_blocks,
             bootstrap_root=bootstrap_root,
             base_model_sha=base_model_sha,
             seed=71 + int(cycle),
+            steps=rescue_steps,
         )
         rescue_accepted = bool(rescue_report.get("accepted"))
         progress["anti_collapse_rescue"] = rescue_report
@@ -1078,7 +1222,7 @@ def run_segment(
             ).strip("; ")
         )
         if promoted:
-            genome = _continual_candidate_genome(champion_genome, cycle + 1)
+            genome = _continual_candidate_genome(candidate_genome, cycle + 1)
             _save_champion(root, genome, runtime, candidate_report)
             status["champion"] = genome.to_dict()
             status["champion_report"] = candidate_report
@@ -1089,6 +1233,12 @@ def run_segment(
         status["phase5_bootstrap"] = {
             "version": PHASE5_BOOTSTRAP_VERSION,
             "target_tokens": target_tokens,
+            "unique_corpus_target_tokens": int(corpus_target_tokens),
+            "optimization_passes_target": float(
+                target_tokens / max(1, corpus_target_tokens)
+            ),
+            "capacity_target_parameters": progress.get("capacity_target_parameters"),
+            "capacity_growth_history": progress.get("capacity_growth_history") or [],
             "tokens_processed": int(progress["tokens_processed"]),
             "steps": int(progress["steps"]),
             "before": before,
@@ -1133,6 +1283,12 @@ def run_segment(
             "schema": 1,
             "version": PHASE5_BOOTSTRAP_VERSION,
             "target_tokens": target_tokens,
+            "unique_corpus_target_tokens": int(corpus_target_tokens),
+            "optimization_passes_target": float(
+                target_tokens / max(1, corpus_target_tokens)
+            ),
+            "capacity_target_parameters": progress.get("capacity_target_parameters"),
+            "capacity_growth_history": progress.get("capacity_growth_history") or [],
             "tokens_processed": int(progress["tokens_processed"]),
             "steps": int(progress["steps"]),
             "model_parameters": int(candidate_report["parameters"]),

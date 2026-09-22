@@ -164,7 +164,7 @@ jobs:
       max-parallel: 8
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       PYTHONPATH: computer
     steps:
@@ -180,9 +180,9 @@ jobs:
         with:
           name: generalist-plan
           path: /tmp/plan
-      - name: Tiny-budget candidate trial
+      - name: Expanded candidate trial
         run: |
-          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 1 --steps 3 --repeat-seeds 1 --pretrain-steps 1             --max-repo-bytes 5000000 --max-external-bytes 10000000
+          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 1 --steps 8 --repeat-seeds 1 --pretrain-steps 2             --max-repo-bytes 5000000 --max-external-bytes 10000000
       - uses: actions/upload-artifact@v4
         with:
           name: generalist-stage1-${{ matrix.index }}
@@ -220,7 +220,7 @@ jobs:
       max-parallel: 4
       matrix: ${{ fromJSON(needs.reduce1.outputs.matrix) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     env:
       PYTHONPATH: computer
     steps:
@@ -240,9 +240,9 @@ jobs:
         with:
           name: generalist-stage1-${{ matrix.index }}
           path: /tmp/previous
-      - name: Continue survivor to cumulative 8-step budget
+      - name: Continue survivor to cumulative 28-step base budget
         run: |
-          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 2 --steps 5 --repeat-seeds 1 --pretrain-steps 1             --source-checkpoint /tmp/previous/best-checkpoint             --max-repo-bytes 10000000 --max-external-bytes 20000000
+          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 2 --steps 20 --repeat-seeds 1 --pretrain-steps 4             --source-checkpoint /tmp/previous/best-checkpoint             --max-repo-bytes 10000000 --max-external-bytes 20000000
       - uses: actions/upload-artifact@v4
         with:
           name: generalist-stage2-${{ matrix.index }}
@@ -280,7 +280,7 @@ jobs:
       max-parallel: 2
       matrix: ${{ fromJSON(needs.reduce2.outputs.matrix) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 90
     env:
       PYTHONPATH: computer
     steps:
@@ -300,9 +300,9 @@ jobs:
         with:
           name: generalist-stage2-${{ matrix.index }}
           path: /tmp/previous
-      - name: Continue finalist to cumulative 20-step multi-seed budget
+      - name: Continue finalist to cumulative 76-step multi-seed base budget
         run: |
-          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 3 --steps 12 --repeat-seeds 2 --pretrain-steps 2             --source-checkpoint /tmp/previous/best-checkpoint             --max-repo-bytes 20000000 --max-external-bytes 50000000
+          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 3 --steps 48 --repeat-seeds 2 --pretrain-steps 8             --source-checkpoint /tmp/previous/best-checkpoint             --max-repo-bytes 20000000 --max-external-bytes 50000000
       - uses: actions/upload-artifact@v4
         with:
           name: generalist-stage3-${{ matrix.index }}
