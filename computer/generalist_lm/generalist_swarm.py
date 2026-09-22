@@ -1927,6 +1927,8 @@ def finalize_swarm(
     plan_path: str | Path,
     result_paths: Iterable[str | Path],
     output_path: str | Path,
+    *,
+    allow_direct_promotion: bool = True,
 ) -> dict[str, Any]:
     root = Path(state_dir).expanduser().resolve()
     plan = _load_json(plan_path)
@@ -2022,6 +2024,7 @@ def finalize_swarm(
 
     promoted = False
     winner_summary = None
+    promotion_candidate = None
     reason = "no finalist passed every independent research gate"
     if finalists:
         finalists.sort(
@@ -2097,16 +2100,27 @@ def finalize_swarm(
                     + "; ".join(retention_reasons)
                 )
         if eligible:
-            _save_champion(root, genome, runtime, verified)
-            promoted = True
-            reason = verify_reason
-            winner_summary = {
+            approved_summary = {
                 "candidate_id": genome.genome_id,
                 "kind": winner.get("kind"),
                 "parameters": verified["parameters"],
                 "score": verified["score"],
                 "nll_per_byte": verified.get("nll_per_byte"),
+                "checkpoint_dir": str(winner.get("checkpoint_dir") or "best-checkpoint"),
+                "result_path": str(result_path),
             }
+            if allow_direct_promotion:
+                _save_champion(root, genome, runtime, verified)
+                promoted = True
+                reason = verify_reason
+                winner_summary = approved_summary
+            else:
+                # Architecture research may prove that a topology is better,
+                # but it must not replace AIRI with a separately trained brain.
+                # The caller must migrate the newest live-lineage checkpoint
+                # into this topology and re-run retention gates first.
+                promotion_candidate = approved_summary
+                reason = "external_reducer_approved_for_single_lineage_migration"
         else:
             reason = f"external_reducer_rejected:{verify_reason}"
 
@@ -2203,6 +2217,14 @@ def finalize_swarm(
             }
     _atomic_json(root / "airi-pc-lab-report.json", airi_pc_lab_report)
 
+    previous_status = {}
+    try:
+        previous_status = _load_json(root / "status.json")
+        if not isinstance(previous_status, dict):
+            previous_status = {}
+    except Exception:
+        previous_status = {}
+
     status = {
         "ok": True,
         "version": GENERALIST_SWARM_VERSION,
@@ -2210,7 +2232,11 @@ def finalize_swarm(
         "promoted": promoted,
         "promotion_reason": reason,
         "winner": winner_summary,
+        "promotion_candidate": promotion_candidate,
         "latest_research": latest_research_summary,
+        "phase5_bootstrap": previous_status.get("phase5_bootstrap"),
+        "lineage": previous_status.get("lineage"),
+        "architecture_migration": previous_status.get("architecture_migration"),
         "champion": champion_genome.to_dict(),
         "champion_report": champion_report,
         "signals": plan.get("signals") or [],
@@ -2261,6 +2287,8 @@ def finalize_swarm(
             },
             "parallel_swarm": "8->4->2",
             "candidate_can_self_promote": False,
+            "direct_research_checkpoint_promotion": bool(allow_direct_promotion),
+            "single_lineage_migration_required": not bool(allow_direct_promotion),
             "external_reducer": True,
             "production_qualification_separate": True,
             "external_pretrained": False,
