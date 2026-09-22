@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import io
 import json
+from pathlib import Path
 
 import pytest
 
@@ -44,6 +45,14 @@ from generalist_lm.training import SFTExample, causal_training_objective
 
 
 
+
+def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
+    workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
+    assert "Dispatch next in-place language rung" in workflow
+    assert "same persisted AIRI Phase-5 lineage" in workflow
+    assert "next=100000000" in workflow
+    assert '"handoff":"converged_swarm_first"' not in workflow
+    assert "Generalist swarm must run once before it is dispatched" not in workflow
 
 def test_phase5_cumulative_target_never_shrinks_on_maintenance_run():
     assert _effective_bootstrap_target(1_000_000, {"target_tokens": 5_000_000}) == 5_000_000
