@@ -317,6 +317,25 @@ def _neural_diagnostics(runtime) -> dict[str, Any]:
     }
 
 
+def _active_lineage_checkpoint(state: Path) -> tuple[Path, dict[str, Any]]:
+    """Resolve the one AIRI checkpoint that owns current cumulative learning."""
+    lineage = _safe_json(state / "lineage.json", {})
+    if isinstance(lineage, dict):
+        rel = str(lineage.get("active_checkpoint") or "").strip()
+        if rel:
+            checkpoint = (state / rel).resolve()
+            try:
+                checkpoint.relative_to(state.resolve())
+            except ValueError:
+                checkpoint = state / "champion"
+            if (
+                (checkpoint / "model.pt").is_file()
+                and (checkpoint / "config.json").is_file()
+            ):
+                return checkpoint, lineage
+    return state / "champion", {}
+
+
 def _mobile_airi_pc_lab(status: dict[str, Any], state: Path) -> dict[str, Any]:
     existing = status.get("airi_pc_lab")
     if isinstance(existing, dict) and existing.get("version"):
@@ -334,8 +353,16 @@ def _mobile_airi_pc_lab(status: dict[str, Any], state: Path) -> dict[str, Any]:
         "learning": summarize_lab_learning(rows),
     }
     try:
-        champion = GeneralistRuntime.from_checkpoint(state / "champion", device="cpu")
-        report["champion"] = run_airi_pc_lab_probe(champion, snapshot)
+        active_checkpoint, lineage = _active_lineage_checkpoint(state)
+        champion = GeneralistRuntime.from_checkpoint(active_checkpoint, device="cpu")
+        report["champion"] = {
+            **run_airi_pc_lab_probe(champion, snapshot),
+            "active_lineage": True,
+            "active_checkpoint": str(
+                lineage.get("active_checkpoint") or "champion"
+            ),
+            "lineage_id": lineage.get("lineage_id"),
+        }
     except Exception as exc:
         report["champion"] = {
             "ok": False,
@@ -610,19 +637,29 @@ def export_mobile_bundle(
 
     champion_report = dict(status.get("champion_report") or {})
     champion_genome = dict(status.get("champion") or {})
-    champion_summary = {
+    active_checkpoint, lineage = _active_lineage_checkpoint(state)
+    active_genome = dict(lineage.get("active_genome") or champion_genome)
+    active_summary = {
         **champion_report,
-        "candidate_id": champion_genome.get("genome_id", "champion"),
+        "candidate_id": active_genome.get("genome_id", "champion"),
         "cycle": int(status.get("cycle", 0) or 0),
         "research_only": False,
         "all_seed_eligible": True,
+        "active_lineage": True,
+        "lineage_id": lineage.get("lineage_id"),
+        "active_checkpoint": str(lineage.get("active_checkpoint") or "champion"),
+        "tokens_processed": int(lineage.get("tokens_processed", 0) or 0),
+        "target_tokens": int(lineage.get("target_tokens", 0) or 0),
     }
+    # Keep the public slot name "champion" for Android compatibility, but its
+    # bytes now come from the single active AIRI lineage rather than from a
+    # stale rollback/qualification anchor.
     slots: dict[str, Any] = {
         "champion": _export_checkpoint(
-            state / "champion",
+            active_checkpoint,
             output / "champion",
             slot_name="champion",
-            summary=champion_summary,
+            summary=active_summary,
         )
     }
 
@@ -647,6 +684,7 @@ def export_mobile_bundle(
         "generalist_version": str(status.get("version", "")),
         "promoted_this_cycle": bool(status.get("promoted")),
         "promotion_reason": str(status.get("promotion_reason", "")),
+        "lineage": lineage,
         "evolution": _evolution_summary(status, state),
         "airi_pc_lab": _mobile_airi_pc_lab(status, state),
         "slots": slots,
