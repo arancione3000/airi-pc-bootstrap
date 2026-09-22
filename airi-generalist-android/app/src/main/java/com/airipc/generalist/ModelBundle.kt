@@ -37,6 +37,12 @@ data class ModelSlot(
     val files: Map<String, BundleFileInfo>,
 )
 
+internal fun sameModelArtifact(first: ModelSlot?, second: ModelSlot?): Boolean {
+    val a = first?.files?.get("model.onnx")?.sha256.orEmpty()
+    val b = second?.files?.get("model.onnx")?.sha256.orEmpty()
+    return a.isNotBlank() && a == b
+}
+
 data class MobileManifest(
     val schema: Int,
     val mobileRevision: String,
