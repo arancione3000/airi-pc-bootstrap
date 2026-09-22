@@ -72,6 +72,34 @@ SOURCES: tuple[dict[str, Any], ...] = (
     },
 )
 
+STREAMING_SOURCES: tuple[dict[str, Any], ...] = (
+    {
+        "id": "fineweb2-it",
+        "dataset": "HuggingFaceFW/fineweb-2",
+        "config": "ita_Latn",
+        "revision": "main",
+        "language": "it",
+        "domain": "general",
+        "license": "ODC-By-1.0",
+        "license_url": "https://opendatacommons.org/licenses/by/1-0/",
+        "source_page": "https://huggingface.co/datasets/HuggingFaceFW/fineweb-2",
+        "attribution": "HuggingFaceFW/FineWeb2 (Italian filtered subset), ODC-By 1.0.",
+    },
+    {
+        "id": "fineweb-en",
+        "dataset": "HuggingFaceFW/fineweb",
+        "config": "sample-10BT",
+        "revision": "main",
+        "language": "en",
+        "domain": "general",
+        "license": "ODC-By-1.0",
+        "license_url": "https://opendatacommons.org/licenses/by/1-0/",
+        "source_page": "https://huggingface.co/datasets/HuggingFaceFW/fineweb",
+        "attribution": "HuggingFaceFW/FineWeb English sample, ODC-By 1.0; CommonCrawl terms also apply.",
+    },
+)
+
+
 _URL_RE = re.compile(r"https?://", re.IGNORECASE)
 
 
@@ -171,6 +199,178 @@ def _quality_sentence(text: str) -> bool:
     alpha = sum(ch.isalpha() for ch in visible)
     return alpha / len(visible) >= 0.45
 
+
+
+def _web_chunks(text: str, *, max_chars: int = 1800) -> list[str]:
+    """Turn long web documents into bounded coherent training documents."""
+    cleaned = str(text).replace("\r", "\n").strip()
+    if not cleaned:
+        return []
+    paragraphs = [
+        re.sub(r"\\s+", " ", part).strip()
+        for part in re.split(r"\\n\\s*\\n+", cleaned)
+        if part.strip()
+    ]
+    out: list[str] = []
+    for paragraph in paragraphs:
+        if len(paragraph) <= max_chars:
+            out.append(paragraph)
+            continue
+        sentences = re.split(r"(?<=[.!?])\\s+", paragraph)
+        current = ""
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            if len(sentence) > max_chars:
+                if current:
+                    out.append(current)
+                    current = ""
+                for start in range(0, len(sentence), max_chars):
+                    out.append(sentence[start:start + max_chars].strip())
+                continue
+            candidate = sentence if not current else current + " " + sentence
+            if len(candidate) > max_chars:
+                out.append(current)
+                current = sentence
+            else:
+                current = candidate
+        if current:
+            out.append(current)
+    return [row for row in out if row]
+
+
+def _quality_web_text(text: str) -> bool:
+    text = str(text).strip()
+    if len(text) < 80 or len(text) > 1800 or "\x00" in text:
+        return False
+    printable = sum(ch.isprintable() for ch in text)
+    if printable / max(1, len(text)) < 0.98:
+        return False
+    visible = [ch for ch in text if not ch.isspace()]
+    if not visible:
+        return False
+    alpha = sum(ch.isalpha() for ch in visible)
+    if alpha / len(visible) < 0.45:
+        return False
+    return _normal(text) not in protected_bootstrap_texts()
+
+
+def _streaming_cache_path(
+    source: dict[str, Any],
+    tokenizer,
+    token_quota: int,
+    cache_dir: Path,
+) -> Path:
+    safe = re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(source["id"]))
+    tok = re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(tokenizer.version))
+    return cache_dir / (
+        f"{safe}-{tok}-v{int(tokenizer.vocab_size)}-{int(token_quota)}.jsonl.gz"
+    )
+
+
+def _load_or_stream_hf_documents(
+    source: dict[str, Any],
+    *,
+    tokenizer,
+    token_quota: int,
+    cache_dir: Path,
+) -> tuple[list[CorpusDocument], int]:
+    """Stream a deterministic bounded FineWeb sample and persist it locally.
+
+    The cache is intentionally source-text only.  Model weights are never
+    imported; the live AIRI checkpoint is trained on these documents directly.
+    """
+    quota = max(1, int(token_quota))
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = _streaming_cache_path(source, tokenizer, quota, cache_dir)
+
+    documents: list[CorpusDocument] = []
+    tokens = 0
+    if cache_path.is_file():
+        with gzip.open(cache_path, "rt", encoding="utf-8") as handle:
+            for line in handle:
+                row = json.loads(line)
+                text = str(row["text"])
+                needed = len(tokenizer.encode(text)) + 1
+                documents.append(CorpusDocument(
+                    source=str(row["source"]),
+                    text=text,
+                    sha256=str(row["sha256"]),
+                    bytes=len(text.encode("utf-8")),
+                    domain=str(source.get("domain") or "general"),
+                ))
+                tokens += needed
+        if tokens >= int(quota * 0.95):
+            return documents, tokens
+        documents.clear()
+        tokens = 0
+
+    try:
+        from datasets import load_dataset
+    except Exception as exc:
+        raise RuntimeError(
+            "FineWeb fast-track requires the 'datasets' package"
+        ) from exc
+
+    stream = load_dataset(
+        str(source["dataset"]),
+        name=str(source["config"]),
+        split="train",
+        streaming=True,
+        revision=str(source.get("revision") or "main"),
+    )
+    try:
+        stream = stream.shuffle(
+            seed=271828 if source["language"] == "it" else 314159,
+            buffer_size=10_000,
+        )
+    except Exception:
+        pass
+
+    seen: set[str] = set()
+    rows_for_cache: list[dict[str, str]] = []
+    for row_index, row in enumerate(stream):
+        raw_text = str((row or {}).get("text") or "").strip()
+        if not raw_text:
+            continue
+        row_id = str((row or {}).get("id") or row_index)
+        for chunk_index, chunk in enumerate(_web_chunks(raw_text)):
+            if not _quality_web_text(chunk):
+                continue
+            digest = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
+            if digest in seen:
+                continue
+            seen.add(digest)
+            source_name = f"{source['id']}:{row_id}:{chunk_index}"
+            documents.append(CorpusDocument(
+                source=source_name,
+                text=chunk,
+                sha256=digest,
+                bytes=len(chunk.encode("utf-8")),
+                domain=str(source.get("domain") or "general"),
+            ))
+            rows_for_cache.append({
+                "source": source_name,
+                "text": chunk,
+                "sha256": digest,
+            })
+            tokens += len(tokenizer.encode(chunk)) + 1
+            if tokens >= quota:
+                break
+        if tokens >= quota:
+            break
+
+    if tokens < int(quota * 0.95):
+        raise RuntimeError(
+            f"streamed source {source['id']} supplied only {tokens} tokens "
+            f"for requested quota {quota}"
+        )
+
+    with gzip.open(cache_path, "wt", encoding="utf-8") as handle:
+        for row in rows_for_cache:
+            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    return documents, tokens
 
 def _parse_tatoeba(
     source: dict[str, Any],
@@ -685,6 +885,46 @@ def build_bootstrap_bundle(
         "imported_tokens_by_language": oasst_by_language,
     })
 
+
+    # The original pinned sources provide roughly five million useful tokens.
+    # Only the 100M fast-track rung asks for more unique text; fill that bounded
+    # deficit with already-cleaned/deduplicated FineWeb data while preserving
+    # the same AIRI model lineage and keeping Italian slightly dominant.
+    remaining = max(0, int(target_tokens) - int(sum(language_counts.values())))
+    if target_tokens > 5_000_000 and remaining > 0:
+        quotas = {
+            "it": max(1, int(round(remaining * 0.60))),
+            "en": max(1, remaining - int(round(remaining * 0.60))),
+        }
+        for source in STREAMING_SOURCES:
+            language = str(source["language"])
+            quota = int(quotas[language])
+            documents, imported_tokens = _load_or_stream_hf_documents(
+                source,
+                tokenizer=tokenizer,
+                token_quota=quota,
+                cache_dir=cache,
+            )
+            all_documents.extend(documents)
+            language_counts[language] += imported_tokens
+            domain_counts["general"] += imported_tokens
+            source_records.append({
+                "id": source["id"],
+                "dataset": source["dataset"],
+                "config": source["config"],
+                "revision": source["revision"],
+                "source_page": source["source_page"],
+                "license": source["license"],
+                "license_url": source["license_url"],
+                "attribution": source["attribution"],
+                "language": source["language"],
+                "domain": source["domain"],
+                "streaming": True,
+                "cached_locally": True,
+                "imported_documents": len(documents),
+                "imported_tokens": imported_tokens,
+            })
+
     train_docs, val_docs = _split_documents(all_documents)
     sft_train, sft_validation = _split_sft(sft_rows)
 
@@ -716,6 +956,7 @@ def build_bootstrap_bundle(
             "italian_contributor_count": len(attribution_authors),
             "italian_contributors": sorted(attribution_authors),
             "oasst1": "OpenAssistant/OASST1, Apache-2.0, pinned revision " + OASST1_REVISION,
+            "fineweb": "HuggingFaceFW FineWeb/FineWeb2, ODC-By 1.0; CommonCrawl terms apply.",
         },
     }
     manifest["manifest_content_sha256"] = hashlib.sha256(
