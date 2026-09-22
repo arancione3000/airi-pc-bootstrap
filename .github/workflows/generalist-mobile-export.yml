@@ -173,6 +173,120 @@ jobs:
           test -f "${STATE_ROOT}/generalist-state/champion/model.pt"
           test -f "${STATE_ROOT}/generalist-state/status.json"
 
+      - name: Bind Latest Research to the live Phase-5 lineage
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import shutil
+          from pathlib import Path
+
+          from generalist_lm.model import parameter_count
+          from generalist_lm.runtime import GeneralistRuntime
+
+          state = Path("/tmp/airi-generalist-mobile-state/generalist-state")
+          candidate = state / "bootstrap-data" / "candidate"
+          progress_path = state / "bootstrap-data" / "progress.json"
+          report_path = state / "bootstrap-data" / "report.json"
+
+          # Mobile "Latest Research" is the exact persisted Phase-5 checkpoint
+          # that the language bootstrap resumes and grows.  This preparation
+          # mutates only the temporary export checkout, never generalist-state.
+          if not (candidate / "model.pt").is_file():
+              raise SystemExit("live Phase-5 candidate checkpoint is missing")
+          if not progress_path.is_file():
+              raise SystemExit("live Phase-5 progress is missing")
+
+          progress = json.loads(progress_path.read_text(encoding="utf-8"))
+          status = json.loads((state / "status.json").read_text(encoding="utf-8"))
+          report = {}
+          if report_path.is_file():
+              raw = json.loads(report_path.read_text(encoding="utf-8"))
+              if int(raw.get("target_tokens", -1) or -1) == int(
+                  progress.get("target_tokens", -2) or -2
+              ):
+                  report = raw
+
+          runtime = GeneralistRuntime.from_checkpoint(candidate, device="cpu")
+          parameters = int(parameter_count(runtime.model))
+          target_tokens = int(progress.get("target_tokens", 0) or 0)
+          tokens_processed = int(progress.get("tokens_processed", 0) or 0)
+
+          latest = state / "latest-research"
+          shutil.rmtree(latest, ignore_errors=True)
+          shutil.copytree(candidate, latest)
+
+          summary = {
+              "candidate_id": f"phase5-live-{target_tokens}-{tokens_processed}",
+              "kind": "language_bootstrap_live",
+              "cycle": int(status.get("cycle", 0) or 0),
+              "stage": 5,
+              "parameters": parameters,
+              "target_tokens": target_tokens,
+              "tokens_processed": tokens_processed,
+              "rung_complete": bool(progress.get("rung_complete")),
+              "research_only": True,
+              "all_seed_eligible": False,
+              "external_pretrained": False,
+              "mobile_binding": "exact_bootstrap_data_candidate",
+          }
+          if report:
+              summary["score"] = float(report.get("score", 0.0) or 0.0)
+              summary["worst_domain_regression"] = float(
+                  report.get("worst_domain_regression", 0.0) or 0.0
+              )
+
+          metrics = {
+              "target_tokens": target_tokens,
+              "tokens_processed": tokens_processed,
+              "rung_complete": bool(progress.get("rung_complete")),
+              "parameters": parameters,
+              "research_source": "bootstrap-data/candidate",
+          }
+          after = report.get("after") if isinstance(report, dict) else None
+          if isinstance(after, dict):
+              metrics.update({
+                  "generation_pathological_repetition": bool(
+                      after.get("pathological_repetition", True)
+                  ),
+                  "generation_repetition_rate": float(
+                      after.get("repetition_rate", 1.0) or 1.0
+                  ),
+                  "generation_similarity": float(
+                      after.get("generation_similarity", 0.0) or 0.0
+                  ),
+                  "generation_nonempty_rate": float(
+                      after.get("non_empty_rate", 0.0) or 0.0
+                  ),
+              })
+
+          (latest / "research-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          (latest / "research-metrics.json").write_text(
+              json.dumps(metrics, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+
+          # The app's research slot must not silently switch to an unrelated
+          # architecture incumbent.  Remove it only in this throw-away clone.
+          shutil.rmtree(
+              state / "architecture-research" / "incumbent",
+              ignore_errors=True,
+          )
+
+          print(json.dumps({
+              "ok": True,
+              "candidate_id": summary["candidate_id"],
+              "parameters": parameters,
+              "target_tokens": target_tokens,
+              "tokens_processed": tokens_processed,
+              "tokenizer_version": runtime.tokenizer.version,
+              "tokenizer_vocab_size": runtime.tokenizer.vocab_size,
+          }, sort_keys=True))
+          PY
+
       - name: Export and independently validate mobile ONNX bundle
         run: |
           set -euo pipefail
@@ -180,7 +294,15 @@ jobs:
           python -m generalist_lm.mobile_export             --state-dir "${STATE_ROOT}/generalist-state"             --output "${MOBILE_OUT}"             --state-sha "${STATE_SHA}"
           test -s "${MOBILE_OUT}/manifest.json"
           test -s "${MOBILE_OUT}/champion/model.onnx"
-          jq -e '.schema == 1 and .slots.champion.files["model.onnx"].bytes > 0'             "${MOBILE_OUT}/manifest.json"
+          jq -e '
+            .schema == 1
+            and .slots.champion.files["model.onnx"].bytes > 0
+            and .slots.research.files["model.onnx"].bytes > 0
+            and (.slots.research.id | startswith("phase5-live-"))
+            and .slots.research.research_source == "latest-research"
+          ' "${MOBILE_OUT}/manifest.json"
+          jq -e '.role == "phase5_language_bootstrap_candidate"' \
+            "${MOBILE_OUT}/research/metadata.json"
 
       - uses: actions/upload-artifact@v4
         with:
