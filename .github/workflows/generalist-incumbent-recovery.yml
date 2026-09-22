@@ -1,0 +1,184 @@
+name: AIRI Generalist Incumbent Recovery
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/generalist-incumbent-recovery.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: airi-generalist-incumbent-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      STATE_REPO: /tmp/airi-incumbent-state-repo
+      ARTIFACT_ID: '10679863712'
+      SOURCE_RUN_ID: '35693000822'
+      EXPECTED_CANDIDATE_ID: 'airi-arch-4-21e14f863939'
+      EXPECTED_PARAMETERS: '1254336'
+      EXPECTED_MODEL_SHA256: '526149394ba869775452726db0406a5763f3955546e31e4726fdf328d07ec3b8'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for all Generalist state writers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 120); do
+            active=0
+            for workflow in generalist-continuum.yml generalist-bootstrap.yml generalist-architecture-search.yml; do
+              payload="$(curl --fail-with-body -sS --retry 3 --retry-all-errors \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?per_page=30")"
+              count="$(jq '[.workflow_runs[] | select(.status == "pending" or .status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "requested")] | length' <<<"${payload}")"
+              active="$((active + count))"
+            done
+            if (( active == 0 )); then
+              echo "Incumbent recovery owns a clean Generalist state-write window."
+              exit 0
+            fi
+            echo "Waiting for ${active} active Generalist state-writer run(s)."
+            sleep 20
+          done
+          echo "Timed out waiting for state-writer window." >&2
+          exit 1
+
+      - name: Restore latest persistent state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf "${STATE_REPO}"
+          git clone --quiet "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${STATE_REPO}"
+          git -C "${STATE_REPO}" config user.name "AIRI Architecture Recovery"
+          git -C "${STATE_REPO}" config user.email "airi-architecture@users.noreply.github.com"
+          git -C "${STATE_REPO}" fetch --quiet origin generalist-state:generalist-state
+          git -C "${STATE_REPO}" checkout --quiet generalist-state
+          git -C "${STATE_REPO}" rev-parse HEAD > /tmp/base-state-sha
+          if [[ -s "${STATE_REPO}/generalist-state/architecture-research/incumbent/summary.json" ]]; then
+            echo "INCUMBENT_ALREADY_PRESENT=true" >> "${GITHUB_ENV}"
+          else
+            echo "INCUMBENT_ALREADY_PRESENT=false" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Download exact Stage-3 architecture artifact
+        if: env.INCUMBENT_ALREADY_PRESENT != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/incumbent-artifact /tmp/incumbent.zip
+          mkdir -p /tmp/incumbent-artifact
+          curl --fail-with-body -sS -L --retry 3 --retry-all-errors \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            -o /tmp/incumbent.zip
+          unzip -q /tmp/incumbent.zip -d /tmp/incumbent-artifact
+          test -s /tmp/incumbent-artifact/result.json
+          test -s /tmp/incumbent-artifact/best-checkpoint/model.pt
+          test -s /tmp/incumbent-artifact/best-checkpoint/config.json
+          test -s /tmp/incumbent-artifact/best-checkpoint/tokenizer.json
+          test -s /tmp/incumbent-artifact/best-checkpoint/metadata.json
+
+      - name: Verify recovered candidate and write immutable research summary
+        if: env.INCUMBENT_ALREADY_PRESENT != 'true'
+        run: |
+          set -euo pipefail
+          actual_sha="$(sha256sum /tmp/incumbent-artifact/best-checkpoint/model.pt | awk '{print $1}')"
+          test "${actual_sha}" = "${EXPECTED_MODEL_SHA256}"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          artifact = Path('/tmp/incumbent-artifact')
+          state_repo = Path(os.environ['STATE_REPO'])
+          result = json.loads((artifact / 'result.json').read_text())
+          if result.get('candidate_id') != os.environ['EXPECTED_CANDIDATE_ID']:
+              raise SystemExit('unexpected incumbent candidate_id')
+          if int(result.get('parameters', 0)) != int(os.environ['EXPECTED_PARAMETERS']):
+              raise SystemExit('unexpected incumbent parameter count')
+          if bool(result.get('all_seed_eligible')):
+              raise SystemExit('recovery artifact is unexpectedly production-eligible')
+
+          leaderboard_path = state_repo / 'generalist-state' / 'architecture-research' / 'leaderboard.json'
+          leaderboard = json.loads(leaderboard_path.read_text())
+          entry = next((row for row in leaderboard.get('entries', []) if row.get('candidate_id') == result['candidate_id']), None)
+          if entry is None:
+              raise SystemExit('candidate missing from persisted architecture leaderboard')
+
+          last_plan_path = state_repo / 'generalist-state' / 'architecture-research' / 'last-plan.json'
+          last_plan = json.loads(last_plan_path.read_text())
+          parent_fingerprint = (last_plan.get('architecture_parent') or {}).get('fingerprint') or ''
+          if not parent_fingerprint:
+              raise SystemExit('missing architecture parent fingerprint')
+
+          target = state_repo / 'generalist-state' / 'architecture-research' / 'incumbent'
+          target.mkdir(parents=True, exist_ok=True)
+          summary = {
+              'schema': 1,
+              'version': 'airi-architecture-incumbent-v1',
+              'candidate_id': result['candidate_id'],
+              'kind': result.get('kind'),
+              'cycle': int(result.get('cycle', 0)),
+              'stage': int(result.get('stage', 0)),
+              'parameters': int(result.get('parameters', 0)),
+              'mean_nll_per_byte': float(result.get('mean_nll_per_byte', 0.0)),
+              'mean_generation_repetition_rate': float(result.get('mean_generation_repetition_rate', 1.0)),
+              'mean_generation_similarity': float(result.get('mean_generation_similarity', 0.0)),
+              'mean_generation_nonempty_rate': float(result.get('mean_generation_nonempty_rate', 0.0)),
+              'pathological_repetition': bool(result.get('any_generation_pathological_repetition')),
+              'worst_domain_regression': float(result.get('worst_domain_regression', 0.0)),
+              'all_seed_eligible': bool(result.get('all_seed_eligible')),
+              'cumulative_steps': int(result.get('cumulative_steps', 0)),
+              'genome': result.get('genome'),
+              'architecture': entry.get('architecture'),
+              'fingerprint': entry.get('fingerprint'),
+              'parent_fingerprint': parent_fingerprint,
+              'source_run_id': int(os.environ['SOURCE_RUN_ID']),
+              'source_artifact_id': int(os.environ['ARTIFACT_ID']),
+              'model_sha256': os.environ['EXPECTED_MODEL_SHA256'],
+              'research_only': True,
+              'production_qualified': False,
+              'recovered': True,
+              'external_pretrained': False,
+          }
+          (target / 'summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True), encoding='utf-8')
+          PY
+
+      - name: Persist recovered incumbent checkpoint
+        if: env.INCUMBENT_ALREADY_PRESENT != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          target="${STATE_REPO}/generalist-state/architecture-research/incumbent/checkpoint"
+          rm -rf "${target}"
+          mkdir -p "${target}"
+          cp -a /tmp/incumbent-artifact/best-checkpoint/. "${target}/"
+          expected_state_sha="$(cat /tmp/base-state-sha)"
+          git -C "${STATE_REPO}" fetch --quiet origin generalist-state
+          current_state_sha="$(git -C "${STATE_REPO}" rev-parse origin/generalist-state)"
+          if [[ "${current_state_sha}" != "${expected_state_sha}" ]]; then
+            echo "generalist-state advanced during recovery; refusing stale overwrite." >&2
+            exit 1
+          fi
+          git -C "${STATE_REPO}" add -A generalist-state/architecture-research/incumbent
+          git -C "${STATE_REPO}" commit -m "generalist-state: recover promising architecture incumbent from cycle 115"
+          git -C "${STATE_REPO}" push --quiet origin HEAD:generalist-state
+          test -s "${target}/model.pt"
+          test -s "${STATE_REPO}/generalist-state/architecture-research/incumbent/summary.json"
