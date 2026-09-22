@@ -237,8 +237,10 @@ jobs:
             -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${TARGET_TOKENS}\"}}"
           echo "NEXT_BOOTSTRAP_TARGET=${TARGET_TOKENS}" >> "${GITHUB_ENV}"
 
-      - name: Queue the next language rung after one converged swarm cycle
+      - name: Dispatch next in-place language rung
         if: env.RUNG_COMPLETE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           report="${STATE_DIR}/bootstrap-data/report.json"
@@ -250,30 +252,37 @@ jobs:
           elif [[ "${current}" -lt 20000000 ]]; then
             next=20000000
           elif [[ "${current}" -lt 100000000 ]]; then
-            # Fast-track the same live checkpoint directly to the 7M/100M rung.
+            # Keep the exact persisted Phase-5 candidate used by the app.
+            # The next run will grow this same checkpoint to the 7M tier.
             next=100000000
           fi
 
+          # Remove legacy swarm-handoff markers.  This prevents an unrelated
+          # architecture winner from replacing the live app lineage between
+          # the completed 20M rung and the 100M/7M continuation.
           marker="${STATE_DIR}/bootstrap-next-target.json"
-          if [[ -n "${next}" ]]; then
-            printf '{"schema":1,"completed_target_tokens":%s,"target_tokens":%s,"handoff":"converged_swarm_first"}\n' \
-              "${current}" "${next}" > "${marker}"
-          else
-            rm -f "${marker}"
-          fi
-
+          rm -f "${marker}"
           cd "${STATE_REPO}"
+          rm -f generalist-state/bootstrap-next-target.json
           git add -A generalist-state/bootstrap-next-target.json || true
-          git commit --allow-empty -m "generalist-state: queue post-fusion bootstrap target ${next:-complete}"
+          git commit --allow-empty -m "generalist-state: direct in-place bootstrap handoff ${current} -> ${next:-complete}"
           git push --quiet origin HEAD:generalist-state
           cd "${GITHUB_WORKSPACE}"
 
           if [[ -n "${next}" ]]; then
+            curl --fail-with-body -sS --retry 3 --retry-all-errors -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/dispatches" \
+              -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${next}\"}}"
             echo "NEXT_BOOTSTRAP_TARGET=${next}" >> "${GITHUB_ENV}"
-            echo "Queued target ${next}; the Generalist swarm must run once before it is dispatched."
+            echo "Dispatched the same persisted AIRI Phase-5 lineage directly to target ${next}."
           else
-            echo "100M bounded language ladder complete; no automatic larger language rung queued."
+            echo "100M bounded language ladder complete; no larger automatic rung queued."
           fi
 
-      # Continuum is resumed by its workflow_run trigger only after this
+      # The next bootstrap is queued before this workflow finishes.  The
+      # Continuum bootstrap-gate therefore sees an active language bootstrap
+      # and yields instead of interposing a swarm/champion replacement.
       # workflow is formally completed, eliminating the pre-completion race.
