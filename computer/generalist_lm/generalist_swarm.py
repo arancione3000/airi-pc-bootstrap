@@ -1545,7 +1545,7 @@ def finalize_swarm(
             "scale_budget_adaptive": True,
             "adaptive_pretraining_budget": {
                 "enabled": True,
-                "max_steps_per_stage": 24,
+                "max_steps_per_stage": 48,
             },
             "domain_balanced_pretraining": True,
             "language_gap_routing": True,
