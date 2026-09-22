@@ -463,7 +463,7 @@ def prepare_swarm(
 
     live_cfg = champion_runtime.config
     max_params = min(
-        48_000_000,
+        96_000_000,
         max(int(max_params), int(parameter_count(champion_runtime.model) * 1.35)),
     )
     max_context = min(
