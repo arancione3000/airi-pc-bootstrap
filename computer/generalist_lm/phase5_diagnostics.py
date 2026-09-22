@@ -62,11 +62,16 @@ def _mean(values: Iterable[float]) -> float:
     return float(sum(values) / len(values)) if values else 0.0
 
 
-def _single_greedy_trace(runtime, prompt: str, *, max_new_tokens: int) -> dict[str, Any]:
+def _single_greedy_trace_messages(
+    runtime,
+    messages: list[dict[str, str]],
+    *,
+    max_new_tokens: int,
+) -> dict[str, Any]:
     torch = runtime.torch
     tokenizer = runtime.tokenizer
     ids = tokenizer.serialize_messages(
-        [{"role": "user", "content": prompt}],
+        messages,
         add_generation_prompt=True,
     )
     context = list(ids[-runtime.config.context_length:])
@@ -102,7 +107,11 @@ def _single_greedy_trace(runtime, prompt: str, *, max_new_tokens: int) -> dict[s
     merged = sum(int(token >= BYTE_VOCAB_SIZE) for token in generated)
     byte_tokens = sum(int(BYTE_OFFSET <= token < BYTE_VOCAB_SIZE) for token in generated)
     return {
-        "prompt": prompt,
+        "prompt": (
+            str(messages[-1].get("content", ""))
+            if messages
+            else ""
+        ),
         "raw_output": decoded,
         "generated_token_ids": generated,
         "generation_length": len(generated),
@@ -120,6 +129,137 @@ def _single_greedy_trace(runtime, prompt: str, *, max_new_tokens: int) -> dict[s
             "merged_fraction": float(merged / len(generated)) if generated else 0.0,
         },
     }
+
+
+def _single_greedy_trace(runtime, prompt: str, *, max_new_tokens: int) -> dict[str, Any]:
+    return _single_greedy_trace_messages(
+        runtime,
+        [{"role": "user", "content": prompt}],
+        max_new_tokens=max_new_tokens,
+    )
+
+
+def evaluate_sft_validation(
+    runtime,
+    examples: Iterable[SFTExample],
+    *,
+    max_examples: int = 24,
+    max_new_tokens: int = 48,
+) -> dict[str, Any]:
+    selected = list(examples)[: max(1, int(max_examples))]
+    if not selected:
+        raise ValueError("SFT validation requires at least one held-out example")
+
+    traces: list[dict[str, Any]] = []
+    all_ids: list[int] = []
+    similarities: list[float] = []
+    nonempty: list[bool] = []
+    word_outputs: list[bool] = []
+
+    for example in selected:
+        messages = [dict(row) for row in example.messages]
+        target = str(messages[-1].get("content", ""))
+        prompt_messages = messages[:-1]
+        trace = _single_greedy_trace_messages(
+            runtime,
+            prompt_messages,
+            max_new_tokens=max_new_tokens,
+        )
+        output = str(trace["raw_output"])
+        similarity = SequenceMatcher(None, output, target, autojunk=False).ratio()
+        trace.update({
+            "target": target,
+            "generation_similarity": float(similarity),
+            "nonempty": bool(output.strip()),
+        })
+        traces.append(trace)
+        all_ids.extend(trace["generated_token_ids"])
+        similarities.append(float(similarity))
+        nonempty.append(bool(output.strip()))
+        word_outputs.append(bool(re.findall(r"[^\\W\\d_]+", output, flags=re.UNICODE)))
+
+    nll = nll_stats_on_examples(
+        runtime.model,
+        runtime.tokenizer,
+        selected,
+        device=str(runtime.device),
+    )
+    avg_unique = _mean(row["unique_token_ratio"] for row in traces)
+    avg_repetition = _mean(row["repetition_rate"] for row in traces)
+    max_run = max((int(row["longest_repeated_token_run"]) for row in traces), default=0)
+    distribution = _distribution(all_ids)
+    dominant_fraction = max(
+        (row["fraction"] for row in distribution),
+        default=0.0,
+    )
+    pathological = bool(
+        (len(all_ids) >= 8 and avg_repetition >= 0.65)
+        or max_run >= 8
+        or (len(all_ids) >= 12 and avg_unique <= 0.20)
+        or (len(all_ids) >= 12 and dominant_fraction >= 0.55)
+    )
+    return {
+        "schema": 1,
+        "suite": "phase5-sft-heldout-v1",
+        "suite_training_excluded": True,
+        "prompt_count": len(selected),
+        "language_nll": float(nll["nll_per_byte"]),
+        "language_bits_per_byte": float(nll["bits_per_byte"]),
+        "generation_similarity": _mean(similarities),
+        "non_empty_rate": float(sum(nonempty) / len(nonempty)) if nonempty else 0.0,
+        "word_output_rate": float(sum(word_outputs) / len(word_outputs)) if word_outputs else 0.0,
+        "token_entropy": _mean(row["token_entropy"] for row in traces),
+        "repetition_rate": float(avg_repetition),
+        "longest_repeated_token_run": int(max_run),
+        "unique_token_ratio": float(avg_unique),
+        "dominant_token_fraction": float(dominant_fraction),
+        "pathological_repetition": pathological,
+        "traces": traces,
+    }
+
+
+def sft_validation_gate(
+    before: dict[str, Any],
+    after: dict[str, Any],
+    *,
+    max_repetition_regression: float = 0.025,
+    max_nll_regression: float = 0.03,
+    min_entropy_fraction: float = 0.85,
+    max_unique_ratio_drop: float = 0.04,
+) -> tuple[bool, list[str]]:
+    """Fail closed on SFT-induced degeneration without using Phase-5 canaries.
+
+    The held-out OASST validation split may guide SFT checkpoint selection, but
+    never enters training. Existing pathology is tolerated only if SFT does not
+    materially worsen it.
+    """
+    reasons: list[str] = []
+    if float(after.get("repetition_rate", 1.0)) > (
+        float(before.get("repetition_rate", 0.0)) + float(max_repetition_regression)
+    ):
+        reasons.append("held-out repetition regressed")
+    if float(after.get("language_nll", float("inf"))) > (
+        float(before.get("language_nll", float("inf"))) + float(max_nll_regression)
+    ):
+        reasons.append("held-out SFT NLL regressed")
+    old_entropy = float(before.get("token_entropy", 0.0))
+    if old_entropy > 0.0 and float(after.get("token_entropy", 0.0)) < (
+        old_entropy * float(min_entropy_fraction)
+    ):
+        reasons.append("held-out token entropy collapsed")
+    if float(after.get("unique_token_ratio", 0.0)) < (
+        float(before.get("unique_token_ratio", 0.0)) - float(max_unique_ratio_drop)
+    ):
+        reasons.append("held-out token diversity regressed")
+    old_run = int(before.get("longest_repeated_token_run", 0) or 0)
+    new_run = int(after.get("longest_repeated_token_run", 0) or 0)
+    if new_run > max(old_run + 2, 8):
+        reasons.append("held-out repeated-token run regressed")
+    if float(after.get("non_empty_rate", 0.0)) + 0.10 < float(
+        before.get("non_empty_rate", 0.0)
+    ):
+        reasons.append("held-out non-empty rate regressed")
+    return (not reasons), reasons
 
 
 def evaluate_phase5_language(runtime, *, max_new_tokens: int = 48) -> dict[str, Any]:
