@@ -519,6 +519,13 @@ def _run_guarded_sft(
         max_examples=24,
         max_new_tokens=32,
     )
+    sft_anti_collapse_weight = (
+        0.04
+        if bool(before.get("pathological_repetition"))
+        or float(before.get("repetition_rate", 0.0) or 0.0) >= 0.60
+        else 0.0
+    )
+    sft_eos_loss_weight = 1.50 if sft_anti_collapse_weight > 0.0 else 1.0
     attempts = (
         {"steps": 80, "learning_rate": 5e-5},
         {"steps": 40, "learning_rate": 3e-5},
@@ -542,6 +549,8 @@ def _run_guarded_sft(
             device="cpu",
             gradient_accumulation_steps=1,
             precision="fp32",
+            repetition_unlikelihood_weight=sft_anti_collapse_weight,
+            eos_loss_weight=sft_eos_loss_weight,
         )
         after = evaluate_sft_validation(
             trial,
@@ -560,6 +569,12 @@ def _run_guarded_sft(
             "gate_passed": bool(gate_ok),
             "gate_reasons": list(gate_reasons),
             "selection_score": float(score),
+            "anti_collapse_objective": {
+                "enabled": bool(sft_anti_collapse_weight > 0.0),
+                "repetition_unlikelihood_weight": float(sft_anti_collapse_weight),
+                "eos_loss_weight": float(sft_eos_loss_weight),
+                "decoding_modified": False,
+            },
         }
         reports.append(report)
         if gate_ok and score > best_score:
@@ -1079,6 +1094,13 @@ def run_segment(
             "promoted": promoted,
             "promotion_reason": promotion_reason,
             "manifest_sha256": bundle.manifest.get("manifest_content_sha256"),
+            "anti_collapse": {
+                "version": PHASE5_ANTICOLLAPSE_VERSION,
+                "rescue": progress.get("anti_collapse_rescue"),
+                "rescue_tokens": int(progress.get("anti_collapse_rescue_tokens", 0) or 0),
+                "last_objective": progress.get("last_objective"),
+                "decoding_modified": False,
+            },
         }
         _atomic_json(root / "status.json", status)
 
@@ -1124,6 +1146,13 @@ def run_segment(
             "promotion_reason": promotion_reason,
             "airi_pc_lab_after": lab_probe,
             "manifest_sha256": bundle.manifest.get("manifest_content_sha256"),
+            "anti_collapse": {
+                "version": PHASE5_ANTICOLLAPSE_VERSION,
+                "rescue": progress.get("anti_collapse_rescue"),
+                "rescue_tokens": int(progress.get("anti_collapse_rescue_tokens", 0) or 0),
+                "last_objective": progress.get("last_objective"),
+                "decoding_modified": False,
+            },
         }
         _atomic_json(bootstrap_root / "report.json", report)
 
