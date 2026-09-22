@@ -56,36 +56,36 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # The language bootstrap is now the authoritative live-app writer.
+          # Continuum already has a bootstrap gate and must yield to an active
+          # bootstrap; waiting for queued Continuum runs here would invert that
+          # priority and can create an unnecessary mutual wait.
           for _ in $(seq 1 90); do
-            active=0
-            for workflow in generalist-continuum.yml generalist-incumbent-recovery.yml; do
-              payload="$(curl --fail-with-body -sS --retry 3 --retry-all-errors \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: Bearer ${GH_TOKEN}" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?per_page=30")"
-              count="$(jq '
-                [
-                  .workflow_runs[]
-                  | select(
-                      .status == "pending"
-                      or .status == "queued"
-                      or .status == "in_progress"
-                      or .status == "waiting"
-                      or .status == "requested"
-                    )
-                ] | length
-              ' <<<"${payload}")"
-              active="$((active + count))"
-            done
+            payload="$(curl --fail-with-body -sS --retry 3 --retry-all-errors \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-incumbent-recovery.yml/runs?per_page=30")"
+            active="$(jq '
+              [
+                .workflow_runs[]
+                | select(
+                    .status == "pending"
+                    or .status == "queued"
+                    or .status == "in_progress"
+                    or .status == "waiting"
+                    or .status == "requested"
+                  )
+              ] | length
+            ' <<<"${payload}")"
             if (( active == 0 )); then
               echo "Bootstrap now owns the Generalist state-write window."
               exit 0
             fi
-            echo "Waiting for ${active} higher-priority Generalist state-writer run(s)."
+            echo "Waiting for ${active} active incumbent-recovery writer(s)."
             sleep 20
           done
-          echo "Timed out waiting for higher-priority state writer." >&2
+          echo "Timed out waiting for incumbent recovery writer." >&2
           exit 1
 
       - name: Restore latest persistent Generalist state
