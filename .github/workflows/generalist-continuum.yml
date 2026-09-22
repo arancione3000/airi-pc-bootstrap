@@ -425,7 +425,7 @@ jobs:
           if [[ -s "${next_target_file}" ]]; then
             next_target="$(jq -r '.target_tokens // 0' "${next_target_file}")"
             completed_target="$(jq -r '.completed_target_tokens // 0' "${next_target_file}")"
-            if (( next_target > completed_target && next_target <= 100000000 )); then
+            if (( next_target > completed_target && next_target <= 1000000000 )); then
               # Consume the marker transactionally before dispatch so a later
               # scheduled Continuum cycle cannot fan out duplicate bootstraps.
               rm -f "${next_target_file}"
