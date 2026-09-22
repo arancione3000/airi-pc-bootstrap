@@ -12,16 +12,18 @@ def _torch():
     return torch, nn, F
 
 
+_ALLOWED_FAMILIES = {"decoder_transformer_v1", "gated_recurrent_v1"}
 _ALLOWED_NORMS = {"layernorm", "rmsnorm"}
-_ALLOWED_POSITIONS = {"learned", "sinusoidal", "rope"}
+_ALLOWED_POSITIONS = {"learned", "sinusoidal", "rope", "none"}
 _ALLOWED_FF = {"swiglu", "gelu"}
 _ALLOWED_TOKENIZERS = {"byte-v1", "bpe-v1"}
-_ALLOWED_ATTENTION = {"mha", "gqa"}
+_ALLOWED_ATTENTION = {"mha", "gqa", "none"}
 _ALLOWED_NORM_PLACEMENT = {"pre", "post"}
 
 
 @dataclass
 class GeneralistLMConfig:
+    architecture_family: str = "decoder_transformer_v1"
     vocab_size: int = 264
     context_length: int = 256
     d_model: int = 128
@@ -42,11 +44,16 @@ class GeneralistLMConfig:
     tie_embeddings: bool = True
 
     def validate(self) -> "GeneralistLMConfig":
+        if self.architecture_family not in _ALLOWED_FAMILIES:
+            raise ValueError("unsupported architecture_family")
         self.vocab_size = max(16, int(self.vocab_size))
         self.context_length = max(32, min(8192, int(self.context_length)))
         self.d_model = max(32, min(4096, int(self.d_model)))
         self.n_heads = max(1, min(64, int(self.n_heads)))
-        if self.d_model % self.n_heads:
+        if (
+            self.architecture_family == "decoder_transformer_v1"
+            and self.d_model % self.n_heads
+        ):
             raise ValueError("d_model must be divisible by n_heads")
         self.n_layers = max(1, min(96, int(self.n_layers)))
         self.d_ff = max(self.d_model, min(16384, int(self.d_ff)))
@@ -57,31 +64,47 @@ class GeneralistLMConfig:
             raise ValueError("unsupported norm_type")
         if self.position_encoding not in _ALLOWED_POSITIONS:
             raise ValueError("unsupported position_encoding")
-        if self.position_encoding == "rope" and (self.d_model // self.n_heads) % 2:
-            raise ValueError("RoPE requires an even attention head dimension")
         if self.ff_variant not in _ALLOWED_FF:
             raise ValueError("unsupported ff_variant")
         if self.attention_type not in _ALLOWED_ATTENTION:
             raise ValueError("unsupported attention_type")
         if self.norm_placement not in _ALLOWED_NORM_PLACEMENT:
             raise ValueError("unsupported norm_placement")
-        if self.attention_type == "mha":
-            self.n_kv_heads = self.n_heads
+
+        if self.architecture_family == "gated_recurrent_v1":
+            if self.position_encoding != "none":
+                raise ValueError("gated_recurrent_v1 requires position_encoding=none")
+            if self.attention_type != "none":
+                raise ValueError("gated_recurrent_v1 requires attention_type=none")
+            self.n_kv_heads = 0
+            if int(self.local_attention_window) != 0 or int(self.local_attention_every) != 0:
+                raise ValueError("gated_recurrent_v1 does not use attention windows")
+            self.local_attention_window = 0
+            self.local_attention_every = 0
         else:
-            requested = self.n_kv_heads
-            if requested is None:
-                requested = max(1, self.n_heads // 2)
-            self.n_kv_heads = max(1, min(self.n_heads, int(requested)))
-            if self.n_heads % self.n_kv_heads:
-                raise ValueError("n_heads must be divisible by n_kv_heads for GQA")
-        self.local_attention_window = max(
-            0,
-            min(self.context_length, int(self.local_attention_window)),
-        )
-        self.local_attention_every = max(
-            0,
-            min(self.n_layers, int(self.local_attention_every)),
-        )
+            if self.position_encoding == "none":
+                raise ValueError("transformer family requires positional encoding")
+            if self.position_encoding == "rope" and (self.d_model // self.n_heads) % 2:
+                raise ValueError("RoPE requires an even attention head dimension")
+            if self.attention_type == "none":
+                raise ValueError("transformer family requires attention")
+            if self.attention_type == "mha":
+                self.n_kv_heads = self.n_heads
+            else:
+                requested = self.n_kv_heads
+                if requested is None:
+                    requested = max(1, self.n_heads // 2)
+                self.n_kv_heads = max(1, min(self.n_heads, int(requested)))
+                if self.n_heads % self.n_kv_heads:
+                    raise ValueError("n_heads must be divisible by n_kv_heads for GQA")
+            self.local_attention_window = max(
+                0,
+                min(self.context_length, int(self.local_attention_window)),
+            )
+            self.local_attention_every = max(
+                0,
+                min(self.n_layers, int(self.local_attention_every)),
+            )
         self.tie_embeddings = bool(self.tie_embeddings)
         return self
 
@@ -532,6 +555,15 @@ def _attention_projection_terms(config: GeneralistLMConfig) -> tuple[int, int]:
 def estimate_flops_per_token(config: GeneralistLMConfig) -> int:
     cfg = config.validate()
     ff_multiplier = 3 if cfg.ff_variant == "swiglu" else 2
+    if cfg.architecture_family == "gated_recurrent_v1":
+        recurrent_weights = 6 * cfg.d_model * cfg.d_model
+        return int(
+            cfg.n_layers
+            * (
+                recurrent_weights
+                + ff_multiplier * cfg.d_model * cfg.d_ff
+            )
+        )
     attention_weights, _attention_biases = _attention_projection_terms(cfg)
     return int(
         cfg.n_layers
@@ -552,11 +584,16 @@ def estimate_parameter_count(config: GeneralistLMConfig) -> int:
         embeddings += cfg.vocab_size * d
     ff_multiplier = 3 if cfg.ff_variant == "swiglu" else 2
     norm_params = 4 * d if cfg.norm_type == "layernorm" else 2 * d
-    attention_weights, attention_bias = _attention_projection_terms(cfg)
-    per_layer = attention_weights + ff_multiplier * d * ff + norm_params
+    if cfg.architecture_family == "gated_recurrent_v1":
+        mixer_weights = 6 * d * d
+        mixer_bias = 6 * d if cfg.bias else 0
+    else:
+        mixer_weights, mixer_bias = _attention_projection_terms(cfg)
+        mixer_bias = mixer_bias if cfg.bias else 0
+    per_layer = mixer_weights + ff_multiplier * d * ff + norm_params
     if cfg.bias:
         ff_bias = (2 * ff + d) if cfg.ff_variant == "swiglu" else (ff + d)
-        per_layer += attention_bias + ff_bias
+        per_layer += mixer_bias + ff_bias
     if cfg.norm_placement == "post":
         final_norm = 0
     else:
