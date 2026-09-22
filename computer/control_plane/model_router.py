@@ -20,7 +20,7 @@ CHATGPT_PROVIDER = {
     "available": True,
     "cost_class": "reasoning-authority",
 }
-GENERALIST_CAPABILITIES = ["simple", "coding", "data", "review"]
+GENERALIST_CAPABILITIES = ["simple", "coding", "data", "research", "review"]
 
 
 def _prefer_generalist() -> bool:
@@ -42,7 +42,7 @@ class ModelRouter:
                 "cost_class": "local-qualified",
                 "qualification": local.get("qualification"),
             }
-        self.state["version"] = 3
+        self.state["version"] = 4
         self.state["providers"] = providers
         self.state["routes"] = DEFAULTS.copy()
         self.state["routing_authority"] = (
