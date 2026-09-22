@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig, parameter_count
 
 
-def bench(name: str, *, layers: int, d_ff: int, context: int, batch: int, steps: int) -> dict:
+def bench(name: str, *, layers: int, d_ff: int, context: int, batch: int, steps: int, compile_model: bool = False) -> dict:
     cfg = GeneralistLMConfig(
         vocab_size=384,
         context_length=context,
@@ -23,6 +23,11 @@ def bench(name: str, *, layers: int, d_ff: int, context: int, batch: int, steps:
         ff_variant="swiglu",
     ).validate()
     model = CausalTransformerLM(cfg)
+    compile_seconds = 0.0
+    if compile_model:
+        compile_start = time.perf_counter()
+        model = torch.compile(model)
+        compile_seconds = time.perf_counter() - compile_start
     opt = torch.optim.AdamW(model.parameters(), lr=3e-4)
     gen = torch.Generator().manual_seed(12345)
     x = torch.randint(8, cfg.vocab_size, (batch, context), generator=gen)
@@ -35,6 +40,7 @@ def bench(name: str, *, layers: int, d_ff: int, context: int, batch: int, steps:
             x[:, 1:].reshape(-1),
         )
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
         return float(loss.detach())
 
@@ -59,6 +65,8 @@ def bench(name: str, *, layers: int, d_ff: int, context: int, batch: int, steps:
         "tokens": trained_tokens,
         "tokens_per_second": trained_tokens / elapsed,
         "last_loss": loss,
+        "compile_enabled": bool(compile_model),
+        "compile_wrapper_seconds": compile_seconds,
     }
 
 
@@ -74,13 +82,8 @@ def main() -> None:
         pass
 
     rows = [
-        bench("current-12x1888-c128-b32", layers=12, d_ff=1888, context=128, batch=32, steps=args.steps),
-        bench("current-12x1888-c128-b64", layers=12, d_ff=1888, context=128, batch=64, steps=args.steps),
-        bench("current-12x1888-c128-b128", layers=12, d_ff=1888, context=128, batch=128, steps=max(2, args.steps // 2)),
-        bench("wide10-10x2304-c128-b32", layers=10, d_ff=2304, context=128, batch=32, steps=args.steps),
-        bench("wide10-10x2304-c128-b64", layers=10, d_ff=2304, context=128, batch=64, steps=args.steps),
-        bench("wide10-10x2304-c256-b32", layers=10, d_ff=2304, context=256, batch=32, steps=args.steps),
-        bench("wide10-10x2304-c256-b16", layers=10, d_ff=2304, context=256, batch=16, steps=args.steps),
+        bench("eager-current-b32", layers=12, d_ff=1888, context=128, batch=32, steps=args.steps),
+        bench("compile-current-b32", layers=12, d_ff=1888, context=128, batch=32, steps=args.steps, compile_model=True),
     ]
     baseline = rows[0]["tokens_per_second"]
     for row in rows:
