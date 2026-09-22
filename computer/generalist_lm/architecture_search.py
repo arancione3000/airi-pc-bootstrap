@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import shutil
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -40,6 +42,132 @@ def _read(path: Path, default: Any):
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return default
+
+
+def _research_quality_key(row: dict[str, Any]) -> tuple:
+    pathological = bool(
+        row.get("any_generation_pathological_repetition")
+        if "any_generation_pathological_repetition" in row
+        else row.get("pathological_repetition")
+    )
+    return (
+        0 if bool(row.get("all_seed_eligible")) else 1,
+        pathological,
+        -float(row.get("mean_generation_similarity", 0.0) or 0.0),
+        float(row.get("mean_generation_repetition_rate", 1.0) or 1.0),
+        float(row.get("mean_nll_per_byte", float("inf"))),
+        int(row.get("parameters", 1 << 60) or (1 << 60)),
+    )
+
+
+def _load_incumbent_candidate(
+    state_dir: Path,
+    *,
+    parent_fingerprint: str,
+    current_vocab: int,
+    parameter_cap: int,
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    root = state_dir / "architecture-research" / "incumbent"
+    summary = _read(root / "summary.json", {})
+    checkpoint = root / "checkpoint"
+    report = {
+        "available": False,
+        "used": False,
+        "reason": "missing",
+    }
+    if not isinstance(summary, dict) or not summary:
+        return None, report
+    if str(summary.get("parent_fingerprint") or "") != str(parent_fingerprint):
+        report.update({
+            "available": True,
+            "reason": "parent_changed",
+            "candidate_id": summary.get("candidate_id"),
+        })
+        return None, report
+    if bool(summary.get("production_qualified")):
+        report.update({"available": True, "reason": "already_production_qualified"})
+        return None, report
+    if bool(summary.get("external_pretrained")):
+        report.update({"available": True, "reason": "external_pretrained_forbidden"})
+        return None, report
+    required = [
+        checkpoint / "model.pt",
+        checkpoint / "config.json",
+        checkpoint / "tokenizer.json",
+        checkpoint / "metadata.json",
+    ]
+    if not all(path.is_file() and path.stat().st_size > 0 for path in required):
+        report.update({"available": True, "reason": "checkpoint_incomplete"})
+        return None, report
+
+    genome_raw = summary.get("genome")
+    if not isinstance(genome_raw, dict):
+        report.update({"available": True, "reason": "missing_genome"})
+        return None, report
+    try:
+        genome = GeneralistGenome(**dict(genome_raw)).validate()
+        architecture_raw = summary.get("architecture") or {}
+        vocab_size = int(
+            architecture_raw.get("target_vocab_size")
+            or summary.get("tokenizer_vocab_size")
+            or current_vocab
+        )
+        spec = ArchitectureSpec.from_genome(
+            genome,
+            target_vocab_size=vocab_size,
+        )
+    except Exception as exc:
+        report.update({
+            "available": True,
+            "reason": f"invalid_incumbent:{type(exc).__name__}:{exc}",
+        })
+        return None, report
+
+    fingerprint = spec.fingerprint()
+    expected_fingerprint = str(summary.get("fingerprint") or "")
+    if expected_fingerprint and expected_fingerprint != fingerprint:
+        report.update({"available": True, "reason": "fingerprint_mismatch"})
+        return None, report
+    parameters = spec.parameter_estimate(vocab_size=vocab_size)
+    if parameters > int(parameter_cap):
+        report.update({"available": True, "reason": "parameter_cap_exceeded"})
+        return None, report
+
+    candidate = {
+        "kind": "architecture_incumbent",
+        "genome": genome.to_dict(),
+        "candidate_id": genome.genome_id,
+        "estimated_parameters": int(parameters),
+        "architecture": spec.to_dict(),
+        "architecture_fingerprint": fingerprint,
+        "hypothesis": (
+            "continue training the best research-only architecture checkpoint "
+            "from a previous cycle instead of rediscovering it from scratch"
+        ),
+        "initial_checkpoint": "architecture-research/incumbent/checkpoint",
+        "incumbent_cycle": int(summary.get("cycle", 0) or 0),
+        "incumbent_cumulative_steps": int(
+            summary.get("cumulative_steps", 0) or 0
+        ),
+        "research_only": True,
+    }
+    report.update({
+        "available": True,
+        "used": True,
+        "reason": "same_parent_research_incumbent",
+        "candidate_id": genome.genome_id,
+        "parameters": int(parameters),
+        "fingerprint": fingerprint,
+    })
+    return candidate, report
+
+
+def _checkpoint_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _phase5_signals(state_dir: Path) -> list[str]:
@@ -263,6 +391,23 @@ def prepare_architecture_search(
     })
 
     seen = {parent.fingerprint()}
+    incumbent_candidate, incumbent_report = _load_incumbent_candidate(
+        root,
+        parent_fingerprint=parent.fingerprint(),
+        current_vocab=current_vocab,
+        parameter_cap=int(parameter_cap),
+    )
+    if incumbent_candidate is not None:
+        incumbent_candidate = {
+            **incumbent_candidate,
+            "index": len(candidates),
+        }
+        incumbent_fingerprint = str(
+            incumbent_candidate.get("architecture_fingerprint") or ""
+        )
+        if incumbent_fingerprint and incumbent_fingerprint not in seen:
+            candidates.append(incumbent_candidate)
+            seen.add(incumbent_fingerprint)
     ordered_proposals = prioritize_architecture_proposals(verified_proposals)
     for proposal in ordered_proposals:
         spec = ArchitectureSpec.from_dict(dict(proposal["architecture"]))
@@ -299,6 +444,7 @@ def prepare_architecture_search(
         "architecture_proposals": verified_proposals,
         "architecture_static_rejections": rejected_static,
         "architecture_negative_memory": negative_memory,
+        "architecture_incumbent": incumbent_report,
         "architecture_proposals_skipped_by_memory": [
             proposal
             for proposal in raw_proposals
@@ -323,6 +469,7 @@ def prepare_architecture_search(
             "same_budget_control_required": True,
             "capacity_slots_reserved": True,
             "same_parent_negative_memory": True,
+            "persistent_research_incumbent": True,
             "static_verifier_required": True,
             "external_pretrained_weights": False,
             "arbitrary_generated_python": False,
@@ -415,17 +562,7 @@ def finalize_architecture_search(
     )
 
     rows = [row for row in _result_rows(result_paths) if row.get("ok")]
-    rank = sorted(
-        rows,
-        key=lambda row: (
-            0 if row.get("all_seed_eligible") else 1,
-            bool(row.get("any_generation_pathological_repetition")),
-            -float(row.get("mean_generation_similarity", 0.0) or 0.0),
-            float(row.get("mean_generation_repetition_rate", 1.0) or 1.0),
-            float(row.get("mean_nll_per_byte", float("inf"))),
-            int(row.get("parameters", 1 << 60)),
-        ),
-    )
+    rank = sorted(rows, key=_research_quality_key)
 
     architecture_root = root / "architecture-research"
     architecture_root.mkdir(parents=True, exist_ok=True)
@@ -482,6 +619,128 @@ def finalize_architecture_search(
                 },
             )
 
+    incumbent_root = architecture_root / "incumbent"
+    incumbent_summary_path = incumbent_root / "summary.json"
+    incumbent_decision: dict[str, Any] = {
+        "action": "unchanged",
+        "reason": "no_stage3_candidate",
+    }
+    parent_fingerprint = str(
+        ((plan.get("architecture_parent") or {}).get("fingerprint"))
+        or ""
+    )
+
+    if bool(base_result.get("promoted")):
+        # A promoted winner changes the production parent. Retain the old
+        # incumbent on disk only as historical evidence; it will be ignored
+        # automatically because its parent fingerprint no longer matches.
+        incumbent_decision = {
+            "action": "inactive_after_promotion",
+            "reason": "production_champion_changed",
+        }
+    elif rank:
+        best_row = rank[0]
+        best_result_path = Path(str(best_row.get("_result_path") or ""))
+        best_checkpoint = (
+            best_result_path.parent
+            / str(best_row.get("checkpoint_dir") or "best-checkpoint")
+        )
+        if best_checkpoint.is_dir():
+            best_genome = GeneralistGenome(
+                **dict(best_row["genome"])
+            ).validate()
+            best_spec = ArchitectureSpec.from_genome(
+                best_genome,
+                target_vocab_size=int(
+                    best_row.get("tokenizer_vocab_size", 384) or 384
+                ),
+            )
+            existing_summary = _read(incumbent_summary_path, {})
+            same_parent = (
+                isinstance(existing_summary, dict)
+                and str(existing_summary.get("parent_fingerprint") or "")
+                    == parent_fingerprint
+            )
+            keep_existing = (
+                same_parent
+                and existing_summary
+                and _research_quality_key(existing_summary)
+                    <= _research_quality_key(best_row)
+            )
+            if keep_existing:
+                incumbent_decision = {
+                    "action": "retained",
+                    "reason": "existing_same_parent_incumbent_ranked_better",
+                    "candidate_id": existing_summary.get("candidate_id"),
+                    "parameters": existing_summary.get("parameters"),
+                }
+            else:
+                previous_rounds = (
+                    int(existing_summary.get("incubation_rounds", 0) or 0)
+                    if same_parent
+                    and existing_summary.get("candidate_id")
+                        == best_row.get("candidate_id")
+                    else 0
+                )
+                checkpoint_target = incumbent_root / "checkpoint"
+                shutil.rmtree(checkpoint_target, ignore_errors=True)
+                incumbent_root.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(best_checkpoint, checkpoint_target)
+                model_path = checkpoint_target / "model.pt"
+                summary = {
+                    "schema": 1,
+                    "version": "airi-architecture-incumbent-v1",
+                    "candidate_id": str(best_row.get("candidate_id") or ""),
+                    "kind": best_row.get("kind"),
+                    "cycle": int(plan.get("cycle", 0) or 0),
+                    "stage": int(best_row.get("stage", 0) or 0),
+                    "parameters": int(best_row.get("parameters", 0) or 0),
+                    "mean_nll_per_byte": float(
+                        best_row.get("mean_nll_per_byte", 0.0) or 0.0
+                    ),
+                    "mean_generation_repetition_rate": float(
+                        best_row.get("mean_generation_repetition_rate", 1.0)
+                        or 1.0
+                    ),
+                    "mean_generation_similarity": float(
+                        best_row.get("mean_generation_similarity", 0.0) or 0.0
+                    ),
+                    "mean_generation_nonempty_rate": float(
+                        best_row.get("mean_generation_nonempty_rate", 0.0)
+                        or 0.0
+                    ),
+                    "pathological_repetition": bool(
+                        best_row.get("any_generation_pathological_repetition")
+                    ),
+                    "worst_domain_regression": float(
+                        best_row.get("worst_domain_regression", 0.0) or 0.0
+                    ),
+                    "all_seed_eligible": bool(
+                        best_row.get("all_seed_eligible")
+                    ),
+                    "cumulative_steps": int(
+                        best_row.get("cumulative_steps", 0) or 0
+                    ),
+                    "incubation_rounds": previous_rounds + 1,
+                    "genome": best_genome.to_dict(),
+                    "architecture": best_spec.to_dict(),
+                    "fingerprint": best_spec.fingerprint(),
+                    "parent_fingerprint": parent_fingerprint,
+                    "model_sha256": _checkpoint_sha256(model_path),
+                    "research_only": True,
+                    "production_qualified": False,
+                    "recovered": False,
+                    "external_pretrained": False,
+                }
+                _atomic_json(incumbent_summary_path, summary)
+                incumbent_decision = {
+                    "action": "replaced" if existing_summary else "created",
+                    "reason": "best_stage3_research_checkpoint",
+                    "candidate_id": summary["candidate_id"],
+                    "parameters": summary["parameters"],
+                    "incubation_rounds": summary["incubation_rounds"],
+                }
+
     leaderboard_payload = {
         "schema": 1,
         "version": ARCHITECTURE_SEARCH_VERSION,
@@ -492,6 +751,7 @@ def finalize_architecture_search(
         "winner_promoted": bool(base_result.get("promoted")),
         "promotion_reason": base_result.get("promotion_reason") or base_result.get("reason"),
         "existing_generalist_gates_preserved": True,
+        "incumbent": incumbent_decision,
     }
     _atomic_json(architecture_root / "leaderboard.json", leaderboard_payload)
     _atomic_json(
@@ -503,6 +763,8 @@ def finalize_architecture_search(
             "architecture_proposals": plan.get("architecture_proposals") or [],
             "static_rejections": plan.get("architecture_static_rejections") or [],
             "negative_memory": plan.get("architecture_negative_memory") or {},
+            "incumbent": plan.get("architecture_incumbent") or {},
+            "incumbent_decision": incumbent_decision,
             "proposals_skipped_by_memory": (
                 plan.get("architecture_proposals_skipped_by_memory") or []
             ),
@@ -535,6 +797,7 @@ def finalize_architecture_search(
         handle.write(json.dumps(history_row, ensure_ascii=False, sort_keys=True) + "\n")
 
     base_result["architecture_search"] = leaderboard_payload
+    base_result["architecture_incumbent"] = incumbent_decision
     _atomic_json(Path(output_path), base_result)
     return base_result
 
