@@ -112,6 +112,20 @@ def test_mobile_export_uses_actual_live_checkpoint_parameters_and_probe():
     assert '"live_probe": active_probe' in source
 
 
+def test_assisted_50m_growth_is_persisted_before_more_training():
+    source = Path("computer/generalist_lm/bootstrap_training.py").read_text(
+        encoding="utf-8"
+    )
+    workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(
+        encoding="utf-8"
+    )
+    assert '"capacity_growth_only": True' in source
+    assert 'reason="assisted_50m_capacity_growth"' in source
+    assert '"segment_tokens_processed": 0' in source
+    assert ".capacity_growth_only // false" in workflow
+    assert "AIRI 50M assisted growth persisted" in workflow
+
+
 def test_phase5_100m_amortizes_setup_without_changing_batch_or_lr():
     workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
     assert "segment_tokens=1000000" in workflow
