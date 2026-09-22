@@ -383,6 +383,22 @@ def prepare_architecture_search(
         requested_parameter_cap,
     )
     live = active_lineage_snapshot(root)
+    live_config = live["runtime"].config
+    # The laboratory must never become structurally smaller than AIRI itself.
+    # Keep bounded headroom so it can test the next architecture rather than
+    # merely re-validating today's dimensions forever.
+    max_context = min(
+        8192,
+        max(int(max_context), int(live_config.context_length) * 2),
+    )
+    max_width = min(
+        4096,
+        max(int(max_width), int(live_config.d_model) + 128),
+    )
+    max_layers = min(
+        96,
+        max(int(max_layers), int(live_config.n_layers) + 2),
+    )
     decision = decide_next_action(root, parameter_cap=int(parameter_cap))
 
     base_path = output.with_suffix(".base.json")
