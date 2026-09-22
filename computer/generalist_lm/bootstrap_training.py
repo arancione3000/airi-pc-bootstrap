@@ -1106,6 +1106,41 @@ def run_segment(
             },
         )
 
+        if (
+            assisted_capacity is not None
+            and bool(progress.get("assisted_capacity_growth_completed"))
+        ):
+            # The 50M assist is a structural gift, not another hidden training
+            # phase. Persist it transactionally first, then let the next normal
+            # bootstrap run continue learning from the enlarged live lineage.
+            progress["rung_complete"] = False
+            progress["early_stopped"] = False
+            progress["updated_at_unix"] = int(time.time())
+            _atomic_json(progress_path, progress)
+            lineage_manifest = refresh_live_lineage_manifest(
+                root,
+                reason="assisted_50m_capacity_growth",
+            )
+            return {
+                "ok": True,
+                "version": PHASE5_BOOTSTRAP_VERSION,
+                "lineage_id": lineage_manifest.get("lineage_id"),
+                "active_lineage_checkpoint": lineage_manifest.get(
+                    "active_checkpoint"
+                ),
+                "target_tokens": int(target_tokens),
+                "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
+                "segment_tokens_processed": 0,
+                "steps": int(progress.get("steps", 0) or 0),
+                "parameters": int(parameter_count(runtime.model)),
+                "capacity_growth_only": True,
+                "assisted_capacity_growth": progress.get(
+                    "assisted_capacity_growth"
+                ),
+                "rung_complete": False,
+                "early_stopped": False,
+            }
+
     # Packing a 20M-token corpus is expensive and previously repeated for
     # every resumable segment.  Cache the exact fixed-width token blocks in the
     # job-local data cache.  The cache identity includes the reviewed manifest,
