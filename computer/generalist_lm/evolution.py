@@ -10,10 +10,12 @@ from .model import GeneralistLMConfig, estimate_flops_per_token, estimate_parame
 
 _ALLOWED_TOKENIZERS = {"byte-v1", "bpe-v1"}
 _ALLOWED_TOOL_PROTOCOLS = {"tool-json-v1"}
+_ALLOWED_FAMILIES = {"decoder_transformer_v1", "gated_recurrent_v1"}
 
 
 @dataclass(frozen=True)
 class GeneralistGenome:
+    architecture_family: str = "decoder_transformer_v1"
     generation: int = 0
     parent_id: str | None = None
     genome_id: str = "generalist-0-seed"
@@ -42,6 +44,8 @@ class GeneralistGenome:
     tie_embeddings: bool = True
 
     def validate(self) -> "GeneralistGenome":
+        if self.architecture_family not in _ALLOWED_FAMILIES:
+            raise ValueError("unauthorized architecture_family")
         if self.tokenizer_version not in _ALLOWED_TOKENIZERS:
             raise ValueError("unauthorized tokenizer")
         if self.tool_protocol not in _ALLOWED_TOOL_PROTOCOLS:
@@ -64,24 +68,36 @@ class GeneralistGenome:
             raise ValueError("reasoning_depth out of bounded DSL")
         if self.norm_type not in {"layernorm", "rmsnorm"}:
             raise ValueError("unauthorized norm_type")
-        if self.position_encoding not in {"learned", "sinusoidal", "rope"}:
+        if self.position_encoding not in {"learned", "sinusoidal", "rope", "none"}:
             raise ValueError("unauthorized position_encoding")
-        if self.position_encoding == "rope" and (self.d_model // self.n_heads) % 2:
-            raise ValueError("RoPE requires an even attention head dimension")
         if self.ff_variant not in {"swiglu", "gelu"}:
             raise ValueError("unauthorized ff_variant")
-        if self.attention_type not in {"mha", "gqa"}:
+        if self.attention_type not in {"mha", "gqa", "none"}:
             raise ValueError("unauthorized attention_type")
         if self.norm_placement not in {"pre", "post"}:
             raise ValueError("unauthorized norm_placement")
-        if self.attention_type == "gqa":
-            kv = self.n_kv_heads if self.n_kv_heads is not None else max(1, self.n_heads // 2)
-            if not (1 <= int(kv) <= self.n_heads and self.n_heads % int(kv) == 0):
-                raise ValueError("invalid GQA kv-head count")
-        if not (0 <= self.local_attention_window <= self.context_length):
-            raise ValueError("local attention window outside context")
-        if not (0 <= self.local_attention_every <= self.n_layers):
-            raise ValueError("local attention cadence outside depth")
+        if self.architecture_family == "gated_recurrent_v1":
+            if self.position_encoding != "none":
+                raise ValueError("gated recurrent family requires position_encoding=none")
+            if self.attention_type != "none":
+                raise ValueError("gated recurrent family requires attention_type=none")
+            if int(self.local_attention_window) != 0 or int(self.local_attention_every) != 0:
+                raise ValueError("gated recurrent family does not use attention windows")
+        else:
+            if self.position_encoding == "none":
+                raise ValueError("transformer family requires positional encoding")
+            if self.position_encoding == "rope" and (self.d_model // self.n_heads) % 2:
+                raise ValueError("RoPE requires an even attention head dimension")
+            if self.attention_type == "none":
+                raise ValueError("transformer family requires attention")
+            if self.attention_type == "gqa":
+                kv = self.n_kv_heads if self.n_kv_heads is not None else max(1, self.n_heads // 2)
+                if not (1 <= int(kv) <= self.n_heads and self.n_heads % int(kv) == 0):
+                    raise ValueError("invalid GQA kv-head count")
+            if not (0 <= self.local_attention_window <= self.context_length):
+                raise ValueError("local attention window outside context")
+            if not (0 <= self.local_attention_every <= self.n_layers):
+                raise ValueError("local attention cadence outside depth")
         return self
 
     def to_dict(self) -> dict[str, Any]:
@@ -90,6 +106,7 @@ class GeneralistGenome:
     def model_config(self, vocab_size: int = 264) -> GeneralistLMConfig:
         self.validate()
         return GeneralistLMConfig(
+            architecture_family=self.architecture_family,
             vocab_size=vocab_size,
             context_length=self.context_length,
             d_model=self.d_model,
@@ -125,7 +142,33 @@ def generate_challengers(
 ) -> list[GeneralistGenome]:
     champion.validate()
     signals = list(signals or [])
+    family_variant = (
+        {
+            "architecture_family": "gated_recurrent_v1",
+            "position_encoding": "none",
+            "attention_type": "none",
+            "n_kv_heads": 0,
+            "local_attention_window": 0,
+            "local_attention_every": 0,
+            "n_heads": 1,
+            "norm_type": "rmsnorm",
+            "norm_placement": "pre",
+        }
+        if champion.architecture_family == "decoder_transformer_v1"
+        else {
+            "architecture_family": "decoder_transformer_v1",
+            "position_encoding": "rope",
+            "attention_type": "mha",
+            "n_kv_heads": 1,
+            "local_attention_window": 0,
+            "local_attention_every": 0,
+            "n_heads": 1,
+            "norm_type": "rmsnorm",
+            "norm_placement": "pre",
+        }
+    )
     variants = [
+        family_variant,
         {"norm_type": "rmsnorm" if champion.norm_type == "layernorm" else "layernorm"},
         {
             "position_encoding": (
@@ -181,11 +224,24 @@ def generate_challengers(
         directed.append({"symbolic_adapter": True, "reasoning_depth": min(16, champion.reasoning_depth + 1)})
     if "language_collapse" in signals or "autoregressive_collapse" in signals:
         directed.extend([
+            family_variant,
             {
                 "norm_type": "rmsnorm",
-                "position_encoding": "rope",
-                "attention_type": "gqa",
-                "n_kv_heads": max(1, champion.n_heads // 2),
+                "position_encoding": (
+                    "none"
+                    if champion.architecture_family == "gated_recurrent_v1"
+                    else "rope"
+                ),
+                "attention_type": (
+                    "none"
+                    if champion.architecture_family == "gated_recurrent_v1"
+                    else "gqa"
+                ),
+                "n_kv_heads": (
+                    0
+                    if champion.architecture_family == "gated_recurrent_v1"
+                    else max(1, champion.n_heads // 2)
+                ),
                 "norm_placement": "pre",
             },
             {
@@ -280,6 +336,7 @@ def progressive_scale_candidate(
                 )
                 try:
                     cfg = GeneralistLMConfig(
+                        architecture_family=champion.architecture_family,
                         vocab_size=int(vocab_size),
                         context_length=champion.context_length,
                         d_model=width,
@@ -380,6 +437,7 @@ def evolution_cost(genome: GeneralistGenome) -> dict[str, Any]:
     cfg = genome.model_config()
     return {
         "flops_per_token_estimate": estimate_flops_per_token(cfg),
+        "architecture_family": cfg.architecture_family,
         "context_length": cfg.context_length,
         "layers": cfg.n_layers,
         "width": cfg.d_model,
