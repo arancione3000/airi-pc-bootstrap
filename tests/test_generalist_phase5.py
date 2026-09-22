@@ -84,6 +84,17 @@ def test_architecture_push_yields_to_explicit_live_lineage_handoff():
     assert "matrix=[]" in workflow
 
 
+def test_bootstrap_janitor_preserves_old_worker_without_replacement():
+    workflow = Path(
+        ".github/workflows/generalist-state-writer-janitor.yml"
+    ).read_text(encoding="utf-8")
+    assert "if (( current_active > 0 )); then" in workflow
+    assert "if (( stale_active > 0 )); then" in workflow
+    assert "AIRI_BOOTSTRAP_JANITOR=PRESERVE" in workflow
+    assert "No replacement exists. Keep the existing bootstrap alive" in workflow
+    assert "AIRI_BOOTSTRAP_JANITOR_RESTART=PASS" in workflow
+
+
 def test_phase5_100m_amortizes_setup_without_changing_batch_or_lr():
     workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
     assert "segment_tokens=1000000" in workflow
