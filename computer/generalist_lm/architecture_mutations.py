@@ -15,6 +15,13 @@ PARAMETER_TIERS = (
     1_250_000,
     3_000_000,
     7_000_000,
+    12_000_000,
+    20_000_000,
+    32_000_000,
+    50_000_000,
+    64_000_000,
+    80_000_000,
+    96_000_000,
 )
 
 
@@ -215,6 +222,8 @@ def proposal_set(
     signals: list[str] | None = None,
     parameter_cap: int = 7_000_000,
     max_candidates: int = 12,
+    max_width: int = 384,
+    max_layers: int = 10,
 ) -> list[dict[str, Any]]:
     parent.validate()
     proposals: list[tuple[str, ArchitectureSpec, str]] = []
@@ -245,6 +254,8 @@ def proposal_set(
             scaled = scaled_descendant(
                 parent,
                 target_parameters=target,
+                max_width=max_width,
+                max_layers=max_layers,
             )
             proposals.append((
                 "capacity_scale",
@@ -262,6 +273,8 @@ def proposal_set(
             scaled_modern = scaled_descendant(
                 modern,
                 target_parameters=target,
+                max_width=max_width,
+                max_layers=max_layers,
             )
             proposals.append((
                 "capacity_plus_structure",
