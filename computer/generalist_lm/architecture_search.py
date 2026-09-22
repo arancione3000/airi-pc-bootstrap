@@ -722,6 +722,7 @@ def finalize_architecture_search(
         result_paths,
         output_path,
         allow_direct_promotion=False,
+        persist_research_checkpoints=False,
     )
 
     rows = [row for row in _result_rows(result_paths) if row.get("ok")]
@@ -852,15 +853,23 @@ def finalize_architecture_search(
         or ""
     )
 
+    # Under the single-lineage policy architecture challengers are laboratory
+    # artifacts only. Persist their leaderboard/specification, never a second
+    # checkpoint that can drift into an alternate AIRI.
+    shutil.rmtree(incumbent_root, ignore_errors=True)
     if bool(base_result.get("promoted")):
-        # A promoted winner changes the production parent. Retain the old
-        # incumbent on disk only as historical evidence; it will be ignored
-        # automatically because its parent fingerprint no longer matches.
         incumbent_decision = {
-            "action": "inactive_after_promotion",
-            "reason": "production_champion_changed",
+            "action": "evidence_only_after_migration",
+            "reason": "live_lineage_architecture_changed",
         }
     elif rank:
+        incumbent_decision = {
+            "action": "evidence_only",
+            "reason": "single_lineage_policy_discards_research_weights",
+            "candidate_id": rank[0].get("candidate_id"),
+            "parameters": rank[0].get("parameters"),
+        }
+    if False and rank:
         best_row = rank[0]
         best_result_path = Path(str(best_row.get("_result_path") or ""))
         best_checkpoint = (
