@@ -44,8 +44,10 @@ def bench(name: str, *, layers: int, d_ff: int, context: int, batch: int, steps:
         opt.step()
         return float(loss.detach())
 
+    warmup_start = time.perf_counter()
     for _ in range(2):
         one_step()
+    warmup_seconds = time.perf_counter() - warmup_start
 
     start = time.perf_counter()
     loss = 0.0
@@ -67,6 +69,8 @@ def bench(name: str, *, layers: int, d_ff: int, context: int, batch: int, steps:
         "last_loss": loss,
         "compile_enabled": bool(compile_model),
         "compile_wrapper_seconds": compile_seconds,
+        "warmup_seconds": warmup_seconds,
+        "estimated_1m_total_seconds": warmup_seconds + (1_000_000 / (trained_tokens / elapsed)),
     }
 
 
