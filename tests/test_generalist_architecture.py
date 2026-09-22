@@ -373,6 +373,80 @@ def test_safe_capacity_probe_is_preserved_by_successive_halving(tmp_path: Path):
     assert result["protected_progressive_scale"] is True
 
 
+def test_safe_incumbent_is_preserved_by_successive_halving(tmp_path: Path):
+    rows = [
+        {
+            "version": GENERALIST_SWARM_VERSION,
+            "ok": True,
+            "candidate_index": 0,
+            "candidate_id": "control",
+            "kind": "architecture_control",
+            "stage": 1,
+            "worst_domain_regression": 0.02,
+            "any_generation_pathological_repetition": False,
+            "any_seed_eligible": True,
+            "mean_generation_accuracy": 0.2,
+            "mean_generation_similarity": 0.4,
+            "mean_generation_nonempty_rate": 1.0,
+            "mean_generation_repetition_rate": 0.2,
+            "mean_nll_per_byte": 1.6,
+            "parameters": 115_000,
+            "score": 20.0,
+        },
+        {
+            "version": GENERALIST_SWARM_VERSION,
+            "ok": True,
+            "candidate_index": 1,
+            "candidate_id": "micro",
+            "kind": "architecture_structural_mutation",
+            "stage": 1,
+            "worst_domain_regression": 0.03,
+            "any_generation_pathological_repetition": False,
+            "any_seed_eligible": True,
+            "mean_generation_accuracy": 0.18,
+            "mean_generation_similarity": 0.38,
+            "mean_generation_nonempty_rate": 1.0,
+            "mean_generation_repetition_rate": 0.21,
+            "mean_nll_per_byte": 1.7,
+            "parameters": 106_000,
+            "score": 19.0,
+        },
+        {
+            "version": GENERALIST_SWARM_VERSION,
+            "ok": True,
+            "candidate_index": 2,
+            "candidate_id": "incumbent",
+            "kind": "architecture_incumbent",
+            "stage": 1,
+            "worst_domain_regression": 0.10,
+            "any_generation_pathological_repetition": False,
+            "any_seed_eligible": False,
+            "mean_generation_accuracy": 0.05,
+            "mean_generation_similarity": 0.12,
+            "mean_generation_nonempty_rate": 0.8,
+            "mean_generation_repetition_rate": 0.35,
+            "mean_nll_per_byte": 2.1,
+            "parameters": 1_250_000,
+            "score": 10.0,
+        },
+    ]
+    paths = []
+    for row in rows:
+        path = tmp_path / f"inc-{row['candidate_index']}.json"
+        path.write_text(json.dumps(row), encoding="utf-8")
+        paths.append(path)
+
+    result = select_survivors(
+        paths,
+        tmp_path / "inc-selection.json",
+        survivors=2,
+    )
+    selected = {row["candidate_id"] for row in result["selected"]}
+    assert "control" in selected
+    assert "incumbent" in selected
+    assert result["protected_progressive_scale"] is True
+
+
 def test_quality_filter_rejects_repetition_without_external_llm():
     bad = "spam " * 100
     report = assess_text(bad)
