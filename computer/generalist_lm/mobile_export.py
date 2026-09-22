@@ -337,16 +337,29 @@ def _active_lineage_checkpoint(state: Path) -> tuple[Path, dict[str, Any]]:
 
 
 def _mobile_airi_pc_lab(status: dict[str, Any], state: Path) -> dict[str, Any]:
+    # Persisted lab metadata may describe an older champion. Reuse descriptive
+    # snapshot/learning fields when available, but always re-probe the one live
+    # AIRI lineage so the mobile bundle cannot publish stale model diagnostics.
     existing = status.get("airi_pc_lab")
-    if isinstance(existing, dict) and existing.get("version"):
-        return existing
     persisted = _safe_json(state / "airi-pc-lab-report.json", {})
-    if isinstance(persisted, dict) and persisted.get("version"):
-        return persisted
+    cached = (
+        existing
+        if isinstance(existing, dict) and existing.get("version")
+        else persisted
+        if isinstance(persisted, dict) and persisted.get("version")
+        else {}
+    )
 
-    snapshot = snapshot_airi_pc_lab(Path.cwd())
+    snapshot = (
+        dict(cached.get("snapshot") or {})
+        if isinstance(cached, dict)
+        else {}
+    )
+    if not snapshot:
+        snapshot = snapshot_airi_pc_lab(Path.cwd())
     rows = build_airi_pc_lab_rows(snapshot, max_rows=18)
     report: dict[str, Any] = {
+        **(dict(cached) if isinstance(cached, dict) else {}),
         "version": str(snapshot.get("version") or "airi-pc-lab-v1"),
         "mode": str(snapshot.get("mode") or "read_only_sandbox"),
         "snapshot": snapshot,
@@ -619,6 +632,62 @@ def _export_checkpoint(
     }
 
 
+def _active_mobile_summary(
+    state: Path,
+    status: dict[str, Any],
+    lineage: dict[str, Any],
+    active_genome: dict[str, Any],
+) -> dict[str, Any]:
+    """Build truthful metadata for the checkpoint actually exported to mobile."""
+    if not lineage:
+        champion_report = dict(status.get("champion_report") or {})
+        champion_genome = dict(status.get("champion") or {})
+        return {
+            **champion_report,
+            "candidate_id": champion_genome.get("genome_id", "champion"),
+            "cycle": int(status.get("cycle", 0) or 0),
+            "research_only": False,
+            "all_seed_eligible": True,
+            "active_lineage": False,
+            "active_checkpoint": "champion",
+        }
+
+    summary: dict[str, Any] = {
+        "candidate_id": active_genome.get("genome_id", "active-lineage"),
+        "cycle": int(status.get("cycle", 0) or 0),
+        "parameters": int(lineage.get("parameters", 0) or 0),
+        "research_only": False,
+        "all_seed_eligible": True,
+        "active_lineage": True,
+        "lineage_id": lineage.get("lineage_id"),
+        "active_checkpoint": str(lineage.get("active_checkpoint") or ""),
+        "tokens_processed": int(lineage.get("tokens_processed", 0) or 0),
+        "target_tokens": int(lineage.get("target_tokens", 0) or 0),
+    }
+
+    # Only attach language-generation metrics when the Phase-5 report belongs
+    # to the same cumulative target. Never borrow metrics from the historical
+    # research champion.
+    report = _safe_json(state / "bootstrap-data" / "report.json", {})
+    if isinstance(report, dict) and int(report.get("target_tokens", -1) or -1) == int(
+        lineage.get("target_tokens", -2) or -2
+    ):
+        after = report.get("after")
+        if isinstance(after, dict):
+            summary.update({
+                "generation_similarity": _metric(
+                    after, "generation_similarity", 0.0
+                ),
+                "generation_nonempty_rate": _metric(
+                    after, "non_empty_rate", 0.0
+                ),
+                "generation_exact_accuracy": _metric(
+                    after, "exact_accuracy", 0.0
+                ),
+            })
+    return summary
+
+
 def export_mobile_bundle(
     state_dir: str | Path,
     output_dir: str | Path,
@@ -635,22 +704,15 @@ def export_mobile_bundle(
         raise FileNotFoundError("generalist state is missing status.json")
     status = json.loads(status_path.read_text(encoding="utf-8"))
 
-    champion_report = dict(status.get("champion_report") or {})
     champion_genome = dict(status.get("champion") or {})
     active_checkpoint, lineage = _active_lineage_checkpoint(state)
     active_genome = dict(lineage.get("active_genome") or champion_genome)
-    active_summary = {
-        **champion_report,
-        "candidate_id": active_genome.get("genome_id", "champion"),
-        "cycle": int(status.get("cycle", 0) or 0),
-        "research_only": False,
-        "all_seed_eligible": True,
-        "active_lineage": True,
-        "lineage_id": lineage.get("lineage_id"),
-        "active_checkpoint": str(lineage.get("active_checkpoint") or "champion"),
-        "tokens_processed": int(lineage.get("tokens_processed", 0) or 0),
-        "target_tokens": int(lineage.get("target_tokens", 0) or 0),
-    }
+    active_summary = _active_mobile_summary(
+        state,
+        status,
+        lineage,
+        active_genome,
+    )
     # Keep the public slot name "champion" for Android compatibility, but its
     # bytes now come from the single active AIRI lineage rather than from a
     # stale rollback/qualification anchor.
