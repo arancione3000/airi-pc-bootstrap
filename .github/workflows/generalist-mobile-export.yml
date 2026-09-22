@@ -216,6 +216,32 @@ jobs:
           shutil.rmtree(latest, ignore_errors=True)
           shutil.copytree(candidate, latest)
 
+          after = report.get("after") if isinstance(report, dict) else None
+          language_nll = None
+          if isinstance(after, dict):
+              try:
+                  candidate_nll = float(after.get("language_nll"))
+                  if __import__("math").isfinite(candidate_nll):
+                      language_nll = candidate_nll
+              except (TypeError, ValueError):
+                  pass
+
+          # mobile_export's ranking profile historically uses +infinity for
+          # missing NLL/domain-regression metrics.  JSON itself does not allow
+          # Infinity, and Android parsers may reject that manifest.  Emit a
+          # finite sentinel only when a current-rung measurement is genuinely
+          # unavailable, and say so explicitly.
+          nll_per_byte = language_nll if language_nll is not None else 1_000_000.0
+          nll_available = language_nll is not None
+          try:
+              measured_regression = float(report.get("worst_domain_regression"))
+              regression_available = __import__("math").isfinite(measured_regression)
+          except (TypeError, ValueError):
+              measured_regression = 1_000_000.0
+              regression_available = False
+          if not regression_available:
+              measured_regression = 1_000_000.0
+
           summary = {
               "candidate_id": f"phase5-live-{target_tokens}-{tokens_processed}",
               "kind": "language_bootstrap_live",
@@ -229,12 +255,12 @@ jobs:
               "all_seed_eligible": False,
               "external_pretrained": False,
               "mobile_binding": "exact_bootstrap_data_candidate",
+              "score": float(report.get("score", 0.0) or 0.0),
+              "nll_per_byte": float(nll_per_byte),
+              "nll_per_byte_available": bool(nll_available),
+              "worst_domain_regression": float(measured_regression),
+              "worst_domain_regression_available": bool(regression_available),
           }
-          if report:
-              summary["score"] = float(report.get("score", 0.0) or 0.0)
-              summary["worst_domain_regression"] = float(
-                  report.get("worst_domain_regression", 0.0) or 0.0
-              )
 
           metrics = {
               "target_tokens": target_tokens,
@@ -242,8 +268,9 @@ jobs:
               "rung_complete": bool(progress.get("rung_complete")),
               "parameters": parameters,
               "research_source": "bootstrap-data/candidate",
+              "nll_per_byte": float(nll_per_byte),
+              "nll_per_byte_available": bool(nll_available),
           }
-          after = report.get("after") if isinstance(report, dict) else None
           if isinstance(after, dict):
               metrics.update({
                   "generation_pathological_repetition": bool(
@@ -303,6 +330,27 @@ jobs:
           ' "${MOBILE_OUT}/manifest.json"
           jq -e '.role == "phase5_language_bootstrap_candidate"' \
             "${MOBILE_OUT}/research/metadata.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          def reject_constant(value):
+              raise ValueError(f"non-standard JSON constant in mobile manifest: {value}")
+
+          manifest = json.loads(
+              Path("/tmp/airi-generalist-mobile-bundle/manifest.json").read_text(
+                  encoding="utf-8"
+              ),
+              parse_constant=reject_constant,
+          )
+          research = manifest["slots"]["research"]
+          assert research["id"].startswith("phase5-live-")
+          assert research["parameters"] > 0
+          PY
+          if grep -Eq 'Infinity|NaN' "${MOBILE_OUT}/manifest.json"; then
+            echo "Mobile manifest contains a non-finite numeric literal." >&2
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
