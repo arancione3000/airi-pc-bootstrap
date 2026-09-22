@@ -1,35 +1,203 @@
 {
-  "academic_fallback": null,
+  "academic_fallback": "openalex",
   "errors": [
     {
       "error": "HTTPError:HTTP Error 406: Not Acceptable",
       "provider": "arxiv"
-    },
-    {
-      "error": "HTTPError:HTTP Error 429: Too Many Requests",
-      "provider": "openalex"
     }
   ],
   "evidence": [
     {
-      "digest": "e532faff62e81ca53aae5c5127997674aa05d08c6994689b01375493f077bd8c",
-      "provider": "github",
-      "published": "2026-09-21T16:11:52Z",
-      "source_id": "Onwcan/crucible",
-      "summary": "Training small language models from scratch and building a high-performance Rust/CUDA inference engine for NVIDIA gpus (optimized for Blackwell). license=Apache-2.0 topics=cuda gpu inference-engine int8 language-model llm model-training nvidia nvidia-blackwell performance-optimization quantization rust stars=0",
-      "tags": [],
-      "title": "Onwcan/crucible",
-      "url": "https://github.com/Onwcan/crucible"
+      "digest": "54503246a54bfa5b3173653f73769b66eb06a38be8f2720bcb5cd8ef450c644e",
+      "provider": "openalex",
+      "published": "2026-12-31",
+      "source_id": "https://openalex.org/W7162095276",
+      "summary": "Online neural learning requires models that update after each incoming example, remain calibrated under distributional change, and avoid brittle gradient transmission. The original version of this work used a small static benchmark, a shallow model, few random seeds, and no significance tests. This revision reformulates the problem as genuine prequential online learning and introduces Smooth Online Activation Routing (SOAR), a Hedge-style routing algorithm over smooth activation experts trained by singleinstance adaptive updates. SOAR links activation smoothness with online regret through a prediction-with-expert-advice bound: the mixture incurs only logarithmic-exponential-weight overhead relative to the best activation expert in hindsight, while each expert uses diagonal adaptive online gradients. We evaluate two-hidden-layer online neural networks on eight streams, fourteen methods, thirteen comparators, and eight random seeds, yielding 896 fully reproducible runs. The benchmark includes four real scikit-learn data sets and four synthetic streaming tasks with stationary, nonlinear, gradual-drift, and sudden-drift regimes. Across all dataset-seed blocks, SOAR obtains the best mean final accuracy ( $92.56 \\%$ ), best mean negative log-likelihood ( 0.199 ), and best prequential accuracy ( $86.83 \\%$ ). Paired Wilcoxon and Holm-corrected tests show significant improvements over ReLU, LeakyReLU, ELU, Softplus, Adam, SGD, and the compact ablation; improvements over the strongest fixed TeLU activation are positive but not statistically significant. The results support a nuanced conclusion: adaptive smooth activation routing is a robust online-learning mechanism and the best overall method in this controlled benchmark suite, but fixed smooth activations remain highly competitive on small static data. topics=Data Stream Mining Techniques Domain Adaptation and Few-Shot Learning Stochastic Gradient Optimization Techniques oa=True oa_status=gold",
+      "tags": [
+        "dataset"
+      ],
+      "title": "SOAR: Smooth Online Activation Routing for Stable Neural Learning from Evolving Streams",
+      "url": "https://pub.respai.de/articles/1-2/3sniu.html"
     },
     {
-      "digest": "219abd37d26eed6b8667f45b5c9f8791cb15897675f7963105f46f6b9a39b758",
-      "provider": "github",
-      "published": "2026-09-21T07:12:38Z",
-      "source_id": "404Simon/TheGreenEpoch",
-      "summary": "Green Gas Emission aware Optimization of Large-Language-Model Training license=MIT topics= stars=1",
+      "digest": "784184d3e830a08fb87e432cb71a909a2b29f9a03a4abc5dde126cda4cc6a379",
+      "provider": "openalex",
+      "published": "2026-12-31",
+      "source_id": "https://openalex.org/W7164183113",
+      "summary": "Do large language models (LLMs) possess a measurable \"personality,\" and how do the linguistic properties of training corpora shape their cognitive style and downstream reasoning? This paper approaches these questions from a sociolinguistic perspective on machine \"identity.\" This manuscript is positioned explicitly as a conceptual perspective paper: it does not present original experimental data, nor does it constitute a systematic review with defined search strategies or inclusion criteria. Instead, it synthesises key published findings into two original theoretical frameworks intended to guide future empirical and engineering work. We examine evidence that LLMs exhibit reliable, valid Big Five personality traits—particularly in large, instruction-tuned models—and that continued pre-training on domain-specific corpora may shape those traits through measurable linguistic features: imperative ratio, type-token ratio (TTR), and syntactic complexity. We then analyse how standard-language ideology embedded in training corpora is amplified in model outputs, disadvantaging dialect and minority-language communities. Building on these findings, we propose two conceptual contributions: (1) a Personality Engineering (PE) framework for targeted continued pre-training to cultivate task-appropriate cognitive profiles, and (2) a Language Ideology Propagation Model (LIPM) mapping the pipeline from corpus composition to societal impact. Both frameworks are explicitly conceptual and require empirical validation before they can function as operational guidelines. Their value lies in structuring future research and providing a shared vocabulary for cross-disciplinary collaboration, with direct implications for responsible AI deployment. topics=Artificial Intelligence in Healthcare and Education Language and cultural evolution Topic Modeling oa=True oa_status=gold",
+      "tags": [
+        "dataset",
+        "long-context",
+        "reasoning",
+        "tokenizer"
+      ],
+      "title": "The Sociolinguistics of Machine Identity: LLM Personality and Ideology Propagation",
+      "url": "https://pub.respai.de/articles/1-2/4gli.html"
+    },
+    {
+      "digest": "f9748eed553d4a6b48cc57f1b09523066d865c72fbf692be23339847900360b5",
+      "provider": "openalex",
+      "published": "2026-12-10",
+      "source_id": "https://openalex.org/W7197044566",
+      "summary": "Adeno-associated virus (AAV) vectors have demonstrated strong clinical efficacy across multiple monogenic disorders, yet neutralizing antibodies (NAbs) remain major barriers to vector redosing and durable transduction. To address this limitation, we developed a sequence-based artificial intelligence framework integrating Bidirectional Encoder Representations from Transformers (BERT) and Evolutionary Scale Modeling with Low-Rank Adaptation (ESM-LoRA) to identify human-tolerant, virus-specific motifs across human and viral proteins using sliding-window analyses and multi-layer fine-tuning. Using capsid-derived segments from AAV2 and AAV843, we prioritized surface-accessible, virus-polarized peptides as candidate decoys and evaluated their ability to block AAV-targeted antibodies. The models achieved high accuracy in distinguishing human versus viral fragments, and selected peptides bound AAV-specific antibodies with nanomolar affinity, competitively restored capsid binding, and recovered >60% of baseline transduction in the presence of NAbs. In mouse models with pre-existing or redosing-induced antibodies, coadministration of decoy peptides and an IgG-degrading enzyme reduced high-titer NAbs to approximately 1:4 and restored hepatic transgene expression without detectable inflammatory or peptide-specific immune responses. A contrastive variational autoencoder (VAE) further generated non-natural peptides with broader epitope coverage. These results support sequence-driven AI design of short, low-immunogenicity decoy peptides as a translational strategy to mitigate NAb interference and enhance the feasibility of AAV redosing. topics=Virus-based gene therapy research vaccines and immunoinformatics approaches Monoclonal and Polyclonal Antibodies Research oa=True oa_status=green",
       "tags": [],
-      "title": "404Simon/TheGreenEpoch",
-      "url": "https://github.com/404Simon/TheGreenEpoch"
+      "title": "Sequence-based artificial intelligence-guided inhibitory peptides to counteract AAV neutralizing antibodies in gene therapy.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/42740894"
+    },
+    {
+      "digest": "bde0759c0121c5b9842bdbe81089912b40ac5132d4490dc4f40196497a1b5c91",
+      "provider": "openalex",
+      "published": "2026-09-20",
+      "source_id": "https://openalex.org/W7213769437",
+      "summary": "Abstract Deep facial representation learning has achieved remarkable performance in computer vision applications; however, high overall accuracy does not necessarily ensure equitable performance across demographic groups. This study presents a unified framework for evaluating the quality and demographic fairness of pretrained deep facial representations. ResNet50, MobileNetV3, and the Data-efficient Image Transformer (DeiT) were evaluated using ImageNet-pretrained weights on the FairFace and UTKFace datasets, representing balanced and unconstrained demographic settings, respectively. Feature embeddings were assessed using one-nearest neighbour (1-NN) retrieval to measure the intrinsic discriminative capability of the representation space and Logistic Probe classification to evaluate the linear separability of demographic information. Fairness was examined through overall accuracy, subgroup performance, race–gender intersectional analysis, fairness gap, coefficient of variation, and statistical significance testing. Logistic Probe classification consistently outperformed 1-NN retrieval across both datasets, indicating that pretrained facial representations encode demographic information that can be effectively separated using simple linear classifiers. ResNet50 achieved the highest overall classification performance, whereas MobileNetV3 demonstrated more consistent subgroup performance in several evaluation settings. Intersectional analysis revealed persistent demographic disparities despite improvements in overall accuracy, underscoring the importance of fairness evaluation beyond aggregate metrics. The proposed framework provides a reproducible methodology for jointly assessing representation quality, demographic fairness, and statistical significance in deep facial representation learning. topics=Face recognition and analysis Face Recognition and Perception Evolutionary Psychology and Human Behavior oa=True oa_status=gold",
+      "tags": [
+        "dataset"
+      ],
+      "title": "Statistically grounded evaluation of demographic bias in deep facial representations using FairFace and UTKFace",
+      "url": "https://doi.org/10.1038/s41598-026-71795-6"
+    },
+    {
+      "digest": "6ca2aace6d856ec21293d7184ca6f9559fb36cbd1243dace3b756a348f1614e3",
+      "provider": "openalex",
+      "published": "2026-09-19",
+      "source_id": "https://openalex.org/W7213665430",
+      "summary": "Background: Diabetes mellitus is a chronic metabolic disorder associated with persistent hyperglycemia and serious long-term complications. Conventional immediate-release antidiabetic formulations may require frequent dosing and can produce fluctuations in drug concentrations. Extended-release drug delivery systems can provide controlled drug release over a prolonged period, potentially improving therapeutic effectiveness and patient compliance.Aim and Objectives: The present study aimed to design, develop, and evaluate extended-release (ER) tablets of Glipizide using different release-retarding polymers to achieve controlled and sustained drug release for up to 12 hours.Materials and Methods: Glipizide ER tablets were prepared by the wet granulation technique using HPMC K100, Carbopol 934P, Guar gum, and Pectin as release-retarding polymers. Preformulation studies, including micromeritic properties, FTIR, and DSC, were performed to assess drug characteristics and drug–excipient compatibility. The prepared tablets were evaluated for physical parameters, drug content, and in vitro drug release using USP Type II dissolution apparatus. Release kinetics were also investigated. Stability studies of the optimized formulation were conducted at 40 ± 2°C/75 ± 5% RH for one month.Results: Twelve formulations were developed and exhibited acceptable physical characteristics, with friability below 1%. Formulation T3 containing HPMC K100 (35 mg/tablet) demonstrated the most desirable sustained-release profile, releasing 99% of Glipizide over 12 hours. The optimized formulation followed zero-order release kinetics with a diffusion-controlled mechanism. After one month of accelerated stability testing, drug content remained 99.92%, with no significant alteration in the dissolution profile.Conclusion: The study successfully developed a stable Glipizide ER tablet using HPMC K100. Formulation T3 provided controlled drug release for 12 hours and demonstrated satisfactory pharmaceutical characteristics, indicating its potential as an extended-release dosage form for improving dosing convenience and patient compliance in diabetes management. topics=Drug Solubulity and Delivery Systems Advanced Drug Delivery Systems Advancements in Transdermal Drug Delivery oa=True oa_status=diamond",
+      "tags": [
+        "long-context"
+      ],
+      "title": "Design, develop and evaluation of extended release tablet for antidiabetic",
+      "url": "https://doi.org/10.18231/j.jpbs.14466.1789553425"
+    },
+    {
+      "digest": "a2e7b9d57a766280f7fd541577611c0515b0d38ae00711147462140a14ef6a08",
+      "provider": "openalex",
+      "published": "2026-09-19",
+      "source_id": "https://openalex.org/W7213666970",
+      "summary": "Artificial intelligence (AI) and immersive technologies are reshaping education by enabling adaptive, personalized, and experiential learning environments that enhance engagement, instructional effectiveness, and administrative efficiency. This review explores Human-in-the-loop (HITL) frameworks that integrate human expertise with AI to enhance trust, interpretability, collaborative decision-making, and continuous feedback. AI applications in teacher professional development facilitate personalized training, competency growth, and ethical governance, emphasizing human-centered frameworks and structured professional learning. HITL approaches extend to reality training, knowledge graph validation, emotion recognition, and large language model integration, combining automated outputs with human oversight to ensure contextual appropriateness, fairness, and ethical compliance. Reinforcement learning augmented with human guidance enhances performance, robustness, and reliability, demonstrating scalable, interpretable, and human-aligned solutions. Challenges persist in explainability, bias mitigation, interface design, and the underexplored role of agentic AI, highlighting the need for continuous human involvement in AI-assisted educational systems. Empirical and conceptual evidence underscores that human-AI collaboration improves engagement and ethical alignment while enabling scalable, inclusive, and responsible AI incorporation across diverse educational and operational domains. This study proposed Human-AI Adaptive Synergy Theory (HAAST) for continuously co-adapting through reciprocal learning, feedback, and shared decisions. The study developed a Human-Centered Adaptive Intelligence Framework (HCAIF) that provides an operational structure for designing, evaluating, and governing such systems. The review synthesizes insights from educational, industrial, and technological applications, emphasizing that future directions should include designing transparent and interactive HITL systems. Collectively, integrating human intelligence with AI fosters resilient, inclusive, and adaptive learning ecosystems while modernizing intelligent educational and operational systems. topics=Intelligent Tutoring Systems and Adaptive Learning Explainable Artificial Intelligence (XAI) Online Learning and Analytics oa=True oa_status=hybrid",
+      "tags": [
+        "efficiency"
+      ],
+      "title": "Human-AI collaboration for ethical, transparent, and equitable educational practices",
+      "url": "https://doi.org/10.29333/jdet/19286"
+    },
+    {
+      "digest": "a3ee5e43faff1bd6919c18a209e3c38505e12f3edd834880a20a87cb40336614",
+      "provider": "openalex",
+      "published": "2026-09-19",
+      "source_id": "https://openalex.org/W7213642797",
+      "summary": "Most multimodal sentiment and emotion models learn one fused representation from text, audio and video and treat every modality as equally trustworthy for every utterance.That assumption fails often: a face leaves the frame, a microphone clips, a transcript is wrong, and the channels disagree.We present RACER-MSA (reliability-adaptive and counterfactual evidence reasoning for multimodal sentiment analysis), which makes modality reliability, crossmodal conflict and predictive dependence explicit instead of implicit in an attention map.It estimates a per-utterance reliability score for each modality from pooled features and observable signal-quality descriptors, represents pairwise agreement and contradiction on a three-node graph, and probes the model with controlled input interventions to measure what each modality contributes.Reliability is regressed onto the degradation those interventions induce, so a low score must correspond to a measurable loss of predictive value.On CMU-MOSI the model reaches 0.692 mean absolute error (MAE) and 86.74% binary accuracy; on CMU-MOSEI, 0.514 MAE and 86.71%, with a mean weighted F1 of 83.0% over six emotions.The advantage widens as conditions degrade: at a 0.9 missing rate RACER-MSA leads the strongest baseline by 0.031 MAE and 2.7 points of Acc-2, expected calibration error falls from 0.069 to 0.038, and reliability-adaptive gating alone accounts for about 2.5 accuracy points in each direction of zero-shot transfer.On corruption families held out of training the mean margin over the strongest robust baseline is 3.9 points, and reliability stays associated with externally measured signal quality when modality importance is held fixed.Code and per-seed records are released at https://github.com/erjagritibhatia-ui/RACERMSA. topics=Emotion and Mood Recognition Sentiment Analysis and Opinion Mining Explainable Artificial Intelligence (XAI) oa=True oa_status=hybrid",
+      "tags": [
+        "reasoning"
+      ],
+      "title": "RACER-MSA: Reliability-adaptive and Counterfactual Evidence Reasoning for Multimodal Sentiment Detection and Emotion Classification",
+      "url": "https://doi.org/10.22266/ijies2026.1031.73"
+    },
+    {
+      "digest": "c50c27095ec83825ea9411a44945928ddda151c17dba533806b859b2cd8c4944",
+      "provider": "openalex",
+      "published": "2026-09-18",
+      "source_id": "https://openalex.org/W7130536286",
+      "summary": "Abstract Knowledge Distillation (KD) as a research area has gained a lot of traction in recent years as a compression tool to address challenges related to ever-larger models in NLP. Remarkably, Machine Translation (MT) offers a much more nuanced take on this narrative: in MT, KD also functions as a general-purpose knowledge transfer mechanism that shapes supervision and translation quality as well as efficiency. This survey synthesizes KD for MT (KD4MT) across 105 papers. We begin by introducing both MT and KD for non-experts, followed by an overview of the standard KD approaches relevant to MT applications. Subsequently, we categorize advances in the KD4MT literature based on (i) their methodological contributions and (ii) their practical applications. Our qualitative and quantitative analyses identify common trends in the field and highlight key research gaps as well as the absence of unified evaluation practice for KD methods in MT. We further provide practical guidelines for selecting a KD method in concrete settings and highlight potential risks associated with the application of KD to MT such as increased hallucination and bias amplification. Finally, we discuss the role of LLMs in re-shaping the KD4MT field. To support further research, we complement our survey with a publicly available database summarizing the main characteristics of the surveyed KD methods and a glossary of key terms. topics=Natural Language Processing Techniques Topic Modeling Biomedical Text Mining and Ontologies oa=True oa_status=diamond",
+      "tags": [
+        "efficiency"
+      ],
+      "title": "KD4MT: A Survey of Knowledge Distillation for Machine Translation",
+      "url": "https://doi.org/10.1162/coli.a.651"
+    },
+    {
+      "digest": "f3051bf935d8bcc6ac50e40af57274d36b1ea77b6404333cc8dd1b19a5ea634a",
+      "provider": "openalex",
+      "published": "2026-09-19",
+      "source_id": "https://openalex.org/W7213591856",
+      "summary": "topics=Islamic Studies and History Gender and Women's Rights Marriage and Sexual Relationships oa=True oa_status=green",
+      "tags": [],
+      "title": "Islam and Feminism: A Qualitative Documentary Analysis of Gender, Marital Rights, and Public Authority in Selected Islamic Texts and Juristic Traditions",
+      "url": "https://doi.org/10.21203/rs.3.rs-11069744/v1"
+    },
+    {
+      "digest": "2e1ae82b21263959c7e909791070fa9da677f73c1a697c10ea822c0f7686744a",
+      "provider": "openalex",
+      "published": "2026-09-19",
+      "source_id": "https://openalex.org/W7213617200",
+      "summary": "Abstract Large language models write code fluently, yet the programs they produce carry defect rates that ordinary functional evaluation seldom exposes, and detection systems that could catch these faults act too late to shape the generation that created them. This paper argues that generation and detection should be optimized together rather than in sequence, and it makes that argument concrete through one specific coupling: the detector’s node-level risk estimates are mapped back onto decoder positions and used to reweight the generation loss token by token, while a composite reward built from test outcomes and defect probability supplies a second, sampled gradient. Generator and detector are updated in alternation under a bounded schedule; failed candidates re-enter the detector’s training stream, and twelve mutation operators widen its exposure to underrepresented fault families. Using Qwen2.5-Coder-7B-Instruct as the generator and a gated graph neural network as the detector, and averaging five independent seeds, the coupled method lowered the defect rate of test-passing code from 0.216 ± 0.008 to 0.128 ± 0.008 while raising pass@10 from 0.724 ± 0.008 to 0.761 ± 0.008. Every defect rate reported here is scored by a reference detector frozen outside the loop, so the improvement cannot be an artefact of a critic grading its own pupil. Detection F1 rose from 0.627 ± 0.011 to 0.681 ± 0.011, although that gain confounds the coupling with the larger training stream the coupled detector receives. Ablation isolates token-level blame assignment as the component doing most of the work, and a controlled error-injection study quantifies how far detector mistakes propagate into generation. The evidence is confined to function-level Python and C, and concurrency faults remain resistant, so the claims made here are deliberately bounded to that setting; code, configurations and per-seed records accompany the submission so the boundary can be tested directly. topics=Software Testing and Debugging Techniques Software Engineering Research Software Reliability and Analysis Research oa=True oa_status=gold",
+      "tags": [
+        "code",
+        "optimizer"
+      ],
+      "title": "Token-level defect feedback and alternating optimization for coupled code generation and defect detection with large language models",
+      "url": "https://doi.org/10.1038/s41598-026-71524-z"
+    },
+    {
+      "digest": "94bf75b3e1b3bc2cdb730da44a5634fa27b1deb48b9797d329a57683f94319a6",
+      "provider": "openalex",
+      "published": "2026-10-01",
+      "source_id": "https://openalex.org/W7202008909",
+      "summary": "Modern software systems evolve rapidly under CI/CD practices, where tests are critical for quality. However, substantial code changes often render existing test cases obsolete, causing pipeline disruptions, reduced productivity, and compromised quality. Recent automatic test update approaches leverage LLMs to refine test cases via execution feedback and exact-matching context retrieval, prioritizing executability and line coverage but suffering three limitations: (1) neglecting test assertion adequacy, weakening fault detection; (2) relying on coarse line coverage instead of specific uncovered lines/branches; (3) using exact-matching retrieval, which fails for LLM hallucinated queries. To address these, we propose MuMuTestUp, a mutation-guided multi-agent framework with three specialized agents: Mutation Analysis (strengthens assertions via surviving mutants), Coverage Analysis (generates targeted repair instructions for uncovered lines/branches), and Semantic Retrieval (handles hallucinations via semantic-similarity search). We also construct PRBENCH, a 571-sample pull-request-level dataset from 10 open-source Java projects (validated for cross-commit update scenarios). Evaluations against state-of-the-art baselines use both open-source (Deepseek-V3.2) and closed-source (GPT-4.1) LLMs. topics=Software Testing and Debugging Techniques Software Engineering Research Software System Performance and Reliability oa=True oa_status=green",
+      "tags": [
+        "dataset"
+      ],
+      "title": "Mutation-based multi-agent test case update",
+      "url": "https://ink.library.smu.edu.sg/sis_research/11196"
+    },
+    {
+      "digest": "429446bf19ff9cb40d873a77a3675cd3ad7e2eaf5dbb9e93c9b30357b72ced50",
+      "provider": "openalex",
+      "published": "2026-09-20",
+      "source_id": "https://openalex.org/W7204828264",
+      "summary": "Portuguese Information Retrieval (IR) lacks public datasets, and relevance assessment for specialized collections remains costly. While Large Language Models (LLMs) increasingly support relevance assessment, their reliability in non-English specialized domains remains unclear. We introduce NormasTCU (https://huggingface.co/datasets/LeandroRibeiro/NormasTCU), a Brazilian Portuguese IR dataset with 14,469 legal documents, 46 queries, and 3,048 human judgments over 812 query-document pairs. Using NormasTCU, we evaluated LLM-as-a-judge for relevance assessment by prompting three models with two prompt techniques to grade these pairs. We then compared the rankings of 15 IR systems derived from LLM-generated and human reference qrels. LLMs consistently showed a positive scoring bias (mean absolute error: 0.46--0.66 on a 0-2 scale). Furthermore, pair-level agreement with human judgments achieved only fair to moderate levels, with Cohen's kappa ranging from 0.32 to 0.53. Despite this bias, LLM-generated judgments often yielded highly similar system rankings for nDCG@10 and MRR (observed Kendall's tau greater than or equal 0.90, although the bootstrap confidence intervals did not always remain above this threshold), but were less reliable for P@10 and R@10. Notably, LLM-based rankings were sometimes more strongly correlated with the reference ranking than individual human annotations were. As a practical implication, our results suggest that LLMs could effectively support scalable relevance assessment in specialized Portuguese corpora when evaluated using nDCG or MRR (rank-aware metrics), but they should be avoided when relying on precision or recall. topics=Topic Modeling Information Retrieval and Search Behavior Natural Language Processing Techniques oa=True oa_status=hybrid",
+      "tags": [
+        "dataset"
+      ],
+      "title": "NormasTCU — A Brazilian Portuguese IR dataset and an evaluation of LLM-as-a-judge for relevance assessment",
+      "url": "https://doi.org/10.1016/j.ipm.2026.105151"
+    },
+    {
+      "digest": "0c191453602e1b8140879d2a8e200f0f33af28e3293bcfed9c71573f1da65fde",
+      "provider": "openalex",
+      "published": "2026-09-19",
+      "source_id": "https://openalex.org/W7213666706",
+      "summary": "We introduce a coarse-grained, turn-level, intention-centered computational framework for large-scale analysis of communicative intentions in psychotherapist–client dialogue, integrating intentional coding, automated intention classification using open-source large language models, and graph-based structural modeling. The study is based on a formal Intentional Coding System of Psychotherapeutic Discourse (ICSPD) and an annotated corpus of psychotherapeutic dialogues, enabling large-scale analysis of therapist–client interaction patterns. Open-source language models were employed for automated annotation, demonstrating robust performance in intention classification, thereby supporting transparent and accessible research workflows that do not rely on proprietary APIs. Among openly-licensed models (Apache 2.0/MIT), the fine-tuned Qwen3-8B model achieved the highest performance, with weighted F1-scores of 0.80 for therapist intentions and 0.85 for client intentions. The model excelled at identifying information-exchange intentions but exhibited reduced accuracy for emotional and evaluative categories. Graph-based modeling of multi-turn interaction patterns across a corpus of 30,724 therapist–client utterances, annotated using fine-tuned intention-classification models trained on an expert-labeled subset (4325 utterances), revealed a structured network of communicative intentions characterized by recurrent communities and transition patterns. Community detection using the Louvain algorithm identified four recurrent interaction clusters that were descriptively interpreted as supportive, reflective, interpretative, and problem-solving configurations of therapeutic communication. Notably, the reflective–exploratory cluster emerged as a central hub linking supportive, interpretative, and problem-solving interaction configurations. Overall, the proposed approach provides a computational framework for investigating psychotherapeutic interaction at the turn-level and demonstrates that open-source language models can support transparent and explainable automated analysis of therapeutic discourse for corpus-level research and training applications when integrated with graph-based methods. topics=Mental Health via Writing Emotion and Mood Recognition Mental Health Research Topics oa=True oa_status=gold",
+      "tags": [
+        "code",
+        "dataset"
+      ],
+      "title": "Modeling communicative intentions in therapist–client dialogue using large language models and graph analysis",
+      "url": "https://doi.org/10.1038/s41598-026-71120-1"
+    },
+    {
+      "digest": "51c6ed2dbc5f30cafda328fe9aeede54279298cbcf8b9656bbfd90fbd492f307",
+      "provider": "openalex",
+      "published": "2026-09-22",
+      "source_id": "https://openalex.org/W7213572980",
+      "summary": "While graphology has historically faced scepticism due to subjectivity, recent Deep Learning (DL) integrations—specifically Convolutional Neural Networks (CNN)—offer a path toward objective personality assessment. However, a significant research gap persists in the systematic mapping of DL-extracted signature features to standardized psychological frameworks for career guidance. This review synthesizes current literature at the intersection of signature-based graphology, the Holland RIASEC model, and CNN architectures. We critique existing feature extraction techniques and classification frameworks, revealing a critical lack of large-scale, standardized datasets and a \"black-box\" interpretability problem that hinders clinical adoption. By evaluating the synergy between automated trait detection and career typology, this paper identifies three primary research voids: the absence of cross-cultural validation, the need for hybrid models that combine psychological theory with raw pixel data, and the ethical implications of AI-driven recruitment. Ultimately, this review provides a roadmap for transitioning AI-enhanced graphology from a niche experimental tool to an evidence-based framework for personalized career counselling. topics=Personality Traits and Psychology Mental Health via Writing Digital Mental Health Interventions oa=True oa_status=green",
+      "tags": [
+        "dataset"
+      ],
+      "title": "Review of Signature Recognition Using Deep Learning with Dataset Profiling for Career Pathway Recommendation",
+      "url": "https://journal.uthm.edu.my/index.php/jmer/article/view/23448"
+    },
+    {
+      "digest": "49991f11093a4032c9539ece62516f427d406f738ff421c458f4be1f4c9faefd",
+      "provider": "github",
+      "published": "2026-09-22T04:48:56Z",
+      "source_id": "JunZhang-03/VPPO",
+      "summary": "VPPO: A Post-Training Method for Vision-Language-Action Models Based on Video Priors and Preference Optimization license=unknown topics= stars=0",
+      "tags": [],
+      "title": "JunZhang-03/VPPO",
+      "url": "https://github.com/JunZhang-03/VPPO"
+    },
+    {
+      "digest": "f2ab1f4c6b390f9acfcbcde4f3409da689a05a7da363a7a2139c54e2f7d90d81",
+      "provider": "github",
+      "published": "2026-09-22T04:26:52Z",
+      "source_id": "michaelc-yu/cs336-llm-systems",
+      "summary": "Large language model systems implementation and optimization: Transformers, BPE tokenization, FlashAttention, Triton, distributed training, GPU profiling, and GRPO reasoning RL license=unknown topics= stars=0",
+      "tags": [
+        "reasoning",
+        "tokenizer"
+      ],
+      "title": "michaelc-yu/cs336-llm-systems",
+      "url": "https://github.com/michaelc-yu/cs336-llm-systems"
     },
     {
       "digest": "6a1371efbe0c8d841209758aeca2fa0008f27f63af6d47e3df3af5a919dbf33f",
@@ -129,35 +297,25 @@
       ],
       "title": "bcode0127-debug/Compositional-Reasoning-Arithmetic",
       "url": "https://github.com/bcode0127-debug/Compositional-Reasoning-Arithmetic"
-    },
-    {
-      "digest": "18455c5013ecc83bdfeb6c702bf24c0c157221a3dcf0686740ac54b2e1c1d6fd",
-      "provider": "github",
-      "published": "2026-06-16T16:08:29Z",
-      "source_id": "deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System",
-      "summary": "Developed an AI-powered Physics Reasoning (RLHF). The system generates step-by-step solutions for physics problems and automatically converts mathematical expressions into LaTeX format. Built using Python, PyTorch, Hugging Face Transformers, and TRL, with a modular architecture for training, evaluation, and scientific document generation.. license=unknown topics= stars=0",
-      "tags": [
-        "reasoning"
-      ],
-      "title": "deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System",
-      "url": "https://github.com/deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System"
     }
   ],
-  "evidence_digest": "ab6388c6edbb03de922c044f631d81840bd4671608c3d2940f5209d4e4fec391",
+  "evidence_digest": "4d06d1903b594e6ab18c3b2eb386171dc3379f9b1f7016e642cbe23d2e363b8c",
   "ok": true,
   "policy": "online material is untrusted evidence; only bounded local mutation families may consume derived tags; OpenAlex is used when arXiv research metadata is unavailable",
-  "queried_at": "2026-09-22T01:38:56.795851+00:00",
+  "queried_at": "2026-09-22T07:43:16.606809+00:00",
   "remote_code_execution": false,
   "remote_content_trusted": false,
   "source_candidates": [],
   "tag_counts": {
-    "code": 1,
+    "code": 3,
     "curriculum": 1,
-    "efficiency": 2,
+    "dataset": 7,
+    "efficiency": 4,
     "gqa": 2,
-    "long-context": 3,
-    "reasoning": 2,
-    "tokenizer": 1
+    "long-context": 5,
+    "optimizer": 1,
+    "reasoning": 4,
+    "tokenizer": 3
   },
   "topics": [
     "language model optimizer training",
