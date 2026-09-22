@@ -496,8 +496,13 @@ def progressive_scale_target(
         7_000_000,
         12_000_000,
         20_000_000,
+        32_000_000,
+        50_000_000,
+        64_000_000,
+        80_000_000,
+        96_000_000,
     ),
-    max_parameters: int = 20_000_000,
+    max_parameters: int = 96_000_000,
 ) -> int | None:
     current = max(0, int(current_parameters))
     cap = max(current, int(max_parameters))

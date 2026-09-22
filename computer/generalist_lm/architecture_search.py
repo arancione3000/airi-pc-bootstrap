@@ -482,6 +482,8 @@ def prepare_architecture_search(
         signals=signals,
         parameter_cap=int(parameter_cap),
         max_candidates=max(8, int(population_size) * 3),
+        max_width=int(max_width),
+        max_layers=int(max_layers),
     )
     proposals = [
         proposal

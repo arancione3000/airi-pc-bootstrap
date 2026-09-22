@@ -62,6 +62,13 @@ PHASE5_250M_UNIQUE_CORPUS_TOKENS = 40_000_000
 PHASE5_500M_UNIQUE_CORPUS_TOKENS = 60_000_000
 PHASE5_1B_UNIQUE_CORPUS_TOKENS = 100_000_000
 
+# One-time human-assisted capacity gift for the current AIRI lineage only.
+# Once this lineage reaches the requested tier the marker is persisted and this
+# path becomes permanently dormant; future growth returns to AIRI's own search.
+ASSISTED_CAPACITY_LINEAGE_ID = "airi-5d3d25177d2e83f7"
+ASSISTED_CAPACITY_TARGET_PARAMETERS = 50_000_000
+ASSISTED_CAPACITY_COMPLETION_FLOOR = 49_000_000
+
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -133,6 +140,21 @@ def _bootstrap_capacity_target(training_target_tokens: int) -> int | None:
     if target >= 20_000_000:
         return 1_250_000
     return None
+
+
+def _assisted_capacity_target(
+    progress: dict[str, Any],
+    *,
+    current_parameters: int,
+) -> int | None:
+    """Return the one-time 50M assist only for Thomas's current AIRI lineage."""
+    if str(progress.get("lineage_id") or "") != ASSISTED_CAPACITY_LINEAGE_ID:
+        return None
+    if bool(progress.get("assisted_capacity_growth_completed")):
+        return None
+    if int(current_parameters) >= ASSISTED_CAPACITY_COMPLETION_FLOOR:
+        return None
+    return ASSISTED_CAPACITY_TARGET_PARAMETERS
 
 
 def _grow_bootstrap_runtime(
@@ -1025,6 +1047,13 @@ def run_segment(
 
     desired_capacity = _bootstrap_capacity_target(target_tokens)
     current_capacity = int(parameter_count(runtime.model))
+    assisted_capacity = _assisted_capacity_target(
+        progress,
+        current_parameters=current_capacity,
+    )
+    if assisted_capacity is not None:
+        desired_capacity = max(int(desired_capacity or 0), int(assisted_capacity))
+
     if desired_capacity is not None and current_capacity < int(desired_capacity):
         candidate_genome, runtime, growth = _grow_bootstrap_runtime(
             candidate_genome,
@@ -1040,6 +1069,27 @@ def run_segment(
             "tokens_processed_before_growth": int(progress.get("tokens_processed", 0) or 0),
         })
         progress["capacity_growth_history"] = history
+        grown_parameters = int(parameter_count(runtime.model))
+        if (
+            assisted_capacity is not None
+            and grown_parameters >= ASSISTED_CAPACITY_COMPLETION_FLOOR
+        ):
+            progress["assisted_capacity_growth_completed"] = True
+            progress["assisted_capacity_growth"] = {
+                "lineage_id": ASSISTED_CAPACITY_LINEAGE_ID,
+                "requested_parameters": int(ASSISTED_CAPACITY_TARGET_PARAMETERS),
+                "actual_parameters": grown_parameters,
+                "tokens_processed_before_growth": int(
+                    progress.get("tokens_processed", 0) or 0
+                ),
+                "generation": int(candidate_genome.generation),
+                "genome_id": str(candidate_genome.genome_id),
+                "function_preserving_growth": bool(
+                    (growth.get("weight_transfer") or {}).get(
+                        "function_preserving_growth"
+                    )
+                ),
+            }
         progress["best_validation_loss"] = None
         progress["bad_eval_count"] = 0
         optimizer_path.unlink(missing_ok=True)

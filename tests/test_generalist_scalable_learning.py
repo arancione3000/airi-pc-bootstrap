@@ -253,6 +253,8 @@ def test_progressive_scaling_builds_larger_bounded_generalist():
     assert progressive_scale_target(7_000_000, max_parameters=20_000_000) == 12_000_000
     assert progressive_scale_target(12_000_000, max_parameters=20_000_000) == 20_000_000
     assert progressive_scale_target(20_000_000, max_parameters=20_000_000) is None
+    assert progressive_scale_target(50_000_000, max_parameters=67_500_000) == 64_000_000
+    assert progressive_scale_target(64_000_000, max_parameters=96_000_000) == 80_000_000
 
 
 def test_adaptive_curriculum_weights_weak_domains_more_heavily():

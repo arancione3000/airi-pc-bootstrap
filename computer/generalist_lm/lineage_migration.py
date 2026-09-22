@@ -131,7 +131,7 @@ def adaptive_architecture_parameter_cap(
     requested_cap: int,
     *,
     growth_headroom: float = 1.35,
-    absolute_cap: int = 48_000_000,
+    absolute_cap: int = 96_000_000,
 ) -> int:
     """Never let architecture research become smaller than the live AIRI."""
     requested = max(100_000, int(requested_cap))
