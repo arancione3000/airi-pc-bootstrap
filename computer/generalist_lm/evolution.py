@@ -41,6 +41,9 @@ class GeneralistGenome:
     local_attention_every: int = 0
     norm_placement: str = "pre"
     tie_embeddings: bool = True
+    recurrent_depth: int = 1
+    moe_experts: int = 1
+    moe_top_k: int = 1
 
     def validate(self) -> "GeneralistGenome":
         if self.tokenizer_version not in _ALLOWED_TOKENIZERS:
@@ -69,7 +72,7 @@ class GeneralistGenome:
             raise ValueError("unauthorized position_encoding")
         if self.position_encoding == "rope" and (self.d_model // self.n_heads) % 2:
             raise ValueError("RoPE requires an even attention head dimension")
-        if self.ff_variant not in {"swiglu", "gelu"}:
+        if self.ff_variant not in {"swiglu", "gelu", "moe_swiglu"}:
             raise ValueError("unauthorized ff_variant")
         if self.attention_type not in {"mha", "gqa"}:
             raise ValueError("unauthorized attention_type")
@@ -83,6 +86,18 @@ class GeneralistGenome:
             raise ValueError("local attention window outside context")
         if not (0 <= self.local_attention_every <= self.n_layers):
             raise ValueError("local attention cadence outside depth")
+        if not (1 <= int(self.recurrent_depth) <= 4):
+            raise ValueError("recurrent_depth out of bounded DSL")
+        if not (1 <= int(self.moe_experts) <= 8):
+            raise ValueError("moe_experts out of bounded DSL")
+        if not (1 <= int(self.moe_top_k) <= int(self.moe_experts)):
+            raise ValueError("moe_top_k out of bounded DSL")
+        if self.ff_variant == "moe_swiglu" and int(self.moe_experts) < 2:
+            raise ValueError("moe_swiglu requires at least two experts")
+        if self.ff_variant != "moe_swiglu" and (
+            int(self.moe_experts) != 1 or int(self.moe_top_k) != 1
+        ):
+            raise ValueError("non-MoE FF variants must use one expert/top-k one")
         return self
 
     def to_dict(self) -> dict[str, Any]:
@@ -108,6 +123,9 @@ class GeneralistGenome:
             local_attention_every=self.local_attention_every,
             norm_placement=self.norm_placement,
             tie_embeddings=self.tie_embeddings,
+            recurrent_depth=self.recurrent_depth,
+            moe_experts=self.moe_experts,
+            moe_top_k=self.moe_top_k,
         ).validate()
 
 
@@ -135,7 +153,31 @@ def generate_challengers(
                 else ("sinusoidal" if champion.position_encoding == "rope" else "learned")
             )
         },
-        {"ff_variant": "gelu" if champion.ff_variant == "swiglu" else "swiglu"},
+        {
+            "ff_variant": (
+                "gelu"
+                if champion.ff_variant == "swiglu"
+                else "swiglu"
+            ),
+            "moe_experts": 1,
+            "moe_top_k": 1,
+        },
+        {
+            "recurrent_depth": (
+                min(4, champion.recurrent_depth + 1)
+                if champion.recurrent_depth < 4
+                else 1
+            ),
+        },
+        {
+            "ff_variant": "moe_swiglu",
+            "moe_experts": (
+                min(8, max(2, champion.moe_experts * 2))
+                if champion.ff_variant == "moe_swiglu"
+                else 4
+            ),
+            "moe_top_k": 1,
+        },
         {"d_model": min(4096, champion.d_model + 32), "d_ff": min(16384, champion.d_ff + 96)},
         {"n_layers": min(96, champion.n_layers + 1)},
         {"context_length": min(8192, champion.context_length * 2)},
@@ -178,6 +220,17 @@ def generate_challengers(
         directed.append({"data_adapter": True, "context_length": min(8192, champion.context_length * 2)})
     if "tool_gap" in signals:
         directed.append({"retrieval_adapter": True})
+    if "efficiency_gap" in signals:
+        directed.extend([
+            {
+                "recurrent_depth": min(4, champion.recurrent_depth + 1),
+            },
+            {
+                "ff_variant": "moe_swiglu",
+                "moe_experts": 4,
+                "moe_top_k": 1,
+            },
+        ])
     if "symbolic_reasoning_signal" in signals:
         directed.append({"symbolic_adapter": True, "reasoning_depth": min(16, champion.reasoning_depth + 1)})
     if "language_collapse" in signals or "autoregressive_collapse" in signals:
@@ -310,6 +363,9 @@ def progressive_scale_candidate(
                         local_attention_every=champion.local_attention_every,
                         norm_placement=champion.norm_placement,
                         tie_embeddings=champion.tie_embeddings,
+                        recurrent_depth=champion.recurrent_depth,
+                        moe_experts=champion.moe_experts,
+                        moe_top_k=champion.moe_top_k,
                     ).validate()
                 except Exception:
                     continue
@@ -467,6 +523,10 @@ def evolution_cost(genome: GeneralistGenome) -> dict[str, Any]:
         "local_attention_every": cfg.local_attention_every,
         "norm_placement": cfg.norm_placement,
         "tie_embeddings": cfg.tie_embeddings,
+        "recurrent_depth": cfg.recurrent_depth,
+        "moe_experts": cfg.moe_experts,
+        "moe_top_k": cfg.moe_top_k,
+        "stored_parameters": estimate_parameter_count(cfg),
     }
 
 
