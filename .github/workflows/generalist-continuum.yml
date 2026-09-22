@@ -353,19 +353,34 @@ jobs:
           cp -a generalist-state/. "${STATE_DIR}/" || true
           cp -a /tmp/plan/state/. "${STATE_DIR}/"
 
-      - name: External verifier and champion promotion
+      - name: External verifier and single-lineage adoption
         run: |
-          python -m generalist_lm.generalist_swarm finalize             "${STATE_DIR}" /tmp/plan/plan.json             /tmp/final-status.json /tmp/finalists
+          python -m generalist_lm.generalist_swarm finalize \
+            "${STATE_DIR}" /tmp/plan/plan.json \
+            /tmp/final-status.json /tmp/finalists \
+            --single-lineage
           jq -e '
             .ok == true
             and .policy.candidate_can_self_promote == false
+            and .policy.direct_research_checkpoint_promotion == false
+            and .policy.persistent_research_checkpoints == false
+            and .policy.single_lineage_migration_required == true
             and .policy.external_reducer == true
             and .policy.external_pretrained == false
           ' /tmp/final-status.json
 
+      - name: Resolve active AIRI lineage for qualification
+        run: |
+          set -euo pipefail
+          active_rel="champion"
+          if [[ -s "${STATE_DIR}/lineage.json" ]]; then
+            active_rel="$(jq -r '.active_checkpoint // "champion"' "${STATE_DIR}/lineage.json")"
+          fi
+          test -s "${STATE_DIR}/${active_rel}/model.pt"
+          echo "AIRI_GENERALIST_RESEARCH_CHECKPOINT=${STATE_DIR}/${active_rel}" >> "${GITHUB_ENV}"
+
       - name: Attempt normal production qualification
         env:
-          AIRI_GENERALIST_RESEARCH_CHECKPOINT: ${{ env.STATE_DIR }}/champion
           AIRI_GENERALIST_PRODUCTION_STATE: ${{ env.STATE_DIR }}/production
           AIRI_GENERALIST_PRODUCTION_MIN_SCORE: '85'
           AIRI_GENERALIST_PRODUCTION_MIN_GAIN: '2'
@@ -373,7 +388,8 @@ jobs:
           AIRI_GENERALIST_RESEARCH_STATE: ${{ env.STATE_DIR }}
         run: |
           set -euo pipefail
-          python -m generalist_lm.production_promotion             | tee "${STATE_DIR}/last-production-attempt.json"
+          python -m generalist_lm.production_promotion \
+            | tee "${STATE_DIR}/last-production-attempt.json"
           python -m generalist_lm.research_health
 
       - name: Persist health-gated Free-Speed state
@@ -408,7 +424,7 @@ jobs:
           if [[ -s "${next_target_file}" ]]; then
             next_target="$(jq -r '.target_tokens // 0' "${next_target_file}")"
             completed_target="$(jq -r '.completed_target_tokens // 0' "${next_target_file}")"
-            if (( next_target > completed_target && next_target <= 100000000 )); then
+            if (( next_target > completed_target && next_target <= 1000000000 )); then
               # Consume the marker transactionally before dispatch so a later
               # scheduled Continuum cycle cannot fan out duplicate bootstraps.
               rm -f "${next_target_file}"

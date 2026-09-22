@@ -599,7 +599,7 @@ def test_generalist_swarm_plan_contains_progressive_scale_and_adaptive_policy(tm
     assert any(row["kind"] == "progressive_scale" for row in plan["candidates"])
 
 
-def test_generalist_swarm_plan_imports_completed_phase5_language_fusion(tmp_path: Path):
+def test_generalist_swarm_plan_uses_completed_phase5_as_live_parent(tmp_path: Path):
     pytest.importorskip("torch")
     from generalist_lm.evolution import GeneralistGenome
     from generalist_lm.generalist_swarm import (
@@ -703,17 +703,25 @@ def test_generalist_swarm_plan_imports_completed_phase5_language_fusion(tmp_path
         max_layers=6,
         grow_data=False,
     )
-    fusion_rows = [
+    assert plan["champion"]["genome_id"] == fusion_genome.genome_id
+    assert plan["live_lineage_source"]["checkpoint"] == "bootstrap-data/candidate"
+    assert plan["live_lineage_source"]["tokens_processed"] == 20_000_000
+    parent_sha = plan["live_lineage_source"]["model_sha256"]
+    assert len(parent_sha) == 64
+    assert not [
         row for row in plan["candidates"]
         if row["kind"] == "language_fusion"
     ]
-    assert len(fusion_rows) == 1
-    assert fusion_rows[0]["candidate_id"] == fusion_genome.genome_id
-    assert fusion_rows[0]["initial_checkpoint"] == "bootstrap-data/candidate"
-    assert fusion_rows[0]["initial_checkpoint_mode"] == "language_fusion"
-    assert fusion_rows[0]["fusion_evidence"]["target_tokens"] == 20_000_000
-    assert plan["converged_champion"]["language_fusion_available"] is True
-    assert plan["policy"]["automatic_best_of_both_fusion"] is True
+    assert plan["candidates"]
+    for row in plan["candidates"]:
+        assert row["initial_checkpoint"] == "bootstrap-data/candidate"
+        assert row["initial_checkpoint_mode"] == "live_lineage"
+        assert row["lineage_parent_model_sha256"] == parent_sha
+        assert row["lineage_id"] == plan["live_lineage_source"]["lineage_id"]
+    assert plan["converged_champion"]["language_fusion_available"] is False
+    assert plan["converged_champion"]["specialist_fusion_available"] is False
+    assert plan["policy"]["automatic_best_of_both_fusion"] is False
+    assert plan["policy"]["single_active_lineage"] is True
 
 
 def test_language_fusion_retention_gate_preserves_language_gains():

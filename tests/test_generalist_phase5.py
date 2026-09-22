@@ -56,6 +56,12 @@ def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
     assert "Dispatch next in-place language rung" in workflow
     assert "same persisted AIRI Phase-5 lineage" in workflow
     assert "next=100000000" in workflow
+    assert "next=250000000" in workflow
+    assert "next=500000000" in workflow
+    assert "next=1000000000" in workflow
+    assert "ARCHITECTURE_INTERVAL_TOKENS: '5000000'" in workflow
+    assert "force_search" in workflow
+    assert "resume_bootstrap_target" in workflow
     assert '"handoff":"converged_swarm_first"' not in workflow
     assert "Generalist swarm must run once before it is dispatched" not in workflow
     assert "git rebase origin/generalist-state" in workflow
@@ -141,7 +147,9 @@ def test_phase5_conversation_rescue_separates_unique_corpus_from_training_budget
     assert _bootstrap_corpus_target(20_000_000) == 5_000_000
     assert _bootstrap_corpus_target(50_000_000) == 5_000_000
     assert _bootstrap_corpus_target(100_000_000) == 20_000_000
-    assert _bootstrap_corpus_target(500_000_000) == 20_000_000
+    assert _bootstrap_corpus_target(250_000_000) == 40_000_000
+    assert _bootstrap_corpus_target(500_000_000) == 60_000_000
+    assert _bootstrap_corpus_target(1_000_000_000) == 100_000_000
 
 
 def test_phase5_conversation_rescue_has_explicit_capacity_rungs():
@@ -152,6 +160,7 @@ def test_phase5_conversation_rescue_has_explicit_capacity_rungs():
     assert _bootstrap_capacity_target(100_000_000) == 7_000_000
     assert _bootstrap_capacity_target(250_000_000) == 12_000_000
     assert _bootstrap_capacity_target(500_000_000) == 20_000_000
+    assert _bootstrap_capacity_target(1_000_000_000) == 32_000_000
 
 
 def test_phase5_capacity_growth_builds_a_larger_compatible_runtime():
