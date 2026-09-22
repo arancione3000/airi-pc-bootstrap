@@ -90,51 +90,6 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "${api}")"
 
-          mapfile -t stale_ids < <(
-            jq -r --arg current_sha "${GITHUB_SHA}" '
-              .workflow_runs[]
-              | select(.head_sha != $current_sha)
-              | select(
-                  .status == "pending"
-                  or .status == "queued"
-                  or .status == "in_progress"
-                  or .status == "waiting"
-                  or .status == "requested"
-                )
-              | .id
-            ' <<<"${payload}"
-          )
-
-          cancelled=0
-          for run_id in "${stale_ids[@]}"; do
-            [[ -n "${run_id}" ]] || continue
-            echo "Force-cancelling obsolete Language Bootstrap run ${run_id}"
-            code="$(curl -sS -o /tmp/bootstrap-cancel-response.txt -w '%{http_code}' -X POST \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/force-cancel")"
-            if [[ "${code}" == "202" ]] || [[ "${code}" == "409" ]]; then
-              cancelled="$((cancelled + 1))"
-            else
-              echo "Unexpected force-cancel HTTP ${code} for run ${run_id}" >&2
-              cat /tmp/bootstrap-cancel-response.txt >&2 || true
-              exit 1
-            fi
-          done
-
-          echo "AIRI_BOOTSTRAP_JANITOR=PASS cancelled=${cancelled} current_sha=${GITHUB_SHA}"
-
-
-          # A janitor code push may not itself match the Language Bootstrap
-          # workflow paths. After removing stale workers, ensure one bootstrap
-          # exists for the current main commit so training can never be left
-          # idle merely because the cancellation logic changed.
-          payload="$(curl --fail-with-body -sS --retry 3 --retry-all-errors \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${api}")"
           current_active="$(jq --arg current_sha "${GITHUB_SHA}" '
             [
               .workflow_runs[]
@@ -149,28 +104,74 @@ jobs:
             ] | length
           ' <<<"${payload}")"
 
-          if (( current_active == 0 )); then
-            target=100000000
-            progress_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/generalist-state/bootstrap-data/progress.json?ref=generalist-state"
-            if progress_json="$(curl --fail-with-body -sS --retry 3 --retry-all-errors \
-              -H "Accept: application/vnd.github.raw+json" \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "${progress_url}" 2>/dev/null)"; then
-              persisted_target="$(jq -r '.target_tokens // 0' <<<"${progress_json}")"
-              if [[ "${persisted_target}" =~ ^[0-9]+$ ]] && (( persisted_target > target )); then
-                target="${persisted_target}"
-              fi
-            fi
+          mapfile -t stale_ids < <(
+            jq -r --arg current_sha "${GITHUB_SHA}" '
+              .workflow_runs[]
+              | select(.head_sha != $current_sha)
+              | select(
+                  .status == "pending"
+                  or .status == "queued"
+                  or .status == "in_progress"
+                  or .status == "waiting"
+                  or .status == "requested"
+                )
+              | .id
+            ' <<<"${payload}"
+          )
+          stale_active="${#stale_ids[@]}"
 
-            curl --fail-with-body -sS --retry 3 --retry-all-errors -X POST \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/dispatches" \
-              -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${target}\"}}"
-            echo "AIRI_BOOTSTRAP_JANITOR_RESTART=PASS target=${target} sha=${GITHUB_SHA}"
-          else
-            echo "Current-SHA Language Bootstrap already active; no restart needed."
+          cancelled=0
+          if (( current_active > 0 )); then
+            # A replacement bootstrap for the new code is already alive, so
+            # older workers are genuinely obsolete and can be cancelled.
+            for run_id in "${stale_ids[@]}"; do
+              [[ -n "${run_id}" ]] || continue
+              echo "Force-cancelling superseded Language Bootstrap run ${run_id}"
+              code="$(curl -sS -o /tmp/bootstrap-cancel-response.txt -w '%{http_code}' -X POST \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/force-cancel")"
+              if [[ "${code}" == "202" ]] || [[ "${code}" == "409" ]]; then
+                cancelled="$((cancelled + 1))"
+              else
+                echo "Unexpected force-cancel HTTP ${code} for run ${run_id}" >&2
+                cat /tmp/bootstrap-cancel-response.txt >&2 || true
+                exit 1
+              fi
+            done
+            echo "AIRI_BOOTSTRAP_JANITOR=PASS current_active=${current_active} cancelled=${cancelled}"
+            exit 0
           fi
+
+          if (( stale_active > 0 )); then
+            # No replacement exists. Keep the existing bootstrap alive so an
+            # unrelated main push cannot throw away an in-flight training
+            # segment. Its next transactional checkpoint remains authoritative.
+            echo "AIRI_BOOTSTRAP_JANITOR=PRESERVE stale_active=${stale_active} current_active=0"
+            exit 0
+          fi
+
+          # No bootstrap is running at all: recover liveness by dispatching one
+          # from the current main commit and preserving the persisted target.
+          target=100000000
+          progress_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/generalist-state/bootstrap-data/progress.json?ref=generalist-state"
+          if progress_json="$(curl --fail-with-body -sS --retry 3 --retry-all-errors \
+            -H "Accept: application/vnd.github.raw+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${progress_url}" 2>/dev/null)"; then
+            persisted_target="$(jq -r '.target_tokens // 0' <<<"${progress_json}")"
+            if [[ "${persisted_target}" =~ ^[0-9]+$ ]] && (( persisted_target > target )); then
+              target="${persisted_target}"
+            fi
+          fi
+
+          curl --fail-with-body -sS --retry 3 --retry-all-errors -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/dispatches" \
+            -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${target}\"}}"
+          echo "AIRI_BOOTSTRAP_JANITOR_RESTART=PASS target=${target} sha=${GITHUB_SHA}"
 
