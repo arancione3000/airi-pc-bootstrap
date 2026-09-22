@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import math
 from typing import Any
 
 from .model import GeneralistLMConfig, estimate_flops_per_token, estimate_parameter_count
