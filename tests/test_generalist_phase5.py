@@ -61,6 +61,9 @@ def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
     assert "git rebase origin/generalist-state" in workflow
     assert "transactionally persist Phase-5 checkpoint" in workflow
     assert "refusing an unsafe overwrite" in workflow
+    assert "Restore reusable packed-token cache" in workflow
+    assert "airi-generalist-phase5-packed-v1-" in workflow
+    assert "github.run_id" in workflow
 
 def test_phase5_packed_block_cache_roundtrips_exact_tokens(tmp_path):
     path = tmp_path / "blocks.bin"
