@@ -327,6 +327,13 @@ jobs:
             and .slots.research.files["model.onnx"].bytes > 0
             and (.slots.research.id | startswith("phase5-live-"))
             and .slots.research.research_source == "latest-research"
+            and (
+              (.lineage.single_active_model != true)
+              or (
+                .slots.champion.parameters == .lineage.parameters
+                and .slots.champion.id == .lineage.active_genome.genome_id
+              )
+            )
           ' "${MOBILE_OUT}/manifest.json"
           jq -e '.role == "phase5_language_bootstrap_candidate"' \
             "${MOBILE_OUT}/research/metadata.json"
