@@ -13,6 +13,8 @@ from generalist_lm.bootstrap_data import (
     _parse_oasst,
 )
 from generalist_lm.bootstrap_training import (
+    _anti_collapse_rescue_gate,
+    _anti_collapse_weights,
     _effective_bootstrap_target,
     _filter_protected_replay,
 )
@@ -27,7 +29,7 @@ from generalist_lm.phase5_diagnostics import (
 )
 from generalist_lm.runtime import GeneralistRuntime
 from generalist_lm.tokenizer import ByteTokenizer
-from generalist_lm.training import SFTExample
+from generalist_lm.training import SFTExample, causal_training_objective
 
 
 
@@ -99,6 +101,104 @@ def test_oasst_parser_excludes_synthetic_and_builds_human_dialogue():
     conversations = _oasst_conversations(parsed)
     assert len(conversations) == 1
     assert conversations[0][1][-1]["content"] == "A cat sleeps."
+
+
+def test_anti_collapse_objective_never_penalizes_correct_repetition():
+    torch = pytest.importorskip("torch")
+    input_ids = torch.tensor([[8, 8, 8, 8]], dtype=torch.long)
+    labels = input_ids.clone()
+    logits = torch.zeros((1, 4, 32), dtype=torch.float32, requires_grad=True)
+    logits.data[:, :, 8] = 5.0
+
+    total, stats = causal_training_objective(
+        logits,
+        labels,
+        input_ids,
+        repetition_unlikelihood_weight=0.2,
+        eos_loss_weight=1.0,
+        repetition_window=4,
+    )
+    assert torch.isfinite(total)
+    assert stats["repetition_negative_count"] == 0
+    assert stats["repetition_unlikelihood_loss"] == pytest.approx(0.0)
+
+
+def test_anti_collapse_objective_penalizes_wrong_recent_token_mass():
+    torch = pytest.importorskip("torch")
+    input_ids = torch.tensor([[8, 9, 10, 11]], dtype=torch.long)
+    labels = input_ids.clone()
+    logits = torch.zeros((1, 4, 32), dtype=torch.float32, requires_grad=True)
+    # At each prediction position put excessive mass on the token just seen,
+    # while the target is the following token.
+    logits.data[0, 0, 8] = 6.0
+    logits.data[0, 1, 9] = 6.0
+    logits.data[0, 2, 10] = 6.0
+
+    base, _ = causal_training_objective(
+        logits,
+        labels,
+        input_ids,
+        repetition_unlikelihood_weight=0.0,
+    )
+    guarded, stats = causal_training_objective(
+        logits,
+        labels,
+        input_ids,
+        repetition_unlikelihood_weight=0.1,
+        repetition_window=4,
+    )
+    assert stats["repetition_negative_count"] > 0
+    assert stats["repetition_unlikelihood_loss"] > 0.0
+    assert float(guarded.detach()) > float(base.detach())
+    guarded.backward()
+    assert torch.isfinite(logits.grad).all()
+
+
+def test_anti_collapse_schedule_only_activates_for_measured_collapse():
+    clean = {"pathological_repetition": False, "repetition_rate": 0.20}
+    assert _anti_collapse_weights("C_causal_next_sentence", clean) == (0.0, 1.0)
+
+    collapsed = {"pathological_repetition": True, "repetition_rate": 0.80}
+    a = _anti_collapse_weights("A_frequent_word_contexts", collapsed)
+    b = _anti_collapse_weights("B_short_sentence_completion", collapsed)
+    c_stage = _anti_collapse_weights("C_causal_next_sentence", collapsed)
+    assert a[0] == 0.0
+    assert 0.0 < b[0] < c_stage[0] <= 0.10
+    assert 1.0 < a[1] < b[1] < c_stage[1] <= 2.0
+
+
+def test_anti_collapse_rescue_gate_requires_real_repetition_improvement():
+    before = {
+        "pathological_repetition": True,
+        "repetition_rate": 0.80,
+        "language_nll": 3.0,
+        "non_empty_rate": 1.0,
+        "token_entropy": 3.0,
+        "generation_similarity": 0.10,
+        "longest_repeated_token_run": 12,
+    }
+    better = {
+        **before,
+        "repetition_rate": 0.70,
+        "language_nll": 3.02,
+        "token_entropy": 3.1,
+        "generation_similarity": 0.12,
+        "longest_repeated_token_run": 8,
+    }
+    ok, reasons = _anti_collapse_rescue_gate(before, better)
+    assert ok, reasons
+
+    fake_gain = dict(better)
+    fake_gain["repetition_rate"] = 0.79
+    ok, reasons = _anti_collapse_rescue_gate(before, fake_gain)
+    assert not ok
+    assert any("repetition" in reason for reason in reasons)
+
+    nll_regression = dict(better)
+    nll_regression["language_nll"] = 3.2
+    ok, reasons = _anti_collapse_rescue_gate(before, nll_regression)
+    assert not ok
+    assert any("NLL" in reason for reason in reasons)
 
 
 def test_degeneration_gate_rejects_repeated_token_collapse():
