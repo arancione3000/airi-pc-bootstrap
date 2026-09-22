@@ -169,6 +169,29 @@ def _grow_bootstrap_runtime(
     }
 
 
+def _maybe_compile_phase5_training_model(model, *, enabled: bool):
+    """Compile the training forward path without wrapping persisted runtime state."""
+    report = {
+        "requested": bool(enabled),
+        "enabled": False,
+        "fallback_reason": None,
+    }
+    if not enabled:
+        return model, report
+    try:
+        import torch
+        compiler = getattr(torch, "compile", None)
+        if compiler is None:
+            report["fallback_reason"] = "torch.compile unavailable"
+            return model, report
+        compiled = compiler(model, dynamic=False)
+        report["enabled"] = True
+        return compiled, report
+    except Exception as exc:
+        report["fallback_reason"] = f"{type(exc).__name__}: {exc}"[:500]
+        return model, report
+
+
 def _batch(blocks: list[list[int]], indices: list[int], *, device):
     import torch
     ids = torch.tensor([blocks[i] for i in indices], dtype=torch.long, device=device)
@@ -1123,6 +1146,12 @@ def run_segment(
     if optimizer_path.is_file():
         optimizer.load_state_dict(torch.load(optimizer_path, map_location="cpu", weights_only=True))
 
+    training_model, compile_report = _maybe_compile_phase5_training_model(
+        runtime.model,
+        enabled=bool(target_tokens >= 100_000_000),
+    )
+    progress["torch_compile"] = compile_report
+
     processed_before_segment = int(progress.get("tokens_processed", 0) or 0)
     segment_budget = max(1, int(segment_tokens))
     eval_every_steps = max(8, int(eval_every_steps))
@@ -1159,7 +1188,20 @@ def run_segment(
         for group in optimizer.param_groups:
             group["lr"] = lr
 
-        result = runtime.model(ids)
+        try:
+            result = training_model(ids)
+        except Exception as exc:
+            if training_model is runtime.model:
+                raise
+            # Compilation failures must never cost a live checkpoint. Fall
+            # back to the canonical eager model before any optimizer step.
+            compile_report["enabled"] = False
+            compile_report["fallback_reason"] = (
+                f"{type(exc).__name__}: {exc}"[:500]
+            )
+            progress["torch_compile"] = compile_report
+            training_model = runtime.model
+            result = runtime.model(ids)
         anti_weight, eos_weight = _anti_collapse_weights(stage, before)
         loss, objective_stats = causal_training_objective(
             result["logits"],
