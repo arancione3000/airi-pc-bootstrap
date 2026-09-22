@@ -14,6 +14,8 @@ from .airi_pc_lab import (
     snapshot_airi_pc_lab,
     summarize_lab_learning,
 )
+from .model import parameter_count
+from .phase5_diagnostics import evaluate_phase5_language
 from .runtime import GeneralistRuntime
 from .tokenizer import BOS, USER, ASSISTANT
 
@@ -582,11 +584,7 @@ def _export_checkpoint(
         ),
         "path": slot_name,
         "cycle": int(summary.get("cycle", 0) or 0),
-        "parameters": int(
-            summary.get("parameters")
-            or summary.get("parameter_count")
-            or 0
-        ),
+        "parameters": int(parameter_count(runtime.model)),
         "score": _metric(summary, "score"),
         "nll_per_byte": _metric(
             summary,
@@ -639,10 +637,12 @@ def export_mobile_bundle(
     champion_genome = dict(status.get("champion") or {})
     active_checkpoint, lineage = _active_lineage_checkpoint(state)
     active_genome = dict(lineage.get("active_genome") or champion_genome)
+    active_runtime = GeneralistRuntime.from_checkpoint(active_checkpoint, device="cpu")
+    active_probe = evaluate_phase5_language(active_runtime)
     active_summary = {
-        **champion_report,
-        "candidate_id": active_genome.get("genome_id", "champion"),
+        "candidate_id": active_genome.get("genome_id", "airi-live"),
         "cycle": int(status.get("cycle", 0) or 0),
+        "parameters": int(parameter_count(active_runtime.model)),
         "research_only": False,
         "all_seed_eligible": True,
         "active_lineage": True,
@@ -650,6 +650,10 @@ def export_mobile_bundle(
         "active_checkpoint": str(lineage.get("active_checkpoint") or "champion"),
         "tokens_processed": int(lineage.get("tokens_processed", 0) or 0),
         "target_tokens": int(lineage.get("target_tokens", 0) or 0),
+        "nll_per_byte": float(active_probe.get("language_nll", 0.0) or 0.0),
+        "generation_similarity": float(active_probe.get("generation_similarity", 0.0) or 0.0),
+        "generation_exact_accuracy": float(active_probe.get("exact_accuracy", 0.0) or 0.0),
+        "generation_nonempty_rate": float(active_probe.get("non_empty_rate", 0.0) or 0.0),
     }
     # Keep the public slot name "champion" for Android compatibility, but its
     # bytes now come from the single active AIRI lineage rather than from a
@@ -685,6 +689,7 @@ def export_mobile_bundle(
         "promoted_this_cycle": bool(status.get("promoted")),
         "promotion_reason": str(status.get("promotion_reason", "")),
         "lineage": lineage,
+        "live_probe": active_probe,
         "evolution": _evolution_summary(status, state),
         "airi_pc_lab": _mobile_airi_pc_lab(status, state),
         "slots": slots,

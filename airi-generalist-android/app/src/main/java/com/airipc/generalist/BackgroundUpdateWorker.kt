@@ -19,11 +19,13 @@ class ModelUpdateWorker(
             val repository = BundleRepository(applicationContext)
             val fetched = repository.fetchManifest()
             val manifest = fetched.manifest
-            manifest.slots["champion"]?.let {
+            val live = manifest.slots["champion"]
+            val research = manifest.slots["research"]
+            live?.let {
                 repository.ensureBundle(it, fetched.mobileRevision)
             }
-            manifest.slots["research"]?.let {
-                repository.ensureBundle(it, fetched.mobileRevision)
+            if (research != null && !sameModelArtifact(live, research)) {
+                repository.ensureBundle(research, fetched.mobileRevision)
             }
             Result.success()
         } catch (_: Exception) {
