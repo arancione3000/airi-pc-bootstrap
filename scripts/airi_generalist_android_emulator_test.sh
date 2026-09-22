@@ -90,7 +90,7 @@ for attempt in $(seq 1 35); do
   adb shell am start -n com.airipc.generalist/.MainActivity >/dev/null 2>&1 || true
   sleep 2
   if dump_ui /sdcard/airi-home.xml "$OUT/home.xml"; then
-    if grep -Eq 'Champion pronto|Champion sincronizzato|AI aggiornata · modello mobile in sincronizzazione|cache offline' "$OUT/home.xml"; then
+    if grep -Eq 'AIRI Live pronto|AIRI Live sincronizzato|AI aggiornata · modello mobile in sincronizzazione|cache offline' "$OUT/home.xml"; then
       READY=1
       break
     fi
@@ -161,51 +161,57 @@ grep -q 'AIRI_GENERALIST_INFERENCE=PASS' "$OUT/logcat.txt"
 adb exec-out screencap -p > "$OUT/chat-after.png"
 test -s "$OUT/chat-after.png"
 
-# Switch to the research-only model and prove that the exact ONNX bundle
-# downloaded from generalist-mobile can execute on Android as well. This is
-# deliberately separate from the Champion smoke because evolved architectures
-# may use RoPE/GQA/local attention before they are production-promoted.
+# A distinct research snapshot is optional. Under the unified-lineage policy,
+# the mobile exporter may publish "research" as a byte-identical alias of AIRI
+# Live. The UI intentionally hides that duplicate instead of pretending there
+# are two models. If a genuinely distinct research snapshot exists, smoke-test
+# it separately.
 dismiss_system_anr
 dump_ui /sdcard/airi-research-select.xml "$OUT/research-select.xml"
-read RESEARCH_X RESEARCH_Y < <(center_for_text "$OUT/research-select.xml" "Latest Research")
-adb shell input tap "$RESEARCH_X" "$RESEARCH_Y"
+RESEARCH_INFERENCE="ALIAS_SKIPPED"
+if grep -q 'text="Research Snapshot"' "$OUT/research-select.xml"; then
+  read RESEARCH_X RESEARCH_Y < <(center_for_text "$OUT/research-select.xml" "Research Snapshot")
+  adb shell input tap "$RESEARCH_X" "$RESEARCH_Y"
 
-RESEARCH_READY=0
-for _ in $(seq 1 45); do
+  RESEARCH_READY=0
+  for _ in $(seq 1 45); do
+    sleep 1
+    dismiss_system_anr
+    dump_ui /sdcard/airi-research-ready.xml "$OUT/research-ready.xml" || true
+    if grep -Eq 'Research Snapshot sincronizzato|Research Snapshot pronto|AI aggiornata · modello mobile in sincronizzazione|cache offline' "$OUT/research-ready.xml" 2>/dev/null; then
+      RESEARCH_READY=1
+      break
+    fi
+  done
+  test "$RESEARCH_READY" -eq 1
+
+  adb logcat -c
+  read RESEARCH_INPUT_X RESEARCH_INPUT_Y < <(center_for_edit_text "$OUT/research-ready.xml")
+  adb shell input tap "$RESEARCH_INPUT_X" "$RESEARCH_INPUT_Y"
+  adb shell input text hello
   sleep 1
   dismiss_system_anr
-  dump_ui /sdcard/airi-research-ready.xml "$OUT/research-ready.xml" || true
-  if grep -Eq 'Latest Research sincronizzato|Latest Research pronto|AI aggiornata · modello mobile in sincronizzazione|cache offline' "$OUT/research-ready.xml" 2>/dev/null; then
-    RESEARCH_READY=1
-    break
-  fi
-done
-test "$RESEARCH_READY" -eq 1
 
-adb logcat -c
-read RESEARCH_INPUT_X RESEARCH_INPUT_Y < <(center_for_edit_text "$OUT/research-ready.xml")
-adb shell input tap "$RESEARCH_INPUT_X" "$RESEARCH_INPUT_Y"
-adb shell input text hello
-sleep 1
-dismiss_system_anr
+  dump_ui /sdcard/airi-research-chat.xml "$OUT/research-chat-before.xml"
+  read RESEARCH_SEND_X RESEARCH_SEND_Y < <(center_for_text "$OUT/research-chat-before.xml" "Invia")
+  adb shell input tap "$RESEARCH_SEND_X" "$RESEARCH_SEND_Y"
 
-dump_ui /sdcard/airi-research-chat.xml "$OUT/research-chat-before.xml"
-read RESEARCH_SEND_X RESEARCH_SEND_Y < <(center_for_text "$OUT/research-chat-before.xml" "Invia")
-adb shell input tap "$RESEARCH_SEND_X" "$RESEARCH_SEND_Y"
-
-RESEARCH_INFERENCE=0
-for _ in $(seq 1 60); do
-  if adb logcat -d | grep -q 'AIRI_GENERALIST_INFERENCE=PASS'; then
-    RESEARCH_INFERENCE=1
-    break
-  fi
-  sleep 1
-done
-test "$RESEARCH_INFERENCE" -eq 1
-adb logcat -d > "$OUT/research-logcat.txt"
-grep -q 'AIRI_GENERALIST_INFERENCE=PASS' "$OUT/research-logcat.txt"
-adb exec-out screencap -p > "$OUT/research-chat-after.png"
-test -s "$OUT/research-chat-after.png"
+  RESEARCH_INFERENCE=0
+  for _ in $(seq 1 60); do
+    if adb logcat -d | grep -q 'AIRI_GENERALIST_INFERENCE=PASS'; then
+      RESEARCH_INFERENCE=1
+      break
+    fi
+    sleep 1
+  done
+  test "$RESEARCH_INFERENCE" -eq 1
+  adb logcat -d > "$OUT/research-logcat.txt"
+  grep -q 'AIRI_GENERALIST_INFERENCE=PASS' "$OUT/research-logcat.txt"
+  adb exec-out screencap -p > "$OUT/research-chat-after.png"
+  test -s "$OUT/research-chat-after.png"
+else
+  grep -q 'text="AIRI Live"' "$OUT/research-select.xml"
+fi
 
 # Verify all requested observability screens.
 for TAB in Live Neural Airi-PC; do
@@ -218,4 +224,4 @@ for TAB in Live Neural Airi-PC; do
   test -s "$OUT/tab-$TAB.png"
 done
 
-echo "AIRI_GENERALIST_ANDROID_SMOKE=PASS pid=$PID apk=$APK refresh=PASS champion_inference=PASS research_inference=PASS observability=PASS"
+echo "AIRI_GENERALIST_ANDROID_SMOKE=PASS pid=$PID apk=$APK refresh=PASS airi_live_inference=PASS research_inference=$RESEARCH_INFERENCE observability=PASS"
