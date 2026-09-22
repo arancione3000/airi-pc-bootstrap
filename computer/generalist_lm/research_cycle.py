@@ -425,24 +425,72 @@ def _research_eligible(
 
 def _weaknesses(report: dict[str, Any]) -> list[str]:
     domains = report.get("domain_nll_per_byte") or report.get("domain_loss") or {}
-    if not domains:
-        return []
-    ordered = sorted(domains.items(), key=lambda item: float(item[1]), reverse=True)
     signals: list[str] = []
-    for domain, _loss in ordered[:3]:
-        if domain == "language":
-            signals.append("language_gap")
-        elif domain == "coding":
-            signals.append("coding_gap")
-        elif domain == "data":
-            signals.append("data_gap")
-        elif domain == "tools":
-            signals.append("tool_gap")
-        elif domain == "reasoning":
-            signals.append("reasoning_gap")
-        elif domain == "structured":
-            signals.append("structured_gap")
-    return signals
+    if domains:
+        ordered = sorted(
+            domains.items(),
+            key=lambda item: float(item[1]),
+            reverse=True,
+        )
+        for domain, _loss in ordered[:3]:
+            if domain == "language":
+                signals.append("language_gap")
+            elif domain == "coding":
+                signals.append("coding_gap")
+            elif domain == "data":
+                signals.append("data_gap")
+            elif domain == "tools":
+                signals.append("tool_gap")
+            elif domain == "reasoning":
+                signals.append("reasoning_gap")
+            elif domain == "structured":
+                signals.append("structured_gap")
+
+    # Autoregressive collapse is orthogonal to per-domain NLL. A model can
+    # achieve a lower teacher-forced loss while greedy decoding still falls
+    # into repeated-token attractors, so route this signal independently.
+    probes = [report]
+    canary = report.get("canary")
+    if isinstance(canary, dict):
+        probes.append(canary)
+
+    collapse = False
+    for probe in probes:
+        pathological = bool(
+            probe.get("generation_pathological_repetition")
+            or probe.get("pathological_repetition")
+        )
+        repetition = float(
+            probe.get("generation_repetition_rate")
+            or probe.get("repetition_rate")
+            or 0.0
+        )
+        longest_run = int(
+            probe.get("generation_longest_repeated_token_run")
+            or probe.get("longest_repeated_token_run")
+            or 0
+        )
+        unique_ratio = float(
+            probe.get("generation_unique_token_ratio")
+            or probe.get("unique_token_ratio")
+            or 1.0
+        )
+        if (
+            pathological
+            or repetition >= 0.65
+            or longest_run >= 8
+            or unique_ratio <= 0.20
+        ):
+            collapse = True
+            break
+
+    if collapse:
+        signals.extend([
+            "language_collapse",
+            "autoregressive_collapse",
+        ])
+
+    return list(dict.fromkeys(signals))
 
 
 def _champion_paths(root: Path) -> tuple[Path, Path]:
