@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("torch")
+
 from generalist_lm.evolution import GeneralistGenome
 from generalist_lm.lineage_migration import (
     active_lineage_snapshot,
