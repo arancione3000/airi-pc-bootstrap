@@ -58,6 +58,9 @@ def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
     assert "next=100000000" in workflow
     assert '"handoff":"converged_swarm_first"' not in workflow
     assert "Generalist swarm must run once before it is dispatched" not in workflow
+    assert "git rebase origin/generalist-state" in workflow
+    assert "transactionally persist Phase-5 checkpoint" in workflow
+    assert "refusing an unsafe overwrite" in workflow
 
 def test_phase5_packed_block_cache_roundtrips_exact_tokens(tmp_path):
     path = tmp_path / "blocks.bin"
