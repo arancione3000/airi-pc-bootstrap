@@ -269,6 +269,125 @@ def _streaming_cache_path(
     )
 
 
+def _read_streaming_cache(
+    source: dict[str, Any],
+    tokenizer,
+    *,
+    quota: int,
+    cache_path: Path,
+) -> tuple[list[CorpusDocument], int]:
+    documents: list[CorpusDocument] = []
+    tokens = 0
+    if not cache_path.is_file():
+        return documents, tokens
+    with gzip.open(cache_path, "rt", encoding="utf-8") as handle:
+        for line in handle:
+            row = json.loads(line)
+            text = str(row["text"])
+            digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            if digest != str(row.get("sha256") or ""):
+                raise RuntimeError(f"streaming cache digest mismatch: {cache_path}")
+            needed = len(tokenizer.encode(text)) + 1
+            documents.append(CorpusDocument(
+                source=str(row["source"]),
+                text=text,
+                sha256=digest,
+                bytes=len(text.encode("utf-8")),
+                domain=str(source.get("domain") or "general"),
+            ))
+            tokens += needed
+    if tokens < int(max(1, quota) * 0.95):
+        return [], 0
+    return documents, tokens
+
+
+def _stream_hf_cache_worker(
+    source: dict[str, Any],
+    tokenizer,
+    quota: int,
+    cache_path_raw: str,
+) -> None:
+    """Populate one FineWeb cache in an isolated interpreter.
+
+    Recent Hugging Face/fsspec stacks may leave HTTP helper threads alive
+    after a bounded IterableDataset is stopped early.  On CPython shutdown
+    those helpers can abort an otherwise successful process.  The remote
+    reader therefore lives in a spawned child and deliberately exits with
+    os._exit only after the gzip cache is fully closed.  The training process
+    itself never imports the streaming stack and can continue safely.
+    """
+    import os
+    import traceback
+
+    try:
+        from datasets import load_dataset
+
+        quota = max(1, int(quota))
+        cache_path = Path(cache_path_raw)
+        stream = load_dataset(
+            str(source["dataset"]),
+            name=str(source["config"]),
+            split="train",
+            streaming=True,
+            revision=str(source.get("revision") or "main"),
+        )
+        try:
+            stream = stream.shuffle(
+                seed=271828 if source["language"] == "it" else 314159,
+                buffer_size=10_000,
+            )
+        except Exception:
+            pass
+
+        seen: set[str] = set()
+        rows_for_cache: list[dict[str, str]] = []
+        tokens = 0
+        for row_index, row in enumerate(stream):
+            raw_text = str((row or {}).get("text") or "").strip()
+            if not raw_text:
+                continue
+            row_id = str((row or {}).get("id") or row_index)
+            for chunk_index, chunk in enumerate(_web_chunks(raw_text)):
+                if not _quality_web_text(chunk):
+                    continue
+                digest = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
+                if digest in seen:
+                    continue
+                seen.add(digest)
+                source_name = f"{source['id']}:{row_id}:{chunk_index}"
+                rows_for_cache.append({
+                    "source": source_name,
+                    "text": chunk,
+                    "sha256": digest,
+                })
+                tokens += len(tokenizer.encode(chunk)) + 1
+                if tokens >= quota:
+                    break
+            if tokens >= quota:
+                break
+
+        if tokens < int(quota * 0.95):
+            raise RuntimeError(
+                f"streamed source {source['id']} supplied only {tokens} tokens "
+                f"for requested quota {quota}"
+            )
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = cache_path.with_suffix(cache_path.suffix + ".tmp")
+        with gzip.open(tmp, "wt", encoding="utf-8") as handle:
+            for row in rows_for_cache:
+                handle.write(
+                    json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
+                )
+        tmp.replace(cache_path)
+    except BaseException:
+        traceback.print_exc()
+        os._exit(1)
+
+    # Do not run third-party HTTP/Arrow finalizers in this short-lived worker.
+    os._exit(0)
+
+
 def _load_or_stream_hf_documents(
     source: dict[str, Any],
     *,
@@ -276,100 +395,43 @@ def _load_or_stream_hf_documents(
     token_quota: int,
     cache_dir: Path,
 ) -> tuple[list[CorpusDocument], int]:
-    """Stream a deterministic bounded FineWeb sample and persist it locally.
+    """Load a bounded cached FineWeb sample, streaming it in isolation once."""
+    import multiprocessing as mp
 
-    The cache is intentionally source-text only.  Model weights are never
-    imported; the live AIRI checkpoint is trained on these documents directly.
-    """
     quota = max(1, int(token_quota))
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = _streaming_cache_path(source, tokenizer, quota, cache_dir)
 
-    documents: list[CorpusDocument] = []
-    tokens = 0
-    if cache_path.is_file():
-        with gzip.open(cache_path, "rt", encoding="utf-8") as handle:
-            for line in handle:
-                row = json.loads(line)
-                text = str(row["text"])
-                needed = len(tokenizer.encode(text)) + 1
-                documents.append(CorpusDocument(
-                    source=str(row["source"]),
-                    text=text,
-                    sha256=str(row["sha256"]),
-                    bytes=len(text.encode("utf-8")),
-                    domain=str(source.get("domain") or "general"),
-                ))
-                tokens += needed
-        if tokens >= int(quota * 0.95):
-            return documents, tokens
-        documents.clear()
-        tokens = 0
-
-    try:
-        from datasets import load_dataset
-    except Exception as exc:
-        raise RuntimeError(
-            "FineWeb fast-track requires the 'datasets' package"
-        ) from exc
-
-    stream = load_dataset(
-        str(source["dataset"]),
-        name=str(source["config"]),
-        split="train",
-        streaming=True,
-        revision=str(source.get("revision") or "main"),
+    documents, tokens = _read_streaming_cache(
+        source, tokenizer, quota=quota, cache_path=cache_path
     )
-    try:
-        stream = stream.shuffle(
-            seed=271828 if source["language"] == "it" else 314159,
-            buffer_size=10_000,
-        )
-    except Exception:
-        pass
+    if documents:
+        return documents, tokens
+    cache_path.unlink(missing_ok=True)
 
-    seen: set[str] = set()
-    rows_for_cache: list[dict[str, str]] = []
-    for row_index, row in enumerate(stream):
-        raw_text = str((row or {}).get("text") or "").strip()
-        if not raw_text:
-            continue
-        row_id = str((row or {}).get("id") or row_index)
-        for chunk_index, chunk in enumerate(_web_chunks(raw_text)):
-            if not _quality_web_text(chunk):
-                continue
-            digest = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
-            if digest in seen:
-                continue
-            seen.add(digest)
-            source_name = f"{source['id']}:{row_id}:{chunk_index}"
-            documents.append(CorpusDocument(
-                source=source_name,
-                text=chunk,
-                sha256=digest,
-                bytes=len(chunk.encode("utf-8")),
-                domain=str(source.get("domain") or "general"),
-            ))
-            rows_for_cache.append({
-                "source": source_name,
-                "text": chunk,
-                "sha256": digest,
-            })
-            tokens += len(tokenizer.encode(chunk)) + 1
-            if tokens >= quota:
-                break
-        if tokens >= quota:
-            break
-
-    if tokens < int(quota * 0.95):
+    ctx = mp.get_context("spawn")
+    worker = ctx.Process(
+        target=_stream_hf_cache_worker,
+        args=(source, tokenizer, quota, str(cache_path)),
+        daemon=False,
+    )
+    worker.start()
+    worker.join(timeout=30 * 60)
+    if worker.is_alive():
+        worker.terminate()
+        worker.join(timeout=10)
+        raise RuntimeError(f"timed out streaming source: {source['id']}")
+    if worker.exitcode != 0:
         raise RuntimeError(
-            f"streamed source {source['id']} supplied only {tokens} tokens "
-            f"for requested quota {quota}"
+            f"isolated streaming worker failed for {source['id']}: "
+            f"exit={worker.exitcode}"
         )
 
-    with gzip.open(cache_path, "wt", encoding="utf-8") as handle:
-        for row in rows_for_cache:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    documents, tokens = _read_streaming_cache(
+        source, tokenizer, quota=quota, cache_path=cache_path
+    )
+    if not documents:
+        raise RuntimeError(f"streaming worker produced no valid cache: {source['id']}")
     return documents, tokens
 
 def _parse_tatoeba(
