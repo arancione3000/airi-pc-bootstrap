@@ -111,11 +111,45 @@ jobs:
             effective_target="${persisted_target}"
           fi
           echo "TARGET_TOKENS=${effective_target}" >> "${GITHUB_ENV}"
-          printf '{"workflow_run_id":%s,"target_tokens":%s,"requested_target_tokens":%s,"started_at":"%s"}\n' \
-            "${GITHUB_RUN_ID}" "${effective_target}" "${TARGET_TOKENS}" "$(date -u +%FT%TZ)" \
-            > "${STATE_DIR}/bootstrap-data-active.json"
+
+          progress="${STATE_DIR}/bootstrap-data/progress.json"
+          report="${STATE_DIR}/bootstrap-data/report.json"
+          persisted_complete=false
+          if [[ -s "${progress}" && -s "${report}" ]]; then
+            if jq -e --argjson target "${effective_target}" '
+              (.tokens_processed // 0) >= $target
+              and ([.completed_rungs[]?] | index($target) != null)
+              and ([.sft_completed_rungs[]?] | index($target) != null)
+            ' "${progress}" >/dev/null \
+              && jq -e --argjson target "${effective_target}" '
+                (.target_tokens // 0) == $target
+              ' "${report}" >/dev/null; then
+              persisted_complete=true
+            fi
+          fi
+          echo "PERSISTED_RUNG_COMPLETE=${persisted_complete}" >> "${GITHUB_ENV}"
+
+          if [[ "${persisted_complete}" != "true" ]]; then
+            printf '{"workflow_run_id":%s,"target_tokens":%s,"requested_target_tokens":%s,"started_at":"%s"}\n' \
+              "${GITHUB_RUN_ID}" "${effective_target}" "${TARGET_TOKENS}" "$(date -u +%FT%TZ)" \
+              > "${STATE_DIR}/bootstrap-data-active.json"
+          else
+            rm -f "${STATE_DIR}/bootstrap-data-active.json"
+            echo "Phase 5 target ${effective_target} is already fully persisted; skipping corpus rebuild/training."
+          fi
+
+      - name: Reuse already-completed persisted bootstrap rung
+        if: env.PERSISTED_RUNG_COMPLETE == 'true'
+        run: |
+          set -euo pipefail
+          test -s "${STATE_DIR}/bootstrap-data/report.json"
+          test -s "${STATE_DIR}/bootstrap-data/manifest.json"
+          jq -e '.external_pretrained_weights_used == false and .external_model_distillation_used == false' \
+            "${STATE_DIR}/bootstrap-data/manifest.json"
+          echo "RUNG_COMPLETE=true" >> "${GITHUB_ENV}"
 
       - name: Run resumable language-first bootstrap segments
+        if: env.PERSISTED_RUNG_COMPLETE != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           OMP_NUM_THREADS: '4'
