@@ -29,6 +29,8 @@ from generalist_lm.bootstrap_training import (
     _filter_protected_replay,
     _grow_bootstrap_runtime,
     _phase5_success,
+    _segment_language_gate,
+    _language_quality,
 )
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
 from generalist_lm.pretraining import (
@@ -552,6 +554,119 @@ def test_anti_collapse_schedule_only_activates_for_measured_collapse():
     assert a[0] == 0.0
     assert 0.0 < b[0] < c_stage[0] <= 0.10
     assert 1.0 < a[1] < b[1] < c_stage[1] <= 2.0
+
+
+
+def _language_report(
+    *,
+    nll: float,
+    repetition: float,
+    similarity: float,
+    multiword: float,
+    pathological: bool,
+) -> dict:
+    return {
+        "language_nll": nll,
+        "repetition_rate": repetition,
+        "generation_similarity": similarity,
+        "multiword_output_rate": multiword,
+        "non_empty_rate": 1.0,
+        "token_entropy": 3.0,
+        "pathological_repetition": pathological,
+        "longest_repeated_token_run": 4 if not pathological else 12,
+    }
+
+
+def test_segment_language_guard_rejects_regression_from_good_anchor():
+    anchor = _language_report(
+        nll=2.85,
+        repetition=0.44,
+        similarity=0.12,
+        multiword=0.43,
+        pathological=False,
+    )
+    before = dict(anchor)
+    after = _language_report(
+        nll=3.40,
+        repetition=0.60,
+        similarity=0.08,
+        multiword=0.40,
+        pathological=True,
+    )
+
+    accepted, report = _segment_language_gate(before, after, anchor)
+
+    assert accepted is False
+    assert report["recovery_mode"] is False
+    assert report["after_anchor_violations"]
+    assert any(
+        "pathological repetition" in reason
+        for reason in report["after_anchor_violations"] + report["local_reasons"]
+    )
+
+
+def test_segment_language_guard_accepts_measurable_recovery_toward_anchor():
+    anchor = _language_report(
+        nll=2.85,
+        repetition=0.44,
+        similarity=0.12,
+        multiword=0.43,
+        pathological=False,
+    )
+    before = _language_report(
+        nll=3.75,
+        repetition=0.53,
+        similarity=0.18,
+        multiword=0.57,
+        pathological=True,
+    )
+    after = _language_report(
+        nll=3.60,
+        repetition=0.50,
+        similarity=0.19,
+        multiword=0.57,
+        pathological=True,
+    )
+
+    assert _language_quality(after) > _language_quality(before)
+    accepted, report = _segment_language_gate(before, after, anchor)
+
+    assert accepted is True
+    assert report["recovery_mode"] is True
+    assert report["after_quality"] > report["before_quality"]
+
+
+def test_segment_language_guard_rejects_nonrecovering_retry_below_anchor():
+    anchor = _language_report(
+        nll=2.85,
+        repetition=0.44,
+        similarity=0.12,
+        multiword=0.43,
+        pathological=False,
+    )
+    before = _language_report(
+        nll=3.75,
+        repetition=0.53,
+        similarity=0.18,
+        multiword=0.57,
+        pathological=True,
+    )
+    after = _language_report(
+        nll=3.76,
+        repetition=0.53,
+        similarity=0.18,
+        multiword=0.57,
+        pathological=True,
+    )
+
+    accepted, report = _segment_language_gate(before, after, anchor)
+
+    assert accepted is False
+    assert report["recovery_mode"] is True
+    assert any(
+        "did not measurably recover" in reason
+        for reason in report["local_reasons"]
+    )
 
 
 def test_anti_collapse_rescue_gate_requires_real_repetition_improvement():
