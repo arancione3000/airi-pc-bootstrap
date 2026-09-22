@@ -138,6 +138,11 @@
             {
               "doc": "",
               "kind": "function",
+              "name": "execute_generalist_tool"
+            },
+            {
+              "doc": "",
+              "kind": "function",
               "name": "run_generalist_agent"
             }
           ]
@@ -184,23 +189,23 @@
     },
     "version": "airi-pc-lab-v1"
   },
-  "cycle": 122,
+  "cycle": 123,
   "evolution": {
     "curriculum_memory": {
-      "added": 10,
-      "cycle": 122,
+      "added": 11,
+      "cycle": 123,
       "domains": {
-        "coding": 137,
-        "data": 237,
-        "language": 206,
-        "reasoning": 244,
-        "structured": 122,
-        "tools": 124
+        "coding": 139,
+        "data": 239,
+        "language": 209,
+        "reasoning": 246,
+        "structured": 123,
+        "tools": 125
       },
       "extra_rows_considered": 10,
-      "max_rows": 4000,
+      "max_rows": 8000,
       "ok": true,
-      "stored": 1070,
+      "stored": 1081,
       "validation_overlap": []
     },
     "data_growth": {
@@ -366,30 +371,35 @@
       "version": "generalist-data-growth-v4"
     },
     "domain_weights": {
-      "coding": 1.581488366999585,
-      "data": 2.3699668640311633,
-      "language": 3.0,
-      "reasoning": 2.2351793156303765,
-      "structured": 1.091704699231064,
-      "tools": 1.0
+      "coding": 2.473684210526316,
+      "data": 3.0095351557251613,
+      "language": 4.0,
+      "reasoning": 2.7976378434803406,
+      "structured": 3.0,
+      "tools": 4.0
     },
     "latest_research": {
       "all_seed_eligible": false,
+      "any_generation_pathological_repetition": false,
       "any_seed_eligible": false,
-      "candidate_id": "phase5-bootstrap-122",
-      "cycle": 122,
+      "candidate_id": "generalist-3-scale-02669e6d",
+      "cycle": 123,
       "external_pretrained": false,
-      "kind": "language_bootstrap",
+      "kind": "progressive_scale",
+      "language_bridge_rows": 256,
+      "max_generation_repeated_token_run": 7,
+      "mean_fitness_score": 12.832328097242407,
       "mean_generation_accuracy": 0.0,
-      "mean_generation_nonempty_rate": 1.0,
-      "mean_generation_similarity": 0.29732416675091833,
-      "mean_nll_per_byte": 1.4225977150790663,
-      "parameters": 1251264,
+      "mean_generation_nonempty_rate": 0.9166666666666667,
+      "mean_generation_repetition_rate": 0.6222027972027973,
+      "mean_generation_similarity": 0.23870274605568723,
+      "mean_nll_per_byte": 2.1140122011483435,
+      "parameters": 250496,
       "research_only": true,
-      "score": 22.675664768449973,
-      "stage": 5,
+      "score": 12.832328097242407,
+      "stage": 3,
       "tokenizer_vocab_size": 384,
-      "worst_domain_regression": 1.6283206939697261
+      "worst_domain_regression": 0.4253162384033202
     },
     "plateau": {
       "generation_exact_accuracy": 0.0,
@@ -404,7 +414,7 @@
       "adaptive_curriculum": true,
       "adaptive_pretraining_budget": {
         "enabled": true,
-        "max_steps_per_stage": 24
+        "max_steps_per_stage": 48
       },
       "airi_pc_lab": {
         "host_actions": false,
@@ -418,6 +428,12 @@
         "exact_name_and_shape": true,
         "identity_residual_depth_expansion": true,
         "layout_aware_net2grow": true
+      },
+      "automatic_best_of_both_fusion": {
+        "enabled": true,
+        "language_checkpoint_competes_in_swarm": true,
+        "protected_reducer_slot_requires_safety_filter": true,
+        "self_promotion": false
       },
       "automatic_data_growth": "permissive SPDX + immutable commit + quarantine + hash + quality filter",
       "autoregressive_similarity_ranking": true,
@@ -438,7 +454,7 @@
       "latest_research_checkpoint_isolated": true,
       "parallel_swarm": "8->4->2",
       "production_qualification_separate": true,
-      "progressive_scaling_max_parameters": 7000000,
+      "progressive_scaling_max_parameters": 20000000,
       "research_only": true,
       "rotating_canary": {
         "domains": 6,
@@ -462,13 +478,14 @@
       "weight_inheritance": "layout-aware Net2Grow + identity residual depth expansion"
     },
     "progressive_scaling": {
-      "candidate_count": 1,
+      "candidate_count": 2,
       "candidate_generated": true,
       "current_parameters": 115328,
       "maximum_scale_budget_multiplier": 1.75,
       "minimum_scale_budget_multiplier": 1.25,
       "strategies": [
-        "progressive_scale"
+        "progressive_scale",
+        "progressive_scale_balanced"
       ],
       "target_parameters": 250000,
       "tiers": [
@@ -476,7 +493,9 @@
         500000,
         1250000,
         3000000,
-        7000000
+        7000000,
+        12000000,
+        20000000
       ]
     },
     "progressive_tokenizer": {
@@ -497,8 +516,8 @@
       "deep_symbolic_signal"
     ]
   },
-  "generalist_version": "airi-generalist-free-speed-v4",
-  "generated_at": 1790094463,
+  "generalist_version": "airi-generalist-free-speed-v5",
+  "generated_at": 1790097189,
   "promoted_this_cycle": false,
   "promotion_reason": "no finalist passed every independent research gate",
   "schema": 1,
@@ -506,7 +525,7 @@
     "champion": {
       "all_seed_eligible": true,
       "context_length": 128,
-      "cycle": 122,
+      "cycle": 123,
       "files": {
         "config.json": {
           "bytes": 492,
@@ -743,31 +762,31 @@
         "kind": "aggregated_checkpoint_weights",
         "note": "This is a truthful aggregate view of checkpoint weights and model topology, not a claim to display every biological-style neuron."
       },
-      "nll_per_byte": 1.8816254237912735,
+      "nll_per_byte": 2.4474051969597137,
       "onnx_max_abs_error": 2.86102294921875e-06,
       "parameters": 115328,
       "path": "champion",
       "research_only": false,
-      "score": 34.70252130699776,
+      "score": -30.73804489103425,
       "tokenizer_version": "bpe-v1",
       "tokenizer_vocab_size": 384
     },
     "research": {
       "all_seed_eligible": false,
       "context_length": 128,
-      "cycle": 122,
+      "cycle": 123,
       "files": {
         "config.json": {
-          "bytes": 493,
-          "sha256": "628f86cb9f5d4146e2e48593de5f0b60af0104fd71d8ef4a9675f5f4365cb610"
+          "bytes": 492,
+          "sha256": "b5da9bca03055597f1ec19853155eda9d1c8205e4948b0aacc07e8d6ba780b6f"
         },
         "metadata.json": {
-          "bytes": 400,
-          "sha256": "87ae31ad802c7d4063ab0fd0e0dedd45e67f1a4da51818008de4b578092d47e6"
+          "bytes": 537,
+          "sha256": "313318196f9d31d9163a107e59c05f1778b72282ae5ede938a22a17907a35159"
         },
         "model.onnx": {
-          "bytes": 6016714,
-          "sha256": "81b529875883064eb5be9ac9fef4f62cf53ce0640b846c276bd3a559b62cefb6"
+          "bytes": 1217846,
+          "sha256": "f6aea264bcd33a5a96e88dd47635e4c8113da9255953fd675016c5318a8c50b7"
         },
         "tokenizer.json": {
           "bytes": 4183,
@@ -775,23 +794,23 @@
         }
       },
       "generation_exact_accuracy": 0.0,
-      "generation_nonempty_rate": 1.0,
-      "generation_similarity": 0.29732416675091833,
-      "id": "phase5-bootstrap-122",
+      "generation_nonempty_rate": 0.8333333333333334,
+      "generation_similarity": 0.2712597859656683,
+      "id": "generalist-3-scale-02669e6d",
       "name": "research",
       "neural": {
         "architecture": {
           "attention_type": "mha",
           "context_length": 128,
-          "d_ff": 288,
-          "d_model": 96,
+          "d_ff": 480,
+          "d_model": 64,
           "ff_variant": "swiglu",
-          "head_dim": 24,
+          "head_dim": 16,
           "local_attention_every": 0,
           "local_attention_window": 0,
           "n_heads": 4,
           "n_kv_heads": 4,
-          "n_layers": 10,
+          "n_layers": 2,
           "norm_placement": "pre",
           "norm_type": "layernorm",
           "position_encoding": "learned",
@@ -803,266 +822,74 @@
           {
             "id": "embedding",
             "label": "Embedding",
-            "max_abs_weight": 0.5123593807220459,
-            "mean_abs_weight": 0.11155317889319526,
-            "parameters": 36864,
-            "rms_weight": 0.15425266431908055
+            "max_abs_weight": 0.3319436311721802,
+            "mean_abs_weight": 0.10026276111602783,
+            "parameters": 24576,
+            "rms_weight": 0.12473539320160504
           },
           {
             "id": "position_embedding",
             "label": "Position Embedding",
-            "max_abs_weight": 0.09876400232315063,
-            "mean_abs_weight": 0.007305486748615901,
-            "parameters": 12288,
-            "rms_weight": 0.010205658678640551
+            "max_abs_weight": 0.1419624239206314,
+            "mean_abs_weight": 0.02762177400290966,
+            "parameters": 8192,
+            "rms_weight": 0.03496472189043204
           },
           {
             "id": "layer_0_attention",
             "label": "Layer 0 Attention",
-            "max_abs_weight": 0.1289183497428894,
-            "mean_abs_weight": 0.01830124192767673,
-            "parameters": 36864,
-            "rms_weight": 0.023225750529411834
+            "max_abs_weight": 0.16611409187316895,
+            "mean_abs_weight": 0.02547184471040964,
+            "parameters": 16384,
+            "rms_weight": 0.03225497912924657
           },
           {
             "id": "layer_0_norm",
             "label": "Layer 0 Norm",
-            "max_abs_weight": 1.082562804222107,
-            "mean_abs_weight": 0.5073250429704785,
-            "parameters": 384,
-            "rms_weight": 0.7100644957914418
+            "max_abs_weight": 1.1559038162231445,
+            "mean_abs_weight": 0.5129271908663213,
+            "parameters": 256,
+            "rms_weight": 0.7134970217604143
           },
           {
             "id": "layer_0_ffn",
             "label": "Layer 0 Ffn",
-            "max_abs_weight": 0.11664415150880814,
-            "mean_abs_weight": 0.01884364198755335,
-            "parameters": 82944,
-            "rms_weight": 0.023586234678689578
+            "max_abs_weight": 0.18617281317710876,
+            "mean_abs_weight": 0.009692628847228156,
+            "parameters": 92160,
+            "rms_weight": 0.023328449282358596
           },
           {
             "id": "layer_1_attention",
             "label": "Layer 1 Attention",
-            "max_abs_weight": 0.14331667125225067,
-            "mean_abs_weight": 0.01892721528808276,
-            "parameters": 36864,
-            "rms_weight": 0.024229856263767138
+            "max_abs_weight": 0.15187373757362366,
+            "mean_abs_weight": 0.02646183641627431,
+            "parameters": 16384,
+            "rms_weight": 0.033445603397233646
           },
           {
             "id": "layer_1_norm",
             "label": "Layer 1 Norm",
-            "max_abs_weight": 1.043306827545166,
-            "mean_abs_weight": 0.502977810256804,
-            "parameters": 384,
-            "rms_weight": 0.7064982729895692
+            "max_abs_weight": 1.064030408859253,
+            "mean_abs_weight": 0.502467027399689,
+            "parameters": 256,
+            "rms_weight": 0.6938421226434494
           },
           {
             "id": "layer_1_ffn",
             "label": "Layer 1 Ffn",
-            "max_abs_weight": 0.09737622737884521,
-            "mean_abs_weight": 0.01856439643436008,
-            "parameters": 82944,
-            "rms_weight": 0.02326361541761282
-          },
-          {
-            "id": "layer_2_attention",
-            "label": "Layer 2 Attention",
-            "max_abs_weight": 0.24340814352035522,
-            "mean_abs_weight": 0.025226150121953752,
-            "parameters": 36864,
-            "rms_weight": 0.03422801956413476
-          },
-          {
-            "id": "layer_2_norm",
-            "label": "Layer 2 Norm",
-            "max_abs_weight": 1.1340446472167969,
-            "mean_abs_weight": 0.5164556506400307,
-            "parameters": 384,
-            "rms_weight": 0.7229917896467515
-          },
-          {
-            "id": "layer_2_ffn",
-            "label": "Layer 2 Ffn",
-            "max_abs_weight": 0.1258365362882614,
-            "mean_abs_weight": 0.019242014413998452,
-            "parameters": 82944,
-            "rms_weight": 0.024088454317959796
-          },
-          {
-            "id": "layer_3_attention",
-            "label": "Layer 3 Attention",
-            "max_abs_weight": 0.2626526951789856,
-            "mean_abs_weight": 0.024494647979736328,
-            "parameters": 36864,
-            "rms_weight": 0.03349553752804362
-          },
-          {
-            "id": "layer_3_norm",
-            "label": "Layer 3 Norm",
-            "max_abs_weight": 1.1114070415496826,
-            "mean_abs_weight": 0.519261219073087,
-            "parameters": 384,
-            "rms_weight": 0.7281400730387787
-          },
-          {
-            "id": "layer_3_ffn",
-            "label": "Layer 3 Ffn",
-            "max_abs_weight": 0.11088770627975464,
-            "mean_abs_weight": 0.020122795193283645,
-            "parameters": 82944,
-            "rms_weight": 0.025194072537718878
-          },
-          {
-            "id": "layer_4_attention",
-            "label": "Layer 4 Attention",
-            "max_abs_weight": 0.23471717536449432,
-            "mean_abs_weight": 0.0246397385166751,
-            "parameters": 36864,
-            "rms_weight": 0.03330727970130781
-          },
-          {
-            "id": "layer_4_norm",
-            "label": "Layer 4 Norm",
-            "max_abs_weight": 1.0984143018722534,
-            "mean_abs_weight": 0.5236451309174299,
-            "parameters": 384,
-            "rms_weight": 0.7343716471253955
-          },
-          {
-            "id": "layer_4_ffn",
-            "label": "Layer 4 Ffn",
-            "max_abs_weight": 0.1102270781993866,
-            "mean_abs_weight": 0.021091363312285623,
-            "parameters": 82944,
-            "rms_weight": 0.02642334912229129
-          },
-          {
-            "id": "layer_5_attention",
-            "label": "Layer 5 Attention",
-            "max_abs_weight": 0.19562579691410065,
-            "mean_abs_weight": 0.02064764416880078,
-            "parameters": 36864,
-            "rms_weight": 0.027339195778571114
-          },
-          {
-            "id": "layer_5_norm",
-            "label": "Layer 5 Norm",
-            "max_abs_weight": 1.1169006824493408,
-            "mean_abs_weight": 0.5192664770099024,
-            "parameters": 384,
-            "rms_weight": 0.7294299319030062
-          },
-          {
-            "id": "layer_5_ffn",
-            "label": "Layer 5 Ffn",
-            "max_abs_weight": 0.11832596361637115,
-            "mean_abs_weight": 0.02162165406309528,
-            "parameters": 82944,
-            "rms_weight": 0.027116761811010102
-          },
-          {
-            "id": "layer_6_attention",
-            "label": "Layer 6 Attention",
-            "max_abs_weight": 0.16429705917835236,
-            "mean_abs_weight": 0.020000255356232326,
-            "parameters": 36864,
-            "rms_weight": 0.026026959289470686
-          },
-          {
-            "id": "layer_6_norm",
-            "label": "Layer 6 Norm",
-            "max_abs_weight": 1.134294033050537,
-            "mean_abs_weight": 0.5218125643829504,
-            "parameters": 384,
-            "rms_weight": 0.7331881332562171
-          },
-          {
-            "id": "layer_6_ffn",
-            "label": "Layer 6 Ffn",
-            "max_abs_weight": 0.11693400144577026,
-            "mean_abs_weight": 0.022347417142656114,
-            "parameters": 82944,
-            "rms_weight": 0.028033283460989922
-          },
-          {
-            "id": "layer_7_attention",
-            "label": "Layer 7 Attention",
-            "max_abs_weight": 0.13054147362709045,
-            "mean_abs_weight": 0.019536065144671336,
-            "parameters": 36864,
-            "rms_weight": 0.02521309702378462
-          },
-          {
-            "id": "layer_7_norm",
-            "label": "Layer 7 Norm",
-            "max_abs_weight": 1.1556382179260254,
-            "mean_abs_weight": 0.5256198234856129,
-            "parameters": 384,
-            "rms_weight": 0.7386576766455034
-          },
-          {
-            "id": "layer_7_ffn",
-            "label": "Layer 7 Ffn",
-            "max_abs_weight": 0.14058636128902435,
-            "mean_abs_weight": 0.023189223106996514,
-            "parameters": 82944,
-            "rms_weight": 0.02910058467700508
-          },
-          {
-            "id": "layer_8_attention",
-            "label": "Layer 8 Attention",
-            "max_abs_weight": 0.12967157363891602,
-            "mean_abs_weight": 0.0198207621773084,
-            "parameters": 36864,
-            "rms_weight": 0.02555298792272743
-          },
-          {
-            "id": "layer_8_norm",
-            "label": "Layer 8 Norm",
-            "max_abs_weight": 1.1796410083770752,
-            "mean_abs_weight": 0.5305353784933686,
-            "parameters": 384,
-            "rms_weight": 0.7460355739183684
-          },
-          {
-            "id": "layer_8_ffn",
-            "label": "Layer 8 Ffn",
-            "max_abs_weight": 0.1309998631477356,
-            "mean_abs_weight": 0.02404655497751118,
-            "parameters": 82944,
-            "rms_weight": 0.03010003758235452
-          },
-          {
-            "id": "layer_9_attention",
-            "label": "Layer 9 Attention",
-            "max_abs_weight": 0.15548671782016754,
-            "mean_abs_weight": 0.020144631879197225,
-            "parameters": 36864,
-            "rms_weight": 0.025833469991240785
-          },
-          {
-            "id": "layer_9_norm",
-            "label": "Layer 9 Norm",
-            "max_abs_weight": 1.2265892028808594,
-            "mean_abs_weight": 0.5403452838460604,
-            "parameters": 384,
-            "rms_weight": 0.7572709615588054
-          },
-          {
-            "id": "layer_9_ffn",
-            "label": "Layer 9 Ffn",
-            "max_abs_weight": 0.15384963154792786,
-            "mean_abs_weight": 0.025693212026431236,
-            "parameters": 82944,
-            "rms_weight": 0.03236717298833967
+            "max_abs_weight": 0.18883422017097473,
+            "mean_abs_weight": 0.008641529745525784,
+            "parameters": 92160,
+            "rms_weight": 0.02085882380825268
           },
           {
             "id": "final_norm",
             "label": "Final Norm",
-            "max_abs_weight": 1.563600778579712,
-            "mean_abs_weight": 0.722684770822525,
-            "parameters": 192,
-            "rms_weight": 0.9663229573888035
+            "max_abs_weight": 1.2621930837631226,
+            "mean_abs_weight": 0.6942173689603806,
+            "parameters": 128,
+            "rms_weight": 0.8813949186592128
           }
         ],
         "connections": [
@@ -1104,126 +931,6 @@
           {
             "from": "layer_1_ffn",
             "kind": "residual_flow",
-            "to": "layer_2_attention"
-          },
-          {
-            "from": "layer_2_attention",
-            "kind": "residual_flow",
-            "to": "layer_2_norm"
-          },
-          {
-            "from": "layer_2_norm",
-            "kind": "residual_flow",
-            "to": "layer_2_ffn"
-          },
-          {
-            "from": "layer_2_ffn",
-            "kind": "residual_flow",
-            "to": "layer_3_attention"
-          },
-          {
-            "from": "layer_3_attention",
-            "kind": "residual_flow",
-            "to": "layer_3_norm"
-          },
-          {
-            "from": "layer_3_norm",
-            "kind": "residual_flow",
-            "to": "layer_3_ffn"
-          },
-          {
-            "from": "layer_3_ffn",
-            "kind": "residual_flow",
-            "to": "layer_4_attention"
-          },
-          {
-            "from": "layer_4_attention",
-            "kind": "residual_flow",
-            "to": "layer_4_norm"
-          },
-          {
-            "from": "layer_4_norm",
-            "kind": "residual_flow",
-            "to": "layer_4_ffn"
-          },
-          {
-            "from": "layer_4_ffn",
-            "kind": "residual_flow",
-            "to": "layer_5_attention"
-          },
-          {
-            "from": "layer_5_attention",
-            "kind": "residual_flow",
-            "to": "layer_5_norm"
-          },
-          {
-            "from": "layer_5_norm",
-            "kind": "residual_flow",
-            "to": "layer_5_ffn"
-          },
-          {
-            "from": "layer_5_ffn",
-            "kind": "residual_flow",
-            "to": "layer_6_attention"
-          },
-          {
-            "from": "layer_6_attention",
-            "kind": "residual_flow",
-            "to": "layer_6_norm"
-          },
-          {
-            "from": "layer_6_norm",
-            "kind": "residual_flow",
-            "to": "layer_6_ffn"
-          },
-          {
-            "from": "layer_6_ffn",
-            "kind": "residual_flow",
-            "to": "layer_7_attention"
-          },
-          {
-            "from": "layer_7_attention",
-            "kind": "residual_flow",
-            "to": "layer_7_norm"
-          },
-          {
-            "from": "layer_7_norm",
-            "kind": "residual_flow",
-            "to": "layer_7_ffn"
-          },
-          {
-            "from": "layer_7_ffn",
-            "kind": "residual_flow",
-            "to": "layer_8_attention"
-          },
-          {
-            "from": "layer_8_attention",
-            "kind": "residual_flow",
-            "to": "layer_8_norm"
-          },
-          {
-            "from": "layer_8_norm",
-            "kind": "residual_flow",
-            "to": "layer_8_ffn"
-          },
-          {
-            "from": "layer_8_ffn",
-            "kind": "residual_flow",
-            "to": "layer_9_attention"
-          },
-          {
-            "from": "layer_9_attention",
-            "kind": "residual_flow",
-            "to": "layer_9_norm"
-          },
-          {
-            "from": "layer_9_norm",
-            "kind": "residual_flow",
-            "to": "layer_9_ffn"
-          },
-          {
-            "from": "layer_9_ffn",
-            "kind": "residual_flow",
             "to": "final_norm"
           }
         ],
@@ -1232,376 +939,88 @@
             "head": 0,
             "kind": "mha_qkv",
             "layer": 0,
-            "max_abs_weight": 0.1289183497428894,
-            "mean_abs_weight": 0.01954503357410431,
-            "parameters": 6912,
-            "rms_weight": 0.024941664189100266
+            "max_abs_weight": 0.14460459351539612,
+            "mean_abs_weight": 0.02706809528172016,
+            "parameters": 3072,
+            "rms_weight": 0.03429805487394333
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 0,
-            "max_abs_weight": 0.10133742541074753,
-            "mean_abs_weight": 0.019464509561657906,
-            "parameters": 6912,
-            "rms_weight": 0.0247818436473608
+            "max_abs_weight": 0.16611409187316895,
+            "mean_abs_weight": 0.026450494304299355,
+            "parameters": 3072,
+            "rms_weight": 0.03346967324614525
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 0,
-            "max_abs_weight": 0.0922010987997055,
-            "mean_abs_weight": 0.01856086403131485,
-            "parameters": 6912,
-            "rms_weight": 0.023345526307821274
+            "max_abs_weight": 0.10153377056121826,
+            "mean_abs_weight": 0.025304170325398445,
+            "parameters": 3072,
+            "rms_weight": 0.03140828385949135
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 0,
-            "max_abs_weight": 0.09497702866792679,
-            "mean_abs_weight": 0.018391229212284088,
-            "parameters": 6912,
-            "rms_weight": 0.023228192701935768
+            "max_abs_weight": 0.1350972056388855,
+            "mean_abs_weight": 0.027366651222109795,
+            "parameters": 3072,
+            "rms_weight": 0.03497707098722458
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 1,
-            "max_abs_weight": 0.11627118289470673,
-            "mean_abs_weight": 0.019764158874750137,
-            "parameters": 6912,
-            "rms_weight": 0.02530680038034916
+            "max_abs_weight": 0.13137854635715485,
+            "mean_abs_weight": 0.02847173996269703,
+            "parameters": 3072,
+            "rms_weight": 0.03570593520998955
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 1,
-            "max_abs_weight": 0.13185662031173706,
-            "mean_abs_weight": 0.020811043679714203,
-            "parameters": 6912,
-            "rms_weight": 0.02680865116417408
+            "max_abs_weight": 0.12057469040155411,
+            "mean_abs_weight": 0.026796499267220497,
+            "parameters": 3072,
+            "rms_weight": 0.033593885600566864
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 1,
-            "max_abs_weight": 0.14331667125225067,
-            "mean_abs_weight": 0.019529756158590317,
-            "parameters": 6912,
-            "rms_weight": 0.024994950741529465
+            "max_abs_weight": 0.15187373757362366,
+            "mean_abs_weight": 0.028208540752530098,
+            "parameters": 3072,
+            "rms_weight": 0.03593085706233978
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 1,
-            "max_abs_weight": 0.10483862459659576,
-            "mean_abs_weight": 0.01882796175777912,
-            "parameters": 6912,
-            "rms_weight": 0.023943880572915077
-          },
-          {
-            "head": 0,
-            "kind": "mha_qkv",
-            "layer": 2,
-            "max_abs_weight": 0.23433266580104828,
-            "mean_abs_weight": 0.02751047909259796,
-            "parameters": 6912,
-            "rms_weight": 0.037687379866838455
-          },
-          {
-            "head": 1,
-            "kind": "mha_qkv",
-            "layer": 2,
-            "max_abs_weight": 0.2105933427810669,
-            "mean_abs_weight": 0.024516796693205833,
-            "parameters": 6912,
-            "rms_weight": 0.0328393392264843
-          },
-          {
-            "head": 2,
-            "kind": "mha_qkv",
-            "layer": 2,
-            "max_abs_weight": 0.24340814352035522,
-            "mean_abs_weight": 0.030090413987636566,
-            "parameters": 6912,
-            "rms_weight": 0.04094833880662918
-          },
-          {
-            "head": 3,
-            "kind": "mha_qkv",
-            "layer": 2,
-            "max_abs_weight": 0.18902035057544708,
-            "mean_abs_weight": 0.02781032584607601,
-            "parameters": 6912,
-            "rms_weight": 0.03684786334633827
-          },
-          {
-            "head": 0,
-            "kind": "mha_qkv",
-            "layer": 3,
-            "max_abs_weight": 0.2626526951789856,
-            "mean_abs_weight": 0.03394792228937149,
-            "parameters": 6912,
-            "rms_weight": 0.04608485847711563
-          },
-          {
-            "head": 1,
-            "kind": "mha_qkv",
-            "layer": 3,
-            "max_abs_weight": 0.23487460613250732,
-            "mean_abs_weight": 0.02941371314227581,
-            "parameters": 6912,
-            "rms_weight": 0.039681270718574524
-          },
-          {
-            "head": 2,
-            "kind": "mha_qkv",
-            "layer": 3,
-            "max_abs_weight": 0.17882823944091797,
-            "mean_abs_weight": 0.023184392601251602,
-            "parameters": 6912,
-            "rms_weight": 0.030497035011649132
-          },
-          {
-            "head": 3,
-            "kind": "mha_qkv",
-            "layer": 3,
-            "max_abs_weight": 0.14523012936115265,
-            "mean_abs_weight": 0.020230522379279137,
-            "parameters": 6912,
-            "rms_weight": 0.026016589254140854
-          },
-          {
-            "head": 0,
-            "kind": "mha_qkv",
-            "layer": 4,
-            "max_abs_weight": 0.19161683320999146,
-            "mean_abs_weight": 0.0244161207228899,
-            "parameters": 6912,
-            "rms_weight": 0.03204029053449631
-          },
-          {
-            "head": 1,
-            "kind": "mha_qkv",
-            "layer": 4,
-            "max_abs_weight": 0.153413325548172,
-            "mean_abs_weight": 0.022354844957590103,
-            "parameters": 6912,
-            "rms_weight": 0.029086481779813766
-          },
-          {
-            "head": 2,
-            "kind": "mha_qkv",
-            "layer": 4,
-            "max_abs_weight": 0.19909165799617767,
-            "mean_abs_weight": 0.027642183005809784,
-            "parameters": 6912,
-            "rms_weight": 0.036930106580257416
-          },
-          {
-            "head": 3,
-            "kind": "mha_qkv",
-            "layer": 4,
-            "max_abs_weight": 0.23471717536449432,
-            "mean_abs_weight": 0.03394078463315964,
-            "parameters": 6912,
-            "rms_weight": 0.045260798186063766
-          },
-          {
-            "head": 0,
-            "kind": "mha_qkv",
-            "layer": 5,
-            "max_abs_weight": 0.12184295058250427,
-            "mean_abs_weight": 0.01994205452501774,
-            "parameters": 6912,
-            "rms_weight": 0.025718556717038155
-          },
-          {
-            "head": 1,
-            "kind": "mha_qkv",
-            "layer": 5,
-            "max_abs_weight": 0.19562579691410065,
-            "mean_abs_weight": 0.023805927485227585,
-            "parameters": 6912,
-            "rms_weight": 0.03162530064582825
-          },
-          {
-            "head": 2,
-            "kind": "mha_qkv",
-            "layer": 5,
-            "max_abs_weight": 0.180137038230896,
-            "mean_abs_weight": 0.024094970896840096,
-            "parameters": 6912,
-            "rms_weight": 0.03190796077251434
-          },
-          {
-            "head": 3,
-            "kind": "mha_qkv",
-            "layer": 5,
-            "max_abs_weight": 0.14010928571224213,
-            "mean_abs_weight": 0.0219340231269598,
-            "parameters": 6912,
-            "rms_weight": 0.028686629608273506
-          },
-          {
-            "head": 0,
-            "kind": "mha_qkv",
-            "layer": 6,
-            "max_abs_weight": 0.16429705917835236,
-            "mean_abs_weight": 0.021680250763893127,
-            "parameters": 6912,
-            "rms_weight": 0.02815442532300949
-          },
-          {
-            "head": 1,
-            "kind": "mha_qkv",
-            "layer": 6,
-            "max_abs_weight": 0.14964520931243896,
-            "mean_abs_weight": 0.02226751670241356,
-            "parameters": 6912,
-            "rms_weight": 0.028911329805850983
-          },
-          {
-            "head": 2,
-            "kind": "mha_qkv",
-            "layer": 6,
-            "max_abs_weight": 0.12064196169376373,
-            "mean_abs_weight": 0.021271290257573128,
-            "parameters": 6912,
-            "rms_weight": 0.027355678379535675
-          },
-          {
-            "head": 3,
-            "kind": "mha_qkv",
-            "layer": 6,
-            "max_abs_weight": 0.15000104904174805,
-            "mean_abs_weight": 0.021832402795553207,
-            "parameters": 6912,
-            "rms_weight": 0.027969755232334137
-          },
-          {
-            "head": 0,
-            "kind": "mha_qkv",
-            "layer": 7,
-            "max_abs_weight": 0.10796397924423218,
-            "mean_abs_weight": 0.02078627049922943,
-            "parameters": 6912,
-            "rms_weight": 0.02675529196858406
-          },
-          {
-            "head": 1,
-            "kind": "mha_qkv",
-            "layer": 7,
-            "max_abs_weight": 0.12323082238435745,
-            "mean_abs_weight": 0.02145610749721527,
-            "parameters": 6912,
-            "rms_weight": 0.02753770910203457
-          },
-          {
-            "head": 2,
-            "kind": "mha_qkv",
-            "layer": 7,
-            "max_abs_weight": 0.10319998115301132,
-            "mean_abs_weight": 0.02121110074222088,
-            "parameters": 6912,
-            "rms_weight": 0.027000125497579575
-          },
-          {
-            "head": 3,
-            "kind": "mha_qkv",
-            "layer": 7,
-            "max_abs_weight": 0.13054147362709045,
-            "mean_abs_weight": 0.020872553810477257,
-            "parameters": 6912,
-            "rms_weight": 0.026829557493329048
-          },
-          {
-            "head": 0,
-            "kind": "mha_qkv",
-            "layer": 8,
-            "max_abs_weight": 0.11917797476053238,
-            "mean_abs_weight": 0.020921194925904274,
-            "parameters": 6912,
-            "rms_weight": 0.02681148052215576
-          },
-          {
-            "head": 1,
-            "kind": "mha_qkv",
-            "layer": 8,
-            "max_abs_weight": 0.12909238040447235,
-            "mean_abs_weight": 0.020679667592048645,
-            "parameters": 6912,
-            "rms_weight": 0.026428397744894028
-          },
-          {
-            "head": 2,
-            "kind": "mha_qkv",
-            "layer": 8,
-            "max_abs_weight": 0.12967157363891602,
-            "mean_abs_weight": 0.022422512993216515,
-            "parameters": 6912,
-            "rms_weight": 0.028986826539039612
-          },
-          {
-            "head": 3,
-            "kind": "mha_qkv",
-            "layer": 8,
-            "max_abs_weight": 0.11159447580575943,
-            "mean_abs_weight": 0.021291937679052353,
-            "parameters": 6912,
-            "rms_weight": 0.027155298739671707
-          },
-          {
-            "head": 0,
-            "kind": "mha_qkv",
-            "layer": 9,
-            "max_abs_weight": 0.1129804328083992,
-            "mean_abs_weight": 0.0217643640935421,
-            "parameters": 6912,
-            "rms_weight": 0.02788727357983589
-          },
-          {
-            "head": 1,
-            "kind": "mha_qkv",
-            "layer": 9,
-            "max_abs_weight": 0.15548671782016754,
-            "mean_abs_weight": 0.022905226796865463,
-            "parameters": 6912,
-            "rms_weight": 0.029501192271709442
-          },
-          {
-            "head": 2,
-            "kind": "mha_qkv",
-            "layer": 9,
-            "max_abs_weight": 0.12007703632116318,
-            "mean_abs_weight": 0.020700179040431976,
-            "parameters": 6912,
-            "rms_weight": 0.026153724640607834
-          },
-          {
-            "head": 3,
-            "kind": "mha_qkv",
-            "layer": 9,
-            "max_abs_weight": 0.10214453190565109,
-            "mean_abs_weight": 0.021027004346251488,
-            "parameters": 6912,
-            "rms_weight": 0.026560744270682335
+            "max_abs_weight": 0.1248113363981247,
+            "mean_abs_weight": 0.027923310175538063,
+            "parameters": 3072,
+            "rms_weight": 0.03504082188010216
           }
         ],
         "kind": "aggregated_checkpoint_weights",
         "note": "This is a truthful aggregate view of checkpoint weights and model topology, not a claim to display every biological-style neuron."
       },
-      "nll_per_byte": 1.4225977150790663,
-      "onnx_max_abs_error": 5.7220458984375e-06,
-      "parameters": 1251264,
+      "nll_per_byte": 2.1538777179028616,
+      "onnx_max_abs_error": 1.430511474609375e-06,
+      "parameters": 250496,
       "path": "research",
       "research_only": true,
       "research_source": "latest-research",
-      "score": 22.675664768449973,
+      "score": 12.832328097242407,
       "tokenizer_version": "bpe-v1",
       "tokenizer_vocab_size": 384
     }
   },
-  "state_sha": "d4404d129410476ad7052c0f7ac4fa55d02d5fee"
+  "state_sha": "0cc191c8a10e2786496b1c04f6cebc54315cca94"
 }
