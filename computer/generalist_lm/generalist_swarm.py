@@ -326,6 +326,10 @@ def prepare_swarm(
         rotating,
         device="cpu",
     )
+    champion_report["score"] = _research_score(
+        champion_report,
+        champion_report["parameters"],
+    )
 
     signals = _weaknesses(champion_report)
     mathesis = None
@@ -1147,6 +1151,10 @@ def run_candidate(
             rotating,
             device="cpu",
         )
+        report["score"] = _research_score(
+            report,
+            int(report["parameters"]),
+        )
         eligible, reason = _research_eligible(
             plan["champion_report"],
             report,
@@ -1177,13 +1185,10 @@ def run_candidate(
         _atomic_json(out_root / "result.json", result)
         return result
 
-    best_index = min(
+    best_index = max(
         range(len(reports)),
         key=lambda idx: float(
-            reports[idx]["report"].get(
-                "nll_per_byte",
-                reports[idx]["report"]["loss"],
-            )
+            reports[idx]["report"].get("score", float("-inf"))
         ),
     )
     best_runtime, best_report = runtimes[best_index]
@@ -1229,6 +1234,10 @@ def run_candidate(
                 item["report"]["loss"],
             )
         )
+        for item in valid
+    ]
+    fitness_scores = [
+        float(item["report"].get("score", float("-inf")))
         for item in valid
     ]
     generations = [
@@ -1312,7 +1321,10 @@ def run_candidate(
         ),
         "worst_domain_regression": max(regressions),
         "parameters": int(best_report["parameters"]),
-        "score": float(best_report["score"]),
+        "score": float(mean(fitness_scores)),
+        "mean_fitness_score": float(mean(fitness_scores)),
+        "best_fitness_score": float(max(fitness_scores)),
+        "fitness": dict(best_report.get("fitness") or {}),
         "corpus": corpus_report,
         "checkpoint_dir": "best-checkpoint",
         "external_pretrained": False,
@@ -1390,13 +1402,13 @@ def select_survivors(
         safe = rows
     rank_key = lambda row: (
         0 if row.get("any_seed_eligible") else 1,
+        -float(row.get("mean_fitness_score", row.get("score", 0.0))),
         -float(row.get("mean_generation_accuracy", 0.0)),
         -float(row.get("mean_generation_similarity", 0.0)),
         -float(row.get("mean_generation_nonempty_rate", 0.0)),
         float(row.get("mean_generation_repetition_rate", 1.0)),
         float(row.get("mean_nll_per_byte", float("inf"))),
         int(row.get("parameters", 1 << 60)),
-        -float(row.get("score", 0.0)),
         int(row["candidate_index"]),
     )
     safe.sort(key=rank_key)
@@ -1497,6 +1509,7 @@ def finalize_swarm(
         research_ranked = sorted(
             scanned,
             key=lambda pair: (
+                -float(pair[1].get("mean_fitness_score", pair[1].get("score", 0.0))),
                 -float(pair[1].get("mean_generation_accuracy", 0.0)),
                 -float(pair[1].get("mean_generation_similarity", 0.0)),
                 -float(pair[1].get("mean_generation_nonempty_rate", 0.0)),
@@ -1522,6 +1535,9 @@ def finalize_swarm(
                 "stage": int(research_row.get("stage", 0) or 0),
                 "parameters": int(research_row.get("parameters", 0) or 0),
                 "score": float(research_row.get("score", 0.0) or 0.0),
+                "mean_fitness_score": float(
+                    research_row.get("mean_fitness_score", research_row.get("score", 0.0)) or 0.0
+                ),
                 "mean_nll_per_byte": float(
                     research_row.get("mean_nll_per_byte", 0.0) or 0.0
                 ),
@@ -1565,6 +1581,7 @@ def finalize_swarm(
     if finalists:
         finalists.sort(
             key=lambda pair: (
+                -float(pair[1].get("mean_fitness_score", pair[1].get("score", 0.0))),
                 -float(pair[1].get("mean_generation_accuracy", 0.0)),
                 -float(pair[1].get("mean_generation_similarity", 0.0)),
                 -float(pair[1].get("mean_generation_nonempty_rate", 0.0)),
@@ -1597,6 +1614,10 @@ def finalize_swarm(
             runtime.tokenizer,
             canary_rows(int(plan["cycle"])),
             device="cpu",
+        )
+        verified["score"] = _research_score(
+            verified,
+            verified["parameters"],
         )
         eligible, verify_reason = _research_eligible(
             plan["champion_report"],
@@ -1667,6 +1688,10 @@ def finalize_swarm(
         champion_runtime.tokenizer,
         rotating,
         device="cpu",
+    )
+    champion_report["score"] = _research_score(
+        champion_report,
+        champion_report["parameters"],
     )
     replay_rows = CurriculumMemory(root, max_rows=20_000).rows()
     replay_prompts = {
