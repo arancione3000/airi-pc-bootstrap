@@ -714,6 +714,30 @@ def _load_stage_source(
     return runtime, metadata
 
 
+def _load_research_incumbent_source(
+    checkpoint: str | Path,
+    *,
+    genome: GeneralistGenome,
+) -> tuple[GeneralistRuntime, dict[str, Any]]:
+    root = Path(checkpoint).expanduser().resolve()
+    metadata_path = root / "metadata.json"
+    if not metadata_path.is_file():
+        raise FileNotFoundError("research incumbent checkpoint requires metadata.json")
+    metadata = _load_json(metadata_path)
+    if not isinstance(metadata, dict):
+        raise ValueError("research incumbent checkpoint metadata must be an object")
+    if str(metadata.get("candidate_id") or "") != genome.genome_id:
+        raise ValueError("research incumbent candidate mismatch")
+    if bool(metadata.get("production_qualified")):
+        raise ValueError("production-qualified checkpoint must not be used as research incumbent")
+
+    runtime = GeneralistRuntime.from_checkpoint(root, device="cpu")
+    expected = genome.model_config(runtime.tokenizer.vocab_size).to_dict()
+    if runtime.config.to_dict() != expected:
+        raise ValueError("research incumbent architecture mismatch")
+    return runtime, metadata
+
+
 def _capacity_budget_multiplier(
     kind: str,
     *,
@@ -727,6 +751,7 @@ def _capacity_budget_multiplier(
         normalized_kind.startswith("progressive_scale")
         or normalized_kind == "architecture_capacity_scale"
         or normalized_kind == "architecture_capacity_plus_structure"
+        or normalized_kind == "architecture_incumbent"
         or (
             current >= 10_000
             and candidate >= int(current * 1.35)
@@ -763,6 +788,7 @@ def run_candidate(
     _champion_genome, champion_runtime = loaded
     source_runtime = champion_runtime
     source_metadata: dict[str, Any] = {}
+    continued_from_incumbent = False
     if source_checkpoint is not None:
         source_runtime, source_metadata = _load_stage_source(
             source_checkpoint,
@@ -770,6 +796,13 @@ def run_candidate(
             cycle=int(plan["cycle"]),
             stage=int(stage),
         )
+    elif int(stage) == 1 and row.get("initial_checkpoint"):
+        initial_checkpoint = root / str(row["initial_checkpoint"])
+        source_runtime, source_metadata = _load_research_incumbent_source(
+            initial_checkpoint,
+            genome=genome,
+        )
+        continued_from_incumbent = True
 
     memory = CurriculumMemory(root, max_rows=20_000)
     replay_rows = memory.rows()
@@ -977,9 +1010,15 @@ def run_candidate(
             "stage": int(stage),
             "previous_stage": (
                 int(source_metadata["stage"])
-                if "stage" in source_metadata
+                if source_checkpoint is not None and "stage" in source_metadata
                 else None
             ),
+            "incumbent_source_cycle": (
+                int(source_metadata.get("cycle", 0) or 0)
+                if continued_from_incumbent
+                else None
+            ),
+            "continued_from_incumbent": bool(continued_from_incumbent),
             "cumulative_steps": (
                 int(source_metadata.get("cumulative_steps", 0) or 0)
                 + int(effective_steps)
@@ -1042,7 +1081,13 @@ def run_candidate(
         ),
         "continued_from_stage": (
             int(source_metadata["stage"])
-            if "stage" in source_metadata
+            if source_checkpoint is not None and "stage" in source_metadata
+            else None
+        ),
+        "continued_from_incumbent": bool(continued_from_incumbent),
+        "incumbent_source_cycle": (
+            int(source_metadata.get("cycle", 0) or 0)
+            if continued_from_incumbent
             else None
         ),
         "candidate_index": int(candidate_index),
@@ -1163,6 +1208,7 @@ def select_survivors(
             kind.startswith("progressive_scale")
             or kind == "architecture_capacity_scale"
             or kind == "architecture_capacity_plus_structure"
+            or kind == "architecture_incumbent"
         )
 
     progressive_rows = [

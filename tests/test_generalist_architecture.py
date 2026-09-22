@@ -13,7 +13,9 @@ from generalist_lm.architecture_mutations import (
     structural_mutations,
 )
 from generalist_lm.architecture_search import (
+    _load_incumbent_candidate,
     _negative_architecture_memory,
+    _research_quality_key,
     prioritize_architecture_proposals,
 )
 from generalist_lm.data_quality import assess_text
@@ -123,6 +125,100 @@ def test_capacity_probes_receive_more_training_budget():
         candidate_parameters=7_000_000,
         current_parameters=115_000,
     ) == 2.25
+
+
+def test_research_quality_key_prefers_lower_repetition_after_pathology():
+    better = {
+        "all_seed_eligible": False,
+        "pathological_repetition": True,
+        "mean_generation_similarity": 0.22,
+        "mean_generation_repetition_rate": 0.44,
+        "mean_nll_per_byte": 1.56,
+        "parameters": 1_250_000,
+    }
+    worse = {
+        "all_seed_eligible": False,
+        "pathological_repetition": True,
+        "mean_generation_similarity": 0.18,
+        "mean_generation_repetition_rate": 0.81,
+        "mean_nll_per_byte": 1.88,
+        "parameters": 115_000,
+    }
+    assert _research_quality_key(better) < _research_quality_key(worse)
+
+
+def test_incumbent_candidate_requires_same_parent_and_complete_checkpoint(
+    tmp_path: Path,
+):
+    parent = ArchitectureSpec(
+        architecture_id="parent",
+        generation=2,
+        parent_id=None,
+        context_length=128,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=128,
+        tokenizer_version="bpe-v1",
+        target_vocab_size=384,
+    ).validate()
+    incumbent_genome = GeneralistGenome(
+        genome_id="incumbent",
+        generation=3,
+        parent_id="parent",
+        context_length=128,
+        d_model=96,
+        n_heads=4,
+        n_layers=4,
+        d_ff=192,
+        tokenizer_version="bpe-v1",
+        norm_type="rmsnorm",
+        position_encoding="rope",
+    ).validate()
+    incumbent_spec = ArchitectureSpec.from_genome(
+        incumbent_genome,
+        target_vocab_size=384,
+    )
+    root = tmp_path / "architecture-research" / "incumbent"
+    checkpoint = root / "checkpoint"
+    checkpoint.mkdir(parents=True)
+    for name in ("model.pt", "config.json", "tokenizer.json", "metadata.json"):
+        (checkpoint / name).write_bytes(b"x")
+    (root / "summary.json").write_text(
+        json.dumps({
+            "candidate_id": incumbent_genome.genome_id,
+            "parent_fingerprint": parent.fingerprint(),
+            "fingerprint": incumbent_spec.fingerprint(),
+            "genome": incumbent_genome.to_dict(),
+            "architecture": incumbent_spec.to_dict(),
+            "cycle": 9,
+            "cumulative_steps": 77,
+            "production_qualified": False,
+            "external_pretrained": False,
+        }),
+        encoding="utf-8",
+    )
+
+    candidate, report = _load_incumbent_candidate(
+        tmp_path,
+        parent_fingerprint=parent.fingerprint(),
+        current_vocab=384,
+        parameter_cap=7_000_000,
+    )
+    assert candidate is not None
+    assert candidate["kind"] == "architecture_incumbent"
+    assert candidate["candidate_id"] == "incumbent"
+    assert candidate["initial_checkpoint"].endswith("incumbent/checkpoint")
+    assert report["used"] is True
+
+    other, other_report = _load_incumbent_candidate(
+        tmp_path,
+        parent_fingerprint="different-parent",
+        current_vocab=384,
+        parameter_cap=7_000_000,
+    )
+    assert other is None
+    assert other_report["reason"] == "parent_changed"
 
 
 def test_negative_memory_blocks_same_parent_failures_only(tmp_path: Path):
@@ -274,6 +370,80 @@ def test_safe_capacity_probe_is_preserved_by_successive_halving(tmp_path: Path):
     selected = {row["candidate_id"] for row in result["selected"]}
     assert "control" in selected
     assert "capacity" in selected
+    assert result["protected_progressive_scale"] is True
+
+
+def test_safe_incumbent_is_preserved_by_successive_halving(tmp_path: Path):
+    rows = [
+        {
+            "version": GENERALIST_SWARM_VERSION,
+            "ok": True,
+            "candidate_index": 0,
+            "candidate_id": "control",
+            "kind": "architecture_control",
+            "stage": 1,
+            "worst_domain_regression": 0.02,
+            "any_generation_pathological_repetition": False,
+            "any_seed_eligible": True,
+            "mean_generation_accuracy": 0.2,
+            "mean_generation_similarity": 0.4,
+            "mean_generation_nonempty_rate": 1.0,
+            "mean_generation_repetition_rate": 0.2,
+            "mean_nll_per_byte": 1.6,
+            "parameters": 115_000,
+            "score": 20.0,
+        },
+        {
+            "version": GENERALIST_SWARM_VERSION,
+            "ok": True,
+            "candidate_index": 1,
+            "candidate_id": "micro",
+            "kind": "architecture_structural_mutation",
+            "stage": 1,
+            "worst_domain_regression": 0.03,
+            "any_generation_pathological_repetition": False,
+            "any_seed_eligible": True,
+            "mean_generation_accuracy": 0.18,
+            "mean_generation_similarity": 0.38,
+            "mean_generation_nonempty_rate": 1.0,
+            "mean_generation_repetition_rate": 0.21,
+            "mean_nll_per_byte": 1.7,
+            "parameters": 106_000,
+            "score": 19.0,
+        },
+        {
+            "version": GENERALIST_SWARM_VERSION,
+            "ok": True,
+            "candidate_index": 2,
+            "candidate_id": "incumbent",
+            "kind": "architecture_incumbent",
+            "stage": 1,
+            "worst_domain_regression": 0.10,
+            "any_generation_pathological_repetition": False,
+            "any_seed_eligible": False,
+            "mean_generation_accuracy": 0.05,
+            "mean_generation_similarity": 0.12,
+            "mean_generation_nonempty_rate": 0.8,
+            "mean_generation_repetition_rate": 0.35,
+            "mean_nll_per_byte": 2.1,
+            "parameters": 1_250_000,
+            "score": 10.0,
+        },
+    ]
+    paths = []
+    for row in rows:
+        path = tmp_path / f"inc-{row['candidate_index']}.json"
+        path.write_text(json.dumps(row), encoding="utf-8")
+        paths.append(path)
+
+    result = select_survivors(
+        paths,
+        tmp_path / "inc-selection.json",
+        survivors=2,
+    )
+    selected = {row["candidate_id"] for row in result["selected"]}
+    assert "control" in selected
+    assert "incumbent" in selected
     assert result["protected_progressive_scale"] is True
 
 
