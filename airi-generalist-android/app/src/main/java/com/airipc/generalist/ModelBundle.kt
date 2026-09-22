@@ -115,12 +115,16 @@ class BundleRepository(context: Context) {
             ?: error("Manifest mobile privo di model.onnx")
         val directory = File(root, "${slot.name}-${modelHash.take(16)}").apply { mkdirs() }
 
+        var downloadRevision = mobileRevision
         for ((name, info) in slot.files) {
             val target = File(directory, name)
             if (!target.isFile || sha256(target) != info.sha256) {
-                check(mobileRevision.isNotBlank()) { "Revisione mobile mancante" }
+                if (downloadRevision.isBlank()) {
+                    downloadRevision = github.resolveBranchSha(MOBILE_BRANCH)
+                }
+                check(downloadRevision.isNotBlank()) { "Revisione mobile mancante" }
                 val bytes = github.getBytesAtRevision(
-                    mobileRevision,
+                    downloadRevision,
                     "${slot.path}/$name",
                 )
                 val tmp = File(directory, "$name.tmp")
