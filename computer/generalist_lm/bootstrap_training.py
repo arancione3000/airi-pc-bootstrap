@@ -56,7 +56,10 @@ PHASE5_SFT_GUARD_VERSION = "phase5-sft-guard-v2"
 PHASE5_ANTICOLLAPSE_VERSION = "phase5-anticollapse-v2"
 PHASE5_CAPACITY_GROWTH_VERSION = "phase5-capacity-growth-v2"
 PHASE5_BASE_UNIQUE_CORPUS_TOKENS = 5_000_000
-PHASE5_MAX_UNIQUE_CORPUS_TOKENS = 20_000_000
+PHASE5_100M_UNIQUE_CORPUS_TOKENS = 20_000_000
+PHASE5_250M_UNIQUE_CORPUS_TOKENS = 40_000_000
+PHASE5_500M_UNIQUE_CORPUS_TOKENS = 60_000_000
+PHASE5_1B_UNIQUE_CORPUS_TOKENS = 100_000_000
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -87,19 +90,25 @@ def _sha256_file(path: Path) -> str:
 
 
 def _bootstrap_corpus_target(training_target_tokens: int) -> int:
-    """Keep the live lineage small until the 100M fast-track rung.
+    """Grow reviewed unique text together with cumulative optimization.
 
-    The existing 20M checkpoint stays on its pinned five-million-token corpus.
-    Once that same checkpoint advances to 100M optimization tokens, expand the
-    unique reviewed corpus to twenty million tokens.  This gives the 7M model
-    substantially more unique language without replacing the live lineage.
+    AIRI keeps one checkpoint lineage, but larger rungs should not merely loop
+    over the same small corpus forever. The streaming FineWeb/FineWeb2 sources
+    already support bounded deterministic growth, so increase unique language
+    gradually while keeping the corpus much smaller than the optimization
+    budget for resumable CPU training.
     """
     target = max(100_000, int(training_target_tokens))
-    ceiling = (
-        PHASE5_MAX_UNIQUE_CORPUS_TOKENS
-        if target >= 100_000_000
-        else PHASE5_BASE_UNIQUE_CORPUS_TOKENS
-    )
+    if target >= 1_000_000_000:
+        ceiling = PHASE5_1B_UNIQUE_CORPUS_TOKENS
+    elif target >= 500_000_000:
+        ceiling = PHASE5_500M_UNIQUE_CORPUS_TOKENS
+    elif target >= 250_000_000:
+        ceiling = PHASE5_250M_UNIQUE_CORPUS_TOKENS
+    elif target >= 100_000_000:
+        ceiling = PHASE5_100M_UNIQUE_CORPUS_TOKENS
+    else:
+        ceiling = PHASE5_BASE_UNIQUE_CORPUS_TOKENS
     return min(target, ceiling)
 
 def _bootstrap_capacity_target(training_target_tokens: int) -> int | None:
