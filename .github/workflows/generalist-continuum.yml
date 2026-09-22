@@ -212,6 +212,9 @@ jobs:
 
   stage2:
     needs: [plan, reduce1]
+    # Continue when the reducer succeeded even if one Stage-1 sibling was
+    # cancelled by runner loss or a code update.
+    if: ${{ always() && needs.plan.result == 'success' && needs.reduce1.result == 'success' }}
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -269,6 +272,9 @@ jobs:
 
   stage3:
     needs: [plan, reduce2]
+    # The reducer is the authority on surviving evidence; failed sibling
+    # workers must not poison the whole continual-learning cycle.
+    if: ${{ always() && needs.plan.result == 'success' && needs.reduce2.result == 'success' }}
     strategy:
       fail-fast: false
       max-parallel: 2
