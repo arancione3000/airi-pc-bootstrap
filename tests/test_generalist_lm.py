@@ -589,7 +589,10 @@ def test_research_promotion_accepts_loss_gain_with_retained_solutions():
 def test_generalist_continuum_has_parallel_free_speed_swarm_and_nonforce_state_push():
     workflow = (ROOT / ".github" / "workflows" / "generalist-continuum.yml").read_text(encoding="utf-8")
     assert "group: airi-generalist-free-speed" in workflow
-    assert "cancel-in-progress: false" in workflow
+    assert (
+        "cancel-in-progress: $" + "{{ github.event_name == 'push' }}"
+    ) in workflow
+    assert "cancel-in-progress: true" not in workflow
     assert "max-parallel: 8" in workflow
     assert "max-parallel: 4" in workflow
     assert "max-parallel: 2" in workflow
