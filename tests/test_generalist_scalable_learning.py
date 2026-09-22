@@ -506,7 +506,7 @@ def test_generalist_swarm_reducer_prefers_safe_generation_and_nll(tmp_path: Path
         folder.mkdir()
         payload = {
             "ok": True,
-            "version": "airi-generalist-free-speed-v4",
+            "version": "airi-generalist-free-speed-v5",
             "cycle": 1,
             "stage": 1,
             "steps": 3,
@@ -1212,7 +1212,7 @@ def test_generalist_swarm_reducer_reserves_one_safe_scale_probe(tmp_path: Path):
         folder.mkdir()
         payload = {
             "ok": True,
-            "version": "airi-generalist-free-speed-v4",
+            "version": "airi-generalist-free-speed-v5",
             "cycle": 1,
             "stage": 1,
             "steps": 3,
@@ -1506,7 +1506,7 @@ def test_generalist_swarm_reducer_prefers_partial_generation_before_nll(tmp_path
         folder.mkdir()
         payload = {
             "ok": True,
-            "version": "airi-generalist-free-speed-v4",
+            "version": "airi-generalist-free-speed-v5",
             "cycle": 1,
             "stage": 1,
             "steps": 3,
