@@ -29,6 +29,7 @@ from generalist_lm.bootstrap_training import (
     _effective_bootstrap_target,
     _filter_protected_replay,
     _grow_bootstrap_runtime,
+    _maybe_compile_phase5_training_model,
     _phase5_success,
 )
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
@@ -172,6 +173,31 @@ def test_phase5_fast_resume_requires_exact_verified_identities():
     assert not _bootstrap_fast_resume_allowed(
         insufficient, replay, tokenizer, 1_000_000
     )
+
+
+def test_phase5_compile_wrapper_falls_back_without_touching_model(monkeypatch):
+    torch = pytest.importorskip("torch")
+    model = object()
+
+    eager, report = _maybe_compile_phase5_training_model(model, enabled=False)
+    assert eager is model
+    assert report["enabled"] is False
+    assert report["fallback_reason"] is None
+
+    compiled_sentinel = object()
+    monkeypatch.setattr(torch, "compile", lambda value, dynamic=False: compiled_sentinel)
+    compiled, report = _maybe_compile_phase5_training_model(model, enabled=True)
+    assert compiled is compiled_sentinel
+    assert report["enabled"] is True
+
+    def _fail_compile(value, dynamic=False):
+        raise RuntimeError("fixture compiler failure")
+
+    monkeypatch.setattr(torch, "compile", _fail_compile)
+    fallback, report = _maybe_compile_phase5_training_model(model, enabled=True)
+    assert fallback is model
+    assert report["enabled"] is False
+    assert "fixture compiler failure" in report["fallback_reason"]
 
 
 def test_phase5_cumulative_target_never_shrinks_on_maintenance_run():
