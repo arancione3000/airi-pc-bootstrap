@@ -75,7 +75,10 @@ def main() -> None:
 
     rows = [
         bench("current-12x1888-c128-b32", layers=12, d_ff=1888, context=128, batch=32, steps=args.steps),
+        bench("current-12x1888-c128-b64", layers=12, d_ff=1888, context=128, batch=64, steps=args.steps),
+        bench("current-12x1888-c128-b128", layers=12, d_ff=1888, context=128, batch=128, steps=max(2, args.steps // 2)),
         bench("wide10-10x2304-c128-b32", layers=10, d_ff=2304, context=128, batch=32, steps=args.steps),
+        bench("wide10-10x2304-c128-b64", layers=10, d_ff=2304, context=128, batch=64, steps=args.steps),
         bench("wide10-10x2304-c256-b32", layers=10, d_ff=2304, context=256, batch=32, steps=args.steps),
         bench("wide10-10x2304-c256-b16", layers=10, d_ff=2304, context=256, batch=16, steps=args.steps),
     ]
