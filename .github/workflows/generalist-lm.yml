@@ -124,10 +124,13 @@ jobs:
               "Hand off to the next autonomous Free-Speed cycle",
               "actions/workflows/generalist-continuum.yml/dispatches",
               "Another Generalist continuum run is already queued/running",
-              "cancel-in-progress: false",
+              "cancel-in-progress: ${{ github.event_name == 'push' }}",
           ]
           missing = [item for item in required if item not in text]
           assert not missing, f"Free-Speed continuity contract missing: {missing}"
+          assert "cancel-in-progress: true" not in text, (
+              "Free-Speed continuity must not cancel scheduled/manual/workflow_run cycles"
+          )
           PY
 
       - name: Compile generalist LM
