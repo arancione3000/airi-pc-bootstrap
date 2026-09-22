@@ -10,7 +10,7 @@ from .model import GeneralistLMConfig, estimate_parameter_count
 
 
 ARCHITECTURE_IR_VERSION = "airi-architecture-ir-v1"
-SUPPORTED_FAMILIES = {"decoder_transformer_v1"}
+SUPPORTED_FAMILIES = {"decoder_transformer_v1", "gated_recurrent_v1"}
 
 
 @dataclass(frozen=True)
@@ -89,15 +89,23 @@ class ArchitectureSpec:
         raw = self.to_dict()
         for key in ("architecture_id", "generation", "parent_id"):
             raw.pop(key, None)
-        # Normalize semantically equivalent encodings before hashing.  MHA has
-        # one KV head set per query head; GQA without an explicit value means
-        # the bounded factory policy of half the query heads.
-        if raw.get("attention_type") == "mha":
-            raw["n_kv_heads"] = int(raw["n_heads"])
-        elif raw.get("n_kv_heads") is None:
-            raw["n_kv_heads"] = max(1, int(raw["n_heads"]) // 2)
-        if int(raw.get("local_attention_window", 0) or 0) == 0:
+        # Normalize semantically equivalent encodings before hashing.
+        if raw.get("family") == "gated_recurrent_v1":
+            raw["attention_type"] = "none"
+            raw["n_kv_heads"] = 0
+            raw["local_attention_window"] = 0
             raw["local_attention_every"] = 0
+            raw["position_encoding"] = "none"
+            raw["n_heads"] = 1
+        else:
+            # MHA has one KV head set per query head; GQA without an explicit
+            # value means the bounded factory policy of half the query heads.
+            if raw.get("attention_type") == "mha":
+                raw["n_kv_heads"] = int(raw["n_heads"])
+            elif raw.get("n_kv_heads") is None:
+                raw["n_kv_heads"] = max(1, int(raw["n_heads"]) // 2)
+            if int(raw.get("local_attention_window", 0) or 0) == 0:
+                raw["local_attention_every"] = 0
         return raw
 
     def fingerprint(self) -> str:
@@ -121,6 +129,7 @@ class ArchitectureSpec:
         validate: bool = True,
     ) -> GeneralistLMConfig:
         cfg = GeneralistLMConfig(
+            architecture_family=str(self.family),
             vocab_size=int(vocab_size or self.target_vocab_size),
             context_length=int(self.context_length),
             d_model=int(self.d_model),
@@ -143,6 +152,7 @@ class ArchitectureSpec:
 
     def to_genome(self, *, validate: bool = True) -> GeneralistGenome:
         genome = GeneralistGenome(
+            architecture_family=str(self.family),
             generation=int(self.generation),
             parent_id=self.parent_id,
             genome_id=str(self.architecture_id),
@@ -182,14 +192,15 @@ class ArchitectureSpec:
         genome: GeneralistGenome,
         *,
         target_vocab_size: int = 1024,
-        family: str = "decoder_transformer_v1",
+        family: str | None = None,
     ) -> "ArchitectureSpec":
         genome.validate()
+        resolved_family = str(family or genome.architecture_family)
         return cls(
             architecture_id=genome.genome_id,
             generation=genome.generation,
             parent_id=genome.parent_id,
-            family=family,
+            family=resolved_family,
             context_length=genome.context_length,
             d_model=genome.d_model,
             n_heads=genome.n_heads,
