@@ -1034,6 +1034,8 @@ def _train_genome(
     precision: str = "fp32",
     pretrain_documents: list[CorpusDocument] | None = None,
     pretrain_steps: int = 0,
+    repetition_unlikelihood_weight: float = 0.0,
+    eos_loss_weight: float = 1.0,
 ) -> tuple[GeneralistRuntime, dict[str, Any]]:
     tokenizer = tokenizer or ByteTokenizer()
     model = CausalTransformerLM(genome.model_config(tokenizer.vocab_size))
@@ -1068,6 +1070,8 @@ def _train_genome(
             seed=seed + 101,
             device=device,
             domain_weights=_pretraining_domain_weights(domain_weights),
+            repetition_unlikelihood_weight=repetition_unlikelihood_weight,
+            eos_loss_weight=eos_loss_weight,
         )
     else:
         pretraining = {
@@ -1100,6 +1104,8 @@ def _train_genome(
         device=device,
         gradient_accumulation_steps=gradient_accumulation_steps,
         precision=precision,
+        repetition_unlikelihood_weight=repetition_unlikelihood_weight,
+        eos_loss_weight=eos_loss_weight,
     )
     runtime = GeneralistRuntime(model, genome.model_config(tokenizer.vocab_size), tokenizer, device=device)
     validation = _grouped_validation(runtime.model, tokenizer, validation_rows(), device=device)
@@ -1108,6 +1114,11 @@ def _train_genome(
     validation["training"] = report
     validation["pretraining"] = pretraining
     validation["weight_transfer"] = transfer
+    validation["anti_collapse_objective"] = {
+        "repetition_unlikelihood_weight": float(repetition_unlikelihood_weight),
+        "eos_loss_weight": float(eos_loss_weight),
+        "decoding_modified": False,
+    }
     return runtime, validation
 
 

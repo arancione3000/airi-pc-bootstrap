@@ -90,6 +90,14 @@ def test_parameter_ladder_exposes_multiple_future_tiers():
         7_000_000,
     ]
 
+    assert next_parameter_tiers(115_328) == [
+        250_000,
+        500_000,
+        1_250_000,
+        3_000_000,
+        7_000_000,
+    ]
+
 
 def test_capacity_probes_receive_more_training_budget():
     assert _capacity_budget_multiplier(

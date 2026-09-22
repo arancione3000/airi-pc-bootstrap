@@ -7,7 +7,7 @@ from pathlib import Path
 import random
 from typing import Any, Iterable
 
-from .tokenizer import PAD, ByteTokenizer
+from .tokenizer import BYTE_OFFSET, EOS, PAD, ByteTokenizer
 
 
 @dataclass(frozen=True)
@@ -164,6 +164,98 @@ def nll_stats_on_examples(model, tokenizer, examples: list[SFTExample], *, devic
     }
 
 
+def causal_training_objective(
+    logits,
+    labels,
+    input_ids,
+    *,
+    eos_token_id: int = EOS,
+    eos_loss_weight: float = 1.0,
+    repetition_unlikelihood_weight: float = 0.0,
+    repetition_window: int = 16,
+    special_token_floor: int = BYTE_OFFSET,
+):
+    """Causal LM loss with bounded, target-safe anti-collapse auxiliaries.
+
+    Cross-entropy remains the primary objective.  EOS targets can be mildly
+    reweighted so short natural sequences learn to terminate, while optional
+    token-level unlikelihood penalizes recently seen tokens only when they are
+    *not* the correct next token.  The helper never changes decoding.
+    """
+    import torch
+    from torch.nn import functional as F
+
+    if logits.ndim != 3 or labels.ndim != 2 or input_ids.ndim != 2:
+        raise ValueError("unexpected causal objective tensor rank")
+    if labels.shape != input_ids.shape or logits.shape[:2] != input_ids.shape:
+        raise ValueError("causal objective tensors must share batch/time dimensions")
+
+    shifted_logits = logits[:, :-1, :]
+    targets = labels[:, 1:]
+    valid = targets != -100
+
+    token_loss = F.cross_entropy(
+        shifted_logits.contiguous().view(-1, shifted_logits.shape[-1]),
+        targets.contiguous().view(-1),
+        ignore_index=-100,
+        reduction="none",
+    ).view_as(targets)
+
+    weights = torch.ones_like(token_loss)
+    eos_weight = max(1.0, float(eos_loss_weight))
+    if eos_weight > 1.0:
+        weights = torch.where(
+            targets == int(eos_token_id),
+            torch.full_like(weights, eos_weight),
+            weights,
+        )
+    valid_weights = weights * valid.to(weights.dtype)
+    ce_loss = (token_loss * valid_weights).sum() / valid_weights.sum().clamp_min(1.0)
+
+    ul_weight = max(0.0, float(repetition_unlikelihood_weight))
+    ul_loss = shifted_logits.sum() * 0.0
+    negative_count = 0
+    if ul_weight > 0.0 and shifted_logits.shape[1] > 0:
+        window = max(1, min(int(repetition_window), int(input_ids.shape[1])))
+        negative_mask = torch.zeros_like(shifted_logits, dtype=torch.bool)
+        prediction_steps = int(shifted_logits.shape[1])
+
+        for position in range(prediction_steps):
+            start = max(0, position - window + 1)
+            recent = input_ids[:, start:position + 1]
+            negative_mask[:, position, :].scatter_(1, recent, True)
+
+        # Chat/control tokens are structural and should not be discouraged.
+        floor = max(0, min(int(special_token_floor), int(shifted_logits.shape[-1])))
+        if floor:
+            negative_mask[:, :, :floor] = False
+
+        # Never penalize the ground-truth target, even if it legitimately
+        # repeats a recent token.
+        safe_targets = targets.clamp_min(0).unsqueeze(-1)
+        negative_mask.scatter_(2, safe_targets, False)
+        negative_mask &= valid.unsqueeze(-1)
+
+        negative_count = int(negative_mask.sum().item())
+        if negative_count:
+            probs = torch.softmax(shifted_logits, dim=-1)
+            negative_probs = probs.masked_select(negative_mask).clamp(
+                min=0.0,
+                max=1.0 - 1e-6,
+            )
+            ul_loss = -torch.log1p(-negative_probs).mean()
+
+    total = ce_loss + ul_weight * ul_loss
+    stats = {
+        "causal_ce_loss": float(ce_loss.detach().cpu()),
+        "repetition_unlikelihood_loss": float(ul_loss.detach().cpu()),
+        "repetition_unlikelihood_weight": ul_weight,
+        "repetition_negative_count": int(negative_count),
+        "eos_loss_weight": eos_weight,
+    }
+    return total, stats
+
+
 def train_sft(
     model,
     tokenizer: ByteTokenizer,
@@ -177,6 +269,9 @@ def train_sft(
     device: str = "cpu",
     gradient_accumulation_steps: int = 1,
     precision: str = "fp32",
+    repetition_unlikelihood_weight: float = 0.0,
+    eos_loss_weight: float = 1.0,
+    repetition_window: int = 16,
 ) -> dict[str, Any]:
     import torch
     if not examples:
@@ -220,6 +315,13 @@ def train_sft(
         enabled=(precision == "fp16" and device_obj.type == "cuda"),
     )
     losses: list[float] = []
+    last_objective_stats = {
+        "causal_ce_loss": float(initial_loss),
+        "repetition_unlikelihood_loss": 0.0,
+        "repetition_unlikelihood_weight": float(repetition_unlikelihood_weight),
+        "repetition_negative_count": 0,
+        "eos_loss_weight": float(eos_loss_weight),
+    }
 
     for _ in range(steps):
         optimizer.zero_grad(set_to_none=True)
@@ -240,7 +342,15 @@ def train_sft(
                 dtype=autocast_dtype,
                 enabled=(autocast_dtype is not None),
             ):
-                raw_loss = model(ids, labels=labels)["loss"]
+                result = model(ids)
+                raw_loss, objective_stats = causal_training_objective(
+                    result["logits"],
+                    labels,
+                    ids,
+                    eos_loss_weight=eos_loss_weight,
+                    repetition_unlikelihood_weight=repetition_unlikelihood_weight,
+                    repetition_window=repetition_window,
+                )
                 loss = raw_loss / accumulation
 
             if not torch.isfinite(raw_loss):
@@ -248,6 +358,7 @@ def train_sft(
 
             scaler.scale(loss).backward()
             micro_losses.append(float(raw_loss.detach().cpu()))
+            last_objective_stats = objective_stats
 
         if scaler.is_enabled():
             scaler.unscale_(optimizer)
@@ -274,4 +385,5 @@ def train_sft(
         "final_loss": final_loss,
         "best_step_loss": min(losses),
         "loss_improvement": initial_loss - final_loss,
+        "objective": last_objective_stats,
     }

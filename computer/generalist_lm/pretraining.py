@@ -7,6 +7,7 @@ import random
 from typing import Iterable, Sequence
 
 from .tokenizer import EOS, PAD, ByteTokenizer
+from .training import causal_training_objective
 
 
 _ALLOWED_SUFFIXES = {
@@ -215,6 +216,9 @@ def pretrain_causal(
     device: str = "cpu",
     max_eval_blocks: int = 128,
     domain_weights: dict[str, float] | None = None,
+    repetition_unlikelihood_weight: float = 0.0,
+    eos_loss_weight: float = 1.0,
+    repetition_window: int = 16,
 ) -> dict:
     """Run bounded causal next-token pretraining on a local reviewed corpus."""
     import torch
@@ -278,6 +282,13 @@ def pretrain_causal(
         weight_decay=float(weight_decay),
     )
     losses: list[float] = []
+    last_objective_stats = {
+        "causal_ce_loss": float(initial_loss),
+        "repetition_unlikelihood_loss": 0.0,
+        "repetition_unlikelihood_weight": float(repetition_unlikelihood_weight),
+        "repetition_negative_count": 0,
+        "eos_loss_weight": float(eos_loss_weight),
+    }
     for _ in range(max(1, int(steps))):
         chosen_domains = rng.choices(
             sampling_domains,
@@ -290,13 +301,22 @@ def pretrain_causal(
         ]
         ids, labels = _batch(blocks, rows, device=device)
         optimizer.zero_grad(set_to_none=True)
-        loss = model(ids, labels=labels)["loss"]
+        result = model(ids)
+        loss, objective_stats = causal_training_objective(
+            result["logits"],
+            labels,
+            ids,
+            eos_loss_weight=eos_loss_weight,
+            repetition_unlikelihood_weight=repetition_unlikelihood_weight,
+            repetition_window=repetition_window,
+        )
         if not torch.isfinite(loss):
             raise RuntimeError("non-finite pretraining loss")
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         losses.append(float(loss.detach().cpu()))
+        last_objective_stats = objective_stats
 
     final_loss = corpus_loss(
         model,
@@ -319,6 +339,7 @@ def pretrain_causal(
         "final_loss": final_loss,
         "loss_improvement": initial_loss - final_loss,
         "best_step_loss": min(losses),
+        "objective": last_objective_stats,
         "corpus_bytes": sum(row.bytes for row in documents),
         "corpus_sha256": hashlib.sha256(
             "\n".join(row.sha256 for row in documents).encode("ascii")

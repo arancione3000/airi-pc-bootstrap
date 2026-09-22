@@ -767,6 +767,18 @@ def run_candidate(
         scale_multiplier=scale_budget_multiplier,
     )
 
+    signals = set(str(value) for value in (plan.get("signals") or []))
+    language_collapse = bool(
+        "language_collapse" in signals
+        or "autoregressive_collapse" in signals
+    )
+    anti_collapse_weight = (
+        0.08 if language_collapse and int(stage) >= 2
+        else 0.05 if language_collapse
+        else 0.0
+    )
+    anti_collapse_eos_weight = 1.75 if language_collapse else 1.0
+
     reports = []
     runtimes: list[tuple[GeneralistRuntime, dict[str, Any]]] = []
     rotating = canary_rows(int(plan["cycle"]))
@@ -790,6 +802,8 @@ def run_candidate(
             precision="fp32",
             pretrain_documents=documents,
             pretrain_steps=effective_pretrain_steps,
+            repetition_unlikelihood_weight=anti_collapse_weight,
+            eos_loss_weight=anti_collapse_eos_weight,
         )
         report["canary_cycle"] = int(plan["cycle"])
         report["canary"] = _grouped_validation(
@@ -944,6 +958,12 @@ def run_candidate(
         "checkpoint_dir": "best-checkpoint",
         "external_pretrained": False,
         "language_bridge_rows": len(language_bridge_rows),
+        "anti_collapse_objective": {
+            "enabled": bool(anti_collapse_weight > 0.0),
+            "repetition_unlikelihood_weight": float(anti_collapse_weight),
+            "eos_loss_weight": float(anti_collapse_eos_weight),
+            "decoding_modified": False,
+        },
         "tokenizer_vocab_size": int(tokenizer.vocab_size),
         "tokenizer_vocab_target": int(bpe_vocab_target),
         "language_bpe_probe": row.get("kind") == "language_bpe_probe",
