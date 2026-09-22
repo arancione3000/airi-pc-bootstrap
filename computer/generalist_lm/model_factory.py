@@ -5,10 +5,10 @@ from typing import Any
 
 from .architecture_ir import ArchitectureSpec
 from .model import (
-    CausalTransformerLM,
     estimate_flops_per_token,
     parameter_count,
 )
+from .model_registry import build_causal_lm
 
 
 @dataclass(frozen=True)
@@ -49,9 +49,7 @@ def build_architecture(
 ) -> BuiltArchitecture:
     spec.validate()
     config = spec.to_model_config(vocab_size=vocab_size)
-    if spec.family != "decoder_transformer_v1":
-        raise ValueError("architecture family is not implemented by this factory")
-    model = CausalTransformerLM(config)
+    model = build_causal_lm(config)
     return BuiltArchitecture(
         spec=spec,
         model=model,
