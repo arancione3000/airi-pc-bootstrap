@@ -371,6 +371,138 @@ def _anti_collapse_rescue_gate(
     return (not reasons), reasons
 
 
+
+def _language_quality(report: dict[str, Any]) -> float:
+    """Small deterministic scalar used only to compare the same held-out suite."""
+    nll = float(report.get("language_nll", 1_000_000.0) or 1_000_000.0)
+    repetition = float(report.get("repetition_rate", 1.0) or 1.0)
+    similarity = float(report.get("generation_similarity", 0.0) or 0.0)
+    multiword = float(report.get("multiword_output_rate", 0.0) or 0.0)
+    nonempty = float(report.get("non_empty_rate", 0.0) or 0.0)
+    entropy = min(5.0, max(0.0, float(report.get("token_entropy", 0.0) or 0.0)))
+    pathological = 1.0 if bool(report.get("pathological_repetition")) else 0.0
+    return (
+        -nll
+        - 1.50 * repetition
+        + 1.50 * similarity
+        + 0.75 * multiword
+        + 0.25 * nonempty
+        + 0.10 * entropy
+        - 0.50 * pathological
+    )
+
+
+def _language_guard_violations(
+    reference: dict[str, Any],
+    candidate: dict[str, Any],
+) -> list[str]:
+    """Return material held-out language regressions versus a durable anchor."""
+    reasons: list[str] = []
+    ref_nll = float(reference.get("language_nll", float("inf")))
+    cand_nll = float(candidate.get("language_nll", float("inf")))
+    ref_rep = float(reference.get("repetition_rate", 1.0) or 1.0)
+    cand_rep = float(candidate.get("repetition_rate", 1.0) or 1.0)
+    ref_similarity = float(reference.get("generation_similarity", 0.0) or 0.0)
+    cand_similarity = float(candidate.get("generation_similarity", 0.0) or 0.0)
+    ref_multi = float(reference.get("multiword_output_rate", 0.0) or 0.0)
+    cand_multi = float(candidate.get("multiword_output_rate", 0.0) or 0.0)
+    ref_nonempty = float(reference.get("non_empty_rate", 0.0) or 0.0)
+    cand_nonempty = float(candidate.get("non_empty_rate", 0.0) or 0.0)
+    ref_entropy = float(reference.get("token_entropy", 0.0) or 0.0)
+    cand_entropy = float(candidate.get("token_entropy", 0.0) or 0.0)
+
+    if cand_nll > ref_nll + 0.15:
+        reasons.append("language NLL exceeds durable anchor by more than 0.15")
+    if cand_rep > ref_rep + 0.08:
+        reasons.append("repetition rate exceeds durable anchor by more than 0.08")
+    if (
+        not bool(reference.get("pathological_repetition"))
+        and bool(candidate.get("pathological_repetition"))
+    ):
+        reasons.append("pathological repetition reappeared")
+    if cand_similarity < ref_similarity - 0.05:
+        reasons.append("generation similarity fell below durable anchor")
+    if cand_multi < max(0.0, ref_multi - 0.15):
+        reasons.append("multiword output rate fell below durable anchor")
+    if cand_nonempty < max(0.50, ref_nonempty - 0.10):
+        reasons.append("non-empty generation rate fell below durable anchor")
+    if cand_entropy < max(1.25, ref_entropy - 0.60):
+        reasons.append("token entropy fell below durable anchor")
+    return reasons
+
+
+def _segment_language_gate(
+    before: dict[str, Any],
+    after: dict[str, Any],
+    anchor: dict[str, Any],
+) -> tuple[bool, dict[str, Any]]:
+    """Fail closed when a training segment makes the live AIRI language worse.
+
+    If the lineage is already below a historical best anchor, enter recovery
+    mode: a segment may be accepted only when it moves held-out quality toward
+    that anchor without introducing a new material regression.
+    """
+    before_anchor = _language_guard_violations(anchor, before)
+    after_anchor = _language_guard_violations(anchor, after)
+    local_reasons: list[str] = []
+
+    before_nll = float(before.get("language_nll", float("inf")))
+    after_nll = float(after.get("language_nll", float("inf")))
+    before_rep = float(before.get("repetition_rate", 1.0) or 1.0)
+    after_rep = float(after.get("repetition_rate", 1.0) or 1.0)
+    before_similarity = float(before.get("generation_similarity", 0.0) or 0.0)
+    after_similarity = float(after.get("generation_similarity", 0.0) or 0.0)
+
+    if after_nll > before_nll + 0.08:
+        local_reasons.append("segment language NLL regressed by more than 0.08")
+    if after_rep > before_rep + 0.06:
+        local_reasons.append("segment repetition rate regressed by more than 0.06")
+    if (
+        not bool(before.get("pathological_repetition"))
+        and bool(after.get("pathological_repetition"))
+    ):
+        local_reasons.append("segment introduced pathological repetition")
+    if after_similarity < before_similarity - 0.04:
+        local_reasons.append("segment generation similarity regressed")
+    if float(after.get("multiword_output_rate", 0.0) or 0.0) < max(
+        0.0,
+        float(before.get("multiword_output_rate", 0.0) or 0.0) - 0.15,
+    ):
+        local_reasons.append("segment multiword output rate regressed")
+
+    before_quality = _language_quality(before)
+    after_quality = _language_quality(after)
+    recovery_mode = bool(before_anchor)
+
+    if recovery_mode:
+        improved = (
+            after_quality >= before_quality + 0.005
+            or len(after_anchor) < len(before_anchor)
+        )
+        if not improved:
+            local_reasons.append(
+                "lineage is below its durable language anchor and this segment "
+                "did not measurably recover quality"
+            )
+        accepted = not local_reasons
+    else:
+        accepted = not local_reasons and not after_anchor
+
+    return bool(accepted), {
+        "accepted": bool(accepted),
+        "recovery_mode": recovery_mode,
+        "before_quality": before_quality,
+        "after_quality": after_quality,
+        "anchor_quality": _language_quality(anchor),
+        "before_anchor_violations": before_anchor,
+        "after_anchor_violations": after_anchor,
+        "local_reasons": local_reasons,
+        "validation_before": before,
+        "validation_after": after,
+        "anchor": anchor,
+    }
+
+
 def _run_anti_collapse_rescue(
     runtime: GeneralistRuntime,
     stage_blocks: dict[str, list[list[int]]],
