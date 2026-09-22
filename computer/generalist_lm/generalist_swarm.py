@@ -552,7 +552,7 @@ def prepare_swarm(
         verified_tool_experiences=len(lab_experience_rows),
     )
     self_play_solver = champion_runtime
-    self_play_solver_source = "champion"
+    self_play_solver_source = "live_lineage"
     if bool(self_play.get("enabled")) and specialist_fusion is not None:
         try:
             self_play_solver = GeneralistRuntime.from_checkpoint(
@@ -875,29 +875,18 @@ def prepare_swarm(
             "maximum_scale_budget_multiplier": 1.75,
         },
         "converged_champion": {
-            "language_fusion_available": language_fusion is not None,
-            "specialist_fusion_available": specialist_fusion is not None,
-            "specialist_teacher": (
-                {
-                    "island": specialist_fusion["island"],
-                    "checkpoint": specialist_fusion["checkpoint"],
-                    "summary": specialist_fusion["summary"],
-                }
-                if specialist_fusion is not None
-                else None
-            ),
-            "language_teacher": (
-                {
-                    key: value
-                    for key, value in language_fusion.items()
-                    if key != "genome"
-                }
-                if language_fusion is not None
-                else None
-            ),
+            "language_fusion_available": False,
+            "specialist_fusion_available": False,
+            "specialist_teacher": None,
+            "language_teacher": None,
+            "live_lineage_source": {
+                "checkpoint": str(live["checkpoint_rel"]),
+                "lineage_id": lineage_id,
+                "model_sha256": live_model_sha,
+            },
             "policy": (
-                "completed language checkpoint competes as a normal research candidate; "
-                "promotion still requires protected generalist and degeneration gates"
+                "the newest live AIRI checkpoint is the parent of every research "
+                "candidate; verified descendants return to that same lineage"
             ),
         },
         "limits": {
@@ -930,14 +919,14 @@ def prepare_swarm(
             "progressive_bpe_vocab": 1024,
             "inherited_sft_lr_cap": 0.001,
             "weight_inheritance": True,
-            "automatic_best_of_both_fusion": True,
+            "automatic_best_of_both_fusion": False,
             "language_fusion_self_promotion": False,
             "automatic_data_growth_fail_closed": True,
             "airi_pc_lab_read_only": True,
             "airi_pc_lab_training": True,
             "active_learning": True,
             "evolution_islands": ["language", "coding", "reasoning", "tools", "efficiency"],
-            "system_sparse_experts": True,
+            "system_sparse_experts": False,
             "max_active_experts": 1,
             "compression_research": True,
             "verified_self_play": bool(self_play.get("enabled")),
@@ -2428,8 +2417,9 @@ def finalize_swarm(
             "adaptive_curriculum": True,
             "progressive_scaling_max_parameters": 20_000_000,
             "automatic_best_of_both_fusion": {
-                "enabled": True,
-                "language_checkpoint_competes_in_swarm": True,
+                "enabled": bool(persist_research_checkpoints),
+                "language_checkpoint_competes_in_swarm": False,
+                "live_lineage_is_training_parent": True,
                 "self_promotion": False,
                 "protected_reducer_slot_requires_safety_filter": True,
             },
