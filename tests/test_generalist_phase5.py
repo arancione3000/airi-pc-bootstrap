@@ -170,12 +170,12 @@ def test_fasttrack_streaming_sources_are_explicit_and_bilingual():
 
 def test_fasttrack_web_chunking_is_bounded_and_normalizes_whitespace():
     raw = (
-        "Questa è una frase italiana abbastanza lunga da essere utile al modello.\n\n"
-        "Seconda frase con   spazi multipli e altro testo naturale per il training."
+        "Questa è una frase italiana abbastanza lunga da essere utile al modello e contiene parole naturali per un buon esempio di addestramento.\n\n"
+        "Seconda frase con   spazi multipli e altro testo naturale sufficientemente lungo per verificare la pulizia dei documenti web."
     )
-    chunks = _web_chunks(raw, max_chars=120)
+    chunks = _web_chunks(raw, max_chars=180)
     assert len(chunks) >= 2
-    assert all(len(row) <= 120 for row in chunks)
+    assert all(len(row) <= 180 for row in chunks)
     assert all("   " not in row for row in chunks)
     assert all(_quality_web_text(row) for row in chunks)
 
