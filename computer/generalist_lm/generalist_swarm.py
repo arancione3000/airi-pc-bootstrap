@@ -33,6 +33,7 @@ from .efficiency_engine import (
     active_learning_weights,
     efficiency_bonus,
     efficiency_profile,
+    measure_inference_latency,
     island_schedule,
     island_weights,
     self_play_policy,
@@ -60,7 +61,10 @@ from .research_cycle import (
     research_seed,
 )
 from .runtime import GeneralistRuntime
-from .verified_self_play import generate_verified_self_play_rows
+from .verified_self_play import (
+    generate_verified_multiagent_rows,
+    generate_verified_self_play_rows,
+)
 
 
 GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v5"
@@ -516,12 +520,28 @@ def prepare_swarm(
         champion_report,
         verified_tool_experiences=len(lab_experience_rows),
     )
-    self_play_rows, self_play_report = generate_verified_self_play_rows(
+    self_play_solver = champion_runtime
+    self_play_solver_source = "champion"
+    if bool(self_play.get("enabled")) and specialist_fusion is not None:
+        try:
+            self_play_solver = GeneralistRuntime.from_checkpoint(
+                root / str(specialist_fusion["checkpoint"]),
+                device="cpu",
+            )
+            self_play_solver_source = (
+                "specialist:" + str(specialist_fusion.get("island") or "unknown")
+            )
+        except Exception:
+            self_play_solver = champion_runtime
+            self_play_solver_source = "champion_fallback"
+    self_play_rows, self_play_report = generate_verified_multiagent_rows(
         champion_runtime,
+        self_play_solver,
         self_play,
         cycle=cycle,
         max_tasks=12,
     )
+    self_play_report["solver_source"] = self_play_solver_source
     memory = CurriculumMemory(root, max_rows=curriculum_max_rows)
     curriculum = memory.expand(
         cycle,
@@ -1437,9 +1457,18 @@ def run_candidate(
             int(report["parameters"]),
         )
         report["island"] = str(row.get("island") or "efficiency")
+        latency = measure_inference_latency(
+            runtime.model,
+            runtime.config,
+            device="cpu",
+            sequence_length=min(32, int(runtime.config.context_length)),
+            repeats=3,
+        )
+        report["latency"] = latency
         report["efficiency"] = efficiency_profile(
             runtime.config,
             report,
+            latency=latency,
         )
         report["efficiency_bonus"] = efficiency_bonus(report["efficiency"])
         report["score"] = float(report["score"]) + float(report["efficiency_bonus"])

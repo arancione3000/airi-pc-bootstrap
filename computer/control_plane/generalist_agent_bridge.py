@@ -502,8 +502,124 @@ def _table_aggregate(arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 
-def tool_specs() -> dict[str, dict[str, Any]]:
+def _generalist_sandbox_write_ready() -> bool:
+    """Expose write/test only to an explicitly enabled, qualified model."""
+    import os
+
+    if os.environ.get("AIRI_GENERALIST_SANDBOX_WRITE", "0").strip().lower() not in {
+        "1", "true", "yes", "on"
+    }:
+        return False
+    status = generalist_provider.status()
+    if not bool(status.get("available") and status.get("qualified")):
+        return False
+    qualification = status.get("qualification") or {}
+    report = qualification.get("report") or {}
+    try:
+        score = float(report.get("score", 0.0) or 0.0)
+    except Exception:
+        score = 0.0
+    return bool(score >= 90.0 and not report.get("critical_failures"))
+
+
+def _generalist_sandbox_patch_test(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Apply one scoped patch, verify it, and rollback automatically on failure."""
+    import os
+    import shlex
+    from pathlib import Path
+
+    if not _generalist_sandbox_write_ready():
+        raise PermissionError("sandbox write/test readiness gate is closed")
+
+    from coding import ROOT, safe_path
+    from code_agent import autonomous_change_cycle
+
+    raw_root = os.environ.get(
+        "AIRI_GENERALIST_WRITE_ROOT",
+        str(ROOT / ".ai" / "generalist-sandbox"),
+    )
+    allowed_root = Path(raw_root).expanduser()
+    if not allowed_root.is_absolute():
+        allowed_root = (ROOT / allowed_root).resolve()
+    else:
+        allowed_root = allowed_root.resolve()
+    try:
+        allowed_root.relative_to(ROOT)
+    except ValueError as exc:
+        raise PermissionError("AIRI_GENERALIST_WRITE_ROOT must stay inside Airi-PC workspace") from exc
+    allowed_root.mkdir(parents=True, exist_ok=True)
+
+    raw_path = str(arguments.get("path", "")).strip()
+    old = str(arguments.get("old", ""))
+    new = str(arguments.get("new", ""))
+    verifier = str(arguments.get("verifier", "auto")).strip().lower()
+    if not raw_path or len(raw_path) > 500:
+        raise ValueError("sandbox patch path must be 1..500 characters")
+    if len(old) > 100_000 or len(new) > 100_000:
+        raise ValueError("sandbox patch payload is too large")
+    target = safe_path(raw_path)
+    try:
+        target.relative_to(allowed_root)
+    except ValueError as exc:
+        raise PermissionError("sandbox patch target is outside the configured write root") from exc
+    if target.suffix.lower() not in {
+        ".py", ".json", ".md", ".txt", ".toml", ".yaml", ".yml",
+        ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".sql",
+    }:
+        raise PermissionError("sandbox patch target extension is not allowlisted")
+
+    project_rel = str(allowed_root.relative_to(ROOT)) or "."
+    target_rel = str(target.relative_to(ROOT))
+    target_in_project = str(target.relative_to(allowed_root))
+
+    if verifier == "auto":
+        verifier = "python_compile" if target.suffix.lower() == ".py" else (
+            "json_parse" if target.suffix.lower() == ".json" else "configured_test"
+        )
+    if verifier == "python_compile":
+        if target.suffix.lower() != ".py":
+            raise ValueError("python_compile requires a .py target")
+        test_command = "python -m py_compile " + shlex.quote(target_in_project)
+    elif verifier == "json_parse":
+        if target.suffix.lower() != ".json":
+            raise ValueError("json_parse requires a .json target")
+        test_command = (
+            "python -c "
+            + shlex.quote(
+                "import json,pathlib;"
+                f"json.loads(pathlib.Path({target_in_project!r}).read_text())"
+            )
+        )
+    elif verifier == "configured_test":
+        test_command = os.environ.get("AIRI_GENERALIST_SANDBOX_TEST_COMMAND", "").strip()
+        if not test_command:
+            raise PermissionError(
+                "configured_test requires AIRI_GENERALIST_SANDBOX_TEST_COMMAND"
+            )
+    else:
+        raise ValueError("unsupported sandbox verifier")
+
+    result = autonomous_change_cycle(
+        [{"path": target_rel, "old": old, "new": new, "test_command": test_command}],
+        project_rel,
+        test_command,
+        [target_rel],
+        1,
+    )
     return {
+        "ok": bool(result.get("ok")),
+        "rolled_back": bool(result.get("rolled_back")),
+        "path": target_rel,
+        "verifier": verifier,
+        "verification": result.get("verification"),
+        "diff": result.get("diff"),
+        "guardrails": result.get("guardrails"),
+        "persistence": "working-tree-only; commit remains a separate explicit action",
+    }
+
+
+def tool_specs() -> dict[str, dict[str, Any]]:
+    tools = {
         "calculator": {
             "description": "Evaluate bounded arithmetic only.",
             "schema": {
@@ -612,6 +728,28 @@ def tool_specs() -> dict[str, dict[str, Any]]:
             },
         },
     }
+    if _generalist_sandbox_write_ready():
+        tools["sandbox_patch_test"] = {
+            "description": (
+                "Patch exactly one allowlisted file inside the configured AIRI sandbox, "
+                "run a bounded verifier, and automatically rollback on failure. "
+                "Never persists a commit."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "old": {"type": "string"},
+                    "new": {"type": "string"},
+                    "verifier": {
+                        "type": "string",
+                        "enum": ["auto", "python_compile", "json_parse", "configured_test"],
+                    },
+                },
+                "required": ["path", "old", "new"],
+            },
+        }
+    return tools
 
 
 def execute_readonly_tool(name: str, arguments: dict[str, Any]) -> Any:
@@ -642,6 +780,12 @@ def execute_readonly_tool(name: str, arguments: dict[str, Any]) -> Any:
     raise PermissionError(f"tool is not allowlisted: {name}")
 
 
+def execute_generalist_tool(name: str, arguments: dict[str, Any]) -> Any:
+    if name == "sandbox_patch_test":
+        return _generalist_sandbox_patch_test(arguments)
+    return execute_readonly_tool(name, arguments)
+
+
 def run_generalist_agent(
     messages: list[dict[str, str]],
     *,
@@ -655,7 +799,7 @@ def run_generalist_agent(
     agent = GeneralistAgent(
         backend,
         tools=tool_specs(),
-        executor=execute_readonly_tool,
+        executor=execute_generalist_tool,
         max_steps=max_steps,
     )
     return agent.run(messages, max_new_tokens=max_new_tokens)

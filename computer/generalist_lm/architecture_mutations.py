@@ -96,7 +96,27 @@ def structural_mutations(
         "tie_embeddings": not parent.tie_embeddings,
     })
     rows.append({
-        "ff_variant": "gelu" if parent.ff_variant == "swiglu" else "swiglu",
+        "ff_variant": (
+            "gelu" if parent.ff_variant == "swiglu" else "swiglu"
+        ),
+        "moe_experts": 1,
+        "moe_top_k": 1,
+    })
+    rows.append({
+        "recurrent_depth": (
+            min(4, int(parent.recurrent_depth) + 1)
+            if int(parent.recurrent_depth) < 4
+            else 1
+        ),
+    })
+    rows.append({
+        "ff_variant": "moe_swiglu",
+        "moe_experts": (
+            min(8, max(2, int(parent.moe_experts) * 2))
+            if parent.ff_variant == "moe_swiglu"
+            else 4
+        ),
+        "moe_top_k": 1,
     })
 
     if "language_gap" in signals or "language_collapse" in signals or "autoregressive_collapse" in signals:
@@ -105,6 +125,8 @@ def structural_mutations(
             "norm_placement": "pre",
             "position_encoding": "rope",
             "ff_variant": "swiglu",
+            "moe_experts": 1,
+            "moe_top_k": 1,
         })
         rows.insert(1, {
             "attention_type": "gqa",
@@ -121,6 +143,8 @@ def structural_mutations(
             "norm_placement": "pre",
             "position_encoding": "rope",
             "ff_variant": "swiglu",
+            "moe_experts": 1,
+            "moe_top_k": 1,
             "attention_type": "gqa",
             "n_kv_heads": max(1, parent.n_heads // 2),
         })
@@ -171,6 +195,9 @@ def scaled_descendant(
         norm_type=parent.norm_type,
         position_encoding=parent.position_encoding,
         ff_variant=parent.ff_variant,
+        recurrent_depth=parent.recurrent_depth,
+        moe_experts=parent.moe_experts,
+        moe_top_k=parent.moe_top_k,
     )
     return replace(
         restored,
@@ -210,6 +237,8 @@ def proposal_set(
         "norm_placement": "pre",
         "position_encoding": "rope",
         "ff_variant": "swiglu",
+        "moe_experts": 1,
+        "moe_top_k": 1,
     })
     for target in targets:
         try:

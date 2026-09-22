@@ -9,15 +9,24 @@ from generalist_lm.efficiency_engine import (
     active_learning_weights,
     efficiency_bonus,
     efficiency_profile,
+    measure_inference_latency,
     island_schedule,
     island_weights,
     self_play_policy,
     sparse_expert_plan,
 )
 from generalist_lm.evolution import GeneralistGenome, compression_candidate
-from generalist_lm.model import GeneralistLMConfig
+from generalist_lm.model import (
+    CausalTransformerLM,
+    GeneralistLMConfig,
+    estimate_flops_per_token,
+    estimate_parameter_count,
+)
 from generalist_lm.specialist_router import classify_specialist, specialist_manifest
-from generalist_lm.verified_self_play import generate_verified_self_play_rows
+from generalist_lm.verified_self_play import (
+    generate_verified_multiagent_rows,
+    generate_verified_self_play_rows,
+)
 
 
 class _SelfPlayBackend:
@@ -339,3 +348,274 @@ def test_unique_candidates_keeps_distinct_learned_weight_lineages():
     assert "specialist_fusion" in kinds
     # Ordinary architecture duplicate shares the topology-only lineage.
     assert kinds.count("architecture") == 0
+
+
+
+class _QueuedBackend:
+    def __init__(self, outputs):
+        self.outputs = list(outputs)
+
+    def generate(self, prompt: str, *, max_new_tokens: int = 80) -> str:
+        assert self.outputs, prompt
+        return self.outputs.pop(0)
+
+
+def test_recurrent_depth_reuses_parameters_but_expands_compute_and_cache():
+    torch = pytest.importorskip("torch")
+
+    base = GeneralistLMConfig(
+        vocab_size=128,
+        context_length=64,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=128,
+        recurrent_depth=1,
+    ).validate()
+    recurrent = GeneralistLMConfig(
+        **{**base.to_dict(), "recurrent_depth": 2}
+    ).validate()
+    assert estimate_parameter_count(recurrent) == estimate_parameter_count(base)
+    assert estimate_flops_per_token(recurrent) == 2 * estimate_flops_per_token(base)
+
+    torch.manual_seed(7)
+    model = CausalTransformerLM(recurrent)
+    ids = torch.randint(0, recurrent.vocab_size, (1, 12), dtype=torch.long)
+    result = model(ids, labels=ids)
+    assert result["logits"].shape == (1, 12, recurrent.vocab_size)
+    result["loss"].backward()
+    assert any(parameter.grad is not None for parameter in model.parameters())
+
+    model.eval()
+    with torch.no_grad():
+        full = model(ids)["logits"][:, -1, :]
+        prefix = model(ids[:, :-1], use_cache=True)
+        assert len(prefix["past_key_values"]) == recurrent.n_layers * recurrent.recurrent_depth
+        cached = model(
+            ids[:, -1:],
+            past_key_values=prefix["past_key_values"],
+            use_cache=True,
+        )["logits"][:, -1, :]
+    assert torch.allclose(full, cached, atol=2e-4, rtol=2e-4)
+
+
+def test_internal_moe_routes_topk_and_counts_real_reference_compute():
+    torch = pytest.importorskip("torch")
+
+    dense = GeneralistLMConfig(
+        vocab_size=128,
+        context_length=64,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=96,
+        ff_variant="swiglu",
+    ).validate()
+    moe = GeneralistLMConfig(
+        vocab_size=128,
+        context_length=64,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=96,
+        ff_variant="moe_swiglu",
+        moe_experts=4,
+        moe_top_k=1,
+    ).validate()
+    assert estimate_parameter_count(moe) > estimate_parameter_count(dense)
+    assert estimate_flops_per_token(moe) > estimate_flops_per_token(dense)
+
+    torch.manual_seed(11)
+    model = CausalTransformerLM(moe)
+    ids = torch.randint(0, moe.vocab_size, (2, 10), dtype=torch.long)
+    result = model(ids, labels=ids)
+    assert torch.isfinite(result["loss"])
+    result["loss"].backward()
+    router_grads = [
+        parameter.grad
+        for name, parameter in model.named_parameters()
+        if ".ff.router." in name
+    ]
+    assert router_grads and all(grad is not None for grad in router_grads)
+
+    profile = efficiency_profile(moe, {
+        "score": 20.0,
+        "nll_per_byte": 2.0,
+        "generation_similarity": 0.4,
+    })
+    assert profile["routing_activation_fraction"] == pytest.approx(0.25)
+    assert profile["active_compute_fraction"] == 1.0
+    assert profile["moe_kernel"] == "dense_reference_topk_routing"
+
+
+def test_real_latency_probe_is_positive_and_enters_efficiency_profile():
+    torch = pytest.importorskip("torch")
+
+    cfg = GeneralistLMConfig(
+        vocab_size=64,
+        context_length=32,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+    ).validate()
+    torch.manual_seed(3)
+    model = CausalTransformerLM(cfg)
+    latency = measure_inference_latency(
+        model,
+        cfg,
+        sequence_length=8,
+        repeats=1,
+    )
+    assert latency["forward_median_ms"] > 0.0
+    assert latency["tokens_per_second"] > 0.0
+    profile = efficiency_profile(
+        cfg,
+        {"score": 10.0, "nll_per_byte": 2.0, "generation_similarity": 0.2},
+        latency=latency,
+    )
+    assert profile["forward_median_ms"] == pytest.approx(latency["forward_median_ms"])
+    assert profile["quality_per_ms"] > 0.0
+
+
+def test_generalized_self_play_uses_separate_solver_and_independent_verifiers():
+    proposer = _QueuedBackend([
+        '{"expression":"7*8"}',
+        '{"key":"count","value":3}',
+        '{"function":"task_add","operation":"add","constant":5}',
+    ])
+    solver = _QueuedBackend([
+        '<tool_call>{"name":"calculator","arguments":{"expression":"7*8"}}</tool_call>',
+        '{"count":3}',
+        'def task_add(x):\n    return x + 5',
+    ])
+    rows, report = generate_verified_multiagent_rows(
+        proposer,
+        solver,
+        {"enabled": True, "reason": "ready"},
+        cycle=12,
+        max_tasks=3,
+    )
+    assert report["accepted"] == 3
+    assert report["rejected"] == 0
+    assert report["proposer_and_solver_distinct"] is True
+    assert report["accepted_by_domain"] == {
+        "tools": 1,
+        "structured": 1,
+        "coding": 1,
+    }
+    assert [row.domain for row in rows] == ["tools", "structured", "coding"]
+
+
+def test_generalized_self_play_rejects_wrong_solver_label():
+    proposer = _QueuedBackend(['{"key":"ok","value":4}'])
+    solver = _QueuedBackend(['{"ok":999}'])
+    # First task kind is tools; make a one-task structured cycle by directly
+    # exercising the verifier through a three-attempt queue where only the
+    # structured proposal is reached and is wrong.
+    proposer = _QueuedBackend([
+        '{"expression":"2+2"}',
+        '{"key":"ok","value":4}',
+    ])
+    solver = _QueuedBackend([
+        '<tool_call>{"name":"calculator","arguments":{"expression":"2+2"}}</tool_call>',
+        '{"ok":999}',
+    ])
+    rows, report = generate_verified_multiagent_rows(
+        proposer,
+        solver,
+        {"enabled": True, "reason": "ready"},
+        cycle=13,
+        max_tasks=2,
+    )
+    assert report["accepted"] == 1
+    assert report["rejected"] == 1
+    assert len(rows) == 1
+
+
+def test_sandbox_write_tool_is_hidden_until_explicit_ready_gate(monkeypatch):
+    from control_plane import generalist_agent_bridge
+
+    monkeypatch.delenv("AIRI_GENERALIST_SANDBOX_WRITE", raising=False)
+    assert "sandbox_patch_test" not in generalist_agent_bridge.tool_specs()
+
+    monkeypatch.setenv("AIRI_GENERALIST_SANDBOX_WRITE", "1")
+    monkeypatch.setattr(
+        generalist_agent_bridge.generalist_provider,
+        "status",
+        lambda: {
+            "available": True,
+            "qualified": True,
+            "qualification": {
+                "report": {"score": 95.0, "critical_failures": []},
+            },
+        },
+    )
+    assert "sandbox_patch_test" in generalist_agent_bridge.tool_specs()
+
+
+def test_sandbox_patch_bridge_enforces_scope_and_bounded_verifier(tmp_path: Path, monkeypatch):
+    from control_plane import generalist_agent_bridge
+    import coding
+    import code_agent
+
+    root = tmp_path / "workspace"
+    target = root / ".ai" / "generalist-sandbox" / "demo.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("VALUE = 1\n", encoding="utf-8")
+
+    monkeypatch.setattr(coding, "ROOT", root)
+    monkeypatch.setattr(coding, "AI", root / ".ai")
+    monkeypatch.setattr(coding, "BACKUPS", root / ".ai" / "backups")
+    monkeypatch.setenv("AIRI_GENERALIST_SANDBOX_WRITE", "1")
+    monkeypatch.setenv("AIRI_GENERALIST_WRITE_ROOT", str(target.parent))
+    monkeypatch.setattr(
+        generalist_agent_bridge.generalist_provider,
+        "status",
+        lambda: {
+            "available": True,
+            "qualified": True,
+            "qualification": {
+                "report": {"score": 95.0, "critical_failures": []},
+            },
+        },
+    )
+
+    captured = {}
+    def fake_cycle(changes, project_path, test_command, declared_scope, max_attempts):
+        captured.update({
+            "changes": changes,
+            "project_path": project_path,
+            "test_command": test_command,
+            "declared_scope": declared_scope,
+            "max_attempts": max_attempts,
+        })
+        return {
+            "ok": True,
+            "rolled_back": False,
+            "verification": {"returncode": 0},
+            "diff": {"summary": "verified"},
+            "guardrails": {"ok": True},
+        }
+
+    monkeypatch.setattr(code_agent, "autonomous_change_cycle", fake_cycle)
+    result = generalist_agent_bridge._generalist_sandbox_patch_test({
+        "path": ".ai/generalist-sandbox/demo.py",
+        "old": "VALUE = 1",
+        "new": "VALUE = 2",
+        "verifier": "python_compile",
+    })
+    assert result["ok"] is True
+    assert captured["max_attempts"] == 1
+    assert captured["declared_scope"] == [".ai/generalist-sandbox/demo.py"]
+    assert "py_compile" in captured["test_command"]
+
+    outside = root / "outside.py"
+    outside.write_text("VALUE = 1\n", encoding="utf-8")
+    with pytest.raises(PermissionError):
+        generalist_agent_bridge._generalist_sandbox_patch_test({
+            "path": "outside.py",
+            "old": "VALUE = 1",
+            "new": "VALUE = 2",
+            "verifier": "python_compile",
+        })

@@ -48,6 +48,9 @@ class ArchitectureSpec:
     local_attention_window: int = 0
     local_attention_every: int = 0
     tie_embeddings: bool = True
+    recurrent_depth: int = 1
+    moe_experts: int = 1
+    moe_top_k: int = 1
 
     learning_rate: float = 3e-4
     reasoning_depth: int = 2
@@ -138,6 +141,9 @@ class ArchitectureSpec:
             local_attention_every=int(self.local_attention_every),
             norm_placement=str(self.norm_placement),
             tie_embeddings=bool(self.tie_embeddings),
+            recurrent_depth=int(self.recurrent_depth),
+            moe_experts=int(self.moe_experts),
+            moe_top_k=int(self.moe_top_k),
         )
         return cfg.validate() if validate else cfg
 
@@ -169,6 +175,9 @@ class ArchitectureSpec:
             local_attention_every=int(self.local_attention_every),
             norm_placement=str(self.norm_placement),
             tie_embeddings=bool(self.tie_embeddings),
+            recurrent_depth=int(self.recurrent_depth),
+            moe_experts=int(self.moe_experts),
+            moe_top_k=int(self.moe_top_k),
         )
         return genome.validate() if validate else genome
 
@@ -207,6 +216,9 @@ class ArchitectureSpec:
             local_attention_window=genome.local_attention_window,
             local_attention_every=genome.local_attention_every,
             tie_embeddings=genome.tie_embeddings,
+            recurrent_depth=genome.recurrent_depth,
+            moe_experts=genome.moe_experts,
+            moe_top_k=genome.moe_top_k,
             learning_rate=genome.learning_rate,
             reasoning_depth=genome.reasoning_depth,
             retrieval_adapter=genome.retrieval_adapter,
