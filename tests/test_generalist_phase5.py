@@ -31,6 +31,7 @@ from generalist_lm.bootstrap_training import (
     _phase5_success,
 )
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
+from generalist_lm.mobile_export import _active_mobile_summary
 from generalist_lm.pretraining import (
     CorpusDocument,
     load_packed_block_cache,
@@ -93,6 +94,52 @@ def test_bootstrap_janitor_preserves_old_worker_without_replacement():
     assert "AIRI_BOOTSTRAP_JANITOR=PRESERVE" in workflow
     assert "No replacement exists. Keep the existing bootstrap alive" in workflow
     assert "AIRI_BOOTSTRAP_JANITOR_RESTART=PASS" in workflow
+
+
+def test_mobile_summary_uses_live_lineage_not_stale_champion(tmp_path: Path):
+    status = {
+        "cycle": 124,
+        "champion": {"genome_id": "old-champion"},
+        "champion_report": {
+            "parameters": 115_328,
+            "score": -30.0,
+            "generation_similarity": 0.01,
+        },
+    }
+    lineage = {
+        "lineage_id": "airi-live",
+        "active_checkpoint": "bootstrap-data/candidate",
+        "parameters": 7_021_248,
+        "tokens_processed": 28_536_545,
+        "target_tokens": 100_000_000,
+    }
+    active_genome = {"genome_id": "generalist-live-7m"}
+    report = {
+        "target_tokens": 100_000_000,
+        "after": {
+            "generation_similarity": 0.42,
+            "non_empty_rate": 1.0,
+            "exact_accuracy": 0.25,
+        },
+    }
+    report_path = tmp_path / "bootstrap-data" / "report.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    summary = _active_mobile_summary(
+        tmp_path,
+        status,
+        lineage,
+        active_genome,
+    )
+
+    assert summary["candidate_id"] == "generalist-live-7m"
+    assert summary["parameters"] == 7_021_248
+    assert summary["lineage_id"] == "airi-live"
+    assert summary["tokens_processed"] == 28_536_545
+    assert summary["generation_similarity"] == 0.42
+    assert "score" not in summary
+    assert summary["parameters"] != status["champion_report"]["parameters"]
 
 
 def test_phase5_100m_amortizes_setup_without_changing_batch_or_lr():
