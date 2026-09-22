@@ -178,12 +178,22 @@ def _unique_candidates(
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     for kind, genome in rows:
+        topology = {
+            key: value
+            for key, value in genome.to_dict().items()
+            if key not in {"generation", "parent_id", "genome_id"}
+        }
+        # Learned checkpoints with identical topology are not duplicates:
+        # their weights encode different acquired capabilities. Reserve one
+        # independent slot for each fusion lineage while continuing to
+        # deduplicate ordinary architecture/topology probes.
+        lineage = (
+            str(kind)
+            if str(kind) in {"language_fusion", "specialist_fusion"}
+            else "topology"
+        )
         signature = json.dumps(
-            {
-                key: value
-                for key, value in genome.to_dict().items()
-                if key not in {"generation", "parent_id", "genome_id"}
-            },
+            {"lineage": lineage, "topology": topology},
             sort_keys=True,
         )
         if signature in seen:
