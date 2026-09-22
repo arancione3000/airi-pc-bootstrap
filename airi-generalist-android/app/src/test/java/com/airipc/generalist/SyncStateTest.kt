@@ -1,5 +1,6 @@
 package com.airipc.generalist
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -73,5 +74,23 @@ class SyncStateTest {
                 slot("research", "different-model"),
             )
         )
+    }
+
+
+    @Test
+    fun pinnedMobileRevisionDoesNotNeedFallback() {
+        var fallbackCalls = 0
+        val resolved = resolveDownloadRevision("abc123") {
+            fallbackCalls += 1
+            "fallback"
+        }
+        assertEquals("abc123", resolved)
+        assertEquals(0, fallbackCalls)
+    }
+
+    @Test
+    fun missingMobileRevisionIsRecoveredFromBranchResolver() {
+        val resolved = resolveDownloadRevision("") { "fresh-branch-sha" }
+        assertEquals("fresh-branch-sha", resolved)
     }
 }
