@@ -68,10 +68,10 @@ def _config_matches(genome: GeneralistGenome, runtime: GeneralistRuntime) -> boo
 def active_lineage_snapshot(state_dir: str | Path) -> dict[str, Any]:
     """Return the single checkpoint that owns the newest learned AIRI state.
 
-    During an unfinished Phase-5 rung the bootstrap candidate is the live
-    lineage and the champion is only a rollback/qualification anchor. Outside
-    an active rung, the champion is the live lineage. No research challenger is
-    ever returned by this function.
+    Once Phase-5 has a valid persisted candidate, that checkpoint is the live
+    learning lineage across rung boundaries; the champion is a rollback and
+    qualification anchor. If no valid bootstrap candidate exists, fall back to
+    the champion. No research challenger is ever returned by this function.
     """
     root = Path(state_dir).expanduser().resolve()
     progress_path = root / "bootstrap-data" / "progress.json"
@@ -89,24 +89,17 @@ def active_lineage_snapshot(state_dir: str | Path) -> dict[str, Any]:
             if _config_matches(genome, runtime):
                 target = int(progress.get("target_tokens", 0) or 0)
                 processed = int(progress.get("tokens_processed", 0) or 0)
-                completed = {
-                    int(value)
-                    for value in (progress.get("completed_rungs") or [])
-                    if isinstance(value, (int, float))
+                return {
+                    "checkpoint": candidate_path,
+                    "checkpoint_rel": "bootstrap-data/candidate",
+                    "genome": genome,
+                    "runtime": runtime,
+                    "bootstrap_active": True,
+                    "tokens_processed": processed,
+                    "target_tokens": target,
+                    "parameters": int(parameter_count(runtime.model)),
+                    "progress": progress,
                 }
-                active_rung = processed < target or target not in completed
-                if active_rung:
-                    return {
-                        "checkpoint": candidate_path,
-                        "checkpoint_rel": "bootstrap-data/candidate",
-                        "genome": genome,
-                        "runtime": runtime,
-                        "bootstrap_active": True,
-                        "tokens_processed": processed,
-                        "target_tokens": target,
-                        "parameters": int(parameter_count(runtime.model)),
-                        "progress": progress,
-                    }
 
     champion_path = root / "champion"
     genome_raw = _read_json(root / "champion-genome.json", {})
