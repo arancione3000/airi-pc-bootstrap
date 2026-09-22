@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Iterable
 
 from .training import SFTExample
@@ -116,14 +117,14 @@ def _web_tool_rows(specs: Iterable[tuple[str, str]]) -> list[ResearchRow]:
             prompt = f"Search the web for: {value}"
             target = (
                 '<tool_call>{"name":"web_search","arguments":{"query":'
-                + repr(value).replace("'", '"')
+                + json.dumps(value, ensure_ascii=False)
                 + ',"limit":6}}</tool_call>'
             )
         elif mode == "read":
             prompt = f"Read this public web source before answering: {value}"
             target = (
                 '<tool_call>{"name":"web_read","arguments":{"url":'
-                + repr(value).replace("'", '"')
+                + json.dumps(value, ensure_ascii=False)
                 + '}}</tool_call>'
             )
         else:
