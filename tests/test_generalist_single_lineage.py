@@ -94,6 +94,22 @@ def test_parameter_cap_never_falls_below_live_lineage(tmp_path: Path):
     assert cap >= live["parameters"]
 
 
+def test_completed_rung_candidate_remains_the_live_learning_lineage(tmp_path: Path):
+    genome, candidate = _bootstrap_state(tmp_path)
+    progress_path = tmp_path / "bootstrap-data" / "progress.json"
+    progress = json.loads(progress_path.read_text(encoding="utf-8"))
+    progress["tokens_processed"] = 100_000_000
+    progress["completed_rungs"].append(100_000_000)
+    _write_json(progress_path, progress)
+
+    live = active_lineage_snapshot(tmp_path)
+
+    assert live["checkpoint"] == candidate
+    assert live["bootstrap_active"] is True
+    assert live["tokens_processed"] == 100_000_000
+    assert live["genome"].genome_id == genome.genome_id
+
+
 def test_architecture_migration_preserves_cumulative_training_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
