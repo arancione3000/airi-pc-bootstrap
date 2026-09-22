@@ -41,3 +41,24 @@ def test_context_pack_and_verification_engine():
     assert pack['files'] and pack['bytes']<=20000
     v=VerificationEngine().run(requirements=['goal','tests'], tests='python -m py_compile computer/control_plane/verification_engine.py', project_path='.')
     assert v['tests']=='PASS' and v['ready'] is True
+
+
+def test_structured_search_order_is_deterministic(tmp_path, monkeypatch):
+    import coding
+
+    root = tmp_path / "workspace"
+    root.mkdir()
+    (root / "zeta.py").write_text("VALUE = 3\n", encoding="utf-8")
+    (root / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    nested = root / "nested"
+    nested.mkdir()
+    (nested / "alpha.py").write_text("VALUE = 2\n", encoding="utf-8")
+
+    monkeypatch.setattr(coding, "ROOT", root)
+    result = coding.search("VALUE", ".")
+    assert [row["path"] for row in result["matches"]] == [
+        "app.py",
+        "nested/alpha.py",
+        "zeta.py",
+    ]
+    assert all(row["line"] == 1 for row in result["matches"])
