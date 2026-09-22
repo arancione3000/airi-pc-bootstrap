@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import statistics
+import time
 from typing import Any
 
 from .model import estimate_flops_per_token, estimate_parameter_count
@@ -113,30 +115,98 @@ def island_weights(
     return dict(sorted(weights.items()))
 
 
-def efficiency_profile(config, report: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Report capability per resource rather than parameter count alone."""
+def measure_inference_latency(
+    model,
+    config,
+    *,
+    device: str = "cpu",
+    sequence_length: int = 32,
+    repeats: int = 3,
+) -> dict[str, float | int]:
+    """Measure real forward latency on the current runner/device.
+
+    This is intentionally tiny and deterministic: it exists to stop the
+    architecture search from mistaking theoretical FLOP savings for actual
+    wall-clock wins on the hardware we really have.
+    """
+    import torch
+
+    cfg = config.validate()
+    length = max(4, min(int(sequence_length), int(cfg.context_length)))
+    repeats = max(1, min(7, int(repeats)))
+    model = model.to(device)
+    model.eval()
+    ids = (
+        torch.arange(length, device=device, dtype=torch.long)
+        .remainder(int(cfg.vocab_size))
+        .unsqueeze(0)
+    )
+    with torch.no_grad():
+        model(ids)
+        samples: list[float] = []
+        for _ in range(repeats):
+            start = time.perf_counter()
+            model(ids)
+            samples.append((time.perf_counter() - start) * 1000.0)
+    median_ms = max(1e-6, float(statistics.median(samples)))
+    return {
+        "forward_median_ms": median_ms,
+        "sequence_length": length,
+        "repeats": repeats,
+        "tokens_per_second": float(length * 1000.0 / median_ms),
+    }
+
+
+def efficiency_profile(
+    config,
+    report: dict[str, Any] | None = None,
+    *,
+    latency: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Report capability per stored capacity, active compute and real latency."""
     report = report or {}
-    params = max(1, int(estimate_parameter_count(config)))
-    flops = max(1, int(estimate_flops_per_token(config)))
+    cfg = config.validate()
+    params = max(1, int(estimate_parameter_count(cfg)))
+    flops = max(1, int(estimate_flops_per_token(cfg)))
     score = _finite(report.get("score"), 0.0)
     generation_similarity = max(0.0, min(1.0, _finite(report.get("generation_similarity"), 0.0)))
     nll = max(0.0, _finite(report.get("nll_per_byte", report.get("loss")), 1_000.0))
     quality_proxy = max(0.0, score) + 10.0 * generation_similarity + 10.0 / (1.0 + nll)
+    active_fraction = (
+        float(cfg.moe_top_k) / float(cfg.moe_experts)
+        if cfg.ff_variant == "moe_swiglu"
+        else 1.0
+    )
+    latency = dict(latency or {})
+    latency_ms = max(0.0, _finite(latency.get("forward_median_ms"), 0.0))
+    quality_per_ms = quality_proxy / latency_ms if latency_ms > 0.0 else 0.0
     return {
         "parameters": params,
         "flops_per_token_estimate": flops,
         "quality_proxy": float(quality_proxy),
         "quality_per_million_parameters": float(quality_proxy * 1_000_000.0 / params),
         "quality_per_million_flops": float(quality_proxy * 1_000_000.0 / flops),
-        "active_compute_fraction": 1.0,
+        "active_compute_fraction": float(active_fraction),
+        "recurrent_depth": int(cfg.recurrent_depth),
+        "moe_experts": int(cfg.moe_experts),
+        "moe_top_k": int(cfg.moe_top_k),
+        "forward_median_ms": float(latency_ms),
+        "tokens_per_second": float(_finite(latency.get("tokens_per_second"), 0.0)),
+        "quality_per_ms": float(quality_per_ms),
     }
 
 
 def efficiency_bonus(profile: dict[str, Any]) -> float:
-    """Small bounded selection bonus; quality gates remain authoritative."""
+    """Small bounded selection bonus; hard quality gates remain authoritative."""
     per_flop = max(0.0, _finite(profile.get("quality_per_million_flops"), 0.0))
     per_param = max(0.0, _finite(profile.get("quality_per_million_parameters"), 0.0))
-    return float(min(2.0, 0.35 * math.log1p(per_flop) + 0.15 * math.log1p(per_param)))
+    per_ms = max(0.0, _finite(profile.get("quality_per_ms"), 0.0))
+    return float(min(
+        2.0,
+        0.30 * math.log1p(per_flop)
+        + 0.12 * math.log1p(per_param)
+        + 0.25 * math.log1p(per_ms),
+    ))
 
 
 def sparse_expert_plan(
