@@ -22,6 +22,7 @@ from generalist_lm.bootstrap_training import (
     _bootstrap_corpus_target,
     _effective_bootstrap_target,
     _filter_protected_replay,
+    _grow_bootstrap_runtime,
 )
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
 from generalist_lm.pretraining import CorpusDocument
@@ -58,6 +59,37 @@ def test_phase5_conversation_rescue_has_explicit_capacity_rungs():
     assert _bootstrap_capacity_target(19_999_999) is None
     assert _bootstrap_capacity_target(20_000_000) == 1_250_000
     assert _bootstrap_capacity_target(50_000_000) == 3_000_000
+
+
+def test_phase5_capacity_growth_builds_a_larger_compatible_runtime():
+    pytest.importorskip("torch")
+    from generalist_lm.model import parameter_count
+    from generalist_lm.research_cycle import research_seed
+
+    genome = research_seed()
+    tokenizer = ByteTokenizer()
+    config = genome.model_config(tokenizer.vocab_size)
+    runtime = GeneralistRuntime(
+        CausalTransformerLM(config),
+        config,
+        tokenizer=tokenizer,
+        device="cpu",
+    )
+    before = parameter_count(runtime.model)
+
+    grown_genome, grown, report = _grow_bootstrap_runtime(
+        genome,
+        runtime,
+        target_parameters=max(250_000, before + 1),
+    )
+
+    assert parameter_count(grown.model) > before
+    assert report["source_parameters"] == before
+    assert report["parameters"] == parameter_count(grown.model)
+    assert report["weight_transfer"]["copied_parameters"] > 0
+    assert grown.config.to_dict() == grown_genome.model_config(
+        grown.tokenizer.vocab_size
+    ).to_dict()
 
 def test_phase5_holdout_suite_is_explicit_and_protected():
     assert len(PHASE5_PROBES) == 7
