@@ -217,6 +217,27 @@ def _normal_content(text: str) -> str:
     return " ".join(str(text).strip().casefold().split())
 
 
+def _filter_protected_replay(rows, *, heldout_sft=()):
+    heldout_hashes = {
+        _sft_row_fingerprint(row)
+        for row in heldout_sft
+    }
+    protected_texts = protected_bootstrap_texts()
+    unique = {}
+    filtered = 0
+    for row in rows:
+        key = _sft_row_fingerprint(row)
+        contents = {
+            _normal_content(message.get("content", ""))
+            for message in row.messages
+        }
+        if key in heldout_hashes or bool(contents & protected_texts):
+            filtered += 1
+            continue
+        unique.setdefault(key, row)
+    return list(unique.values()), int(filtered)
+
+
 def _mixed_replay_rows(
     root: Path,
     bootstrap_sft,
@@ -250,25 +271,12 @@ def _mixed_replay_rows(
 
     # Deterministic de-duplication plus structural exclusion of every
     # held-out SFT row and the canonical Phase-5 evaluation strings.
-    heldout_hashes = {
-        _sft_row_fingerprint(row)
-        for row in heldout_sft
-    }
-    protected_texts = protected_bootstrap_texts()
-    unique = {}
-    filtered = 0
-    for row in rows:
-        key = _sft_row_fingerprint(row)
-        contents = {
-            _normal_content(message.get("content", ""))
-            for message in row.messages
-        }
-        if key in heldout_hashes or bool(contents & protected_texts):
-            filtered += 1
-            continue
-        unique.setdefault(key, row)
+    filtered_rows, filtered = _filter_protected_replay(
+        rows,
+        heldout_sft=heldout_sft,
+    )
     counts["held_out_filtered"] = int(filtered)
-    return list(unique.values()), counts
+    return filtered_rows, counts
 
 
 def _sft_attempt_score(
