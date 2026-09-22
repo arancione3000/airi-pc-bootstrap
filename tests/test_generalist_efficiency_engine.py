@@ -361,7 +361,7 @@ class _QueuedBackend:
 
 
 def test_recurrent_depth_reuses_parameters_but_expands_compute_and_cache():
-    import torch
+    torch = pytest.importorskip("torch")
 
     base = GeneralistLMConfig(
         vocab_size=128,
@@ -400,7 +400,7 @@ def test_recurrent_depth_reuses_parameters_but_expands_compute_and_cache():
 
 
 def test_internal_moe_routes_topk_and_counts_real_reference_compute():
-    import torch
+    torch = pytest.importorskip("torch")
 
     dense = GeneralistLMConfig(
         vocab_size=128,
@@ -449,7 +449,7 @@ def test_internal_moe_routes_topk_and_counts_real_reference_compute():
 
 
 def test_real_latency_probe_is_positive_and_enters_efficiency_profile():
-    import torch
+    torch = pytest.importorskip("torch")
 
     cfg = GeneralistLMConfig(
         vocab_size=64,
