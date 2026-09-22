@@ -74,7 +74,7 @@ jobs:
           git -C "${STATE_REPO}" fetch --quiet origin generalist-state:generalist-state
           git -C "${STATE_REPO}" checkout --quiet generalist-state
           git -C "${STATE_REPO}" rev-parse HEAD > /tmp/base-state-sha
-          if [[ -s "${STATE_REPO}/generalist-state/architecture-research/incumbent/summary.json" ]]; then
+          if [[ -s "${STATE_REPO}/generalist-state/architecture-research/recovered-evidence/cycle-115.json" ]]; then
             echo "INCUMBENT_ALREADY_PRESENT=true" >> "${GITHUB_ENV}"
           else
             echo "INCUMBENT_ALREADY_PRESENT=false" >> "${GITHUB_ENV}"
@@ -134,7 +134,7 @@ jobs:
           if not parent_fingerprint:
               raise SystemExit('missing architecture parent fingerprint')
 
-          target = state_repo / 'generalist-state' / 'architecture-research' / 'incumbent'
+          target = state_repo / 'generalist-state' / 'architecture-research' / 'recovered-evidence'
           target.mkdir(parents=True, exist_ok=True)
           summary = {
               'schema': 1,
@@ -164,19 +164,22 @@ jobs:
               'recovered': True,
               'external_pretrained': False,
           }
-          (target / 'summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True), encoding='utf-8')
+          summary['weights_persisted'] = False
+          summary['single_lineage_policy'] = True
+          (target / 'cycle-115.json').write_text(
+              json.dumps(summary, indent=2, sort_keys=True),
+              encoding='utf-8',
+          )
           PY
 
-      - name: Persist recovered incumbent checkpoint
+      - name: Persist recovered incumbent evidence only
         if: env.INCUMBENT_ALREADY_PRESENT != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          target="${STATE_REPO}/generalist-state/architecture-research/incumbent/checkpoint"
-          rm -rf "${target}"
-          mkdir -p "${target}"
-          cp -a /tmp/incumbent-artifact/best-checkpoint/. "${target}/"
+          evidence="${STATE_REPO}/generalist-state/architecture-research/recovered-evidence/cycle-115.json"
+          test -s "${evidence}"
           expected_state_sha="$(cat /tmp/base-state-sha)"
           git -C "${STATE_REPO}" fetch --quiet origin generalist-state
           current_state_sha="$(git -C "${STATE_REPO}" rev-parse origin/generalist-state)"
@@ -184,8 +187,8 @@ jobs:
             echo "generalist-state advanced during recovery; refusing stale overwrite." >&2
             exit 1
           fi
-          git -C "${STATE_REPO}" add -A generalist-state/architecture-research/incumbent
-          git -C "${STATE_REPO}" commit -m "generalist-state: recover promising architecture incumbent from cycle 115"
+          rm -rf "${STATE_REPO}/generalist-state/architecture-research/incumbent"
+          git -C "${STATE_REPO}" add -A generalist-state/architecture-research
+          git -C "${STATE_REPO}" commit -m "generalist-state: preserve cycle 115 architecture evidence only"
           git -C "${STATE_REPO}" push --quiet origin HEAD:generalist-state
-          test -s "${target}/model.pt"
-          test -s "${STATE_REPO}/generalist-state/architecture-research/incumbent/summary.json"
+          test ! -e "${STATE_REPO}/generalist-state/architecture-research/incumbent/checkpoint/model.pt"
