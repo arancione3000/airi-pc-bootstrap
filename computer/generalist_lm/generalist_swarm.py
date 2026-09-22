@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -42,6 +43,10 @@ from .efficiency_engine import (
 from .generalist_data_growth import grow_generalist_data
 from .language_bridge import build_language_bridge_rows
 from .bootstrap_data import load_bootstrap_replay
+from .lineage_migration import (
+    active_lineage_snapshot,
+    adopt_verified_descendant,
+)
 from .mathesis_bridge import mathesis_signals
 from .model import estimate_parameter_count, parameter_count
 from .pretraining import CorpusDocument, load_local_corpus
@@ -446,7 +451,34 @@ def prepare_swarm(
         _save_champion(root, genome, runtime, report)
         loaded = (genome, runtime)
 
-    champion_genome, champion_runtime = loaded
+    # The persisted champion remains a rollback/qualification anchor. Every
+    # research cycle is planned from the newest live AIRI checkpoint instead,
+    # including a Phase-5 candidate that has accumulated more language tokens.
+    live = active_lineage_snapshot(root)
+    champion_genome = live["genome"]
+    champion_runtime = live["runtime"]
+    live_model_sha = hashlib.sha256(
+        (Path(live["checkpoint"]) / "model.pt").read_bytes()
+    ).hexdigest()
+
+    live_cfg = champion_runtime.config
+    max_params = min(
+        48_000_000,
+        max(int(max_params), int(parameter_count(champion_runtime.model) * 1.35)),
+    )
+    max_context = min(
+        8192,
+        max(int(max_context), int(live_cfg.context_length) * 2),
+    )
+    max_width = min(
+        4096,
+        max(int(max_width), int(live_cfg.d_model) + 128),
+    )
+    max_layers = min(
+        96,
+        max(int(max_layers), int(live_cfg.n_layers) + 2),
+    )
+
     previous = {}
     try:
         previous = _load_json(root / "status.json")
@@ -505,14 +537,13 @@ def prepare_swarm(
         lab_training_rows,
         verified_experience_rows=len(lab_experience_rows),
     )
-    specialist_fusion = _persisted_specialist_candidate(
-        root,
-        champion_id=champion_genome.genome_id,
-        max_params=int(max_params),
-    )
+    # Old specialist checkpoints may remain in historical state, but the
+    # single-lineage engine no longer creates or consumes them as alternate
+    # brains. Verified improvements must return through the live AIRI lineage.
+    specialist_fusion = None
     distilled_rows, distillation_report = _internal_distillation_rows(
         root,
-        specialist_fusion,
+        None,
         max_rows=12,
     )
 
@@ -620,10 +651,9 @@ def prepare_swarm(
         count=max(8, population_size),
         exploration_offset=max(0, cycle - 1),
     )
-    language_fusion = _phase5_language_fusion_candidate(
-        root,
-        max_params=int(max_params),
-    )
+    # Phase-5 is already the live baseline when present, so there is no
+    # second "language fusion" model to compete with AIRI.
+    language_fusion = None
     rows: list[tuple[str, GeneralistGenome]] = []
     if language_fusion is not None:
         # Put the learned-language checkpoint first. If its topology is the
@@ -740,6 +770,24 @@ def prepare_swarm(
                 candidate["specialist_evidence"] = dict(specialist_fusion["summary"])
                 break
 
+    lineage_state = {}
+    try:
+        lineage_state = _load_json(root / "lineage.json")
+        if not isinstance(lineage_state, dict):
+            lineage_state = {}
+    except Exception:
+        lineage_state = {}
+    lineage_id = str(
+        lineage_state.get("lineage_id")
+        or (live.get("progress") or {}).get("lineage_id")
+        or f"airi-{live_model_sha[:16]}"
+    )
+    for candidate in candidates:
+        candidate["initial_checkpoint"] = str(live["checkpoint_rel"])
+        candidate["initial_checkpoint_mode"] = "live_lineage"
+        candidate["lineage_id"] = lineage_id
+        candidate["lineage_parent_model_sha256"] = live_model_sha
+
     champion_vocab_size = int(getattr(champion_runtime.tokenizer, "vocab_size", 0) or 0)
     bpe_growth_target = champion_vocab_size
     if (
@@ -758,6 +806,15 @@ def prepare_swarm(
         "cycle": cycle,
         "champion": champion_genome.to_dict(),
         "champion_report": champion_report,
+        "live_lineage_source": {
+            "checkpoint": str(live["checkpoint_rel"]),
+            "lineage_id": lineage_id,
+            "model_sha256": live_model_sha,
+            "bootstrap_active": bool(live["bootstrap_active"]),
+            "tokens_processed": int(live.get("tokens_processed", 0) or 0),
+            "target_tokens": int(live.get("target_tokens", 0) or 0),
+            "parameters": int(parameter_count(champion_runtime.model)),
+        },
         "signals": signals,
         "mathesis": mathesis,
         "airi_pc_lab": {
@@ -855,6 +912,9 @@ def prepare_swarm(
         },
         "policy": {
             "parallel_candidates": True,
+            "single_active_lineage": True,
+            "live_lineage_weight_seed": True,
+            "research_challengers_are_temporary": True,
             "candidate_can_self_promote": False,
             "production_qualification_separate": True,
             "external_pretrained": False,
@@ -1545,6 +1605,16 @@ def run_candidate(
         ),
     )
     best_runtime, best_report = runtimes[best_index]
+    lineage_parent_model_sha256 = str(
+        row.get("lineage_parent_model_sha256")
+        or source_metadata.get("lineage_parent_model_sha256")
+        or ""
+    )
+    lineage_id = str(
+        row.get("lineage_id")
+        or source_metadata.get("lineage_id")
+        or ""
+    )
     checkpoint = out_root / "best-checkpoint"
     shutil.rmtree(checkpoint, ignore_errors=True)
     best_runtime.save_checkpoint(
@@ -1576,6 +1646,10 @@ def run_candidate(
                 + int(effective_steps)
             ),
             "production_qualified": False,
+            "lineage_id": lineage_id or None,
+            "lineage_parent_model_sha256": (
+                lineage_parent_model_sha256 or None
+            ),
         },
     )
     _atomic_json(checkpoint / "research-metrics.json", best_report)
@@ -1654,6 +1728,10 @@ def run_candidate(
         ),
         "candidate_index": int(candidate_index),
         "candidate_id": genome.genome_id,
+        "lineage_id": lineage_id or None,
+        "lineage_parent_model_sha256": (
+            lineage_parent_model_sha256 or None
+        ),
         "kind": row.get("kind"),
         "island": str(row.get("island") or "efficiency"),
         "domain_weights": dict(row.get("domain_weights") or {}),
@@ -2158,6 +2236,10 @@ def finalize_swarm(
                 "checkpoint_dir": str(winner.get("checkpoint_dir") or "best-checkpoint"),
                 "result_path": str(result_path),
                 "genome": genome.to_dict(),
+                "lineage_id": winner.get("lineage_id"),
+                "lineage_parent_model_sha256": winner.get(
+                    "lineage_parent_model_sha256"
+                ),
             }
             if allow_direct_promotion:
                 _save_champion(root, genome, runtime, verified)
@@ -2448,6 +2530,7 @@ def main(argv=None) -> int:
     final.add_argument("plan")
     final.add_argument("output")
     final.add_argument("results", nargs="+")
+    final.add_argument("--single-lineage", action="store_true")
 
     args = parser.parse_args(argv)
     if args.cmd == "prepare":
@@ -2493,7 +2576,74 @@ def main(argv=None) -> int:
             args.plan,
             args.results,
             args.output,
+            allow_direct_promotion=not bool(args.single_lineage),
+            persist_research_checkpoints=not bool(args.single_lineage),
         )
+        if bool(args.single_lineage):
+            adoption = {
+                "accepted": False,
+                "reason": "no externally approved trained descendant",
+            }
+            approved = result.get("promotion_candidate")
+            if isinstance(approved, dict) and approved.get("candidate_id"):
+                result_path = Path(str(approved.get("result_path") or ""))
+                checkpoint = (
+                    result_path.parent
+                    / str(approved.get("checkpoint_dir") or "best-checkpoint")
+                )
+                if checkpoint.is_dir():
+                    try:
+                        adoption = adopt_verified_descendant(
+                            args.state_dir,
+                            candidate_checkpoint=checkpoint,
+                            candidate_genome=dict(approved.get("genome") or {}),
+                            cycle=int(result.get("cycle", 0) or 0),
+                            candidate_id=str(approved.get("candidate_id") or ""),
+                            research_kind=str(approved.get("kind") or ""),
+                            expected_parent_model_sha256=str(
+                                approved.get("lineage_parent_model_sha256")
+                                or ""
+                            ),
+                        )
+                    except Exception as exc:
+                        adoption = {
+                            "accepted": False,
+                            "reason": (
+                                "lineage_adoption_error:"
+                                f"{type(exc).__name__}:{exc}"
+                            ),
+                        }
+                else:
+                    adoption = {
+                        "accepted": False,
+                        "reason": "approved trained descendant checkpoint missing",
+                    }
+            result["lineage_adoption"] = adoption
+            result["promoted"] = bool(adoption.get("accepted"))
+            result["promotion_reason"] = (
+                "verified trained descendant adopted into the live AIRI lineage"
+                if adoption.get("accepted")
+                else str(adoption.get("reason") or "lineage adoption rejected")
+            )
+            status_path = Path(args.state_dir) / "status.json"
+            try:
+                status = _load_json(status_path)
+                if not isinstance(status, dict):
+                    status = {}
+            except Exception:
+                status = {}
+            status["promoted"] = bool(result["promoted"])
+            status["promotion_reason"] = result["promotion_reason"]
+            status["lineage_adoption"] = adoption
+            try:
+                lineage = _load_json(Path(args.state_dir) / "lineage.json")
+                if isinstance(lineage, dict):
+                    status["lineage"] = lineage
+                    result["lineage"] = lineage
+            except Exception:
+                pass
+            _atomic_json(status_path, status)
+            _atomic_json(Path(args.output), result)
     else:
         raise AssertionError(args.cmd)
 
