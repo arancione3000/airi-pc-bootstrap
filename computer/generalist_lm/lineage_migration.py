@@ -191,6 +191,69 @@ def _lineage_genome(
     ).validate()
 
 
+def refresh_live_lineage_manifest(
+    state_dir: str | Path,
+    *,
+    reason: str = "training_refresh",
+) -> dict[str, Any]:
+    """Synchronize lineage metadata with the checkpoint that is actually live.
+
+    This is intentionally cheap in semantics, not authority: it never promotes
+    a research checkpoint and never changes weights. It only records the newest
+    persisted active checkpoint after training/capacity growth or a completed
+    rung so lineage.json cannot drift behind AIRI's real weights.
+    """
+    root = Path(state_dir).expanduser().resolve()
+    live = active_lineage_snapshot(root)
+    checkpoint = Path(live["checkpoint"])
+    model_sha = _sha256_file(checkpoint / "model.pt")
+    previous = _read_json(root / "lineage.json", {})
+    previous = previous if isinstance(previous, dict) else {}
+    lineage_id = str(
+        previous.get("lineage_id")
+        or (live.get("progress") or {}).get("lineage_id")
+        or f"airi-{model_sha[:16]}"
+    )
+    architecture = ArchitectureSpec.from_genome(
+        live["genome"],
+        target_vocab_size=int(live["runtime"].tokenizer.vocab_size),
+    )
+    payload = {
+        "schema": LINEAGE_SCHEMA,
+        "version": LINEAGE_VERSION,
+        "lineage_id": lineage_id,
+        "single_active_model": True,
+        "active_checkpoint": str(live["checkpoint_rel"]),
+        "active_model_sha256": model_sha,
+        "active_genome": live["genome"].to_dict(),
+        "active_architecture": architecture_manifest(architecture),
+        "tokens_processed": int(live.get("tokens_processed", 0) or 0),
+        "target_tokens": int(live.get("target_tokens", 0) or 0),
+        "parameters": int(live["parameters"]),
+        "tokenizer_version": str(live["runtime"].tokenizer.version),
+        "tokenizer_vocab_size": int(live["runtime"].tokenizer.vocab_size),
+        "bootstrap_active": bool(live["bootstrap_active"]),
+        "rollback_snapshots_are_not_competing_models": True,
+        "research_challengers_are_temporary": True,
+        "migrations": list(previous.get("migrations") or [])[-64:],
+        "last_refresh_reason": str(reason),
+        "updated_at": time.time(),
+    }
+    _atomic_json(root / "lineage.json", payload)
+
+    status = _read_json(root / "status.json", {})
+    status = dict(status) if isinstance(status, dict) else {}
+    status["lineage"] = payload
+    _atomic_json(root / "status.json", status)
+
+    progress_path = root / "bootstrap-data" / "progress.json"
+    if progress_path.is_file() and bool(live["bootstrap_active"]):
+        progress = _read_json(progress_path, {})
+        progress["lineage_id"] = lineage_id
+        _atomic_json(progress_path, progress)
+    return payload
+
+
 def migrate_live_lineage(
     state_dir: str | Path,
     *,
