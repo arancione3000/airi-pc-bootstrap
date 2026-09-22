@@ -1,14 +1,14 @@
 {
-  "bits_per_byte": 2.542885359696697,
+  "bits_per_byte": 2.5350851162040757,
   "canary": {
-    "bits_per_byte": 2.681199383027732,
+    "bits_per_byte": 2.660879575145562,
     "domain_bits_per_byte": {
-      "coding": 3.5103686143277417,
-      "data": 4.240514308569962,
-      "language": 5.360293073165467,
-      "reasoning": 5.462600461477287,
-      "structured": 4.384693556163685,
-      "tools": 1.075159368235616
+      "coding": 3.5655308342479213,
+      "data": 4.0908430816586865,
+      "language": 5.075381935818036,
+      "reasoning": 4.912367148301817,
+      "structured": 4.110017804127283,
+      "tools": 1.1702107906722956
     },
     "domain_generation_accuracy": {
       "coding": 0.0,
@@ -19,114 +19,114 @@
       "tools": 0.0
     },
     "domain_generation_similarity": {
-      "coding": 0.09090909090909091,
+      "coding": 0.3076923076923077,
       "data": 0.2857142857142857,
-      "language": 0.16666666666666666,
-      "reasoning": 0.3333333333333333,
-      "structured": 0.30303030303030304,
-      "tools": 0.6535947712418301
+      "language": 0.15384615384615385,
+      "reasoning": 0.0,
+      "structured": 0.19047619047619047,
+      "tools": 0.5405405405405406
     },
     "domain_loss": {
-      "coding": 3.6498031616210938,
-      "data": 2.5194004603794644,
-      "language": 3.377701846036044,
-      "reasoning": 3.1553217569986978,
-      "structured": 3.403946533203125,
-      "tools": 0.9895858764648438
+      "coding": 3.6613891036422164,
+      "data": 2.430476869855608,
+      "language": 3.198169708251953,
+      "reasoning": 2.8374945322672525,
+      "structured": 3.1907089233398436,
+      "tools": 1.077072018482646
     },
     "domain_nll_per_byte": {
-      "coding": 2.433202107747396,
-      "data": 2.939300537109375,
-      "language": 3.7154720306396483,
-      "reasoning": 3.7863861083984376,
-      "structured": 3.0392379760742188,
-      "tools": 0.7452436847451293
+      "coding": 2.4714376449584963,
+      "data": 2.8355563481648765,
+      "language": 3.5179866790771483,
+      "reasoning": 3.404993438720703,
+      "structured": 2.8488472529820035,
+      "tools": 0.811128310215326
     },
     "domain_token_accuracy": {
-      "coding": 0.23076923076923078,
+      "coding": 0.2222222222222222,
       "data": 0.2857142857142857,
       "language": 0.09090909090909091,
       "reasoning": 0.16666666666666666,
-      "structured": 0.16,
-      "tools": 0.8360655737704918
+      "structured": 0.2,
+      "tools": 0.819672131147541
     },
     "finite": true,
     "generated_solved_items": [],
-    "generation_dominant_token_fraction": 0.17567567567567569,
+    "generation_dominant_token_fraction": 0.40298507462686567,
     "generation_exact_accuracy": 0.0,
-    "generation_longest_repeated_token_run": 6,
+    "generation_longest_repeated_token_run": 16,
     "generation_nonempty_rate": 1.0,
     "generation_pathological_repetition": true,
     "generation_probe": [
       {
         "domain": "coding",
-        "item": "coding:ae43c5782f93344c",
+        "item": "coding:c3771b0dce7d9675",
         "ok": false,
-        "output": "{\":10",
-        "similarity": 0.09090909090909091,
-        "target": "def canary_sub_105(x):\n    return x - 9"
+        "output": "deffffffok\":trre     1111",
+        "similarity": 0.3076923076923077,
+        "target": "def canary_sub_106(x):\n    return x - 10"
       },
       {
         "domain": "data",
-        "item": "data:75be0ebe31c67b45",
+        "item": "data:134766d3f7ce1503",
         "ok": false,
         "output": "1",
         "similarity": 0.2857142857142857,
-        "target": "191272"
+        "target": "191665"
       },
       {
         "domain": "language",
-        "item": "language:52fbac1853dfc73c",
+        "item": "language:215a960ff666d51b",
         "ok": false,
-        "output": "12",
-        "similarity": 0.16666666666666666,
-        "target": "CANARY0105"
+        "output": "111",
+        "similarity": 0.15384615384615385,
+        "target": "CANARY0106"
       },
       {
         "domain": "reasoning",
-        "item": "reasoning:7a0039ef7ba8b85c",
+        "item": "reasoning:aeb93efbc7801f3a",
         "ok": false,
-        "output": "1",
-        "similarity": 0.3333333333333333,
-        "target": "63771"
+        "output": "11111111",
+        "similarity": 0.0,
+        "target": "63902"
       },
       {
         "domain": "structured",
-        "item": "structured:93352140419e2b52",
+        "item": "structured:6bdf4af7b9909219",
         "ok": false,
-        "output": "{\":10",
-        "similarity": 0.30303030303030304,
-        "target": "{\"canary\":105,\"value\":63755}"
+        "output": "{\":11111111111",
+        "similarity": 0.19047619047619047,
+        "target": "{\"canary\":106,\"value\":63886}"
       },
       {
         "domain": "tools",
-        "item": "tools:776a0b2a0a745fd7",
+        "item": "tools:4ab3072ff74ef3eb",
         "ok": false,
-        "output": "<tool_call>{\"name\":\"calcalall>{\"call>{\":{\"\":{\":\":\"1111110\"}}</tool_call>",
-        "similarity": 0.6535947712418301,
-        "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"63755*2\"}}</tool_call>"
+        "output": "<tool_call>{\"name\":\"calcalall>",
+        "similarity": 0.5405405405405406,
+        "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"63886*3\"}}</tool_call>"
       }
     ],
-    "generation_repetition_rate": 0.7567567567567568,
-    "generation_similarity": 0.30554140848258493,
-    "generation_unique_token_ratio": 0.24324324324324326,
-    "loss": 2.3094170514275048,
-    "nll_per_byte": 1.8584657928647375,
+    "generation_repetition_rate": 0.6716417910447761,
+    "generation_similarity": 0.24637824637824637,
+    "generation_unique_token_ratio": 0.3283582089552239,
+    "loss": 2.288648173756843,
+    "nll_per_byte": 1.8443811753216912,
     "solved_items": [],
-    "target_token_accuracy": 0.47794117647058826,
-    "target_tokens": 136,
+    "target_token_accuracy": 0.4744525547445255,
+    "target_tokens": 137,
     "tokenizer_version": "bpe-v1",
-    "validation_target_bytes": 169,
-    "validation_target_tokens": 136
+    "validation_target_bytes": 170,
+    "validation_target_tokens": 137
   },
-  "canary_cycle": 105,
+  "canary_cycle": 106,
   "domain_bits_per_byte": {
-    "coding": 2.9676755761519553,
-    "data": 4.410544612380176,
-    "language": 5.5866021875594445,
-    "reasoning": 5.442812589737694,
-    "structured": 2.1881303054886168,
-    "tools": 1.4552678440457991
+    "coding": 2.977717633308255,
+    "data": 4.459931700746423,
+    "language": 5.571738154591027,
+    "reasoning": 4.966145081503132,
+    "structured": 2.034335817106485,
+    "tools": 1.4938245833889183
   },
   "domain_generation_accuracy": {
     "coding": 0.0,
@@ -137,66 +137,66 @@
     "tools": 0.0
   },
   "domain_generation_similarity": {
-    "coding": 0.15789473684210525,
-    "data": 0.5,
+    "coding": 0.11320754716981132,
+    "data": 0.0,
     "language": 0.0,
-    "reasoning": 0.4,
-    "structured": 0.5,
-    "tools": 0.5314685314685315
+    "reasoning": 0.25,
+    "structured": 0.32,
+    "tools": 0.46296296296296297
   },
   "domain_loss": {
-    "coding": 3.243074709230715,
-    "data": 2.0381043752034507,
-    "language": 4.817908353583757,
-    "reasoning": 2.779862253289474,
-    "structured": 1.7459644051485284,
-    "tools": 1.3565474937702047
+    "coding": 3.2540486653645835,
+    "data": 2.060926055908203,
+    "language": 4.805089551349019,
+    "reasoning": 2.5364090768914473,
+    "structured": 1.6232479006745095,
+    "tools": 1.3924886769261853
   },
   "domain_nll_per_byte": {
-    "coding": 2.057035958426339,
-    "data": 3.057156562805176,
-    "language": 3.8723375552168515,
-    "reasoning": 3.772670200892857,
-    "structured": 1.5166963519472065,
-    "tools": 1.0087148030598958
+    "coding": 2.06399658203125,
+    "data": 3.0913890838623046,
+    "language": 3.862034592673043,
+    "reasoning": 3.4422694614955356,
+    "structured": 1.4100941359394727,
+    "tools": 1.0354402982271635
   },
   "domain_token_accuracy": {
-    "coding": 0.2972972972972973,
+    "coding": 0.3333333333333333,
     "data": 0.3333333333333333,
-    "language": 0.05813953488372093,
-    "reasoning": 0.3157894736842105,
-    "structured": 0.627906976744186,
-    "tools": 0.7241379310344828
+    "language": 0.09302325581395349,
+    "reasoning": 0.15789473684210525,
+    "structured": 0.7093023255813954,
+    "tools": 0.7068965517241379
   },
   "finite": true,
   "generated_solved_items": [],
-  "generation_dominant_token_fraction": 0.19753086419753085,
+  "generation_dominant_token_fraction": 0.4523809523809524,
   "generation_exact_accuracy": 0.0,
-  "generation_longest_repeated_token_run": 7,
-  "generation_nonempty_rate": 0.8333333333333334,
-  "generation_pathological_repetition": false,
+  "generation_longest_repeated_token_run": 20,
+  "generation_nonempty_rate": 1.0,
+  "generation_pathological_repetition": true,
   "generation_probe": [
     {
       "domain": "coding",
       "item": "coding:9f36f220338cd9ff",
       "ok": false,
-      "output": "defffff",
-      "similarity": 0.15789473684210525,
+      "output": "deffffffffffffffffffff",
+      "similarity": 0.11320754716981132,
       "target": "def sub(a, b):\n    return a - b"
     },
     {
       "domain": "data",
       "item": "data:5bd96918425fd195",
       "ok": false,
-      "output": "10",
-      "similarity": 0.5,
+      "output": "11",
+      "similarity": 0.0,
       "target": "20"
     },
     {
       "domain": "language",
       "item": "language:082c2713322e1930",
       "ok": false,
-      "output": "",
+      "output": "ffffffffffffffffff",
       "similarity": 0.0,
       "target": "Musicians play music."
     },
@@ -204,50 +204,50 @@
       "domain": "reasoning",
       "item": "reasoning:d206563c75c2d4bd",
       "ok": false,
-      "output": "10",
-      "similarity": 0.4,
+      "output": "11111",
+      "similarity": 0.25,
       "target": "144"
     },
     {
       "domain": "structured",
       "item": "structured:b4833d19223b3d60",
       "ok": false,
-      "output": "{\":trments\":true}",
-      "similarity": 0.5,
+      "output": "{\"cal_call>{\"c",
+      "similarity": 0.32,
       "target": "{\"count\":2}"
     },
     {
       "domain": "tools",
       "item": "tools:169b024c50474998",
       "ok": false,
-      "output": "<tool_call>{\"ok\":\"call>{\"n\"\":\":\"call>{\":{\":{\":\":{\"1111111\"}}</tool",
-      "similarity": 0.5314685314685315,
+      "output": "<tool_call>{\":\":{\":\":\"cal_call>",
+      "similarity": 0.46296296296296297,
       "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"6*7\"}}</tool_call>"
     }
   ],
-  "generation_repetition_rate": 0.691358024691358,
-  "generation_similarity": 0.3482272113851061,
-  "generation_unique_token_ratio": 0.30864197530864196,
-  "loss": 2.3085042585847404,
-  "nll_per_byte": 1.7625938175609277,
-  "parameters": 123520,
+  "generation_repetition_rate": 0.8333333333333334,
+  "generation_similarity": 0.1910284183554624,
+  "generation_unique_token_ratio": 0.16666666666666666,
+  "loss": 2.3014229738339167,
+  "nll_per_byte": 1.7571871007763364,
+  "parameters": 246912,
   "pretraining": {
-    "best_step_loss": 4.7361650466918945,
-    "blocks": 73202,
+    "best_step_loss": 4.7703752517700195,
+    "blocks": 146401,
     "corpus_bytes": 27573118,
     "corpus_sha256": "e70a5f551a411536175949c9f1765a25cf5be9d9f5ef629760c9131efa20948f",
     "documents": 1690,
     "domain_blocks": {
-      "code": 20266,
-      "data": 40080,
-      "general": 12744,
-      "reasoning": 112
+      "code": 40531,
+      "data": 80159,
+      "general": 25487,
+      "reasoning": 224
     },
     "eval_blocks": 128,
-    "final_loss": 4.8585062474012375,
-    "initial_loss": 5.498167306184769,
-    "learning_rate": 0.001,
-    "loss_improvement": 0.6396610587835312,
+    "final_loss": 4.852800279855728,
+    "initial_loss": 5.360572919249535,
+    "learning_rate": 0.000375,
+    "loss_improvement": 0.5077726393938065,
     "ok": true,
     "sampling_domain_weights": {
       "code": 0.1721510046978385,
@@ -255,31 +255,31 @@
       "general": 0.32656137400070495,
       "reasoning": 0.24330774281673703
     },
-    "steps": 12
+    "steps": 18
   },
-  "score": 36.197742182996905,
+  "score": 36.26860113673894,
   "solved_items": [],
-  "target_token_accuracy": 0.515650741350906,
+  "target_token_accuracy": 0.5255354200988468,
   "target_tokens": 607,
   "tokenizer_version": "bpe-v1",
   "training": {
-    "best_step_loss": 1.2696223258972168,
+    "best_step_loss": 1.2594877481460571,
     "effective_batch_size": 4,
-    "final_loss": 2.378751277923584,
+    "final_loss": 2.3807332515716553,
     "gradient_accumulation_steps": 1,
-    "initial_loss": 3.0744240283966064,
-    "learning_rate": 0.001,
-    "loss_improvement": 0.6956727504730225,
+    "initial_loss": 2.911102771759033,
+    "learning_rate": 0.00075,
+    "loss_improvement": 0.5303695201873779,
     "micro_batch_size": 4,
     "ok": true,
     "precision": "fp32",
-    "steps": 12
+    "steps": 18
   },
   "validation_target_bytes": 795,
   "validation_target_tokens": 607,
   "weight_transfer": {
-    "copied_parameters": 148096,
-    "copied_tensors": 21,
+    "copied_parameters": 271488,
+    "copied_tensors": 37,
     "derived_bpe_rows": 0,
     "embedding_width_migrated": false,
     "function_preserving_growth": true,
@@ -289,11 +289,11 @@
     "partial_prefix_tensors": [],
     "policy": "layout-aware Net2Grow transfer with identity residual depth expansion",
     "shared_token_rows": 0,
-    "source_tensors": 21,
+    "source_tensors": 37,
     "source_tokenizer": "bpe-v1",
     "source_unmatched_tensors": [],
-    "target_parameters": 148096,
-    "target_tensors": 21,
+    "target_parameters": 271488,
+    "target_tensors": 37,
     "target_tokenizer": "bpe-v1",
     "tokenizer_identical": true,
     "vocabulary_migrated": false
