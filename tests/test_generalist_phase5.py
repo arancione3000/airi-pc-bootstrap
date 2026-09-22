@@ -72,14 +72,15 @@ def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
     assert "github.run_id" in workflow
 
 
-def test_architecture_push_yields_to_explicit_live_lineage_handoff():
+def test_generic_architecture_yields_to_active_explicit_lineage_handoff():
     workflow = Path(".github/workflows/generalist-architecture-search.yml").read_text(
         encoding="utf-8"
     )
-    assert 'EVENT_NAME: ${{ github.event_name }}' in workflow
     assert "live-lineage-handoff.json" in workflow
-    assert '"${EVENT_NAME}" == "push"' in workflow
-    assert "live_lineage_handoff_owns_architecture_window" in workflow
+    assert '"${FORCE_SEARCH}" != "true"' in workflow
+    assert 'select(.event == "workflow_dispatch")' in workflow
+    assert "explicit_active > 0" in workflow
+    assert "explicit_live_lineage_handoff_owns_architecture_window" in workflow
     assert "run_search=false" in workflow
     assert "matrix=[]" in workflow
 
