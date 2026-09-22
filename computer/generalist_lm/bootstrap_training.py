@@ -1083,6 +1083,13 @@ def run_segment(
     }
 
     progress["bootstrap_replay"] = replay_manifest
+    progress["fast_resume"] = {
+        "reused_verified_manifest_and_replay": bool(reusable_manifest),
+        "full_bundle_materialized": bool(bundle is not None),
+        "all_packed_blocks_hit": bool(
+            all(bool(value) for value in packed_cache_hits.values())
+        ),
+    }
     progress["curriculum_schedule"] = [
         "A_frequent_word_contexts",
         "B_short_sentence_completion",
@@ -1283,6 +1290,9 @@ def run_segment(
     )
 
     if needs_sft:
+        # Held-out SFT validation is intentionally excluded from the compact
+        # replay, so reconstruct the reviewed bundle once at the final rung.
+        _materialize_bundle()
         progress["curriculum_stage"] = "D_to_F_supervised_replay"
         if sft_guard_migration:
             causal_best_dir = bootstrap_root / "best"
