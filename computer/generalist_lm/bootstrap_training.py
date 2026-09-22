@@ -343,7 +343,7 @@ def _phase5_training_acceleration(
                 "model_parameters": 7_021_248,
                 "baseline_raw_tokens_per_second": 4623.081773918064,
                 "fast_raw_tokens_per_second": 9116.896819863172,
-                "throughput_multiplier": 1.972476918,
+                "throughput_multiplier": 1.972038840259708,
                 "batch_size": 32,
                 "torch_version": "2.14.0+cpu",
             }
