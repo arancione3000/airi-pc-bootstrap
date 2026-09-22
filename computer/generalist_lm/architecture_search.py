@@ -22,6 +22,12 @@ from .generalist_swarm import (
 from .mathesis_bridge import mathesis_architecture_hypotheses
 from .meta_controller import decide_next_action
 from .model import estimate_parameter_count
+from .lineage_migration import (
+    active_lineage_snapshot,
+    adaptive_architecture_parameter_cap,
+    evaluate_lineage_runtime,
+    migrate_live_lineage,
+)
 
 
 ARCHITECTURE_SEARCH_VERSION = "airi-architecture-search-v1"
@@ -367,9 +373,16 @@ def prepare_architecture_search(
     max_context: int = 512,
     max_width: int = 384,
     max_layers: int = 10,
+    force_search: bool = False,
 ) -> dict[str, Any]:
     root = Path(state_dir).expanduser().resolve()
     output = Path(output_path).expanduser().resolve()
+    requested_parameter_cap = int(parameter_cap)
+    parameter_cap = adaptive_architecture_parameter_cap(
+        root,
+        requested_parameter_cap,
+    )
+    live = active_lineage_snapshot(root)
     decision = decide_next_action(root, parameter_cap=int(parameter_cap))
 
     base_path = output.with_suffix(".base.json")
@@ -391,11 +404,27 @@ def prepare_architecture_search(
     signals = list(dict.fromkeys(str(row) for row in signals))
     base["signals"] = signals
 
-    champion = GeneralistGenome(**dict(base["champion"])).validate()
-    current_vocab = int(
-        (base.get("progressive_tokenizer") or {}).get("current_vocab_size")
-        or 384
+    # Architecture research is always relative to the newest learned AIRI,
+    # including an unfinished Phase-5 candidate. The production champion can
+    # remain a rollback anchor, but it is not allowed to make the laboratory
+    # compare against stale weights.
+    champion = live["genome"]
+    current_vocab = int(live["runtime"].tokenizer.vocab_size)
+    base["champion"] = champion.to_dict()
+    base["champion_report"] = evaluate_lineage_runtime(
+        live["runtime"],
+        cycle=int(base.get("cycle", 1) or 1),
     )
+    base["live_lineage_source"] = {
+        "checkpoint": str(live["checkpoint_rel"]),
+        "bootstrap_active": bool(live["bootstrap_active"]),
+        "tokens_processed": int(live.get("tokens_processed", 0) or 0),
+        "target_tokens": int(live.get("target_tokens", 0) or 0),
+        "parameters": int(live["parameters"]),
+    }
+    scaling = dict(base.get("progressive_scaling") or {})
+    scaling["current_parameters"] = int(live["parameters"])
+    base["progressive_scaling"] = scaling
     parent = ArchitectureSpec.from_genome(
         champion,
         target_vocab_size=current_vocab,
@@ -483,6 +512,8 @@ def prepare_architecture_search(
         "architecture": control_spec.to_dict(),
         "architecture_fingerprint": control_spec.fingerprint(),
         "hypothesis": "same topology, equal training budget control",
+        "initial_checkpoint": str(live["checkpoint_rel"]),
+        "initial_checkpoint_mode": "live_lineage",
     })
 
     seen = {parent.fingerprint()}
@@ -531,12 +562,14 @@ def prepare_architecture_search(
             "hypothesis": proposal["hypothesis"],
             "mathesis_support": proposal.get("mathesis_support") or [],
             "falsification": proposal["falsification"],
+            "initial_checkpoint": str(live["checkpoint_rel"]),
+            "initial_checkpoint_mode": "live_lineage",
         })
         if len(candidates) >= max(2, int(population_size)):
             break
 
     run_search = (
-        decision.get("action") == "architecture_search"
+        (bool(force_search) or decision.get("action") == "architecture_search")
         and len(candidates) >= 2
     )
 
@@ -570,6 +603,13 @@ def prepare_architecture_search(
             "max_layers": int(max_layers),
         },
         "architecture_policy": {
+            "single_active_lineage": True,
+            "research_challengers_are_temporary": True,
+            "direct_research_checkpoint_promotion": False,
+            "live_lineage_weight_seed": True,
+            "requested_parameter_cap": int(requested_parameter_cap),
+            "effective_parameter_cap": int(parameter_cap),
+            "forced_search": bool(force_search),
             "same_budget_control_required": True,
             "capacity_slots_reserved": True,
             "attention_structure_slots_reserved": 2,
@@ -665,10 +705,70 @@ def finalize_architecture_search(
         plan_path,
         result_paths,
         output_path,
+        allow_direct_promotion=False,
     )
 
     rows = [row for row in _result_rows(result_paths) if row.get("ok")]
     rank = sorted(rows, key=_research_quality_key)
+
+    migration_result: dict[str, Any] = {
+        "accepted": False,
+        "reason": "no externally approved architecture candidate",
+    }
+    approved = base_result.get("promotion_candidate")
+    if isinstance(approved, dict) and approved.get("candidate_id"):
+        approved_row = next(
+            (
+                row for row in rows
+                if str(row.get("candidate_id") or "")
+                == str(approved.get("candidate_id") or "")
+            ),
+            None,
+        )
+        if approved_row is None:
+            migration_result = {
+                "accepted": False,
+                "reason": "approved architecture result could not be resolved",
+                "candidate_id": approved.get("candidate_id"),
+            }
+        else:
+            approved_result_path = Path(
+                str(approved_row.get("_result_path") or "")
+            )
+            approved_checkpoint = (
+                approved_result_path.parent
+                / str(approved_row.get("checkpoint_dir") or "best-checkpoint")
+            )
+            if not approved_checkpoint.is_dir():
+                migration_result = {
+                    "accepted": False,
+                    "reason": "approved architecture checkpoint is missing",
+                    "candidate_id": approved.get("candidate_id"),
+                }
+            else:
+                try:
+                    migration_result = migrate_live_lineage(
+                        root,
+                        target_checkpoint=approved_checkpoint,
+                        target_genome=dict(approved_row["genome"]),
+                        cycle=int(plan.get("cycle", 0) or 0),
+                        candidate_id=str(approved.get("candidate_id") or ""),
+                        research_kind=str(approved.get("kind") or ""),
+                    )
+                except Exception as exc:
+                    migration_result = {
+                        "accepted": False,
+                        "reason": f"lineage_migration_error:{type(exc).__name__}:{exc}",
+                        "candidate_id": approved.get("candidate_id"),
+                    }
+
+    base_result["promoted"] = bool(migration_result.get("accepted"))
+    base_result["promotion_reason"] = (
+        "single live lineage migrated to externally verified architecture"
+        if migration_result.get("accepted")
+        else str(migration_result.get("reason") or "lineage migration rejected")
+    )
+    base_result["lineage_migration"] = migration_result
 
     architecture_root = root / "architecture-research"
     architecture_root.mkdir(parents=True, exist_ok=True)
@@ -856,6 +956,8 @@ def finalize_architecture_search(
         "entries": leaderboard,
         "winner_promoted": bool(base_result.get("promoted")),
         "promotion_reason": base_result.get("promotion_reason") or base_result.get("reason"),
+        "lineage_migration": migration_result,
+        "single_active_lineage": True,
         "existing_generalist_gates_preserved": True,
         "incumbent": incumbent_decision,
     }
@@ -892,6 +994,15 @@ def finalize_architecture_search(
             architecture_manifest(champion_spec),
         )
 
+    lineage_raw = _read(root / "lineage.json", {})
+    if isinstance(lineage_raw, dict) and isinstance(
+        lineage_raw.get("active_architecture"), dict
+    ):
+        _atomic_json(
+            architecture_root / "active-lineage-architecture.json",
+            dict(lineage_raw["active_architecture"]),
+        )
+
     history_row = {
         "cycle": int(plan.get("cycle", 0) or 0),
         "evaluated": len(leaderboard),
@@ -919,6 +1030,7 @@ def main(argv: list[str] | None = None) -> int:
     prep.add_argument("--mathesis-state")
     prep.add_argument("--population-size", type=int, default=8)
     prep.add_argument("--parameter-cap", type=int, default=7_000_000)
+    prep.add_argument("--force-search", action="store_true")
 
     worker = sub.add_parser("worker")
     worker.add_argument("plan")
@@ -952,6 +1064,7 @@ def main(argv: list[str] | None = None) -> int:
             mathesis_state_dir=args.mathesis_state,
             population_size=args.population_size,
             parameter_cap=args.parameter_cap,
+            force_search=args.force_search,
         )
     elif args.cmd == "worker":
         result = run_architecture_candidate(
