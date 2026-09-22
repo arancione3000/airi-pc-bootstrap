@@ -33,6 +33,7 @@ from .efficiency_engine import (
     active_learning_weights,
     efficiency_bonus,
     efficiency_profile,
+    measure_inference_latency,
     island_schedule,
     island_weights,
     self_play_policy,
@@ -1437,9 +1438,18 @@ def run_candidate(
             int(report["parameters"]),
         )
         report["island"] = str(row.get("island") or "efficiency")
+        latency = measure_inference_latency(
+            runtime.model,
+            runtime.config,
+            device="cpu",
+            sequence_length=min(32, int(runtime.config.context_length)),
+            repeats=3,
+        )
+        report["latency"] = latency
         report["efficiency"] = efficiency_profile(
             runtime.config,
             report,
+            latency=latency,
         )
         report["efficiency_bonus"] = efficiency_bonus(report["efficiency"])
         report["score"] = float(report["score"]) + float(report["efficiency_bonus"])
