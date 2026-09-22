@@ -44,6 +44,7 @@ from .training import train_sft
 
 
 PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v1"
+PHASE5_SFT_GUARD_VERSION = "phase5-sft-guard-v1"
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -660,8 +661,35 @@ def run_segment(
     progress["rung_complete"] = bool(rung_complete)
     progress["updated_at_unix"] = int(time.time())
 
-    if rung_complete and target_tokens not in set(progress.get("sft_completed_rungs") or []):
+    completed_sft_before = set(
+        int(x) for x in (progress.get("sft_completed_rungs") or [])
+    )
+    sft_guard_migration = bool(
+        rung_complete
+        and target_tokens in completed_sft_before
+        and str(progress.get("sft_guard_version") or "") != PHASE5_SFT_GUARD_VERSION
+    )
+    needs_sft = bool(
+        rung_complete
+        and (
+            target_tokens not in completed_sft_before
+            or sft_guard_migration
+        )
+    )
+
+    if needs_sft:
         progress["curriculum_stage"] = "D_to_F_supervised_replay"
+        if sft_guard_migration:
+            causal_best_dir = bootstrap_root / "best"
+            if not (causal_best_dir / "model.pt").is_file():
+                raise RuntimeError(
+                    "cannot migrate legacy SFT state without causal-best checkpoint"
+                )
+            runtime = GeneralistRuntime.from_checkpoint(
+                causal_best_dir,
+                device="cpu",
+            )
+            progress["sft_guard_migrated_from_causal_best"] = True
         replay, replay_counts = _mixed_replay_rows(
             root,
             bundle.sft_train,
@@ -702,7 +730,9 @@ def run_segment(
         # Only accepted SFT changes invalidate the causal Adam moments. If every
         # SFT attempt is rejected, the restored pre-SFT checkpoint still matches
         # the persisted causal optimizer exactly.
-        if bool(sft_report.get("accepted")):
+        progress["sft_guard_version"] = PHASE5_SFT_GUARD_VERSION
+        progress["sft_guard_migration_applied"] = bool(sft_guard_migration)
+        if bool(sft_report.get("accepted")) or sft_guard_migration:
             optimizer_path.unlink(missing_ok=True)
             progress["optimizer_reset_after_sft"] = True
         else:
