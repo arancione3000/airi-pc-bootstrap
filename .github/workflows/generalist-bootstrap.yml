@@ -49,6 +49,7 @@ jobs:
       - name: Install CPU bootstrap runtime
         run: |
           python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check 'datasets>=3.6,<5'
 
       - name: Wait for active higher-priority state writers
         env:
@@ -138,6 +139,15 @@ jobs:
             echo "Phase 5 target ${effective_target} is already fully persisted; skipping corpus rebuild/training."
           fi
 
+      - name: Restore reusable bootstrap source cache
+        if: env.PERSISTED_RUNG_COMPLETE != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CACHE_DIR }}
+          key: airi-generalist-phase5-data-v2-${{ runner.os }}-${{ env.TARGET_TOKENS }}
+          restore-keys: |
+            airi-generalist-phase5-data-v2-${{ runner.os }}-
+
       - name: Reuse already-completed persisted bootstrap rung
         if: env.PERSISTED_RUNG_COMPLETE == 'true'
         run: |
@@ -167,7 +177,7 @@ jobs:
           }
 
           rung_complete=false
-          for segment in $(seq 1 80); do
+          for segment in $(seq 1 4); do
             echo "Phase 5 segment ${segment}; target=${TARGET_TOKENS}"
             python -m generalist_lm.bootstrap_training \
               --state-dir "${STATE_DIR}" \
@@ -239,9 +249,8 @@ jobs:
             next=5000000
           elif [[ "${current}" -lt 20000000 ]]; then
             next=20000000
-          elif [[ "${current}" -lt 50000000 ]]; then
-            next=50000000
           elif [[ "${current}" -lt 100000000 ]]; then
+            # Fast-track the same live checkpoint directly to the 7M/100M rung.
             next=100000000
           fi
 
