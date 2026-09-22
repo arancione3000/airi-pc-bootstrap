@@ -667,6 +667,7 @@ def test_generalist_swarm_plan_imports_completed_phase5_language_fusion(tmp_path
             "target_tokens": 20_000_000,
             "tokens_processed": 20_000_000,
             "completed_rungs": [5_000_000, 20_000_000],
+            "sft_completed_rungs": [5_000_000, 20_000_000],
             "capacity_genome": fusion_genome.to_dict(),
             "unique_corpus_target_tokens": 5_000_000,
         }),
