@@ -16,7 +16,9 @@ from generalist_lm.architecture_search import (
     _load_incumbent_candidate,
     _negative_architecture_memory,
     _research_quality_key,
+    link_mathesis_hypotheses,
     prioritize_architecture_proposals,
+    select_diverse_architecture_proposals,
 )
 from generalist_lm.data_quality import assess_text
 from generalist_lm.evolution import GeneralistGenome
@@ -258,6 +260,76 @@ def test_negative_memory_blocks_same_parent_failures_only(tmp_path: Path):
     )
     assert rejected_other == set()
     assert report_other["count"] == 0
+
+
+def test_population_reserves_gqa_and_local_attention_slots():
+    parent = ArchitectureSpec(
+        architecture_id="tiny-parent",
+        generation=2,
+        parent_id=None,
+        context_length=128,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=128,
+        tokenizer_version="bpe-v1",
+        target_vocab_size=384,
+    ).validate()
+    proposals = proposal_set(
+        parent,
+        signals=["language_collapse", "data_gap", "reasoning_gap"],
+        parameter_cap=7_000_000,
+        max_candidates=24,
+    )
+    selected = select_diverse_architecture_proposals(
+        proposals,
+        slots=6,
+        attention_slots=2,
+    )
+    assert len(selected) == 6
+    assert any(
+        row["architecture"]["attention_type"] == "gqa"
+        for row in selected
+    )
+    assert any(
+        int(row["architecture"]["local_attention_window"]) > 0
+        for row in selected
+    )
+    assert any(
+        row["kind"] in {"capacity_scale", "capacity_plus_structure"}
+        for row in selected
+    )
+
+
+def test_mathesis_hypotheses_are_linked_to_matching_topology():
+    gqa = {
+        "architecture": {
+            "attention_type": "gqa",
+            "local_attention_window": 0,
+            "norm_type": "layernorm",
+            "position_encoding": "learned",
+        },
+    }
+    local = {
+        "architecture": {
+            "attention_type": "mha",
+            "local_attention_window": 64,
+            "norm_type": "layernorm",
+            "position_encoding": "learned",
+        },
+    }
+    hypotheses = [
+        {
+            "hypothesis_id": "math-gqa",
+            "mutation": {"attention_type": "gqa"},
+        },
+        {
+            "hypothesis_id": "math-local",
+            "mutation": {"local_attention_window_policy": "half_context"},
+        },
+    ]
+    assert link_mathesis_hypotheses(gqa, hypotheses) == ["math-gqa"]
+    assert link_mathesis_hypotheses(local, hypotheses) == ["math-local"]
 
 
 def test_capacity_proposals_cannot_be_crowded_out_by_micro_mutations():
