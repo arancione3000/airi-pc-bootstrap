@@ -46,10 +46,10 @@ from .tokenizer import PAD
 from .training import causal_training_objective, train_sft
 
 
-PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v2"
+PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v3"
 PHASE5_SFT_GUARD_VERSION = "phase5-sft-guard-v2"
 PHASE5_ANTICOLLAPSE_VERSION = "phase5-anticollapse-v2"
-PHASE5_CAPACITY_GROWTH_VERSION = "phase5-capacity-growth-v1"
+PHASE5_CAPACITY_GROWTH_VERSION = "phase5-capacity-growth-v2"
 PHASE5_MAX_UNIQUE_CORPUS_TOKENS = 5_000_000
 
 
@@ -95,8 +95,19 @@ def _bootstrap_corpus_target(training_target_tokens: int) -> int:
 
 
 def _bootstrap_capacity_target(training_target_tokens: int) -> int | None:
-    """Capacity ladder paired with the expensive language-bootstrap rungs."""
+    """Capacity ladder paired with cumulative language optimization.
+
+    The 100M rung is the requested conversational/knowledge bootstrap budget.
+    Larger explicit targets remain supported so the language lane does not
+    become a permanent capacity ceiling after that rung.
+    """
     target = max(0, int(training_target_tokens))
+    if target >= 500_000_000:
+        return 20_000_000
+    if target >= 250_000_000:
+        return 12_000_000
+    if target >= 100_000_000:
+        return 7_000_000
     if target >= 50_000_000:
         return 3_000_000
     if target >= 20_000_000:
@@ -117,8 +128,8 @@ def _grow_bootstrap_runtime(
         base_genome,
         target_parameters=target,
         vocab_size=runtime.tokenizer.vocab_size,
-        max_width=384,
-        max_layers=10,
+        max_width=512,
+        max_layers=12,
         prefer_function_preserving=False,
     )
     config = grown_genome.model_config(runtime.tokenizer.vocab_size)
@@ -597,7 +608,13 @@ def _run_guarded_sft(
     parameters = parameter_count(runtime.model)
     sft_anti_collapse_weight = 0.08 if collapsed else 0.0
     sft_eos_loss_weight = 1.75 if collapsed else 1.0
-    if int(target_tokens) >= 20_000_000 or parameters >= 750_000:
+    if int(target_tokens) >= 100_000_000 or parameters >= 3_000_000:
+        attempts = (
+            {"steps": 1600, "learning_rate": 4e-5},
+            {"steps": 800, "learning_rate": 2.5e-5},
+            {"steps": 320, "learning_rate": 1.25e-5},
+        )
+    elif int(target_tokens) >= 20_000_000 or parameters >= 750_000:
         attempts = (
             {"steps": 800, "learning_rate": 5e-5},
             {"steps": 400, "learning_rate": 3e-5},
@@ -1020,9 +1037,11 @@ def run_segment(
         )
     )
     if rescue_due:
+        runtime_parameters = parameter_count(runtime.model)
         rescue_steps = (
-            512 if parameter_count(runtime.model) >= 750_000
-            else 256 if parameter_count(runtime.model) >= 250_000
+            1024 if runtime_parameters >= 3_000_000
+            else 512 if runtime_parameters >= 750_000
+            else 256 if runtime_parameters >= 250_000
             else 128
         )
         runtime, rescue_report = _run_anti_collapse_rescue(
