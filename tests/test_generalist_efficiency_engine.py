@@ -253,3 +253,69 @@ def test_commercial_audit_fails_closed_without_explicit_license(tmp_path: Path):
     assert report["commercial_ready"] is False
     assert any("LICENSE" in item for item in report["blockers"])
     assert report["legal_clearance"] is False
+
+
+
+def test_runtime_tool_curriculum_covers_readonly_airi_pc_surface():
+    from generalist_lm.curriculum import train_rows, validation_rows
+
+    train_targets = "\n".join(
+        message.get("content", "")
+        for row in train_rows()
+        if row.domain == "tools"
+        for message in row.messages
+        if message.get("role") == "assistant"
+    )
+    validation_targets = "\n".join(
+        message.get("content", "")
+        for row in validation_rows()
+        if row.domain == "tools"
+        for message in row.messages
+        if message.get("role") == "assistant"
+    )
+    for tool in ("calculator", "web_search", "web_read", "file_read", "file_search", "project_analyze", "memory_search"):
+        assert f'"name":"{tool}"' in train_targets
+    for tool in ("file_read", "file_search", "project_analyze", "memory_search"):
+        assert f'"name":"{tool}"' in validation_targets
+
+
+def test_persisted_specialist_keeps_distillation_gate_evidence(tmp_path: Path):
+    from generalist_lm.generalist_swarm import _persist_specialist_checkpoints
+
+    trial = tmp_path / "trial"
+    checkpoint = trial / "best-checkpoint"
+    checkpoint.mkdir(parents=True)
+    (checkpoint / "model.pt").write_bytes(b"research-checkpoint")
+    result_path = trial / "result.json"
+    row = {
+        "candidate_id": "specialist-tools-1",
+        "stage": 3,
+        "island": "tools",
+        "parameters": 123456,
+        "score": 31.0,
+        "mean_fitness_score": 31.0,
+        "mean_nll_per_byte": 1.9,
+        "mean_generation_similarity": 0.55,
+        "mean_generation_repetition_rate": 0.20,
+        "all_seed_eligible": True,
+        "any_seed_eligible": True,
+        "any_generation_pathological_repetition": False,
+        "worst_domain_regression": 0.02,
+        "checkpoint_dir": "best-checkpoint",
+        "genome": GeneralistGenome().to_dict(),
+    }
+    state = tmp_path / "state"
+    state.mkdir()
+    report = _persist_specialist_checkpoints(
+        state,
+        [(result_path, row)],
+        cycle=9,
+    )
+    saved = json.loads(
+        (state / "specialists" / "tools" / "summary.json").read_text(encoding="utf-8")
+    )
+    assert report["specialists"]["tools"]["candidate_id"] == "specialist-tools-1"
+    assert saved["all_seed_eligible"] is True
+    assert saved["any_generation_pathological_repetition"] is False
+    assert saved["worst_domain_regression"] == pytest.approx(0.02)
+    assert saved["genome"]["genome_id"] == GeneralistGenome().genome_id
