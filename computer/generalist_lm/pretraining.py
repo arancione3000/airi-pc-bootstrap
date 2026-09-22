@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from array import array
 from dataclasses import dataclass
 import hashlib
+import json
 from pathlib import Path
 import random
 from typing import Iterable, Sequence
@@ -156,6 +158,125 @@ def pack_causal_blocks(
             block.extend([PAD] * (block_size - len(block)))
         blocks.append(block)
     return blocks
+
+
+
+class PackedBlockArray(Sequence[Sequence[int]]):
+    """Compact fixed-width causal blocks backed by one contiguous integer array."""
+
+    def __init__(self, flat: array, block_size: int):
+        self._flat = flat
+        self.block_size = int(block_size)
+        if self.block_size <= 0 or len(self._flat) % self.block_size:
+            raise ValueError("invalid packed block array shape")
+
+    def __len__(self) -> int:
+        return len(self._flat) // self.block_size
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            start, stop, step = index.indices(len(self))
+            return [self[i] for i in range(start, stop, step)]
+        idx = int(index)
+        if idx < 0:
+            idx += len(self)
+        if idx < 0 or idx >= len(self):
+            raise IndexError(index)
+        start = idx * self.block_size
+        return list(self._flat[start:start + self.block_size])
+
+
+def save_packed_block_cache(
+    path: str | Path,
+    blocks: Sequence[Sequence[int]],
+    *,
+    block_size: int,
+    identity: dict,
+) -> dict:
+    """Atomically persist deterministic fixed-width token blocks.
+
+    The cache is an acceleration artifact only.  Its sidecar records a SHA-256
+    of the binary payload plus the corpus/tokenizer identity supplied by the
+    caller, so stale or corrupt cache files fail closed.
+    """
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    block_size = int(block_size)
+    if block_size <= 0:
+        raise ValueError("block_size must be positive")
+
+    max_token = 0
+    for block in blocks:
+        if len(block) != block_size:
+            raise ValueError("all cached blocks must have the fixed block_size")
+        if block:
+            max_token = max(max_token, max(int(value) for value in block))
+    typecode = "H" if max_token <= 0xFFFF else "I"
+    flat = array(typecode)
+    for block in blocks:
+        flat.extend(int(value) for value in block)
+
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    with tmp.open("wb") as handle:
+        flat.tofile(handle)
+    digest = hashlib.sha256(tmp.read_bytes()).hexdigest()
+    tmp.replace(target)
+
+    meta = {
+        "schema": 1,
+        "version": "packed-causal-blocks-v1",
+        "block_size": block_size,
+        "block_count": len(blocks),
+        "typecode": typecode,
+        "binary_sha256": digest,
+        "identity": dict(identity),
+    }
+    meta_path = target.with_suffix(target.suffix + ".json")
+    meta_tmp = meta_path.with_suffix(meta_path.suffix + ".tmp")
+    meta_tmp.write_text(json.dumps(meta, indent=2, sort_keys=True), encoding="utf-8")
+    meta_tmp.replace(meta_path)
+    return meta
+
+
+def load_packed_block_cache(
+    path: str | Path,
+    *,
+    expected_identity: dict,
+) -> PackedBlockArray | None:
+    """Load a verified packed-block cache or return None when it is stale."""
+    target = Path(path)
+    meta_path = target.with_suffix(target.suffix + ".json")
+    if not target.is_file() or not meta_path.is_file():
+        return None
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if meta.get("version") != "packed-causal-blocks-v1":
+        return None
+    if dict(meta.get("identity") or {}) != dict(expected_identity):
+        return None
+    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    if digest != str(meta.get("binary_sha256") or ""):
+        return None
+
+    typecode = str(meta.get("typecode") or "")
+    if typecode not in {"H", "I"}:
+        return None
+    block_size = int(meta.get("block_size", 0) or 0)
+    block_count = int(meta.get("block_count", 0) or 0)
+    if block_size <= 0 or block_count <= 0:
+        return None
+
+    flat = array(typecode)
+    try:
+        with target.open("rb") as handle:
+            flat.fromfile(handle, block_size * block_count)
+    except (EOFError, OSError, ValueError):
+        return None
+    if len(flat) != block_size * block_count:
+        return None
+    return PackedBlockArray(flat, block_size)
 
 
 def _batch(blocks: Sequence[Sequence[int]], indices: Sequence[int], *, device: str):

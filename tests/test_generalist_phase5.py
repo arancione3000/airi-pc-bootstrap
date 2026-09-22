@@ -31,7 +31,11 @@ from generalist_lm.bootstrap_training import (
     _phase5_success,
 )
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
-from generalist_lm.pretraining import CorpusDocument
+from generalist_lm.pretraining import (
+    CorpusDocument,
+    load_packed_block_cache,
+    save_packed_block_cache,
+)
 from generalist_lm.phase5_diagnostics import (
     PHASE5_PROBES,
     degeneration_gate,
@@ -54,6 +58,67 @@ def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
     assert "next=100000000" in workflow
     assert '"handoff":"converged_swarm_first"' not in workflow
     assert "Generalist swarm must run once before it is dispatched" not in workflow
+    assert "git rebase origin/generalist-state" in workflow
+    assert "transactionally persist Phase-5 checkpoint" in workflow
+    assert "refusing an unsafe overwrite" in workflow
+    assert "Restore reusable packed-token cache" in workflow
+    assert "airi-generalist-phase5-packed-v1-" in workflow
+    assert "github.run_id" in workflow
+
+def test_phase5_packed_block_cache_roundtrips_exact_tokens(tmp_path):
+    path = tmp_path / "blocks.bin"
+    blocks = [
+        [1, 8, 9, 10, 2, 0, 0, 0],
+        [1, 11, 12, 13, 14, 2, 0, 0],
+    ]
+    identity = {
+        "version": "fixture-v1",
+        "manifest_content_sha256": "abc123",
+        "tokenizer_version": "bpe-v1",
+        "tokenizer_vocab_size": 384,
+        "context_length": 8,
+        "split": "C_causal_next_sentence",
+    }
+    meta = save_packed_block_cache(
+        path,
+        blocks,
+        block_size=8,
+        identity=identity,
+    )
+    loaded = load_packed_block_cache(path, expected_identity=identity)
+
+    assert meta["block_count"] == 2
+    assert loaded is not None
+    assert len(loaded) == 2
+    assert loaded[0] == blocks[0]
+    assert loaded[1] == blocks[1]
+
+
+def test_phase5_packed_block_cache_rejects_stale_or_corrupt_data(tmp_path):
+    path = tmp_path / "blocks.bin"
+    blocks = [[1, 8, 9, 10, 2, 0, 0, 0]]
+    identity = {
+        "version": "fixture-v1",
+        "manifest_content_sha256": "abc123",
+        "tokenizer_version": "bpe-v1",
+        "tokenizer_vocab_size": 384,
+        "context_length": 8,
+        "split": "validation",
+    }
+    save_packed_block_cache(
+        path,
+        blocks,
+        block_size=8,
+        identity=identity,
+    )
+
+    stale = dict(identity)
+    stale["manifest_content_sha256"] = "different"
+    assert load_packed_block_cache(path, expected_identity=stale) is None
+
+    path.write_bytes(path.read_bytes()[:-1])
+    assert load_packed_block_cache(path, expected_identity=identity) is None
+
 
 def test_phase5_cumulative_target_never_shrinks_on_maintenance_run():
     assert _effective_bootstrap_target(1_000_000, {"target_tokens": 5_000_000}) == 5_000_000

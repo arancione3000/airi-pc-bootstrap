@@ -31,7 +31,12 @@ from .phase5_diagnostics import (
     protected_bootstrap_texts,
     sft_validation_gate,
 )
-from .pretraining import pack_causal_blocks, corpus_loss
+from .pretraining import (
+    corpus_loss,
+    load_packed_block_cache,
+    pack_causal_blocks,
+    save_packed_block_cache,
+)
 from .research_cycle import (
     _continual_candidate_genome,
     _grouped_validation,
@@ -903,29 +908,128 @@ def run_segment(
             },
         )
 
-    stage_documents = {
-        "A_frequent_word_contexts": _frequent_word_documents(bundle.train_documents),
-        "B_short_sentence_completion": [
-            row for row in bundle.train_documents
-            if len(row.text) <= 220
-        ] or list(bundle.train_documents),
-        "C_causal_next_sentence": list(bundle.train_documents),
+    # Packing a 20M-token corpus is expensive and previously repeated for
+    # every resumable segment.  Cache the exact fixed-width token blocks in the
+    # job-local data cache.  The cache identity includes the reviewed manifest,
+    # tokenizer and context length, so stale data fails closed and is rebuilt.
+    manifest_identity = str(bundle.manifest.get("manifest_content_sha256") or "")
+    packed_cache_root = cache / "phase5-packed-blocks-v1"
+    packed_cache_root.mkdir(parents=True, exist_ok=True)
+    packed_cache_base = {
+        "version": "phase5-stage-block-cache-v1",
+        "manifest_content_sha256": manifest_identity,
+        "tokenizer_version": str(runtime.tokenizer.version),
+        "tokenizer_vocab_size": int(runtime.tokenizer.vocab_size),
+        "context_length": int(runtime.config.context_length),
     }
-    stage_blocks = {
-        stage: pack_causal_blocks(
+
+    def _packed_identity(split: str) -> dict[str, Any]:
+        return {**packed_cache_base, "split": str(split)}
+
+    def _packed_path(split: str) -> Path:
+        safe = re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(split))
+        digest = hashlib.sha256(
+            json.dumps(_packed_identity(split), sort_keys=True).encode("utf-8")
+        ).hexdigest()[:20]
+        return packed_cache_root / f"{safe}-{digest}.bin"
+
+    stage_blocks: dict[str, Any] = {}
+    packed_cache_hits: dict[str, bool] = {}
+    stage_names = (
+        "A_frequent_word_contexts",
+        "B_short_sentence_completion",
+        "C_causal_next_sentence",
+    )
+    for stage in stage_names:
+        cached = load_packed_block_cache(
+            _packed_path(stage),
+            expected_identity=_packed_identity(stage),
+        )
+        if cached is not None:
+            stage_blocks[stage] = cached
+            packed_cache_hits[stage] = True
+        else:
+            packed_cache_hits[stage] = False
+
+    missing_stages = [stage for stage in stage_names if stage not in stage_blocks]
+    if "A_frequent_word_contexts" in missing_stages:
+        documents = _frequent_word_documents(bundle.train_documents)
+        packed = pack_causal_blocks(
             documents,
             runtime.tokenizer,
             context_length=runtime.config.context_length,
         )
-        for stage, documents in stage_documents.items()
-    }
-    validation_blocks = pack_causal_blocks(
-        bundle.validation_documents,
-        runtime.tokenizer,
-        context_length=runtime.config.context_length,
+        save_packed_block_cache(
+            _packed_path("A_frequent_word_contexts"),
+            packed,
+            block_size=runtime.config.context_length,
+            identity=_packed_identity("A_frequent_word_contexts"),
+        )
+        stage_blocks["A_frequent_word_contexts"] = packed
+
+    if "B_short_sentence_completion" in missing_stages:
+        documents = [
+            row for row in bundle.train_documents
+            if len(row.text) <= 220
+        ] or list(bundle.train_documents)
+        packed = pack_causal_blocks(
+            documents,
+            runtime.tokenizer,
+            context_length=runtime.config.context_length,
+        )
+        save_packed_block_cache(
+            _packed_path("B_short_sentence_completion"),
+            packed,
+            block_size=runtime.config.context_length,
+            identity=_packed_identity("B_short_sentence_completion"),
+        )
+        stage_blocks["B_short_sentence_completion"] = packed
+
+    if "C_causal_next_sentence" in missing_stages:
+        packed = pack_causal_blocks(
+            bundle.train_documents,
+            runtime.tokenizer,
+            context_length=runtime.config.context_length,
+        )
+        save_packed_block_cache(
+            _packed_path("C_causal_next_sentence"),
+            packed,
+            block_size=runtime.config.context_length,
+            identity=_packed_identity("C_causal_next_sentence"),
+        )
+        stage_blocks["C_causal_next_sentence"] = packed
+
+    validation_identity = _packed_identity("validation")
+    validation_blocks = load_packed_block_cache(
+        _packed_path("validation"),
+        expected_identity=validation_identity,
     )
+    packed_cache_hits["validation"] = validation_blocks is not None
+    if validation_blocks is None:
+        validation_blocks = pack_causal_blocks(
+            bundle.validation_documents,
+            runtime.tokenizer,
+            context_length=runtime.config.context_length,
+        )
+        save_packed_block_cache(
+            _packed_path("validation"),
+            validation_blocks,
+            block_size=runtime.config.context_length,
+            identity=validation_identity,
+        )
+
     if any(not rows for rows in stage_blocks.values()) or not validation_blocks:
         raise RuntimeError("bootstrap corpus did not produce curriculum train/validation blocks")
+
+    progress["packed_block_cache"] = {
+        "version": "phase5-stage-block-cache-v1",
+        "manifest_content_sha256": manifest_identity,
+        "hits": packed_cache_hits,
+        "block_counts": {
+            stage: len(rows) for stage, rows in stage_blocks.items()
+        },
+        "validation_blocks": len(validation_blocks),
+    }
 
     progress["bootstrap_replay"] = replay_manifest
     progress["curriculum_schedule"] = [
