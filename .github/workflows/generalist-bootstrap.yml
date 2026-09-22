@@ -149,6 +149,15 @@ jobs:
           restore-keys: |
             airi-generalist-phase5-data-v2-${{ runner.os }}-
 
+      - name: Restore reusable packed-token cache
+        if: env.PERSISTED_RUNG_COMPLETE != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CACHE_DIR }}/phase5-packed-blocks-v1
+          key: airi-generalist-phase5-packed-v1-${{ runner.os }}-${{ env.TARGET_TOKENS }}-${{ github.run_id }}
+          restore-keys: |
+            airi-generalist-phase5-packed-v1-${{ runner.os }}-${{ env.TARGET_TOKENS }}-
+
       - name: Reuse already-completed persisted bootstrap rung
         if: env.PERSISTED_RUNG_COMPLETE == 'true'
         run: |
