@@ -37,6 +37,11 @@ data class ModelSlot(
     val files: Map<String, BundleFileInfo>,
 )
 
+internal fun resolveDownloadRevision(
+    revision: String,
+    fallback: () -> String,
+): String = revision.ifBlank(fallback)
+
 internal fun sameModelArtifact(first: ModelSlot?, second: ModelSlot?): Boolean {
     val a = first?.files?.get("model.onnx")?.sha256.orEmpty()
     val b = second?.files?.get("model.onnx")?.sha256.orEmpty()
@@ -119,8 +124,8 @@ class BundleRepository(context: Context) {
         for ((name, info) in slot.files) {
             val target = File(directory, name)
             if (!target.isFile || sha256(target) != info.sha256) {
-                if (downloadRevision.isBlank()) {
-                    downloadRevision = github.resolveBranchSha(MOBILE_BRANCH)
+                downloadRevision = resolveDownloadRevision(downloadRevision) {
+                    github.resolveBranchSha(MOBILE_BRANCH)
                 }
                 check(downloadRevision.isNotBlank()) { "Revisione mobile mancante" }
                 val bytes = github.getBytesAtRevision(
