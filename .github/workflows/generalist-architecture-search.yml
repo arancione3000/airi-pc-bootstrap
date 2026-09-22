@@ -124,32 +124,55 @@ jobs:
 
       - name: Ask meta-controller and build Architecture IR population
         id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           rm -rf "${BUNDLE}"
           mkdir -p "${BUNDLE}"
 
           handoff_file="${STATE_DIR}/architecture-research/live-lineage-handoff.json"
-          if [[ "${EVENT_NAME}" == "push" && -s "${handoff_file}" ]]; then
-            echo "A live-lineage handoff already owns the next architecture window; skipping generic push-triggered search."
-            cycle="$(jq -r '.cycle // 0' "${STATE_DIR}/status.json" 2>/dev/null || echo 0)"
-            base_state_sha="$(git -C "${STATE_REPO}" rev-parse HEAD)"
-            jq -n \
-              --argjson cycle "${cycle}" \
-              '{
-                run_search: false,
-                matrix: [],
-                cycle: $cycle,
-                skip_reason: "live_lineage_handoff_owns_architecture_window"
-              }' > "${BUNDLE}/plan.json"
-            cp -a "${STATE_DIR}" "${BUNDLE}/state"
-            {
-              echo "run_search=false"
-              echo "matrix=[]"
-              echo "cycle=${cycle}"
-              echo "base_state_sha=${base_state_sha}"
-            } >> "${GITHUB_OUTPUT}"
-            exit 0
+          if [[ "${FORCE_SEARCH}" != "true" && -s "${handoff_file}" ]]; then
+            payload="$(curl --fail-with-body -sS --retry 3 --retry-all-errors \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-architecture-search.yml/runs?per_page=50")"
+            explicit_active="$(jq --argjson current_id "${GITHUB_RUN_ID}" '
+              [
+                .workflow_runs[]
+                | select(.id != $current_id)
+                | select(.event == "workflow_dispatch")
+                | select(
+                    .status == "pending"
+                    or .status == "queued"
+                    or .status == "in_progress"
+                    or .status == "waiting"
+                    or .status == "requested"
+                  )
+              ] | length
+            ' <<<"${payload}")"
+            if (( explicit_active > 0 )); then
+              echo "An explicit live-lineage architecture handoff is queued; generic search yields to it."
+              cycle="$(jq -r '.cycle // 0' "${STATE_DIR}/status.json" 2>/dev/null || echo 0)"
+              base_state_sha="$(git -C "${STATE_REPO}" rev-parse HEAD)"
+              jq -n \
+                --argjson cycle "${cycle}" \
+                '{
+                  run_search: false,
+                  matrix: [],
+                  cycle: $cycle,
+                  skip_reason: "explicit_live_lineage_handoff_owns_architecture_window"
+                }' > "${BUNDLE}/plan.json"
+              cp -a "${STATE_DIR}" "${BUNDLE}/state"
+              {
+                echo "run_search=false"
+                echo "matrix=[]"
+                echo "cycle=${cycle}"
+                echo "base_state_sha=${base_state_sha}"
+              } >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
           fi
 
           force_arg=()
