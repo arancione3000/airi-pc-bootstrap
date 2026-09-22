@@ -1,0 +1,61 @@
+name: Linting & checking links
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: readme-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  Awesome_Lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - name: Python lint
+        run: |
+          python -m pip install ruff==0.3.2
+          ruff check scripts
+          ruff format --check scripts
+      - name: Awesome lint
+        run: npx --yes awesome-lint@2.3.0 README.md
+      - name: Markdown lint
+        run: npx --yes markdownlint-cli2@0.18.1 "*.md"
+      - name: Check release timeline coverage
+        run: python scripts/build_release_timeline.py --check
+      - name: Check architecture figure mappings
+        run: python scripts/embed_architecture_figures.py --check
+      - name: Check repository formatting
+        run: >-
+          npx --yes prettier@3.6.2 --check
+          .github/workflows/main.yml
+          .github/workflows/markdown-links-config.json
+          CITATION.cff
+
+  Link_Check:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825a76410c181273ba90b1 # v7.0.1
+      - name: Check links
+        uses: gaurav-nelson/github-action-markdown-link-check@7481451f70251762f149d69596e3e276ebf2b236 # v1.0.9
+        with:
+          config-file: .github/workflows/markdown-links-config.json
+          use-verbose-mode: "yes"

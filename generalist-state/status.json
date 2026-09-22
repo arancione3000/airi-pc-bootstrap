@@ -203,9 +203,536 @@
   },
   "architecture_migration": null,
   "automatic_data_growth": {
+    "added_bytes": 3137618,
+    "added_files": 207,
+    "approved_dir": "/tmp/airi-generalist-state/autodata/approved",
+    "desired_domains": [
+      "reasoning",
+      "data",
+      "general",
+      "code"
+    ],
+    "domain_bytes": {
+      "code": 9004883,
+      "data": 15074691,
+      "general": 4779926,
+      "reasoning": 45949
+    },
+    "domain_files": {
+      "code": 654,
+      "data": 316,
+      "general": 414,
+      "reasoning": 11
+    },
+    "external_pretrained": false,
+    "manifest": "/tmp/airi-generalist-state/autodata/manifest.json",
     "ok": true,
-    "reason": "automatic data growth disabled",
-    "skipped": true
+    "queries": [
+      "reasoning dataset license:mit",
+      "mathematics proofs license:mit",
+      "csv dataset license:mit",
+      "json dataset license:mit",
+      "text corpus license:mit",
+      "educational corpus license:apache-2.0",
+      "algorithms license:mit",
+      "dataset license:cc0-1.0"
+    ],
+    "rejected": [
+      {
+        "path": "modeling/evaluate_gpt3.py",
+        "reason": "secret_like_content",
+        "repo": "hendrycks/math"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "xid32/SoundMind"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "OpenBioLink/ThoughtSource"
+      },
+      {
+        "path": "models/Gemini.py",
+        "reason": "secret_like_content",
+        "repo": "mathllm/MATH-V"
+      },
+      {
+        "path": "models/GPT4V.py",
+        "reason": "secret_like_content",
+        "repo": "mathllm/MATH-V"
+      },
+      {
+        "path": "models/GPT4.py",
+        "reason": "secret_like_content",
+        "repo": "mathllm/MATH-V"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "Paper-Proof/paperproof"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "lotchuazzz-crypto/papergraph-mcp"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "Intrafere/MOTO-Autonomous-ASI"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "turnstilelabs/adjoint"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "adaltas/node-csv"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "shencangsheng/easydb_app"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "SEC-API-io/sec-api-python"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "openbrewerydb/openbrewerydb"
+      },
+      {
+        "path": "fuzzy_logic/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "path": "ciphers/prehistoric_men.txt",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "path": "DIRECTORY.md",
+        "reason": "quality_v4:lexical_repetition",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "path": "docs/hacktober_2026_prep.md",
+        "reason": "quality_v4:lexical_repetition",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "path": "project_euler/problem_081/matrix.txt",
+        "reason": "quality_v4:low_alphabetic_ratio,too_few_words",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "path": "project_euler/problem_082/input.txt",
+        "reason": "quality_v4:low_alphabetic_ratio,too_few_words",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "path": "project_euler/problem_054/poker_hands.txt",
+        "reason": "quality_v4:lexical_repetition",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "path": "project_euler/problem_102/p102_triangles.txt",
+        "reason": "quality_v4:low_alphabetic_ratio,too_few_words",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "path": "project_euler/problem_067/triangle.txt",
+        "reason": "quality_v4:low_alphabetic_ratio,too_few_words",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "path": "project_euler/problem_099/base_exp.txt",
+        "reason": "quality_v4:low_alphabetic_ratio,too_few_words",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "path": "CONTRIBUTING.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "path": "blockchain/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "path": "src/algorithms/math/bits/README.fr-FR.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/image-processing/seam-carving/README.ru-RU.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/fourier-transform/README.fr-FR.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.uk-UA.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/bits/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.ru-RU.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/bits/README.zh-CN.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/image-processing/seam-carving/README.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/complex-number/README.fr-FR.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.he-IL.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/binary-floating-point/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.de-DE.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/fourier-transform/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.uz-UZ.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/complex-number/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.vi-VN.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/liu-hui/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/euclidean-algorithm/README.fr-FR.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.ar-AR.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/square-root/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.id-ID.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/euclidean-algorithm/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.ja-JP.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/graph/topological-sorting/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.es-ES.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/pascal-triangle/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.fr-FR.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/matrix/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.pt-BR.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/prime-factors/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.tr-TR.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/fast-powering/README.fr-FR.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.it-IT.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/prime-factors/README.zh-CN.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.pl-PL.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.ko-KR.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.zh-CN.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "src/algorithms/math/fast-powering/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "README.zh-TW.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "path": "apps/website/contents/algorithms/math.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/blog/2021-08-19-facebook-career-questions-and-answers.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/portal/src/server/router/offers/offers-profile-router.ts",
+        "reason": "secret_like_content",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/contents/resume.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/contents/software-engineering-interview-guide.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/contents/coding-interview-techniques.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/blog/2021-10-30-my-experience-working-as-a-meta-engineer.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/blog/2022-04-20-take-control-over-your-coding-interview.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/contents/coding-interview-prep.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/contents/behavioral-interview.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/contents/best-practice-questions.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/contents/choosing-between-companies.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/contents/behavioral-interview-senior-candidates.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/docusaurus.config.js",
+        "reason": "secret_like_content",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "apps/website/contents/behavioral-interview-questions.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "path": "DIRECTORY.md",
+        "reason": "quality_v4:lexical_repetition",
+        "repo": "TheAlgorithms/Java"
+      },
+      {
+        "path": "CONTRIBUTING.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "TheAlgorithms/Java"
+      },
+      {
+        "path": "README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "TheAlgorithms/Java"
+      },
+      {
+        "path": "README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "kdn251/interviews"
+      },
+      {
+        "path": "README-zh-cn.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "kdn251/interviews"
+      },
+      {
+        "path": "CODE_OF_CONDUCT.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "algorithm-visualizer/algorithm-visualizer"
+      },
+      {
+        "path": "README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "algorithm-visualizer/algorithm-visualizer"
+      },
+      {
+        "path": "CONTRIBUTING.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "algorithm-visualizer/algorithm-visualizer"
+      },
+      {
+        "path": "src/files/scratch-paper/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "algorithm-visualizer/algorithm-visualizer"
+      },
+      {
+        "path": "website/content.en/ChapterTwo/Math.md",
+        "reason": "quality_v4:lexical_repetition",
+        "repo": "halfrost/LeetCode-Go"
+      },
+      {
+        "path": "README.md",
+        "reason": "secret_like_content",
+        "repo": "halfrost/LeetCode-Go"
+      },
+      {
+        "path": "website/content/ChapterTwo/Math.md",
+        "reason": "quality_v4:lexical_repetition",
+        "repo": "halfrost/LeetCode-Go"
+      },
+      {
+        "path": "README_zh.md",
+        "reason": "secret_like_content",
+        "repo": "halfrost/LeetCode-Go"
+      },
+      {
+        "path": "README_old.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "halfrost/LeetCode-Go"
+      },
+      {
+        "path": "website/content.en/ChapterTwo/Array.md",
+        "reason": "quality_v4:lexical_repetition",
+        "repo": "halfrost/LeetCode-Go"
+      },
+      {
+        "path": "website/content/ChapterTwo/Array.md",
+        "reason": "quality_v4:lexical_repetition",
+        "repo": "halfrost/LeetCode-Go"
+      },
+      {
+        "path": "website/themes/book/exampleSite/content/posts/creating-a-new-theme.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "halfrost/LeetCode-Go"
+      },
+      {
+        "path": "website/content.en/ChapterThree/Binary_Indexed_Tree.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "halfrost/LeetCode-Go"
+      }
+    ],
+    "repositories_used": 12,
+    "total_bytes": 28905449,
+    "total_files": 1395,
+    "version": "generalist-data-growth-v4"
   },
   "champion": {
     "attention_type": "mha",
@@ -241,14 +768,14 @@
   "champion_report": {
     "bits_per_byte": 3.5308591285186504,
     "canary": {
-      "bits_per_byte": 3.0306263164261744,
+      "bits_per_byte": 2.993575953515262,
       "domain_bits_per_byte": {
-        "coding": 3.850603709371999,
-        "data": 4.661076555406254,
-        "language": 6.159104331280972,
-        "reasoning": 5.873640648072848,
-        "structured": 4.0168083177012655,
-        "tools": 1.6124195128346062
+        "coding": 3.852708847575544,
+        "data": 4.831965855229977,
+        "language": 6.089878700172399,
+        "reasoning": 4.765742720171187,
+        "structured": 3.9888087559343965,
+        "tools": 1.6080587462182399
       },
       "domain_generation_accuracy": {
         "coding": 0.0,
@@ -262,31 +789,31 @@
         "coding": 0.3188405797101449,
         "data": 0.2857142857142857,
         "language": 0.16666666666666666,
-        "reasoning": 0.15384615384615385,
+        "reasoning": 0.0,
         "structured": 0.05263157894736842,
-        "tools": 0.35374149659863946
+        "tools": 0.29931972789115646
       },
       "domain_loss": {
-        "coding": 4.003552656907302,
-        "data": 2.7692674909319197,
-        "language": 3.8810598200017754,
-        "reasoning": 3.3927478790283203,
-        "structured": 3.1183480834960937,
-        "tools": 1.484084707791688
+        "coding": 4.005741412823017,
+        "data": 2.8707972935267856,
+        "language": 3.8374384099786933,
+        "reasoning": 2.752800941467285,
+        "structured": 3.096611328125,
+        "tools": 1.480071020908043
       },
       "domain_nll_per_byte": {
-        "coding": 2.669035104604868,
-        "data": 3.2308120727539062,
-        "language": 4.269165802001953,
-        "reasoning": 4.071297454833984,
-        "structured": 2.7842393602643694,
-        "tools": 1.1176440392011477
+        "coding": 2.6704942752153444,
+        "data": 3.3492635091145835,
+        "language": 4.221182250976563,
+        "reasoning": 3.3033611297607424,
+        "structured": 2.76483154296875,
+        "tools": 1.1146213861159335
       },
       "domain_token_accuracy": {
         "coding": 0.15384615384615385,
-        "data": 0.42857142857142855,
+        "data": 0.2857142857142857,
         "language": 0.09090909090909091,
-        "reasoning": 0.0,
+        "reasoning": 0.16666666666666666,
         "structured": 0.28,
         "tools": 0.7213114754098361
       },
@@ -300,58 +827,58 @@
       "generation_probe": [
         {
           "domain": "coding",
-          "item": "coding:e9e77c33980e44fc",
+          "item": "coding:9f334ec79479b36e",
           "ok": false,
           "output": "defff_ccalal_calue xxxxxxxx):1",
           "similarity": 0.3188405797101449,
-          "target": "def canary_sub_125(x):\n    return x - 7"
+          "target": "def canary_sub_126(x):\n    return x - 8"
         },
         {
           "domain": "data",
-          "item": "data:1e1fbdb7bed98ae5",
+          "item": "data:8d7039c72087808a",
           "ok": false,
           "output": "1",
           "similarity": 0.2857142857142857,
-          "target": "199132"
+          "target": "199525"
         },
         {
           "domain": "language",
-          "item": "language:d9c8a5f3db4c2fd1",
+          "item": "language:f533b9a48a82222e",
           "ok": false,
           "output": "11",
           "similarity": 0.16666666666666666,
-          "target": "CANARY0125"
+          "target": "CANARY0126"
         },
         {
           "domain": "reasoning",
-          "item": "reasoning:546d97c895e41d77",
+          "item": "reasoning:543d88919c246ae2",
           "ok": false,
           "output": "11111111",
-          "similarity": 0.15384615384615385,
-          "target": "66391"
+          "similarity": 0.0,
+          "target": "66522"
         },
         {
           "domain": "structured",
-          "item": "structured:af697d7e65931c33",
+          "item": "structured:f6b4891883249d22",
           "ok": false,
           "output": "1111111111",
           "similarity": 0.05263157894736842,
-          "target": "{\"canary\":125,\"value\":66375}"
+          "target": "{\"canary\":126,\"value\":66506}"
         },
         {
           "domain": "tools",
-          "item": "tools:d5f5ba9675340242",
+          "item": "tools:413fe204228f6c71",
           "ok": false,
-          "output": "<tool_call>{\":{\":\":\":\":\":\":{\":\":\":{\"\":\":\":\":1111111111111111111111",
-          "similarity": 0.35374149659863946,
-          "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"66375*2\"}}</tool_call>"
+          "output": "<tool_call>{\":\":{\"\":\"\"\":\":\":\":\":\":{\"\":\":\":\":1111111111111111111111",
+          "similarity": 0.29931972789115646,
+          "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"66506*3\"}}</tool_call>"
         }
       ],
       "generation_repetition_rate": 0.8348623853211009,
-      "generation_similarity": 0.22190679358054313,
+      "generation_similarity": 0.187195473154937,
       "generation_unique_token_ratio": 0.1651376146788991,
-      "loss": 2.6103915046243107,
-      "nll_per_byte": 2.1006700865615753,
+      "loss": 2.578478644875919,
+      "nll_per_byte": 2.0749887319711537,
       "solved_items": [],
       "target_token_accuracy": 0.4338235294117647,
       "target_tokens": 136,
@@ -359,7 +886,7 @@
       "validation_target_bytes": 169,
       "validation_target_tokens": 136
     },
-    "canary_cycle": 125,
+    "canary_cycle": 126,
     "domain_bits_per_byte": {
       "coding": 3.0236824045084525,
       "data": 4.843641780328073,
@@ -411,7 +938,7 @@
     "finite": true,
     "fitness": {
       "canary_penalty": 18.174311926605505,
-      "canary_reward": 2.717902403679971,
+      "canary_reward": 2.579057121977546,
       "collapse_penalty": 20.0,
       "domain_balance_penalty": 3.8359039316949453,
       "efficiency_penalty": 0.02167716621942598,
@@ -420,10 +947,10 @@
       "quality_reward": 18.854761497239693,
       "repeated_run_penalty": 8.0,
       "repetition_penalty": 11.395348837209303,
-      "score": -30.74592121574517,
+      "score": -30.884766497447597,
       "teacher_reward": 2.442724458204334,
       "total_penalty": 61.42724186172918,
-      "total_reward": 30.68132064598401
+      "total_reward": 30.542475364281582
     },
     "generated_solved_items": [],
     "generation_dominant_token_fraction": 0.23255813953488372,
@@ -487,7 +1014,7 @@
     "loss": 3.2320544016010344,
     "nll_per_byte": 2.447405049887048,
     "parameters": 115328,
-    "score": -30.74592121574517,
+    "score": -30.884766497447597,
     "solved_items": [],
     "target_token_accuracy": 0.4071207430340557,
     "target_tokens": 1292,
@@ -514,22 +1041,22 @@
   },
   "curriculum_memory": {
     "added": 8,
-    "cycle": 125,
+    "cycle": 126,
     "domains": {
-      "coding": 141,
-      "data": 243,
-      "language": 213,
-      "reasoning": 250,
-      "structured": 125,
-      "tools": 127
+      "coding": 142,
+      "data": 245,
+      "language": 214,
+      "reasoning": 252,
+      "structured": 126,
+      "tools": 128
     },
     "extra_rows_considered": 10,
-    "max_rows": 5000,
+    "max_rows": 8000,
     "ok": true,
-    "stored": 1099,
+    "stored": 1107,
     "validation_overlap": []
   },
-  "cycle": 125,
+  "cycle": 126,
   "grounded_pretraining": {
     "adaptive_budget": true,
     "corpus": {
@@ -635,8 +1162,12 @@
     "updated_at": 1790116088.4028635,
     "version": "airi-single-lineage-v1"
   },
+  "lineage_adoption": {
+    "accepted": false,
+    "reason": "no externally approved trained descendant"
+  },
   "mathesis": {
-    "curriculum_cursor": 833,
+    "curriculum_cursor": 835,
     "mathesis_generation": 15,
     "ok": true,
     "policy": "persisted MATHESIS metadata is untrusted; current verifier re-proof is required before mathematics may influence generalist curriculum/architecture, and generalist promotion remains independently benchmark-gated",
@@ -732,13 +1263,16 @@
     "weight_inheritance": "layout-aware Net2Grow + identity residual depth expansion"
   },
   "progressive_scaling": {
-    "candidate_count": 0,
-    "candidate_generated": false,
+    "candidate_count": 2,
+    "candidate_generated": true,
     "current_parameters": 7021248,
     "maximum_scale_budget_multiplier": 1.75,
     "minimum_scale_budget_multiplier": 1.25,
-    "strategies": [],
-    "target_parameters": null,
+    "strategies": [
+      "progressive_scale",
+      "progressive_scale_balanced"
+    ],
+    "target_parameters": 12000000,
     "tiers": [
       250000,
       500000,
@@ -763,9 +1297,9 @@
   },
   "promoted": false,
   "promotion_candidate": null,
-  "promotion_reason": "no finalist passed every independent research gate",
+  "promotion_reason": "no externally approved trained descendant",
   "rotating_canary": {
-    "cycle": 125,
+    "cycle": 126,
     "domains": [
       "language",
       "coding",
@@ -830,7 +1364,7 @@
     "specialists": {}
   },
   "trials": [],
-  "updated_at": 1790118034.2312248,
+  "updated_at": 1790118691.2990844,
   "version": "airi-generalist-free-speed-v5",
   "winner": null
 }
