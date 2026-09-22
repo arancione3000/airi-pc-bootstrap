@@ -7,10 +7,13 @@ import json
 import pytest
 
 from generalist_lm.bootstrap_data import (
+    BootstrapDataBundle,
     OASST1_REVISION,
     SOURCES,
     _oasst_conversations,
     _parse_oasst,
+    load_bootstrap_replay,
+    write_bootstrap_replay,
 )
 from generalist_lm.bootstrap_training import (
     _anti_collapse_rescue_gate,
@@ -19,6 +22,7 @@ from generalist_lm.bootstrap_training import (
     _filter_protected_replay,
 )
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
+from generalist_lm.pretraining import CorpusDocument
 from generalist_lm.phase5_diagnostics import (
     PHASE5_PROBES,
     degeneration_gate,
@@ -101,6 +105,119 @@ def test_oasst_parser_excludes_synthetic_and_builds_human_dialogue():
     conversations = _oasst_conversations(parsed)
     assert len(conversations) == 1
     assert conversations[0][1][-1]["content"] == "A cat sleeps."
+
+
+def test_bootstrap_replay_is_bounded_training_only_and_roundtrips(tmp_path):
+    tokenizer = ByteTokenizer()
+    documents = [
+        CorpusDocument(
+            source="tatoeba-en-cc0:1:en",
+            text="A calm cat sleeps beside the warm window in the morning.",
+            sha256=__import__("hashlib").sha256(
+                b"A calm cat sleeps beside the warm window in the morning."
+            ).hexdigest(),
+            bytes=len(b"A calm cat sleeps beside the warm window in the morning."),
+            domain="language",
+        ),
+        CorpusDocument(
+            source="tatoeba-it-ccby:2:it",
+            text="Un gatto tranquillo dorme accanto alla finestra durante la mattina.",
+            sha256=__import__("hashlib").sha256(
+                "Un gatto tranquillo dorme accanto alla finestra durante la mattina.".encode()
+            ).hexdigest(),
+            bytes=len(
+                "Un gatto tranquillo dorme accanto alla finestra durante la mattina.".encode()
+            ),
+            domain="language",
+        ),
+        CorpusDocument(
+            source="oasst1-human:3:en",
+            text="I can explain that idea with a short and clear example.",
+            sha256=__import__("hashlib").sha256(
+                b"I can explain that idea with a short and clear example."
+            ).hexdigest(),
+            bytes=len(b"I can explain that idea with a short and clear example."),
+            domain="dialogue",
+        ),
+    ]
+    heldout = CorpusDocument(
+        source="heldout:never",
+        text="THIS MUST NOT ENTER TRAINING REPLAY.",
+        sha256=__import__("hashlib").sha256(
+            b"THIS MUST NOT ENTER TRAINING REPLAY."
+        ).hexdigest(),
+        bytes=len(b"THIS MUST NOT ENTER TRAINING REPLAY."),
+        domain="language",
+    )
+    bundle = BootstrapDataBundle(
+        train_documents=documents,
+        validation_documents=[heldout],
+        sft_train=[SFTExample([
+            {"role": "user", "content": "Say hello naturally."},
+            {"role": "assistant", "content": "Hello! Nice to meet you."},
+        ])],
+        sft_validation=[SFTExample([
+            {"role": "user", "content": "Held out question"},
+            {"role": "assistant", "content": "Held out answer"},
+        ])],
+        manifest={"manifest_content_sha256": "abc123"},
+    )
+
+    first = write_bootstrap_replay(
+        bundle,
+        tokenizer,
+        output_dir=tmp_path,
+        max_tokens=100_000,
+        max_sft_conversations=8,
+    )
+    loaded = load_bootstrap_replay(tmp_path)
+
+    assert loaded.manifest["available"] is True
+    assert first["held_out_phase5_suite_excluded"] is True
+    assert first["validation_documents_excluded"] is True
+    assert first["sft_validation_excluded"] is True
+    assert {row.source for row in loaded.documents} == {
+        "tatoeba-en-cc0:1:en",
+        "tatoeba-it-ccby:2:it",
+        "oasst1-human:3:en",
+    }
+    assert all("THIS MUST NOT ENTER" not in row.text for row in loaded.documents)
+    assert len(loaded.sft_train) == 1
+    assert loaded.sft_train[0].messages[-1]["content"] == "Hello! Nice to meet you."
+
+    # gzip output is deterministic (mtime=0), making the replay immutable/hashable.
+    second = write_bootstrap_replay(
+        bundle,
+        tokenizer,
+        output_dir=tmp_path,
+        max_tokens=100_000,
+        max_sft_conversations=8,
+    )
+    assert first["corpus_sha256"] == second["corpus_sha256"]
+    assert first["sft_sha256"] == second["sft_sha256"]
+
+
+def test_bootstrap_replay_fails_closed_on_digest_tampering(tmp_path):
+    tokenizer = ByteTokenizer()
+    text = "A sufficiently natural training sentence for replay integrity checks."
+    bundle = BootstrapDataBundle(
+        train_documents=[CorpusDocument(
+            source="tatoeba-en-cc0:1:en",
+            text=text,
+            sha256=__import__("hashlib").sha256(text.encode()).hexdigest(),
+            bytes=len(text.encode()),
+            domain="language",
+        )],
+        validation_documents=[],
+        sft_train=[],
+        sft_validation=[],
+        manifest={"manifest_content_sha256": "abc123"},
+    )
+    write_bootstrap_replay(bundle, tokenizer, output_dir=tmp_path)
+    corpus = tmp_path / "replay-corpus.jsonl.gz"
+    corpus.write_bytes(corpus.read_bytes() + b"tamper")
+    with pytest.raises(RuntimeError, match="digest mismatch"):
+        load_bootstrap_replay(tmp_path)
 
 
 def test_anti_collapse_objective_never_penalizes_correct_repetition():

@@ -16,6 +16,7 @@ from .training import SFTExample
 
 
 BOOTSTRAP_DATA_VERSION = "phase5-bootstrap-data-v1"
+BOOTSTRAP_REPLAY_VERSION = "phase5-bootstrap-replay-v1"
 OASST1_REVISION = "cdc771654ed9e7ad1b4cf4d94ae38272daa48437"
 
 SOURCES: tuple[dict[str, Any], ...] = (
@@ -80,6 +81,13 @@ class BootstrapDataBundle:
     validation_documents: list[CorpusDocument]
     sft_train: list[SFTExample]
     sft_validation: list[SFTExample]
+    manifest: dict[str, Any]
+
+
+@dataclass
+class BootstrapReplayBundle:
+    documents: list[CorpusDocument]
+    sft_train: list[SFTExample]
     manifest: dict[str, Any]
 
 
@@ -332,6 +340,214 @@ def _split_sft(rows: list[SFTExample]) -> tuple[list[SFTExample], list[SFTExampl
     if rows and not validation:
         validation.append(train.pop())
     return train, validation
+
+
+def _replay_bucket(document: CorpusDocument) -> str:
+    source = str(document.source)
+    if source.startswith("tatoeba-en-"):
+        return "language-en"
+    if source.startswith("tatoeba-it-"):
+        return "language-it"
+    if source.startswith("oasst1-human:"):
+        return "dialogue"
+    return str(getattr(document, "domain", "general") or "general")
+
+
+def _bounded_replay_documents(
+    documents: list[CorpusDocument],
+    tokenizer,
+    *,
+    max_tokens: int,
+) -> tuple[list[CorpusDocument], dict[str, int]]:
+    """Keep a deterministic bilingual/dialogue replay without holdout rows."""
+    max_tokens = max(10_000, int(max_tokens))
+    target = {
+        "language-en": int(max_tokens * 0.4),
+        "language-it": int(max_tokens * 0.4),
+        "dialogue": max_tokens - int(max_tokens * 0.8),
+    }
+    grouped: dict[str, list[CorpusDocument]] = {}
+    for document in documents:
+        grouped.setdefault(_replay_bucket(document), []).append(document)
+
+    selected: list[CorpusDocument] = []
+    counts: dict[str, int] = {}
+    selected_hashes: set[str] = set()
+    for bucket in ("language-en", "language-it", "dialogue"):
+        quota = target[bucket]
+        used = 0
+        rows = sorted(
+            grouped.get(bucket, []),
+            key=lambda row: _stable_score("bootstrap-replay", row.sha256),
+        )
+        for row in rows:
+            needed = len(tokenizer.encode(row.text)) + 1
+            if selected and used + needed > quota:
+                continue
+            if row.sha256 in selected_hashes:
+                continue
+            selected.append(row)
+            selected_hashes.add(row.sha256)
+            used += needed
+            if used >= quota:
+                break
+        counts[bucket] = used
+
+    # If one language bucket is sparse, fill remaining budget deterministically
+    # from any already-approved training document without crossing holdouts.
+    used_total = sum(counts.values())
+    if used_total < max_tokens:
+        fallback = sorted(
+            documents,
+            key=lambda row: _stable_score("bootstrap-replay-fallback", row.sha256),
+        )
+        for row in fallback:
+            if row.sha256 in selected_hashes:
+                continue
+            needed = len(tokenizer.encode(row.text)) + 1
+            if used_total + needed > max_tokens:
+                continue
+            selected.append(row)
+            selected_hashes.add(row.sha256)
+            used_total += needed
+            bucket = _replay_bucket(row)
+            counts[bucket] = counts.get(bucket, 0) + needed
+            if used_total >= max_tokens:
+                break
+    return selected, counts
+
+
+def _gzip_jsonl(rows: list[dict[str, Any]]) -> bytes:
+    payload = "\n".join(
+        json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        for row in rows
+    ).encode("utf-8")
+    if payload:
+        payload += b"\n"
+    return gzip.compress(payload, compresslevel=9, mtime=0)
+
+
+def write_bootstrap_replay(
+    bundle: BootstrapDataBundle,
+    tokenizer,
+    *,
+    output_dir: str | Path,
+    max_tokens: int = 1_000_000,
+    max_sft_conversations: int = 512,
+) -> dict[str, Any]:
+    """Persist a bounded immutable training-only replay for future descendants."""
+    root = Path(output_dir).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    documents, token_counts = _bounded_replay_documents(
+        list(bundle.train_documents),
+        tokenizer,
+        max_tokens=max_tokens,
+    )
+    sft_rows = list(bundle.sft_train)[: max(0, int(max_sft_conversations))]
+
+    corpus_rows = [
+        {
+            "source": row.source,
+            "text": row.text,
+            "sha256": row.sha256,
+            "bytes": int(row.bytes),
+            "domain": str(row.domain),
+        }
+        for row in documents
+    ]
+    sft_payload = [{"messages": row.messages} for row in sft_rows]
+
+    corpus_bytes = _gzip_jsonl(corpus_rows)
+    sft_bytes = _gzip_jsonl(sft_payload)
+    corpus_path = root / "replay-corpus.jsonl.gz"
+    sft_path = root / "replay-sft.jsonl.gz"
+    corpus_path.write_bytes(corpus_bytes)
+    sft_path.write_bytes(sft_bytes)
+
+    manifest = {
+        "schema": 1,
+        "version": BOOTSTRAP_REPLAY_VERSION,
+        "source_manifest_sha256": str(
+            bundle.manifest.get("manifest_content_sha256") or ""
+        ),
+        "held_out_phase5_suite_excluded": True,
+        "validation_documents_excluded": True,
+        "sft_validation_excluded": True,
+        "user_private_data_used": False,
+        "external_model_distillation_used": False,
+        "documents": len(documents),
+        "sft_conversations": len(sft_rows),
+        "selected_tokens": int(sum(token_counts.values())),
+        "token_counts_by_bucket": dict(sorted(token_counts.items())),
+        "corpus_file": corpus_path.name,
+        "corpus_sha256": _sha256_bytes(corpus_bytes),
+        "sft_file": sft_path.name,
+        "sft_sha256": _sha256_bytes(sft_bytes),
+    }
+    manifest_path = root / "replay-manifest.json"
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def load_bootstrap_replay(
+    replay_dir: str | Path,
+) -> BootstrapReplayBundle:
+    root = Path(replay_dir).expanduser().resolve()
+    manifest_path = root / "replay-manifest.json"
+    if not manifest_path.is_file():
+        return BootstrapReplayBundle([], [], {
+            "version": BOOTSTRAP_REPLAY_VERSION,
+            "available": False,
+        })
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if str(manifest.get("version")) != BOOTSTRAP_REPLAY_VERSION:
+        raise RuntimeError("unsupported bootstrap replay version")
+    for key in (
+        "held_out_phase5_suite_excluded",
+        "validation_documents_excluded",
+        "sft_validation_excluded",
+    ):
+        if manifest.get(key) is not True:
+            raise RuntimeError(f"bootstrap replay fail-closed invariant missing: {key}")
+
+    corpus_path = root / str(manifest["corpus_file"])
+    sft_path = root / str(manifest["sft_file"])
+    corpus_raw = corpus_path.read_bytes()
+    sft_raw = sft_path.read_bytes()
+    if _sha256_bytes(corpus_raw) != str(manifest.get("corpus_sha256")):
+        raise RuntimeError("bootstrap replay corpus digest mismatch")
+    if _sha256_bytes(sft_raw) != str(manifest.get("sft_sha256")):
+        raise RuntimeError("bootstrap replay SFT digest mismatch")
+
+    documents: list[CorpusDocument] = []
+    for line in gzip.decompress(corpus_raw).decode("utf-8").splitlines():
+        row = json.loads(line)
+        text = str(row["text"])
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        if digest != str(row["sha256"]):
+            raise RuntimeError("bootstrap replay document digest mismatch")
+        documents.append(CorpusDocument(
+            source=str(row["source"]),
+            text=text,
+            sha256=digest,
+            bytes=int(row["bytes"]),
+            domain=str(row.get("domain") or "language"),
+        ))
+
+    sft_train: list[SFTExample] = []
+    for line in gzip.decompress(sft_raw).decode("utf-8").splitlines():
+        row = json.loads(line)
+        messages = row.get("messages")
+        if not isinstance(messages, list) or not messages:
+            raise RuntimeError("bootstrap replay SFT row is malformed")
+        sft_train.append(SFTExample(messages))
+
+    out_manifest = dict(manifest)
+    out_manifest["available"] = True
+    return BootstrapReplayBundle(documents, sft_train, out_manifest)
 
 
 def build_bootstrap_bundle(

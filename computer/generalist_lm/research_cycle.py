@@ -1034,6 +1034,7 @@ def _train_genome(
     precision: str = "fp32",
     pretrain_documents: list[CorpusDocument] | None = None,
     pretrain_steps: int = 0,
+    pretraining_domain_weights: dict[str, float] | None = None,
     repetition_unlikelihood_weight: float = 0.0,
     eos_loss_weight: float = 1.0,
 ) -> tuple[GeneralistRuntime, dict[str, Any]]:
@@ -1069,7 +1070,11 @@ def _train_genome(
             weight_decay=0.01,
             seed=seed + 101,
             device=device,
-            domain_weights=_pretraining_domain_weights(domain_weights),
+            domain_weights=(
+                dict(pretraining_domain_weights)
+                if pretraining_domain_weights is not None
+                else _pretraining_domain_weights(domain_weights)
+            ),
             repetition_unlikelihood_weight=repetition_unlikelihood_weight,
             eos_loss_weight=eos_loss_weight,
         )

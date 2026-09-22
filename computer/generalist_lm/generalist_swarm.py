@@ -19,7 +19,7 @@ from .airi_pc_lab import (
     summarize_lab_learning,
 )
 from .corpus import repository_corpus
-from .curriculum import DOMAINS, validation_rows
+from .curriculum import DOMAINS, ResearchRow, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
 from .evolution import (
     GeneralistGenome,
@@ -29,6 +29,7 @@ from .evolution import (
 )
 from .generalist_data_growth import grow_generalist_data
 from .language_bridge import build_language_bridge_rows
+from .bootstrap_data import load_bootstrap_replay
 from .mathesis_bridge import mathesis_signals
 from .model import estimate_parameter_count, parameter_count
 from .pretraining import CorpusDocument, load_local_corpus
@@ -471,6 +472,7 @@ def _corpus_documents(
     *,
     max_repo_bytes: int,
     max_external_bytes: int,
+    bootstrap_replay_documents: Sequence[CorpusDocument] | None = None,
 ) -> tuple[list[CorpusDocument], dict[str, Any]]:
     repo_docs, repo_manifest = repository_corpus(
         repo_root,
@@ -530,16 +532,105 @@ def _corpus_documents(
             "domain_documents": external_domain_documents,
         }
 
+    replay_documents = list(bootstrap_replay_documents or [])
+    documents.extend(replay_documents)
+
     # Cross-source content dedup.
     unique: dict[str, CorpusDocument] = {}
     for row in documents:
         unique.setdefault(row.sha256, row)
     final = list(unique.values())
+    replay_domains: dict[str, int] = {}
+    for row in replay_documents:
+        replay_domains[row.domain] = replay_domains.get(row.domain, 0) + 1
     return final, {
         "repository": repo_manifest.to_dict(),
         "external": external_report,
+        "bootstrap_replay": {
+            "documents": len(replay_documents),
+            "bytes": sum(row.bytes for row in replay_documents),
+            "domain_documents": dict(sorted(replay_domains.items())),
+        },
         "documents": len(final),
         "bytes": sum(row.bytes for row in final),
+    }
+
+
+def _language_rescue_weights(
+    base_task_weights: dict[str, float] | None,
+    documents: Sequence[CorpusDocument],
+    signals: set[str],
+) -> tuple[dict[str, float], dict[str, float] | None, dict[str, Any]]:
+    rescue = bool(
+        "language_gap" in signals
+        or "language_collapse" in signals
+        or "autoregressive_collapse" in signals
+    )
+    task_weights = dict(base_task_weights or {})
+    if not rescue:
+        return task_weights, None, {
+            "enabled": False,
+            "reason": "no language collapse signal",
+        }
+
+    # SFT remains domain-balanced by default; language gets two extra replay
+    # copies, while the other weak domains are capped so they cannot drown it.
+    for domain in ("coding", "data", "reasoning", "structured", "tools"):
+        if domain in task_weights:
+            task_weights[domain] = max(1.0, min(2.0, float(task_weights[domain])))
+    task_weights["language"] = max(3.0, float(task_weights.get("language", 1.0)))
+
+    available = sorted({
+        str(getattr(document, "domain", "general") or "general")
+        for document in documents
+    })
+    natural = [
+        domain for domain in available
+        if domain == "general"
+        or domain == "dialogue"
+        or domain.startswith("language")
+    ]
+    pretrain_weights: dict[str, float] = {}
+    natural_mass = 0.68
+    if natural:
+        share = natural_mass / len(natural)
+        for domain in natural:
+            pretrain_weights[domain] = share
+
+    fixed = {
+        "code": 0.10,
+        "reasoning": 0.14,
+        "data": 0.05,
+    }
+    for domain, weight in fixed.items():
+        if domain in available:
+            pretrain_weights[domain] = weight
+
+    assigned = sum(pretrain_weights.values())
+    others = [domain for domain in available if domain not in pretrain_weights]
+    remaining = max(0.01, 1.0 - assigned)
+    if others:
+        each = remaining / len(others)
+        for domain in others:
+            pretrain_weights[domain] = each
+    elif pretrain_weights:
+        scale = 1.0 / sum(pretrain_weights.values())
+        pretrain_weights = {
+            domain: value * scale
+            for domain, value in pretrain_weights.items()
+        }
+
+    return task_weights, pretrain_weights, {
+        "enabled": True,
+        "signals": sorted(signals),
+        "sft_language_weight": float(task_weights["language"]),
+        "pretraining_domain_weights": dict(sorted(pretrain_weights.items())),
+        "natural_domain_mass": float(sum(
+            pretrain_weights.get(domain, 0.0)
+            for domain in natural
+        )),
+        "natural_domains": natural,
+        "available_domains": available,
     }
 
 
@@ -682,18 +773,34 @@ def run_candidate(
 
     memory = CurriculumMemory(root, max_rows=20_000)
     replay_rows = memory.rows()
+    bootstrap_replay = load_bootstrap_replay(root / "bootstrap-data")
     documents, corpus_report = _corpus_documents(
         repo_root,
         root,
         max_repo_bytes=max_repo_bytes,
         max_external_bytes=max_external_bytes,
+        bootstrap_replay_documents=bootstrap_replay.documents,
+    )
+    signals = set(str(value) for value in (plan.get("signals") or []))
+    language_rescue = bool(
+        "language_gap" in signals
+        or "language_collapse" in signals
+        or "autoregressive_collapse" in signals
     )
     language_bridge_rows = build_language_bridge_rows(
         documents,
-        max_rows=(32 if "language_gap" in set(plan.get("signals") or []) else 16),
+        max_rows=(256 if language_rescue else 16),
         seed=int(plan["cycle"]),
     )
-    training_replay_rows = replay_rows + language_bridge_rows
+    bootstrap_sft_rows = [
+        ResearchRow("language", list(example.messages))
+        for example in bootstrap_replay.sft_train
+    ]
+    training_replay_rows = (
+        replay_rows
+        + bootstrap_sft_rows
+        + language_bridge_rows
+    )
 
     if genome.tokenizer_version == "bpe-v1":
         if row.get("bpe_vocab_target") is not None:
@@ -767,7 +874,13 @@ def run_candidate(
         scale_multiplier=scale_budget_multiplier,
     )
 
-    signals = set(str(value) for value in (plan.get("signals") or []))
+    task_domain_weights, pretraining_domain_weights, rescue_report = (
+        _language_rescue_weights(
+            dict(plan.get("domain_weights") or {}),
+            documents,
+            signals,
+        )
+    )
     language_collapse = bool(
         "language_collapse" in signals
         or "autoregressive_collapse" in signals
@@ -794,7 +907,7 @@ def run_candidate(
             seed=max(1, int(seed)),
             device="cpu",
             replay_rows=training_replay_rows,
-            domain_weights=dict(plan.get("domain_weights") or {}),
+            domain_weights=task_domain_weights,
             source_model=source_runtime.model,
             source_tokenizer=source_runtime.tokenizer,
             tokenizer=tokenizer,
@@ -802,6 +915,7 @@ def run_candidate(
             precision="fp32",
             pretrain_documents=documents,
             pretrain_steps=effective_pretrain_steps,
+            pretraining_domain_weights=pretraining_domain_weights,
             repetition_unlikelihood_weight=anti_collapse_weight,
             eos_loss_weight=anti_collapse_eos_weight,
         )
@@ -958,6 +1072,9 @@ def run_candidate(
         "checkpoint_dir": "best-checkpoint",
         "external_pretrained": False,
         "language_bridge_rows": len(language_bridge_rows),
+        "bootstrap_replay_sft_rows": len(bootstrap_sft_rows),
+        "bootstrap_replay_manifest": bootstrap_replay.manifest,
+        "language_rescue": rescue_report,
         "anti_collapse_objective": {
             "enabled": bool(anti_collapse_weight > 0.0),
             "repetition_unlikelihood_weight": float(anti_collapse_weight),

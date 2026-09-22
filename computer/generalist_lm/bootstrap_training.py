@@ -19,7 +19,7 @@ from .airi_pc_lab import (
     snapshot_airi_pc_lab,
     run_airi_pc_lab_probe,
 )
-from .bootstrap_data import build_bootstrap_bundle
+from .bootstrap_data import build_bootstrap_bundle, write_bootstrap_replay
 from .curriculum import train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
 from .phase5_diagnostics import (
@@ -665,6 +665,13 @@ def run_segment(
             f"selected={bundle.manifest.get('actual_selected_tokens')} target={target_tokens}"
         )
     _atomic_json(manifest_path, bundle.manifest)
+    replay_manifest = write_bootstrap_replay(
+        bundle,
+        champion_runtime.tokenizer,
+        output_dir=bootstrap_root,
+        max_tokens=min(1_000_000, max(250_000, int(target_tokens // 4))),
+        max_sft_conversations=512,
+    )
 
     if not before_path.is_file():
         _atomic_json(before_path, evaluate_phase5_language(champion_runtime))
@@ -734,6 +741,7 @@ def run_segment(
     if any(not rows for rows in stage_blocks.values()) or not validation_blocks:
         raise RuntimeError("bootstrap corpus did not produce curriculum train/validation blocks")
 
+    progress["bootstrap_replay"] = replay_manifest
     progress["curriculum_schedule"] = [
         "A_frequent_word_contexts",
         "B_short_sentence_completion",
