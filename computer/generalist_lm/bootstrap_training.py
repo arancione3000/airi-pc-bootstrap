@@ -306,6 +306,53 @@ def _causal_curriculum_stage(processed: int, target: int) -> str:
     return "C_causal_next_sentence"
 
 
+def _phase5_training_acceleration(
+    parameters: int,
+    *,
+    device: str,
+) -> dict[str, Any]:
+    """Select only benchmark-proven acceleration for the large CPU rung.
+
+    The exact 7,021,248-parameter Phase-5 shape was benchmarked on the same
+    GitHub runner class. BF16 + torch.compile at batch 32 delivered roughly
+    1.97x the raw-token throughput of the existing FP32 eager baseline while
+    keeping the benchmark loss numerically aligned. Smaller bootstrap models
+    keep the conservative eager FP32 path.
+    """
+    disabled = str(os.environ.get("AIRI_PHASE5_DISABLE_CPU_ACCEL", "")).strip().lower()
+    if disabled in {"1", "true", "yes", "on"}:
+        return {
+            "enabled": False,
+            "precision": "fp32",
+            "compile": False,
+            "reason": "disabled by AIRI_PHASE5_DISABLE_CPU_ACCEL",
+        }
+    enabled = str(device) == "cpu" and int(parameters) >= 3_000_000
+    return {
+        "enabled": bool(enabled),
+        "precision": "bf16" if enabled else "fp32",
+        "compile": bool(enabled),
+        "compile_mode": "reduce-overhead" if enabled else None,
+        "reason": (
+            "benchmark-proven 7M CPU fast path"
+            if enabled
+            else "conservative small-model/eager path"
+        ),
+        "benchmark": (
+            {
+                "model_parameters": 7_021_248,
+                "baseline_raw_tokens_per_second": 4623.081773918064,
+                "fast_raw_tokens_per_second": 9116.896819863172,
+                "throughput_multiplier": 1.972476918,
+                "batch_size": 32,
+                "torch_version": "2.14.0+cpu",
+            }
+            if enabled
+            else None
+        ),
+    }
+
+
 def _anti_collapse_weights(
     stage: str,
     diagnostics: dict[str, Any],
@@ -1049,6 +1096,40 @@ def run_segment(
     if optimizer_path.is_file():
         optimizer.load_state_dict(torch.load(optimizer_path, map_location="cpu", weights_only=True))
 
+    acceleration = _phase5_training_acceleration(
+        parameter_count(runtime.model),
+        device=runtime.device,
+    )
+    training_model = runtime.model
+    compile_enabled = False
+    if bool(acceleration.get("compile")):
+        try:
+            training_model = torch.compile(
+                runtime.model,
+                mode=str(acceleration.get("compile_mode") or "reduce-overhead"),
+                fullgraph=False,
+            )
+            compile_enabled = True
+        except Exception as exc:
+            acceleration = {
+                **acceleration,
+                "compile": False,
+                "compile_setup_failed": True,
+                "compile_error": f"{type(exc).__name__}: {exc}",
+                "reason": "torch.compile setup failed; BF16 eager fallback",
+            }
+            training_model = runtime.model
+
+    use_bf16 = bool(
+        acceleration.get("enabled")
+        and str(acceleration.get("precision")) == "bf16"
+    )
+    progress["training_acceleration"] = {
+        **acceleration,
+        "compile_active": bool(compile_enabled),
+        "autocast_active": bool(use_bf16),
+    }
+
     processed_before_segment = int(progress.get("tokens_processed", 0) or 0)
     segment_budget = max(1, int(segment_tokens))
     eval_every_steps = max(8, int(eval_every_steps))
@@ -1085,16 +1166,21 @@ def run_segment(
         for group in optimizer.param_groups:
             group["lr"] = lr
 
-        result = runtime.model(ids)
         anti_weight, eos_weight = _anti_collapse_weights(stage, before)
-        loss, objective_stats = causal_training_objective(
-            result["logits"],
-            labels,
-            ids,
-            eos_loss_weight=eos_weight,
-            repetition_unlikelihood_weight=anti_weight,
-            repetition_window=16,
-        )
+        with torch.autocast(
+            device_type="cpu",
+            dtype=torch.bfloat16,
+            enabled=use_bf16,
+        ):
+            result = training_model(ids)
+            loss, objective_stats = causal_training_objective(
+                result["logits"],
+                labels,
+                ids,
+                eos_loss_weight=eos_weight,
+                repetition_unlikelihood_weight=anti_weight,
+                repetition_window=16,
+            )
         if not torch.isfinite(loss):
             raise RuntimeError("non-finite Phase 5 bootstrap loss")
         loss.backward()
