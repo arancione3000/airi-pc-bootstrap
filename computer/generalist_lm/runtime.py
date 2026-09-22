@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from .bpe_tokenizer import BPETokenizer
-from .model import CausalTransformerLM, GeneralistLMConfig, parameter_count
+from .model import GeneralistLMConfig, parameter_count
+from .model_registry import build_causal_lm
 from .tokenizer import ASSISTANT, EOS, ByteTokenizer
 from .tool_protocol import ToolCall, parse_tool_call, tool_prompt
 
@@ -33,7 +34,7 @@ class GeneralistRuntime:
         config = (config or GeneralistLMConfig()).validate()
         if tokenizer is None and config.tokenizer_version != "byte-v1":
             raise ValueError("fresh non-byte models require an explicit tokenizer")
-        return cls(CausalTransformerLM(config), config, tokenizer=tokenizer, device=device)
+        return cls(build_causal_lm(config), config, tokenizer=tokenizer, device=device)
 
     @classmethod
     def from_checkpoint(cls, state_dir: str | Path, *, device: str = "cpu") -> "GeneralistRuntime":
@@ -69,7 +70,7 @@ class GeneralistRuntime:
             elif declared_digest not in {None, ""}:
                 raise ValueError("byte-v1 checkpoint metadata must not declare a tokenizer digest")
 
-        model = CausalTransformerLM(config)
+        model = build_causal_lm(config)
         model.load_state_dict(torch.load(model_path, map_location="cpu", weights_only=True))
         return cls(model, config, tokenizer=tokenizer, device=device)
 
