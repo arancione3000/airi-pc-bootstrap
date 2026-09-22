@@ -667,7 +667,7 @@ def _adaptive_pretrain_steps(
         * stage_multiplier
         * max(1.0, float(scale_multiplier))
     ))
-    return min(24, max(requested, effective))
+    return min(48, max(requested, effective))
 
 
 def _domain_regression(
@@ -1511,7 +1511,7 @@ def finalize_swarm(
         },
         "grounded_pretraining": {
             "adaptive_budget": True,
-            "max_steps_per_stage": 24,
+            "max_steps_per_stage": 48,
             "domain_balanced_sampling": True,
             "corpus": {
                 "enabled": True,
