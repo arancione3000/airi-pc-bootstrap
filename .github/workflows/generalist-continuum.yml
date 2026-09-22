@@ -353,12 +353,18 @@ jobs:
           cp -a generalist-state/. "${STATE_DIR}/" || true
           cp -a /tmp/plan/state/. "${STATE_DIR}/"
 
-      - name: External verifier and champion promotion
+      - name: External verifier and single-lineage adoption
         run: |
-          python -m generalist_lm.generalist_swarm finalize             "${STATE_DIR}" /tmp/plan/plan.json             /tmp/final-status.json /tmp/finalists
+          python -m generalist_lm.generalist_swarm finalize \
+            "${STATE_DIR}" /tmp/plan/plan.json \
+            /tmp/final-status.json /tmp/finalists \
+            --single-lineage
           jq -e '
             .ok == true
             and .policy.candidate_can_self_promote == false
+            and .policy.direct_research_checkpoint_promotion == false
+            and .policy.persistent_research_checkpoints == false
+            and .policy.single_lineage_migration_required == true
             and .policy.external_reducer == true
             and .policy.external_pretrained == false
           ' /tmp/final-status.json
