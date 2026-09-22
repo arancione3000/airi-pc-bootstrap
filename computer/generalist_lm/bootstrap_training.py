@@ -974,7 +974,12 @@ def run_segment(
                 bad_eval_count += 1
             progress["best_validation_loss"] = best_loss
             progress["bad_eval_count"] = bad_eval_count
-            minimum_before_early_stop = min(600_000, int(target_tokens * 0.60))
+            # A freshly grown network needs a substantial fraction of the
+            # rescue rung before plateau logic is allowed to stop it.
+            minimum_before_early_stop = max(
+                600_000,
+                int(target_tokens * 0.75),
+            )
             if (
                 bad_eval_count >= 4
                 and int(progress["tokens_processed"]) >= minimum_before_early_stop
@@ -1274,6 +1279,12 @@ def run_segment(
             "schema": 1,
             "version": PHASE5_BOOTSTRAP_VERSION,
             "target_tokens": target_tokens,
+            "unique_corpus_target_tokens": int(corpus_target_tokens),
+            "optimization_passes_target": float(
+                target_tokens / max(1, corpus_target_tokens)
+            ),
+            "capacity_target_parameters": progress.get("capacity_target_parameters"),
+            "capacity_growth_history": progress.get("capacity_growth_history") or [],
             "tokens_processed": int(progress["tokens_processed"]),
             "steps": int(progress["steps"]),
             "model_parameters": int(candidate_report["parameters"]),
