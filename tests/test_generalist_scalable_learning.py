@@ -1839,3 +1839,136 @@ def test_airi_pc_lab_does_not_store_failed_probe(tmp_path):
     )
     assert result["stored"] is False
     assert load_verified_lab_experiences(tmp_path) == []
+
+
+def test_research_fitness_penalizes_collapse_even_with_better_nll():
+    from generalist_lm.research_cycle import _research_score
+
+    healthy = {
+        "loss": 2.0,
+        "nll_per_byte": 2.0,
+        "target_token_accuracy": 0.35,
+        "generation_exact_accuracy": 0.10,
+        "generation_similarity": 0.42,
+        "generation_nonempty_rate": 1.0,
+        "generation_unique_token_ratio": 0.62,
+        "generation_repetition_rate": 0.18,
+        "generation_longest_repeated_token_run": 2,
+        "generation_pathological_repetition": False,
+        "domain_nll_per_byte": {
+            "language": 2.0,
+            "coding": 2.1,
+            "reasoning": 2.05,
+            "tools": 2.0,
+        },
+    }
+    collapsed = {
+        **healthy,
+        "loss": 1.9,
+        "nll_per_byte": 1.9,
+        "generation_exact_accuracy": 0.0,
+        "generation_similarity": 0.06,
+        "generation_unique_token_ratio": 0.04,
+        "generation_repetition_rate": 0.91,
+        "generation_longest_repeated_token_run": 18,
+        "generation_pathological_repetition": True,
+    }
+
+    healthy_score = _research_score(healthy, 1_250_000)
+    collapsed_score = _research_score(collapsed, 1_250_000)
+
+    assert healthy_score > collapsed_score
+    assert healthy["fitness"]["total_reward"] > 0.0
+    assert collapsed["fitness"]["total_penalty"] > healthy["fitness"]["total_penalty"]
+    assert collapsed["fitness"]["collapse_penalty"] > 0.0
+
+
+def test_research_fitness_efficiency_penalty_is_bounded_and_does_not_block_useful_scale():
+    from generalist_lm.research_cycle import _research_score
+
+    base = {
+        "loss": 2.0,
+        "nll_per_byte": 2.0,
+        "target_token_accuracy": 0.30,
+        "generation_exact_accuracy": 0.05,
+        "generation_similarity": 0.35,
+        "generation_nonempty_rate": 1.0,
+        "generation_unique_token_ratio": 0.55,
+        "generation_repetition_rate": 0.20,
+        "generation_longest_repeated_token_run": 2,
+        "generation_pathological_repetition": False,
+        "domain_nll_per_byte": {"language": 2.0, "coding": 2.05},
+    }
+    small = dict(base)
+    large_same_quality = dict(base)
+    large_better = {
+        **base,
+        "loss": 1.8,
+        "nll_per_byte": 1.8,
+        "domain_nll_per_byte": {"language": 1.8, "coding": 1.85},
+    }
+
+    small_score = _research_score(small, 100_000)
+    large_same_score = _research_score(large_same_quality, 20_000_000)
+    large_better_score = _research_score(large_better, 20_000_000)
+
+    assert small_score > large_same_score
+    assert small_score - large_same_score < 1.5
+    assert large_better_score > small_score
+    assert large_same_quality["fitness"]["efficiency_penalty"] <= 1.5
+
+
+def test_generalist_swarm_reducer_prefers_multiobjective_fitness_over_raw_nll(tmp_path: Path):
+    import json
+
+    from generalist_lm.generalist_swarm import select_survivors
+
+    rows = [
+        {
+            "candidate_index": 0,
+            "candidate_id": "healthy-fitness",
+            "mean_fitness_score": 31.0,
+            "mean_nll_per_byte": 1.95,
+        },
+        {
+            "candidate_index": 1,
+            "candidate_id": "nll-only",
+            "mean_fitness_score": 24.0,
+            "mean_nll_per_byte": 1.70,
+        },
+    ]
+    paths = []
+    for row in rows:
+        payload = {
+            "ok": True,
+            "version": "airi-generalist-free-speed-v5",
+            "cycle": 1,
+            "stage": 1,
+            "steps": 8,
+            "kind": "architecture",
+            "genome": {},
+            "reports": [],
+            "all_seed_eligible": True,
+            "any_seed_eligible": True,
+            "mean_generation_accuracy": 0.1,
+            "mean_generation_similarity": 0.4,
+            "mean_generation_nonempty_rate": 1.0,
+            "mean_generation_repetition_rate": 0.2,
+            "worst_domain_regression": 0.01,
+            "any_generation_pathological_repetition": False,
+            "parameters": 1_000_000,
+            "score": row["mean_fitness_score"],
+            "checkpoint_dir": "best-checkpoint",
+            "external_pretrained": False,
+            **row,
+        }
+        path = tmp_path / f"fitness-{row['candidate_index']}.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        paths.append(path)
+
+    result = select_survivors(
+        paths,
+        tmp_path / "fitness-selection.json",
+        survivors=1,
+    )
+    assert result["selected"][0]["candidate_id"] == "healthy-fitness"

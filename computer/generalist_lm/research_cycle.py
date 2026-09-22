@@ -283,10 +283,135 @@ def _grouped_validation(model, tokenizer, rows: list[ResearchRow], *, device: st
         "finite": bool(all(math.isfinite(v) for v in finite_values)),
     }
 
+def _unit_interval(value: Any, default: float = 0.0) -> float:
+    try:
+        number = float(value)
+    except Exception:
+        number = float(default)
+    if not math.isfinite(number):
+        number = float(default)
+    return max(0.0, min(1.0, number))
+
+
+def _research_fitness_components(report: dict[str, Any], params: int) -> dict[str, float | bool]:
+    """Multi-objective research fitness used only after fail-closed gates.
+
+    Lower held-out NLL remains the strongest smooth reward, but generation,
+    diversity and canary behavior now contribute continuous selection pressure.
+    Repetition/collapse and parameter growth receive bounded penalties so a
+    candidate cannot win merely by optimizing teacher-forced loss or size.
+    Hard anti-forgetting/domain/collapse gates remain authoritative elsewhere.
+    """
+    try:
+        quality = float(report.get("nll_per_byte", report.get("loss", float("inf"))))
+    except Exception:
+        quality = float("inf")
+    if not math.isfinite(quality):
+        quality = 1_000_000.0
+    quality = max(0.0, quality)
+
+    target_accuracy = _unit_interval(report.get("target_token_accuracy"))
+    generation_accuracy = _unit_interval(report.get("generation_exact_accuracy"))
+    generation_similarity = _unit_interval(report.get("generation_similarity"))
+    nonempty_rate = _unit_interval(report.get("generation_nonempty_rate"))
+    unique_ratio = _unit_interval(report.get("generation_unique_token_ratio"))
+    repetition_rate = _unit_interval(report.get("generation_repetition_rate"), 1.0)
+    longest_run = max(
+        0,
+        int(report.get("generation_longest_repeated_token_run", 0) or 0),
+    )
+    pathological = bool(report.get("generation_pathological_repetition"))
+
+    domains = report.get("domain_nll_per_byte") or report.get("domain_loss") or {}
+    finite_domains = [
+        float(value)
+        for value in domains.values()
+        if isinstance(value, (int, float)) and math.isfinite(float(value))
+    ]
+    worst_domain_excess = (
+        max(0.0, max(finite_domains) - quality)
+        if finite_domains
+        else 0.0
+    )
+
+    quality_reward = 65.0 / (1.0 + quality)
+    teacher_reward = 6.0 * target_accuracy
+    generation_reward = (
+        12.0 * generation_accuracy
+        + 12.0 * generation_similarity
+        + 4.0 * nonempty_rate
+        + 6.0 * unique_ratio
+    )
+    repetition_penalty = 14.0 * repetition_rate
+    repeated_run_penalty = min(8.0, max(0.0, float(longest_run - 2)))
+    collapse_penalty = 20.0 if pathological else 0.0
+    domain_balance_penalty = min(6.0, 2.0 * worst_domain_excess)
+    efficiency_penalty = min(
+        1.5,
+        0.35 * max(0.0, math.log10(max(1, int(params)) / 100_000.0)),
+    )
+
+    canary_reward = 0.0
+    canary_penalty = 0.0
+    canary = report.get("canary")
+    if isinstance(canary, dict):
+        canary_reward = (
+            4.0 * _unit_interval(canary.get("generation_similarity"))
+            + 1.5 * _unit_interval(canary.get("generation_nonempty_rate"))
+            + 2.0 * _unit_interval(canary.get("generation_unique_token_ratio"))
+        )
+        canary_penalty = (
+            5.0 * _unit_interval(canary.get("generation_repetition_rate"), 1.0)
+            + min(
+                4.0,
+                max(
+                    0.0,
+                    float(
+                        int(canary.get("generation_longest_repeated_token_run", 0) or 0)
+                        - 2
+                    ),
+                ),
+            )
+            + (10.0 if bool(canary.get("generation_pathological_repetition")) else 0.0)
+        )
+
+    total_reward = (
+        quality_reward
+        + teacher_reward
+        + generation_reward
+        + canary_reward
+    )
+    total_penalty = (
+        repetition_penalty
+        + repeated_run_penalty
+        + collapse_penalty
+        + domain_balance_penalty
+        + efficiency_penalty
+        + canary_penalty
+    )
+    score = float(total_reward - total_penalty)
+    return {
+        "score": score,
+        "quality_reward": float(quality_reward),
+        "teacher_reward": float(teacher_reward),
+        "generation_reward": float(generation_reward),
+        "canary_reward": float(canary_reward),
+        "repetition_penalty": float(repetition_penalty),
+        "repeated_run_penalty": float(repeated_run_penalty),
+        "collapse_penalty": float(collapse_penalty),
+        "domain_balance_penalty": float(domain_balance_penalty),
+        "efficiency_penalty": float(efficiency_penalty),
+        "canary_penalty": float(canary_penalty),
+        "total_reward": float(total_reward),
+        "total_penalty": float(total_penalty),
+        "pathological_repetition": pathological,
+    }
+
+
 def _research_score(report: dict[str, Any], params: int) -> float:
-    quality = float(report.get("nll_per_byte", report["loss"]))
-    efficiency_penalty = min(1.0, params / 10_000_000.0) * 0.01
-    return float(100.0 / (1.0 + quality) - efficiency_penalty)
+    fitness = _research_fitness_components(report, params)
+    report["fitness"] = fitness
+    return float(fitness["score"])
 
 
 def _genome_training_seed(genome: GeneralistGenome, *, namespace: str = "candidate") -> int:
@@ -1363,6 +1488,10 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         rotating_canary,
         device=device,
     )
+    champion_report["score"] = _research_score(
+        champion_report,
+        champion_report["parameters"],
+    )
 
     signals = _weaknesses(champion_report)
     mathesis = None
@@ -1411,6 +1540,10 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         continual_runtime.tokenizer,
         rotating_canary,
         device=device,
+    )
+    continual_report["score"] = _research_score(
+        continual_report,
+        int(continual_report["parameters"]),
     )
     continual_eligible, continual_reason = _research_eligible(
         champion_report,
@@ -1476,6 +1609,10 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
             rotating_canary,
             device=device,
         )
+        report["score"] = _research_score(
+            report,
+            int(report["parameters"]),
+        )
         eligible, reason = _research_eligible(
             champion_report,
             report,
@@ -1491,8 +1628,8 @@ def run_research_cycle(state_dir: str | Path | None = None) -> dict[str, Any]:
         })
         if eligible and (
             winner is None
-            or float(report.get("nll_per_byte", report["loss"]))
-            < float(winner[2].get("nll_per_byte", winner[2]["loss"]))
+            or float(report.get("score", float("-inf")))
+            > float(winner[2].get("score", float("-inf")))
         ):
             winner = (genome, runtime, report)
 
