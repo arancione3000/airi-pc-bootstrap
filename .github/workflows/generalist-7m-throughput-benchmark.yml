@@ -18,7 +18,7 @@ jobs:
       PYTHONPATH: computer
       OMP_NUM_THREADS: '4'
       MKL_NUM_THREADS: '4'
-      TORCHINDUCTOR_CACHE_DIR: ${{ runner.temp }}/airi-generalist-inductor
+      TORCHINDUCTOR_CACHE_DIR: /tmp/airi-generalist-inductor
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
