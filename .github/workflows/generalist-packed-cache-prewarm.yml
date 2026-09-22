@@ -2,6 +2,9 @@ name: AIRI Generalist 100M Packed Cache Prewarm
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/generalist-packed-cache-prewarm.yml'
   push:
     branches: [main]
     paths:
