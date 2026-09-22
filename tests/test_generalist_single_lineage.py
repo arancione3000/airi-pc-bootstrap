@@ -49,7 +49,7 @@ def _checkpoint(path: Path, genome: GeneralistGenome, *, role: str) -> Generalis
 
 def _bootstrap_state(root: Path) -> tuple[GeneralistGenome, Path]:
     genome = _tiny_genome()
-    _checkpoint(root / "champion", genome, role="production_champion")
+    _checkpoint(root / "champion", genome, role="research_champion")
     _write_json(root / "champion-genome.json", genome.to_dict())
 
     candidate = root / "bootstrap-data" / "candidate"
