@@ -172,7 +172,7 @@ jobs:
 
   reduce1:
     needs: [plan, stage1]
-    if: needs.plan.outputs.run_search == 'true'
+    if: ${{ always() && needs.plan.outputs.run_search == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.reduce.outputs.matrix }}
@@ -225,7 +225,7 @@ jobs:
 
   reduce2:
     needs: [plan, stage2]
-    if: needs.plan.outputs.run_search == 'true'
+    if: ${{ always() && needs.plan.outputs.run_search == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.reduce.outputs.matrix }}
@@ -278,7 +278,7 @@ jobs:
 
   finalize:
     needs: [plan, stage3]
-    if: needs.plan.outputs.run_search == 'true'
+    if: ${{ always() && needs.plan.outputs.run_search == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
