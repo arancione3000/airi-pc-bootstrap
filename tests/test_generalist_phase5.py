@@ -25,6 +25,7 @@ from generalist_lm.bootstrap_training import (
     _anti_collapse_weights,
     _bootstrap_capacity_target,
     _bootstrap_corpus_target,
+    _bootstrap_fast_resume_allowed,
     _effective_bootstrap_target,
     _filter_protected_replay,
     _grow_bootstrap_runtime,
@@ -118,6 +119,50 @@ def test_phase5_packed_block_cache_rejects_stale_or_corrupt_data(tmp_path):
 
     path.write_bytes(path.read_bytes()[:-1])
     assert load_packed_block_cache(path, expected_identity=identity) is None
+
+
+def test_phase5_fast_resume_requires_exact_verified_identities():
+    tokenizer = ByteTokenizer()
+    manifest = {
+        "target_tokens": 1_000_000,
+        "actual_selected_tokens": 1_000_000,
+        "tokenizer_version": tokenizer.version,
+        "tokenizer_vocab_size": tokenizer.vocab_size,
+        "external_pretrained_weights_used": False,
+        "external_model_distillation_used": False,
+        "manifest_content_sha256": "manifest-abc",
+    }
+    replay = {
+        "available": True,
+        "source_manifest_sha256": "manifest-abc",
+    }
+    assert _bootstrap_fast_resume_allowed(
+        manifest, replay, tokenizer, 1_000_000
+    )
+
+    stale_replay = dict(replay)
+    stale_replay["source_manifest_sha256"] = "different"
+    assert not _bootstrap_fast_resume_allowed(
+        manifest, stale_replay, tokenizer, 1_000_000
+    )
+
+    wrong_vocab = dict(manifest)
+    wrong_vocab["tokenizer_vocab_size"] = tokenizer.vocab_size + 1
+    assert not _bootstrap_fast_resume_allowed(
+        wrong_vocab, replay, tokenizer, 1_000_000
+    )
+
+    external_weights = dict(manifest)
+    external_weights["external_pretrained_weights_used"] = True
+    assert not _bootstrap_fast_resume_allowed(
+        external_weights, replay, tokenizer, 1_000_000
+    )
+
+    insufficient = dict(manifest)
+    insufficient["actual_selected_tokens"] = 900_000
+    assert not _bootstrap_fast_resume_allowed(
+        insufficient, replay, tokenizer, 1_000_000
+    )
 
 
 def test_phase5_cumulative_target_never_shrinks_on_maintenance_run():
