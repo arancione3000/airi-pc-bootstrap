@@ -2,10 +2,6 @@ name: AIRI Generalist Incumbent Recovery
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/generalist-incumbent-recovery.yml'
 
 permissions:
   actions: read
@@ -13,7 +9,7 @@ permissions:
 
 concurrency:
   group: airi-generalist-incumbent-recovery
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  cancel-in-progress: false
 
 jobs:
   recover:
@@ -29,37 +25,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Wait only for an already-running Continuum writer
+      - name: Wait for a clean Generalist state-write window
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # Bootstrap and Architecture Search on current main already yield to
-          # Incumbent Recovery before touching generalist-state. Counting their
-          # in-progress gate/install jobs here would create a mutual wait.
-          # Only Continuum can have entered a state-writing cycle before this
-          # recovery run acquired priority.
-          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-continuum.yml/runs?per_page=30"
           for _ in $(seq 1 120); do
-            payload="$(curl --fail-with-body -sS --retry 3 --retry-all-errors \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "${api}")"
-            active="$(jq '
-              [
-                .workflow_runs[]
-                | select(.status == "in_progress")
-              ] | length
-            ' <<<"${payload}")"
+            active=0
+            for workflow in generalist-bootstrap.yml generalist-architecture-search.yml generalist-continuum.yml; do
+              payload="$(curl --fail-with-body -sS --retry 3 --retry-all-errors \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?per_page=30")"
+              count="$(jq '
+                [
+                  .workflow_runs[]
+                  | select(
+                      .status == "pending"
+                      or .status == "queued"
+                      or .status == "in_progress"
+                      or .status == "waiting"
+                      or .status == "requested"
+                    )
+                ] | length
+              ' <<<"${payload}")"
+              active="$((active + count))"
+            done
             if (( active == 0 )); then
-              echo "Incumbent recovery owns a clean Generalist state-write window."
+              echo "Evidence recovery owns a clean Generalist state-write window."
               exit 0
             fi
-            echo "Waiting for ${active} already-running Continuum writer(s)."
+            echo "Waiting for ${active} active Generalist writer run(s)."
             sleep 10
           done
-          echo "Timed out waiting for Continuum writer." >&2
+          echo "Timed out waiting for a clean Generalist state-write window." >&2
           exit 1
 
       - name: Restore latest persistent state
@@ -122,17 +122,29 @@ jobs:
           if bool(result.get('all_seed_eligible')):
               raise SystemExit('recovery artifact is unexpectedly production-eligible')
 
+          # This is historical evidence only. The current AIRI lineage is
+          # expected to have moved past cycle 115, so current leaderboard/parent
+          # membership is informative but never an authorization requirement.
           leaderboard_path = state_repo / 'generalist-state' / 'architecture-research' / 'leaderboard.json'
-          leaderboard = json.loads(leaderboard_path.read_text())
-          entry = next((row for row in leaderboard.get('entries', []) if row.get('candidate_id') == result['candidate_id']), None)
-          if entry is None:
-              raise SystemExit('candidate missing from persisted architecture leaderboard')
+          entry = None
+          if leaderboard_path.is_file():
+              leaderboard = json.loads(leaderboard_path.read_text())
+              entry = next(
+                  (
+                      row for row in leaderboard.get('entries', [])
+                      if row.get('candidate_id') == result['candidate_id']
+                  ),
+                  None,
+              )
 
           last_plan_path = state_repo / 'generalist-state' / 'architecture-research' / 'last-plan.json'
-          last_plan = json.loads(last_plan_path.read_text())
-          parent_fingerprint = (last_plan.get('architecture_parent') or {}).get('fingerprint') or ''
-          if not parent_fingerprint:
-              raise SystemExit('missing architecture parent fingerprint')
+          parent_fingerprint = None
+          if last_plan_path.is_file():
+              last_plan = json.loads(last_plan_path.read_text())
+              parent_fingerprint = (
+                  (last_plan.get('architecture_parent') or {}).get('fingerprint')
+                  or None
+              )
 
           target = state_repo / 'generalist-state' / 'architecture-research' / 'recovered-evidence'
           target.mkdir(parents=True, exist_ok=True)
@@ -153,8 +165,8 @@ jobs:
               'all_seed_eligible': bool(result.get('all_seed_eligible')),
               'cumulative_steps': int(result.get('cumulative_steps', 0)),
               'genome': result.get('genome'),
-              'architecture': entry.get('architecture'),
-              'fingerprint': entry.get('fingerprint'),
+              'architecture': entry.get('architecture') if entry else None,
+              'fingerprint': entry.get('fingerprint') if entry else None,
               'parent_fingerprint': parent_fingerprint,
               'source_run_id': int(os.environ['SOURCE_RUN_ID']),
               'source_artifact_id': int(os.environ['ARTIFACT_ID']),
