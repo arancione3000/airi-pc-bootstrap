@@ -171,10 +171,16 @@ def _evaluation(runtime: GeneralistRuntime, *, cycle: int) -> dict[str, Any]:
     return report
 
 
-def _lineage_genome(source: GeneralistGenome, target: GeneralistGenome, cycle: int) -> GeneralistGenome:
+def _lineage_genome(
+    source: GeneralistGenome,
+    target: GeneralistGenome,
+    cycle: int,
+    *,
+    target_vocab_size: int,
+) -> GeneralistGenome:
     architecture = ArchitectureSpec.from_genome(
         target,
-        target_vocab_size=target.model_config().vocab_size,
+        target_vocab_size=int(target_vocab_size),
     )
     tag = architecture.fingerprint()[:12]
     return replace(
@@ -312,7 +318,12 @@ def migrate_live_lineage(
         _atomic_json(architecture_root / "lineage-migration.json", report)
         return report
 
-    lineage_genome = _lineage_genome(source_genome, target_genome_obj, cycle)
+    lineage_genome = _lineage_genome(
+        source_genome,
+        target_genome_obj,
+        cycle,
+        target_vocab_size=migrated.tokenizer.vocab_size,
+    )
     staging = root / ".lineage-migration-candidate"
     shutil.rmtree(staging, ignore_errors=True)
     migrated.save_checkpoint(
