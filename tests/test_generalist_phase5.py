@@ -120,6 +120,7 @@ def test_mobile_summary_uses_live_lineage_not_stale_champion(tmp_path: Path):
             "generation_similarity": 0.42,
             "non_empty_rate": 1.0,
             "exact_accuracy": 0.25,
+            "language_bits_per_byte": 4.0,
         },
     }
     report_path = tmp_path / "bootstrap-data" / "report.json"
@@ -138,6 +139,8 @@ def test_mobile_summary_uses_live_lineage_not_stale_champion(tmp_path: Path):
     assert summary["lineage_id"] == "airi-live"
     assert summary["tokens_processed"] == 28_536_545
     assert summary["generation_similarity"] == 0.42
+    assert summary["nll_per_byte_available"] is True
+    assert summary["nll_per_byte"] == pytest.approx(4.0 * __import__("math").log(2.0))
     assert "score" not in summary
     assert summary["parameters"] != status["champion_report"]["parameters"]
 
