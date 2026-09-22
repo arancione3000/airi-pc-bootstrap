@@ -27,7 +27,7 @@ def next_parameter_tiers(
     current: int,
     *,
     cap: int = 7_000_000,
-    limit: int = 2,
+    limit: int = 5,
 ) -> list[int]:
     out = [
         int(tier)
@@ -203,7 +203,7 @@ def proposal_set(
     targets = next_parameter_tiers(
         parent.parameter_estimate(vocab_size=parent.target_vocab_size),
         cap=int(parameter_cap),
-        limit=2,
+        limit=5,
     )
     modern = _with_id(parent, {
         "norm_type": "rmsnorm",
