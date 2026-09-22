@@ -177,6 +177,31 @@ def _batch(blocks: list[list[int]], indices: list[int], *, device):
     return ids, labels
 
 
+def _bootstrap_fast_resume_allowed(
+    previous_manifest: dict[str, Any] | None,
+    replay_manifest: dict[str, Any] | None,
+    tokenizer,
+    corpus_target_tokens: int,
+) -> bool:
+    """Allow packed-block fast resume only with exact persisted identities."""
+    manifest = previous_manifest if isinstance(previous_manifest, dict) else {}
+    replay = replay_manifest if isinstance(replay_manifest, dict) else {}
+    return bool(
+        int(manifest.get("target_tokens", 0) or 0) == int(corpus_target_tokens)
+        and int(manifest.get("actual_selected_tokens", 0) or 0)
+            >= int(corpus_target_tokens * 0.95)
+        and str(manifest.get("tokenizer_version") or "")
+            == str(tokenizer.version)
+        and int(manifest.get("tokenizer_vocab_size", 0) or 0)
+            == int(tokenizer.vocab_size)
+        and manifest.get("external_pretrained_weights_used") is False
+        and manifest.get("external_model_distillation_used") is False
+        and replay.get("available") is True
+        and str(replay.get("source_manifest_sha256") or "")
+            == str(manifest.get("manifest_content_sha256") or "")
+    )
+
+
 def _effective_bootstrap_target(
     requested_target: int,
     persisted_progress: dict[str, Any] | None,
@@ -775,20 +800,11 @@ def run_segment(
     # current reviewed corpus/tokenizer contract.  This avoids reconstructing
     # the full 20M-token text bundle on every intermediate 100M segment.
     replay_bundle = load_bootstrap_replay(bootstrap_root)
-    reusable_manifest = bool(
-        isinstance(previous_manifest, dict)
-        and int(previous_manifest.get("target_tokens", 0) or 0) == int(corpus_target_tokens)
-        and int(previous_manifest.get("actual_selected_tokens", 0) or 0)
-            >= int(corpus_target_tokens * 0.95)
-        and str(previous_manifest.get("tokenizer_version") or "")
-            == str(champion_runtime.tokenizer.version)
-        and int(previous_manifest.get("tokenizer_vocab_size", 0) or 0)
-            == int(champion_runtime.tokenizer.vocab_size)
-        and previous_manifest.get("external_pretrained_weights_used") is False
-        and previous_manifest.get("external_model_distillation_used") is False
-        and replay_bundle.manifest.get("available") is True
-        and str(replay_bundle.manifest.get("source_manifest_sha256") or "")
-            == str(previous_manifest.get("manifest_content_sha256") or "")
+    reusable_manifest = _bootstrap_fast_resume_allowed(
+        previous_manifest,
+        replay_bundle.manifest,
+        champion_runtime.tokenizer,
+        corpus_target_tokens,
     )
     if reusable_manifest:
         replay_manifest = dict(replay_bundle.manifest)
