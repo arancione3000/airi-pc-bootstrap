@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import io
 import json
+from pathlib import Path
 
 import pytest
 
@@ -10,8 +11,11 @@ from generalist_lm.bootstrap_data import (
     BootstrapDataBundle,
     OASST1_REVISION,
     SOURCES,
+    STREAMING_SOURCES,
     _oasst_conversations,
     _parse_oasst,
+    _quality_web_text,
+    _web_chunks,
     load_bootstrap_replay,
     write_bootstrap_replay,
 )
@@ -42,6 +46,14 @@ from generalist_lm.training import SFTExample, causal_training_objective
 
 
 
+def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
+    workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
+    assert "Dispatch next in-place language rung" in workflow
+    assert "same persisted AIRI Phase-5 lineage" in workflow
+    assert "next=100000000" in workflow
+    assert '"handoff":"converged_swarm_first"' not in workflow
+    assert "Generalist swarm must run once before it is dispatched" not in workflow
+
 def test_phase5_cumulative_target_never_shrinks_on_maintenance_run():
     assert _effective_bootstrap_target(1_000_000, {"target_tokens": 5_000_000}) == 5_000_000
     assert _effective_bootstrap_target(20_000_000, {"target_tokens": 5_000_000}) == 20_000_000
@@ -53,6 +65,8 @@ def test_phase5_conversation_rescue_separates_unique_corpus_from_training_budget
     assert _bootstrap_corpus_target(5_000_000) == 5_000_000
     assert _bootstrap_corpus_target(20_000_000) == 5_000_000
     assert _bootstrap_corpus_target(50_000_000) == 5_000_000
+    assert _bootstrap_corpus_target(100_000_000) == 20_000_000
+    assert _bootstrap_corpus_target(500_000_000) == 20_000_000
 
 
 def test_phase5_conversation_rescue_has_explicit_capacity_rungs():
@@ -150,6 +164,29 @@ def test_bootstrap_sources_are_explicitly_licensed_and_pinned():
     assert len(OASST1_REVISION) == 40
     assert all(row["url"].startswith("https://") for row in SOURCES)
     assert all(row["license_url"].startswith("https://") for row in SOURCES)
+
+
+def test_fasttrack_streaming_sources_are_explicit_and_bilingual():
+    by_id = {row["id"]: row for row in STREAMING_SOURCES}
+    assert by_id["fineweb2-it"]["dataset"] == "HuggingFaceFW/fineweb-2"
+    assert by_id["fineweb2-it"]["config"] == "ita_Latn"
+    assert by_id["fineweb-en"]["dataset"] == "HuggingFaceFW/fineweb"
+    assert by_id["fineweb-en"]["config"] == "sample-10BT"
+    assert {row["language"] for row in STREAMING_SOURCES} == {"it", "en"}
+    assert all(row["license"] == "ODC-By-1.0" for row in STREAMING_SOURCES)
+    assert all(row["source_page"].startswith("https://") for row in STREAMING_SOURCES)
+
+
+def test_fasttrack_web_chunking_is_bounded_and_normalizes_whitespace():
+    raw = (
+        "Questa è una frase italiana abbastanza lunga da essere utile al modello e contiene parole naturali per un buon esempio di addestramento.\n\n"
+        "Seconda frase con   spazi multipli e altro testo naturale sufficientemente lungo per verificare la pulizia dei documenti web."
+    )
+    chunks = _web_chunks(raw, max_chars=180)
+    assert len(chunks) >= 2
+    assert all(len(row) <= 180 for row in chunks)
+    assert all("   " not in row for row in chunks)
+    assert all(_quality_web_text(row) for row in chunks)
 
 
 def test_oasst_parser_excludes_synthetic_and_builds_human_dialogue():

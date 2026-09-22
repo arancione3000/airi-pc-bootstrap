@@ -49,6 +49,7 @@ jobs:
       - name: Install CPU bootstrap runtime
         run: |
           python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check 'datasets>=3.6,<5'
 
       - name: Wait for active higher-priority state writers
         env:
@@ -138,6 +139,15 @@ jobs:
             echo "Phase 5 target ${effective_target} is already fully persisted; skipping corpus rebuild/training."
           fi
 
+      - name: Restore reusable bootstrap source cache
+        if: env.PERSISTED_RUNG_COMPLETE != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CACHE_DIR }}
+          key: airi-generalist-phase5-data-v2-${{ runner.os }}-${{ env.TARGET_TOKENS }}
+          restore-keys: |
+            airi-generalist-phase5-data-v2-${{ runner.os }}-
+
       - name: Reuse already-completed persisted bootstrap rung
         if: env.PERSISTED_RUNG_COMPLETE == 'true'
         run: |
@@ -167,7 +177,7 @@ jobs:
           }
 
           rung_complete=false
-          for segment in $(seq 1 80); do
+          for segment in $(seq 1 4); do
             echo "Phase 5 segment ${segment}; target=${TARGET_TOKENS}"
             python -m generalist_lm.bootstrap_training \
               --state-dir "${STATE_DIR}" \
@@ -227,8 +237,10 @@ jobs:
             -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${TARGET_TOKENS}\"}}"
           echo "NEXT_BOOTSTRAP_TARGET=${TARGET_TOKENS}" >> "${GITHUB_ENV}"
 
-      - name: Queue the next language rung after one converged swarm cycle
+      - name: Dispatch next in-place language rung
         if: env.RUNG_COMPLETE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           report="${STATE_DIR}/bootstrap-data/report.json"
@@ -239,32 +251,37 @@ jobs:
             next=5000000
           elif [[ "${current}" -lt 20000000 ]]; then
             next=20000000
-          elif [[ "${current}" -lt 50000000 ]]; then
-            next=50000000
           elif [[ "${current}" -lt 100000000 ]]; then
+            # Keep the exact persisted Phase-5 candidate used by the app.
+            # The next run will grow this same checkpoint to the 7M tier.
             next=100000000
           fi
 
+          # Remove legacy swarm-handoff markers.  This prevents an unrelated
+          # architecture winner from replacing the live app lineage between
+          # the completed 20M rung and the 100M/7M continuation.
           marker="${STATE_DIR}/bootstrap-next-target.json"
-          if [[ -n "${next}" ]]; then
-            printf '{"schema":1,"completed_target_tokens":%s,"target_tokens":%s,"handoff":"converged_swarm_first"}\n' \
-              "${current}" "${next}" > "${marker}"
-          else
-            rm -f "${marker}"
-          fi
-
+          rm -f "${marker}"
           cd "${STATE_REPO}"
+          rm -f generalist-state/bootstrap-next-target.json
           git add -A generalist-state/bootstrap-next-target.json || true
-          git commit --allow-empty -m "generalist-state: queue post-fusion bootstrap target ${next:-complete}"
+          git commit --allow-empty -m "generalist-state: direct in-place bootstrap handoff ${current} -> ${next:-complete}"
           git push --quiet origin HEAD:generalist-state
           cd "${GITHUB_WORKSPACE}"
 
           if [[ -n "${next}" ]]; then
+            curl --fail-with-body -sS --retry 3 --retry-all-errors -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/dispatches" \
+              -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${next}\"}}"
             echo "NEXT_BOOTSTRAP_TARGET=${next}" >> "${GITHUB_ENV}"
-            echo "Queued target ${next}; the Generalist swarm must run once before it is dispatched."
+            echo "Dispatched the same persisted AIRI Phase-5 lineage directly to target ${next}."
           else
-            echo "100M bounded language ladder complete; no automatic larger language rung queued."
+            echo "100M bounded language ladder complete; no larger automatic rung queued."
           fi
 
-      # Continuum is resumed by its workflow_run trigger only after this
-      # workflow is formally completed, eliminating the pre-completion race.
+      # The next bootstrap is queued before this workflow finishes.  The
+      # Continuum bootstrap-gate therefore sees an active language bootstrap
+      # and yields instead of interposing a swarm/champion replacement.
