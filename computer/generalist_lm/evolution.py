@@ -272,12 +272,24 @@ def progressive_scale_candidate(
             max(1, champion.n_layers),
             max(1, int(max_layers)) + 1,
         ):
-            for ratio in (2.0, 3.0, 4.0):
-                ff = max(
-                    champion.d_ff,
-                    width,
-                    int(round(width * ratio / 32.0)) * 32,
-                )
+            # Function-preserving growth must keep the residual width stable.
+            # With a fixed width, capacity can still scale by expanding FFN
+            # and depth. Search the full aligned FFN range so a close target
+            # is available instead of falling back to destructive width growth.
+            if prefer_function_preserving and width == champion.d_model:
+                minimum_ff = max(champion.d_ff, width)
+                first_ff = int(math.ceil(minimum_ff / 32.0) * 32)
+                ff_values = range(first_ff, 16_384 + 1, 32)
+            else:
+                ff_values = sorted({
+                    max(
+                        champion.d_ff,
+                        width,
+                        int(round(width * ratio / 32.0)) * 32,
+                    )
+                    for ratio in (2.0, 3.0, 4.0)
+                })
+            for ff in ff_values:
                 try:
                     cfg = GeneralistLMConfig(
                         vocab_size=int(vocab_size),
