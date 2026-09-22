@@ -27,6 +27,7 @@ from generalist_lm.internet_quarantine import (
     quarantine_records,
 )
 from generalist_lm.meta_controller import decide_next_action
+from generalist_lm.mobile_export import _select_mobile_research
 from generalist_lm.pretraining import CorpusDocument
 from generalist_lm.generalist_swarm import (
     GENERALIST_SWARM_VERSION,
@@ -517,6 +518,64 @@ def test_safe_incumbent_is_preserved_by_successive_halving(tmp_path: Path):
     assert "control" in selected
     assert "incumbent" in selected
     assert result["protected_progressive_scale"] is True
+
+
+def test_mobile_research_prefers_stronger_persisted_incumbent(tmp_path: Path):
+    latest = tmp_path / "latest-research"
+    latest.mkdir()
+    (latest / "research-summary.json").write_text(
+        json.dumps({
+            "candidate_id": "bootstrap-latest",
+            "all_seed_eligible": False,
+            "mean_generation_similarity": 0.14,
+            "mean_nll_per_byte": 2.85,
+            "worst_domain_regression": 2.04,
+            "score": 26.0,
+        }),
+        encoding="utf-8",
+    )
+    (latest / "research-metrics.json").write_text(
+        json.dumps({
+            "generation_pathological_repetition": True,
+            "generation_repetition_rate": 0.84,
+            "generation_similarity": 0.14,
+            "nll_per_byte": 2.85,
+        }),
+        encoding="utf-8",
+    )
+
+    incumbent = tmp_path / "architecture-research" / "incumbent"
+    checkpoint = incumbent / "checkpoint"
+    checkpoint.mkdir(parents=True)
+    (incumbent / "summary.json").write_text(
+        json.dumps({
+            "candidate_id": "arch-incumbent",
+            "all_seed_eligible": False,
+            "mean_generation_similarity": 0.25,
+            "mean_generation_repetition_rate": 0.44,
+            "mean_nll_per_byte": 1.56,
+            "worst_domain_regression": 0.89,
+            "score": 39.1,
+            "external_pretrained": False,
+        }),
+        encoding="utf-8",
+    )
+    (checkpoint / "research-metrics.json").write_text(
+        json.dumps({
+            "generation_pathological_repetition": False,
+            "generation_repetition_rate": 0.25,
+            "generation_similarity": 0.25,
+            "nll_per_byte": 1.55,
+        }),
+        encoding="utf-8",
+    )
+
+    selected = _select_mobile_research(tmp_path)
+    assert selected is not None
+    path, summary = selected
+    assert path == checkpoint
+    assert summary["candidate_id"] == "arch-incumbent"
+    assert summary["research_source"] == "architecture-incumbent"
 
 
 def test_quality_filter_rejects_repetition_without_external_llm():

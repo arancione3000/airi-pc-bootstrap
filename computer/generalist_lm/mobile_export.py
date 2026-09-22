@@ -52,6 +52,118 @@ def _safe_json(path: Path, fallback: Any) -> Any:
         return fallback
 
 
+def _research_profile(
+    checkpoint: Path,
+    summary: dict[str, Any],
+    *,
+    source: str,
+) -> dict[str, Any]:
+    metrics = _safe_json(checkpoint / "research-metrics.json", {})
+    if not isinstance(metrics, dict):
+        metrics = {}
+    merged = {**metrics, **dict(summary)}
+    merged["research_source"] = source
+    merged["generation_pathological_repetition"] = bool(
+        metrics.get(
+            "generation_pathological_repetition",
+            summary.get(
+                "pathological_repetition",
+                summary.get("any_generation_pathological_repetition", True),
+            ),
+        )
+    )
+    merged["generation_repetition_rate"] = _metric(
+        metrics,
+        "generation_repetition_rate",
+        _metric(
+            summary,
+            "mean_generation_repetition_rate",
+            _metric(summary, "generation_repetition_rate", 1.0),
+        ),
+    )
+    merged["generation_similarity"] = _metric(
+        metrics,
+        "generation_similarity",
+        _metric(
+            summary,
+            "mean_generation_similarity",
+            _metric(summary, "generation_similarity", 0.0),
+        ),
+    )
+    merged["nll_per_byte"] = _metric(
+        metrics,
+        "nll_per_byte",
+        _metric(
+            summary,
+            "mean_nll_per_byte",
+            _metric(summary, "nll_per_byte", float("inf")),
+        ),
+    )
+    merged["worst_domain_regression"] = _metric(
+        summary,
+        "worst_domain_regression",
+        _metric(metrics, "worst_domain_regression", float("inf")),
+    )
+    merged["score"] = _metric(
+        summary,
+        "score",
+        _metric(metrics, "score", 0.0),
+    )
+    return merged
+
+
+def _research_mobile_key(profile: dict[str, Any]) -> tuple:
+    return (
+        0 if bool(profile.get("all_seed_eligible")) else 1,
+        bool(profile.get("generation_pathological_repetition", True)),
+        float(profile.get("worst_domain_regression", float("inf"))),
+        float(profile.get("generation_repetition_rate", 1.0)),
+        -float(profile.get("generation_similarity", 0.0)),
+        float(profile.get("nll_per_byte", float("inf"))),
+        -float(profile.get("score", 0.0)),
+    )
+
+
+def _select_mobile_research(
+    state: Path,
+) -> tuple[Path, dict[str, Any]] | None:
+    candidates: list[tuple[Path, dict[str, Any]]] = []
+
+    latest = state / "latest-research"
+    latest_summary = _safe_json(latest / "research-summary.json", {})
+    if latest.is_dir() and isinstance(latest_summary, dict) and latest_summary:
+        candidates.append((
+            latest,
+            _research_profile(
+                latest,
+                latest_summary,
+                source="latest-research",
+            ),
+        ))
+
+    incumbent = state / "architecture-research" / "incumbent"
+    incumbent_checkpoint = incumbent / "checkpoint"
+    incumbent_summary = _safe_json(incumbent / "summary.json", {})
+    if (
+        incumbent_checkpoint.is_dir()
+        and isinstance(incumbent_summary, dict)
+        and incumbent_summary
+        and not bool(incumbent_summary.get("external_pretrained"))
+    ):
+        candidates.append((
+            incumbent_checkpoint,
+            _research_profile(
+                incumbent_checkpoint,
+                incumbent_summary,
+                source="architecture-incumbent",
+            ),
+        ))
+
+    if not candidates:
+        return None
+    return min(candidates, key=lambda row: _research_mobile_key(row[1]))
+
+
 def _neural_diagnostics(runtime) -> dict[str, Any]:
     import torch
 
@@ -231,15 +343,22 @@ def _mobile_airi_pc_lab(status: dict[str, Any], state: Path) -> dict[str, Any]:
             "error": f"{type(exc).__name__}:{exc}",
         }
 
-    research_path = state / "latest-research"
-    if research_path.is_dir():
+    selected_research = _select_mobile_research(state)
+    if selected_research is not None:
+        research_path, research_summary = selected_research
         try:
             research = GeneralistRuntime.from_checkpoint(research_path, device="cpu")
-            report["research"] = run_airi_pc_lab_probe(research, snapshot)
+            report["research"] = {
+                **run_airi_pc_lab_probe(research, snapshot),
+                "research_source": research_summary.get("research_source"),
+                "candidate_id": research_summary.get("candidate_id"),
+            }
         except Exception as exc:
             report["research"] = {
                 "ok": False,
                 "tool_call_valid": False,
+                "research_source": research_summary.get("research_source"),
+                "candidate_id": research_summary.get("candidate_id"),
                 "error": f"{type(exc).__name__}:{exc}",
             }
     return report
@@ -507,17 +626,17 @@ def export_mobile_bundle(
         )
     }
 
-    research_checkpoint = state / "latest-research"
-    research_summary_path = research_checkpoint / "research-summary.json"
-    if research_checkpoint.is_dir() and research_summary_path.is_file():
-        research_summary = json.loads(
-            research_summary_path.read_text(encoding="utf-8")
-        )
+    selected_research = _select_mobile_research(state)
+    if selected_research is not None:
+        research_checkpoint, research_summary = selected_research
         slots["research"] = _export_checkpoint(
             research_checkpoint,
             output / "research",
             slot_name="research",
             summary=research_summary,
+        )
+        slots["research"]["research_source"] = str(
+            research_summary.get("research_source") or "unknown"
         )
 
     manifest = {
