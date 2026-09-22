@@ -47,13 +47,15 @@ _GENERALIST_WEB_MAX_READ_BYTES = 500_000
 _GENERALIST_WEB_MAX_TEXT = 12_000
 
 
-def _compact_web_text(raw: str) -> str:
+def _compact_web_text(raw: str, *, limit: int | None = _GENERALIST_WEB_MAX_TEXT) -> str:
     text = str(raw or "")
     text = re.sub(r"(?is)<(script|style)\b.*?>.*?</\1>", " ", text)
     text = re.sub(r"(?s)<[^>]+>", " ", text)
     text = html_lib.unescape(text)
     text = re.sub(r"\s+", " ", text).strip()
-    return text[:_GENERALIST_WEB_MAX_TEXT]
+    if limit is None:
+        return text
+    return text[:max(1, int(limit))]
 
 
 def _generalist_web_search(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -89,13 +91,14 @@ def _generalist_web_read(arguments: dict[str, Any]) -> dict[str, Any]:
         timeout=20,
         max_bytes=_GENERALIST_WEB_MAX_READ_BYTES,
     )
-    compact = _compact_web_text(page.get("text", ""))
+    compact_full = _compact_web_text(page.get("text", ""), limit=None)
+    compact = compact_full[:_GENERALIST_WEB_MAX_TEXT]
     return {
         "url": page.get("url", url),
         "content_type": page.get("content_type", ""),
         "bytes": int(page.get("bytes", 0) or 0),
         "text": compact,
-        "truncated": len(str(page.get("text", ""))) > len(compact),
+        "truncated": len(compact_full) > len(compact),
         "read_only": True,
         "remote_content_trusted": False,
     }
