@@ -1,15 +1,15 @@
 {
-  "cycle": 99,
+  "cycle": 102,
   "entries": [
     {
       "all_seed_eligible": false,
       "any_seed_eligible": false,
       "architecture": {
-        "architecture_id": "airi-arch-3-b620fc8f8016",
+        "architecture_id": "airi-arch-3-f0d4ed7b4ec0",
         "attention_type": "mha",
         "code_adapter": false,
         "context_length": 128,
-        "d_ff": 256,
+        "d_ff": 192,
         "d_model": 64,
         "data_adapter": false,
         "dropout": 0.0,
@@ -21,7 +21,7 @@
         "local_attention_window": 0,
         "n_heads": 4,
         "n_kv_heads": null,
-        "n_layers": 7,
+        "n_layers": 4,
         "norm_placement": "pre",
         "norm_type": "layernorm",
         "parent_id": "generalist-2-0-57f3721a",
@@ -34,20 +34,68 @@
         "tokenizer_version": "bpe-v1",
         "tool_protocol": "tool-json-v1"
       },
-      "candidate_id": "airi-arch-3-b620fc8f8016",
-      "cumulative_steps": 60,
-      "fingerprint": "7d0fb432df45679f305fb1d12dfbb57d2a667043a916ae0e051761f4e5e94b70",
+      "candidate_id": "airi-arch-3-f0d4ed7b4ec0",
+      "cumulative_steps": 42,
+      "fingerprint": "3e1cef5b721a5b54ff24b4961b2462e429348c4036162d61809775504cdbed2f",
       "kind": "architecture_capacity_scale",
-      "mean_generation_repetition_rate": 0.7257625272331155,
-      "mean_generation_similarity": 0.3209663919442801,
-      "mean_nll_per_byte": 1.6567960919074292,
-      "parameters": 493440,
-      "pathological_repetition": true,
+      "mean_generation_repetition_rate": 0.6836734693877551,
+      "mean_generation_similarity": 0.276044990841493,
+      "mean_nll_per_byte": 1.7405658074145047,
+      "parameters": 246912,
+      "pathological_repetition": false,
       "pretrain_steps": 24,
       "rank": 1,
-      "score": 37.70645681620779,
+      "score": 36.5071829540401,
       "stage": 3,
-      "steps": 34
+      "steps": 24
+    },
+    {
+      "all_seed_eligible": false,
+      "any_seed_eligible": false,
+      "architecture": {
+        "architecture_id": "airi-arch-3-43acfd922225",
+        "attention_type": "mha",
+        "code_adapter": false,
+        "context_length": 128,
+        "d_ff": 128,
+        "d_model": 64,
+        "data_adapter": false,
+        "dropout": 0.0,
+        "family": "decoder_transformer_v1",
+        "ff_variant": "swiglu",
+        "generation": 3,
+        "learning_rate": 0.003,
+        "local_attention_every": 0,
+        "local_attention_window": 0,
+        "n_heads": 4,
+        "n_kv_heads": null,
+        "n_layers": 2,
+        "norm_placement": "pre",
+        "norm_type": "layernorm",
+        "parent_id": "generalist-2-0-57f3721a",
+        "position_encoding": "learned",
+        "reasoning_depth": 1,
+        "retrieval_adapter": false,
+        "symbolic_adapter": false,
+        "target_vocab_size": 384,
+        "tie_embeddings": true,
+        "tokenizer_version": "bpe-v1",
+        "tool_protocol": "tool-json-v1"
+      },
+      "candidate_id": "airi-arch-3-43acfd922225",
+      "cumulative_steps": 28,
+      "fingerprint": "c2dee02ab87bed6d5dfe06936810e2e0bb51cb2e748ed1991901f29a6bebf94d",
+      "kind": "architecture_control",
+      "mean_generation_repetition_rate": 0.8210756634669678,
+      "mean_generation_similarity": 0.1614800925217273,
+      "mean_nll_per_byte": 1.826390603503341,
+      "parameters": 115328,
+      "pathological_repetition": true,
+      "pretrain_steps": 24,
+      "rank": 2,
+      "score": 35.77068252022885,
+      "stage": 3,
+      "steps": 16
     }
   ],
   "existing_generalist_gates_preserved": true,
@@ -98,14 +146,14 @@
   "meta_controller": {
     "action": "architecture_search",
     "observations": {
-      "cycle": 98,
-      "language_nll": 3.0505153574842088,
+      "cycle": 101,
+      "language_nll": null,
       "minimum_language_success": false,
       "next_parameter_tier": 250000,
       "parameter_cap": 7000000,
       "parameters": 115328,
-      "pathological_repetition": true,
-      "repetition_rate": 0.8410443722943723
+      "pathological_repetition": false,
+      "repetition_rate": 0.0
     },
     "permissions": {
       "may_access_secrets": false,
@@ -117,7 +165,7 @@
       "may_weaken_promotion_gates": false
     },
     "reasons": [
-      "autoregressive language collapse remains"
+      "champion remains below first serious capacity tier"
     ],
     "schema": 1,
     "version": "airi-generalist-meta-controller-v1"
