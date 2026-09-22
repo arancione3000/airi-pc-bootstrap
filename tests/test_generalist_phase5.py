@@ -15,6 +15,7 @@ from generalist_lm.bootstrap_data import (
     _oasst_conversations,
     _parse_oasst,
     _quality_web_text,
+    _read_streaming_cache,
     _web_chunks,
     load_bootstrap_replay,
     write_bootstrap_replay,
@@ -187,6 +188,27 @@ def test_fasttrack_web_chunking_is_bounded_and_normalizes_whitespace():
     assert all(len(row) <= 180 for row in chunks)
     assert all("   " not in row for row in chunks)
     assert all(_quality_web_text(row) for row in chunks)
+
+
+def test_fasttrack_stream_cache_roundtrips_with_digest_validation(tmp_path):
+    tokenizer = ByteTokenizer()
+    source = {"id": "fixture", "domain": "general"}
+    text = "Una frase naturale abbastanza lunga per verificare la cache del corpus AIRI."
+    digest = __import__("hashlib").sha256(text.encode("utf-8")).hexdigest()
+    cache = tmp_path / "fixture.jsonl.gz"
+    with gzip.open(cache, "wt", encoding="utf-8") as handle:
+        handle.write(json.dumps({
+            "source": "fixture:1:0",
+            "text": text,
+            "sha256": digest,
+        }, sort_keys=True) + "\n")
+    quota = len(tokenizer.encode(text)) + 1
+    documents, tokens = _read_streaming_cache(
+        source, tokenizer, quota=quota, cache_path=cache
+    )
+    assert tokens == quota
+    assert len(documents) == 1
+    assert documents[0].text == text
 
 
 def test_oasst_parser_excludes_synthetic_and_builds_human_dialogue():
