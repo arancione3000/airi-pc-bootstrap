@@ -104,6 +104,84 @@ def _generalist_web_read(arguments: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _generalist_memory_search(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Search only previously verified AIRI Generalist lab experiences."""
+    from pathlib import Path
+    import json
+    import os
+
+    query = str(arguments.get("query", "")).strip()
+    if not query or len(query) > 1000:
+        raise ValueError("memory search query must be 1..1000 characters")
+    try:
+        limit = max(1, min(8, int(arguments.get("limit", 5))))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("memory search limit must be an integer") from exc
+
+    raw_root = os.environ.get("AIRI_GENERALIST_RESEARCH_STATE", "").strip()
+    if not raw_root:
+        return {
+            "query": query,
+            "matches": [],
+            "count": 0,
+            "available": False,
+            "reason": "AIRI_GENERALIST_RESEARCH_STATE is not configured",
+            "verified_only": True,
+        }
+    root = Path(raw_root).expanduser().resolve()
+    path = root / "airi-pc-lab-experiences.jsonl"
+    if not path.is_file() or path.stat().st_size > 2_000_000:
+        return {
+            "query": query,
+            "matches": [],
+            "count": 0,
+            "available": path.is_file(),
+            "verified_only": True,
+        }
+
+    tokens = [token for token in re.findall(r"[\w-]+", query.casefold()) if len(token) >= 2]
+    scored: list[tuple[int, dict[str, Any]]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[-2000:]:
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        if not isinstance(row, dict) or row.get("domain") != "tools":
+            continue
+        messages = row.get("messages")
+        if not isinstance(messages, list):
+            continue
+        text = " ".join(
+            str(message.get("content", ""))
+            for message in messages
+            if isinstance(message, dict)
+        )
+        haystack = text.casefold()
+        score = sum(1 for token in tokens if token in haystack)
+        if score <= 0:
+            continue
+        scored.append((
+            score,
+            {
+                "id": str(row.get("id") or ""),
+                "cycle": int(row.get("cycle", 0) or 0),
+                "source": str(row.get("source") or ""),
+                "text": text[:2500],
+                "verified": True,
+            },
+        ))
+    scored.sort(key=lambda item: (-item[0], -int(item[1]["cycle"]), item[1]["id"]))
+    matches = [row for _score, row in scored[:limit]]
+    return {
+        "query": query,
+        "matches": matches,
+        "count": len(matches),
+        "available": True,
+        "verified_only": True,
+        "read_only": True,
+    }
+
+
 def _sensitive_workspace_path(path) -> bool:
     from pathlib import Path
 
@@ -494,6 +572,20 @@ def tool_specs() -> dict[str, dict[str, Any]]:
                 "properties": {"path": {"type": "string"}},
             },
         },
+        "memory_search": {
+            "description": (
+                "Search previously verified AIRI-PC experiences. "
+                "Only independently verified read-only lab experiences are returned."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer"},
+                },
+                "required": ["query"],
+            },
+        },
         "web_search": {
             "description": (
                 "Search public HTTPS web sources when current or external information is needed. "
@@ -541,6 +633,8 @@ def execute_readonly_tool(name: str, arguments: dict[str, Any]) -> Any:
         return _generalist_file_search(arguments)
     if name == "project_analyze":
         return _generalist_project_analyze(arguments)
+    if name == "memory_search":
+        return _generalist_memory_search(arguments)
     if name == "web_search":
         return _generalist_web_search(arguments)
     if name == "web_read":

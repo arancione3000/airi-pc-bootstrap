@@ -19,13 +19,24 @@ from .airi_pc_lab import (
     summarize_lab_learning,
 )
 from .corpus import repository_corpus
-from .curriculum import DOMAINS, ResearchRow, validation_rows
+from .curriculum import DOMAINS, ResearchRow, train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
 from .evolution import (
     GeneralistGenome,
+    compression_candidate,
     generate_challengers,
     progressive_scale_candidate,
     progressive_scale_target,
+)
+from .distillation import DistillationPrompt, distill_prompts
+from .efficiency_engine import (
+    active_learning_weights,
+    efficiency_bonus,
+    efficiency_profile,
+    island_schedule,
+    island_weights,
+    self_play_policy,
+    sparse_expert_plan,
 )
 from .generalist_data_growth import grow_generalist_data
 from .language_bridge import build_language_bridge_rows
@@ -49,6 +60,7 @@ from .research_cycle import (
     research_seed,
 )
 from .runtime import GeneralistRuntime
+from .verified_self_play import generate_verified_self_play_rows
 
 
 GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v5"
@@ -166,12 +178,22 @@ def _unique_candidates(
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     for kind, genome in rows:
+        topology = {
+            key: value
+            for key, value in genome.to_dict().items()
+            if key not in {"generation", "parent_id", "genome_id"}
+        }
+        # Learned checkpoints with identical topology are not duplicates:
+        # their weights encode different acquired capabilities. Reserve one
+        # independent slot for each fusion lineage while continuing to
+        # deduplicate ordinary architecture/topology probes.
+        lineage = (
+            str(kind)
+            if str(kind) in {"language_fusion", "specialist_fusion"}
+            else "topology"
+        )
         signature = json.dumps(
-            {
-                key: value
-                for key, value in genome.to_dict().items()
-                if key not in {"generation", "parent_id", "genome_id"}
-            },
+            {"lineage": lineage, "topology": topology},
             sort_keys=True,
         )
         if signature in seen:
@@ -268,6 +290,127 @@ def _phase5_language_fusion_candidate(
         return None
 
 
+def _internal_distillation_rows(
+    root: Path,
+    teacher: dict[str, Any] | None,
+    *,
+    max_rows: int = 12,
+) -> tuple[list[ResearchRow], dict[str, Any]]:
+    """Distill only from a strong persisted specialist and only on train rows."""
+    if not isinstance(teacher, dict):
+        return [], {"enabled": False, "reason": "no persisted specialist teacher"}
+    island = str(teacher.get("island") or "")
+    summary = teacher.get("summary") or {}
+    if island not in {"language", "coding", "reasoning"}:
+        return [], {
+            "enabled": False,
+            "reason": "tool/efficiency specialists use verified replay rather than free-form distillation",
+        }
+    if not bool(summary.get("all_seed_eligible")):
+        return [], {"enabled": False, "reason": "specialist has not passed all-seed research gates"}
+    if bool(summary.get("any_generation_pathological_repetition", True)):
+        return [], {"enabled": False, "reason": "specialist still has pathological repetition"}
+    if float(summary.get("mean_generation_similarity", 0.0) or 0.0) < 0.45:
+        return [], {"enabled": False, "reason": "specialist generation similarity is below 0.45"}
+    if float(summary.get("mean_generation_repetition_rate", 1.0) or 1.0) > 0.45:
+        return [], {"enabled": False, "reason": "specialist repetition rate is above 0.45"}
+
+    checkpoint = root / str(teacher.get("checkpoint") or "")
+    try:
+        runtime = GeneralistRuntime.from_checkpoint(checkpoint, device="cpu")
+    except Exception as exc:
+        return [], {
+            "enabled": False,
+            "reason": f"teacher checkpoint unavailable:{type(exc).__name__}:{exc}",
+        }
+
+    domain_map = {
+        "language": {"language"},
+        "coding": {"coding"},
+        "reasoning": {"reasoning", "data"},
+    }
+    prompts: list[DistillationPrompt] = []
+    for row in train_rows():
+        if row.domain not in domain_map[island]:
+            continue
+        user = next(
+            (
+                str(message.get("content", ""))
+                for message in row.messages
+                if str(message.get("role", "")) == "user"
+            ),
+            "",
+        ).strip()
+        if not user:
+            continue
+        prompts.append(DistillationPrompt(domain=row.domain, prompt=user))
+        if len(prompts) >= max(1, min(24, int(max_rows))):
+            break
+
+    examples, report = distill_prompts(
+        runtime,
+        prompts,
+        max_new_tokens=128,
+        max_output_chars=4000,
+    )
+    distilled_domain = island if island in {"language", "coding"} else "reasoning"
+    rows = [
+        ResearchRow(distilled_domain, list(example.messages))
+        for example in examples
+    ]
+    return rows, {
+        "enabled": True,
+        "teacher_island": island,
+        "teacher_candidate_id": summary.get("candidate_id"),
+        "accepted": len(rows),
+        "requested": len(prompts),
+        "research_only": True,
+        "promotion_bypass": False,
+        "distillation_report": report,
+    }
+
+
+def _persisted_specialist_candidate(
+    root: Path,
+    *,
+    champion_id: str,
+    max_params: int,
+) -> dict[str, Any] | None:
+    specialists = root / "specialists"
+    rows: list[dict[str, Any]] = []
+    for island in ("language", "coding", "reasoning", "tools", "efficiency"):
+        folder = specialists / island
+        summary_path = folder / "summary.json"
+        if not summary_path.is_file() or not (folder / "model.pt").is_file():
+            continue
+        try:
+            summary = _load_json(summary_path)
+            genome = GeneralistGenome(**dict(summary.get("genome") or {})).validate()
+        except Exception:
+            continue
+        if genome.genome_id == champion_id:
+            continue
+        if int(summary.get("parameters", 0) or 0) > int(max_params):
+            continue
+        if not bool(summary.get("research_only", True)):
+            continue
+        rows.append({
+            "island": island,
+            "checkpoint": str(Path("specialists") / island),
+            "summary": summary,
+            "genome": genome,
+        })
+    if not rows:
+        return None
+    rows.sort(
+        key=lambda row: (
+            -float((row["summary"] or {}).get("mean_fitness_score", 0.0) or 0.0),
+            int((row["summary"] or {}).get("parameters", 1 << 60) or (1 << 60)),
+        )
+    )
+    return rows[0]
+
+
 def prepare_swarm(
     state_dir: str | Path,
     output_path: str | Path,
@@ -358,14 +501,38 @@ def prepare_swarm(
         lab_training_rows,
         verified_experience_rows=len(lab_experience_rows),
     )
+    specialist_fusion = _persisted_specialist_candidate(
+        root,
+        champion_id=champion_genome.genome_id,
+        max_params=int(max_params),
+    )
+    distilled_rows, distillation_report = _internal_distillation_rows(
+        root,
+        specialist_fusion,
+        max_rows=12,
+    )
 
+    self_play = self_play_policy(
+        champion_report,
+        verified_tool_experiences=len(lab_experience_rows),
+    )
+    self_play_rows, self_play_report = generate_verified_self_play_rows(
+        champion_runtime,
+        self_play,
+        cycle=cycle,
+        max_tasks=12,
+    )
     memory = CurriculumMemory(root, max_rows=curriculum_max_rows)
     curriculum = memory.expand(
         cycle,
         signals=signals,
-        extra_rows=lab_training_rows,
+        extra_rows=[*lab_training_rows, *self_play_rows, *distilled_rows],
     )
-    domain_weights = adaptive_domain_weights(champion_report)
+    domain_weights = active_learning_weights(
+        champion_report,
+        base_weights=adaptive_domain_weights(champion_report),
+        verified_tool_experiences=len(lab_experience_rows),
+    )
 
     data_report: dict[str, Any] = {
         "ok": True,
@@ -422,6 +589,11 @@ def prepare_swarm(
                 continue
             scale_genomes.append((kind, candidate))
 
+    compressed_genome = compression_candidate(
+        champion_genome,
+        vocab_size=champion_runtime.tokenizer.vocab_size,
+        target_ratio=0.72,
+    )
     generated = generate_challengers(
         champion_genome,
         signals=signals,
@@ -439,10 +611,28 @@ def prepare_swarm(
         # weights rather than replacing them with a fresh continual copy.
         rows.append(("language_fusion", language_fusion["genome"]))
     rows.append(("continual", _continual_genome(champion_genome, cycle)))
+    if specialist_fusion is not None:
+        rows.append(("specialist_fusion", specialist_fusion["genome"]))
     rows.extend(scale_genomes)
+    if compressed_genome is not None:
+        rows.append(("compression", compressed_genome))
     rows.extend(("architecture", genome) for genome in generated)
 
     candidates = _unique_candidates(rows, count=population_size)
+    scheduled_islands = island_schedule(len(candidates), signals=signals)
+    for idx, candidate in enumerate(candidates):
+        kind = str(candidate.get("kind") or "")
+        if kind == "language_fusion":
+            island = "language"
+        elif kind == "specialist_fusion" and specialist_fusion is not None:
+            island = str(specialist_fusion["island"])
+        elif kind == "compression" or kind.startswith("progressive_scale"):
+            island = "efficiency"
+        else:
+            island = scheduled_islands[idx]
+        candidate["island"] = island
+        candidate["domain_weights"] = island_weights(domain_weights, island)
+        candidate["sparse_expert_role"] = island
     if language_fusion is not None:
         fusion_genome = language_fusion["genome"]
         fusion_evidence = {
@@ -456,6 +646,20 @@ def prepare_swarm(
             candidate["initial_checkpoint"] = str(language_fusion["checkpoint"])
             candidate["initial_checkpoint_mode"] = "language_fusion"
             candidate["fusion_evidence"] = fusion_evidence
+            break
+    if specialist_fusion is not None:
+        specialist_genome = specialist_fusion["genome"]
+        for candidate in candidates:
+            if candidate.get("candidate_id") != specialist_genome.genome_id:
+                continue
+            candidate["initial_checkpoint"] = str(specialist_fusion["checkpoint"])
+            candidate["initial_checkpoint_mode"] = "specialist_fusion"
+            candidate["specialist_evidence"] = dict(specialist_fusion["summary"])
+            candidate["island"] = str(specialist_fusion["island"])
+            candidate["domain_weights"] = island_weights(
+                domain_weights,
+                candidate["island"],
+            )
             break
     # If a duplicate collapsed the population, rotate deeper into the standard
     # mutation library until the requested matrix is full.
@@ -476,6 +680,45 @@ def prepare_swarm(
             count=population_size,
         )
         offset += 1
+
+    scheduled_islands = island_schedule(len(candidates), signals=signals)
+    for idx, candidate in enumerate(candidates):
+        kind = str(candidate.get("kind") or "")
+        if kind == "language_fusion":
+            island = "language"
+        elif kind == "specialist_fusion" and specialist_fusion is not None:
+            island = str(specialist_fusion["island"])
+        elif kind == "compression" or kind.startswith("progressive_scale"):
+            island = "efficiency"
+        else:
+            island = str(candidate.get("island") or scheduled_islands[idx])
+        candidate["island"] = island
+        candidate["domain_weights"] = island_weights(domain_weights, island)
+        candidate["sparse_expert_role"] = island
+
+    # _unique_candidates() intentionally rebuilds rows during population refill.
+    # Re-attach learned checkpoint provenance after that step so a language or
+    # specialist fusion candidate never silently falls back to fresh weights.
+    if language_fusion is not None:
+        fusion_genome = language_fusion["genome"]
+        for candidate in candidates:
+            if candidate.get("candidate_id") == fusion_genome.genome_id:
+                candidate["initial_checkpoint"] = str(language_fusion["checkpoint"])
+                candidate["initial_checkpoint_mode"] = "language_fusion"
+                candidate["fusion_evidence"] = {
+                    key: value
+                    for key, value in language_fusion.items()
+                    if key != "genome"
+                }
+                break
+    if specialist_fusion is not None:
+        specialist_genome = specialist_fusion["genome"]
+        for candidate in candidates:
+            if candidate.get("candidate_id") == specialist_genome.genome_id:
+                candidate["initial_checkpoint"] = str(specialist_fusion["checkpoint"])
+                candidate["initial_checkpoint_mode"] = "specialist_fusion"
+                candidate["specialist_evidence"] = dict(specialist_fusion["summary"])
+                break
 
     champion_vocab_size = int(getattr(champion_runtime.tokenizer, "vocab_size", 0) or 0)
     bpe_growth_target = champion_vocab_size
@@ -503,6 +746,27 @@ def prepare_swarm(
         },
         "curriculum": curriculum,
         "domain_weights": domain_weights,
+        "active_learning": {
+            "enabled": True,
+            "domain_weights": domain_weights,
+            "verified_tool_experiences": len(lab_experience_rows),
+            "policy": "allocate bounded extra replay to measured weak domains",
+        },
+        "sparse_experts": sparse_expert_plan(
+            available_islands=sorted({str(row.get("island") or "") for row in candidates}),
+        ),
+        "self_play": {
+            **dict(self_play),
+            "cycle_report": self_play_report,
+        },
+        "internal_distillation": distillation_report,
+        "compression": {
+            "enabled": compressed_genome is not None,
+            "candidate_id": (
+                compressed_genome.genome_id if compressed_genome is not None else None
+            ),
+            "policy": "smaller same-width inherited candidate must pass normal gates",
+        },
         "data_growth": data_report,
         "plateau": plateau,
         "progressive_tokenizer": {
@@ -535,6 +799,16 @@ def prepare_swarm(
         },
         "converged_champion": {
             "language_fusion_available": language_fusion is not None,
+            "specialist_fusion_available": specialist_fusion is not None,
+            "specialist_teacher": (
+                {
+                    "island": specialist_fusion["island"],
+                    "checkpoint": specialist_fusion["checkpoint"],
+                    "summary": specialist_fusion["summary"],
+                }
+                if specialist_fusion is not None
+                else None
+            ),
             "language_teacher": (
                 {
                     key: value
@@ -581,6 +855,13 @@ def prepare_swarm(
             "automatic_data_growth_fail_closed": True,
             "airi_pc_lab_read_only": True,
             "airi_pc_lab_training": True,
+            "active_learning": True,
+            "evolution_islands": ["language", "coding", "reasoning", "tools", "efficiency"],
+            "system_sparse_experts": True,
+            "max_active_experts": 1,
+            "compression_research": True,
+            "verified_self_play": bool(self_play.get("enabled")),
+            "internal_distillation": bool(distillation_report.get("enabled")),
             "corpus_language_bridge": True,
             "progressive_bpe_vocab": 1024,
         },
@@ -1101,7 +1382,7 @@ def run_candidate(
 
     task_domain_weights, pretraining_domain_weights, rescue_report = (
         _language_rescue_weights(
-            dict(plan.get("domain_weights") or {}),
+            dict(row.get("domain_weights") or plan.get("domain_weights") or {}),
             documents,
             signals,
         )
@@ -1155,6 +1436,16 @@ def run_candidate(
             report,
             int(report["parameters"]),
         )
+        report["island"] = str(row.get("island") or "efficiency")
+        report["efficiency"] = efficiency_profile(
+            runtime.config,
+            report,
+        )
+        report["efficiency_bonus"] = efficiency_bonus(report["efficiency"])
+        report["score"] = float(report["score"]) + float(report["efficiency_bonus"])
+        if isinstance(report.get("fitness"), dict):
+            report["fitness"]["efficiency_bonus"] = float(report["efficiency_bonus"])
+            report["fitness"]["score_with_efficiency"] = float(report["score"])
         eligible, reason = _research_eligible(
             plan["champion_report"],
             report,
@@ -1302,6 +1593,8 @@ def run_candidate(
         "candidate_index": int(candidate_index),
         "candidate_id": genome.genome_id,
         "kind": row.get("kind"),
+        "island": str(row.get("island") or "efficiency"),
+        "domain_weights": dict(row.get("domain_weights") or {}),
         "genome": genome.to_dict(),
         "reports": reports,
         "all_seed_eligible": all(item["eligible"] for item in reports),
@@ -1325,6 +1618,8 @@ def run_candidate(
         "mean_fitness_score": float(mean(fitness_scores)),
         "best_fitness_score": float(max(fitness_scores)),
         "fitness": dict(best_report.get("fitness") or {}),
+        "efficiency": dict(best_report.get("efficiency") or {}),
+        "efficiency_bonus": float(best_report.get("efficiency_bonus", 0.0) or 0.0),
         "corpus": corpus_report,
         "checkpoint_dir": "best-checkpoint",
         "external_pretrained": False,
@@ -1375,6 +1670,122 @@ def _scan_results(paths: Iterable[str | Path]) -> list[tuple[Path, dict[str, Any
         if current is None or int(row.get("stage", -1)) > int(current[1].get("stage", -1)):
             by_index[idx] = (path, row)
     return list(by_index.values())
+
+
+def _persist_specialist_checkpoints(
+    root: Path,
+    scanned: list[tuple[Path, dict[str, Any]]],
+    *,
+    cycle: int,
+) -> dict[str, Any]:
+    """Keep the best safe research checkpoint for each specialist island.
+
+    Specialists are research-only and never bypass normal champion/production
+    promotion. Persisting them prevents useful domain discoveries from being
+    discarded just because another candidate wins the global tournament.
+    """
+    allowed = {"language", "coding", "reasoning", "tools", "efficiency"}
+    grouped: dict[str, list[tuple[Path, dict[str, Any]]]] = {}
+    for path, row in scanned:
+        island = str(row.get("island") or "")
+        if island not in allowed:
+            continue
+        if bool(row.get("any_generation_pathological_repetition")):
+            continue
+        if float(row.get("worst_domain_regression", float("inf"))) > 0.18:
+            continue
+        checkpoint = path.parent / str(row.get("checkpoint_dir") or "best-checkpoint")
+        if not checkpoint.is_dir():
+            continue
+        grouped.setdefault(island, []).append((checkpoint, row))
+
+    specialists_root = root / "specialists"
+    specialists_root.mkdir(parents=True, exist_ok=True)
+    summary: dict[str, Any] = {}
+    for island in sorted(allowed):
+        options = grouped.get(island) or []
+        if not options:
+            existing = _load_json(specialists_root / island / "summary.json") if (
+                specialists_root / island / "summary.json"
+            ).is_file() else None
+            if isinstance(existing, dict):
+                summary[island] = existing
+            continue
+
+        options.sort(
+            key=lambda pair: (
+                0 if bool(pair[1].get("all_seed_eligible")) else 1,
+                -float(pair[1].get("mean_fitness_score", pair[1].get("score", 0.0))),
+                float(pair[1].get("mean_nll_per_byte", float("inf"))),
+                int(pair[1].get("parameters", 1 << 60)),
+            )
+        )
+        checkpoint, row = options[0]
+        candidate_summary = {
+            "island": island,
+            "candidate_id": str(row.get("candidate_id") or ""),
+            "cycle": int(cycle),
+            "stage": int(row.get("stage", 0) or 0),
+            "parameters": int(row.get("parameters", 0) or 0),
+            "score": float(row.get("score", 0.0) or 0.0),
+            "mean_fitness_score": float(
+                row.get("mean_fitness_score", row.get("score", 0.0)) or 0.0
+            ),
+            "mean_nll_per_byte": float(row.get("mean_nll_per_byte", 0.0) or 0.0),
+            "mean_generation_similarity": float(
+                row.get("mean_generation_similarity", 0.0) or 0.0
+            ),
+            "mean_generation_repetition_rate": float(
+                row.get("mean_generation_repetition_rate", 0.0) or 0.0
+            ),
+            "all_seed_eligible": bool(row.get("all_seed_eligible")),
+            "any_seed_eligible": bool(row.get("any_seed_eligible")),
+            "any_generation_pathological_repetition": bool(
+                row.get("any_generation_pathological_repetition")
+            ),
+            "worst_domain_regression": float(
+                row.get("worst_domain_regression", 1_000_000.0) or 0.0
+            ),
+            "research_only": True,
+            "production_qualified": False,
+            "external_pretrained": False,
+            "all_seed_eligible": bool(row.get("all_seed_eligible")),
+            "any_generation_pathological_repetition": bool(
+                row.get("any_generation_pathological_repetition")
+            ),
+            "genome": dict(row.get("genome") or {}),
+        }
+        destination = specialists_root / island
+        existing_summary = (
+            _load_json(destination / "summary.json")
+            if (destination / "summary.json").is_file()
+            else {}
+        )
+        existing_score = float(
+            existing_summary.get("mean_fitness_score", float("-inf"))
+            if isinstance(existing_summary, dict)
+            else float("-inf")
+        )
+        if candidate_summary["mean_fitness_score"] > existing_score:
+            tmp = specialists_root / f".{island}-next"
+            shutil.rmtree(tmp, ignore_errors=True)
+            shutil.copytree(checkpoint, tmp)
+            _atomic_json(tmp / "summary.json", candidate_summary)
+            backup = specialists_root / f".{island}-old"
+            shutil.rmtree(backup, ignore_errors=True)
+            if destination.exists():
+                destination.replace(backup)
+            tmp.replace(destination)
+            shutil.rmtree(backup, ignore_errors=True)
+            summary[island] = candidate_summary
+        elif isinstance(existing_summary, dict):
+            summary[island] = existing_summary
+    return {
+        "mode": "system_sparse_experts",
+        "max_active_experts": 1,
+        "specialists": summary,
+        "research_only": True,
+    }
 
 
 def select_survivors(
@@ -1500,6 +1911,11 @@ def finalize_swarm(
         for path, row in scanned
         if row.get("all_seed_eligible")
     ]
+    specialist_state = _persist_specialist_checkpoints(
+        root,
+        scanned,
+        cycle=int(plan["cycle"]),
+    )
 
     # Persist the best Stage-3 research checkpoint independently from the
     # production champion. This is explicitly research-only: the Android lab
@@ -1774,7 +2190,15 @@ def finalize_swarm(
         "curriculum_memory": plan.get("curriculum"),
         "adaptive_curriculum": {
             "domain_weights": plan.get("domain_weights") or {},
+            "active_learning": plan.get("active_learning") or {},
         },
+        "sparse_experts": {
+            **dict(plan.get("sparse_experts") or {}),
+            **dict(specialist_state or {}),
+        },
+        "self_play": plan.get("self_play") or {},
+        "internal_distillation": plan.get("internal_distillation") or {},
+        "compression": plan.get("compression") or {},
         "rotating_canary": {
             "cycle": cycle,
             "domains": [row.domain for row in rotating],

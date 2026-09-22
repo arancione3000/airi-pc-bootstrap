@@ -375,6 +375,60 @@ def progressive_scale_candidate(
     return GeneralistGenome(**payload).validate()
 
 
+def compression_candidate(
+    champion: GeneralistGenome,
+    *,
+    vocab_size: int = 264,
+    target_ratio: float = 0.72,
+) -> GeneralistGenome | None:
+    """Create a smaller same-width candidate that can inherit most weights.
+
+    Depth compression is preferred over width changes because existing blocks,
+    embeddings and tokenizer-aligned tensors remain exactly reusable. The
+    compressed model must still win the normal held-out and production gates.
+    """
+    champion.validate()
+    current = estimate_parameter_count(champion.model_config(vocab_size))
+    target = max(1, int(current * max(0.50, min(0.90, float(target_ratio)))))
+    choices: list[tuple[int, int, int]] = []
+
+    # Remove one or two residual blocks while preserving width/FFN layout.
+    for layers in range(max(1, champion.n_layers - 2), champion.n_layers):
+        try:
+            payload = {**champion.to_dict(), "n_layers": layers}
+            candidate = GeneralistGenome(**payload).validate()
+            params = estimate_parameter_count(candidate.model_config(vocab_size))
+        except Exception:
+            continue
+        if params < current:
+            choices.append((abs(params - target), params, layers))
+
+    if not choices:
+        return None
+    _distance, _params, layers = min(choices)
+    payload = {
+        **champion.to_dict(),
+        "generation": champion.generation + 1,
+        "parent_id": champion.genome_id,
+        "n_layers": int(layers),
+        "learning_rate": max(1e-5, min(float(champion.learning_rate) * 0.5, 5e-4)),
+    }
+    raw = json.dumps(
+        {
+            "parent": champion.genome_id,
+            "compression": True,
+            "layers": layers,
+            "target_ratio": float(target_ratio),
+        },
+        sort_keys=True,
+    ).encode("utf-8")
+    payload["genome_id"] = (
+        f"generalist-{champion.generation + 1}-compress-"
+        f"{hashlib.sha256(raw).hexdigest()[:8]}"
+    )
+    return GeneralistGenome(**payload).validate()
+
+
 def progressive_scale_target(
     current_parameters: int,
     *,

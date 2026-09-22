@@ -68,7 +68,7 @@ def run(cmd:str,cwd:str='.',timeout:int=120,allow_shell:bool=False)->dict[str,An
 
 def tree(path='.',limit=4000):
     r=safe_path(path); out=[]
-    for p in r.rglob('*'):
+    for p in sorted(r.rglob('*'), key=lambda item: str(item.relative_to(r))):
         if p.is_file() and '.git' not in p.parts and '.venv' not in p.parts and '__pycache__' not in p.parts:
             out.append(str(p.relative_to(ROOT)))
             if len(out)>=limit: break
