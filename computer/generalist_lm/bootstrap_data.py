@@ -208,7 +208,7 @@ def _web_chunks(text: str, *, max_chars: int = 1800) -> list[str]:
         return []
     paragraphs = [
         re.sub(r"\s+", " ", part).strip()
-        for part in re.split(r"\\n\\s*\\n+", cleaned)
+        for part in re.split(r"\n\s*\n+", cleaned)
         if part.strip()
     ]
     out: list[str] = []
