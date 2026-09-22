@@ -98,8 +98,18 @@ jobs:
           mkdir -p "${CACHE_DIR}"
           test -f "${STATE_DIR}/champion/model.pt"
           test -f "${STATE_DIR}/status.json"
-          printf '{"workflow_run_id":%s,"target_tokens":%s,"started_at":"%s"}\n' \
-            "${GITHUB_RUN_ID}" "${TARGET_TOKENS}" "$(date -u +%FT%TZ)" \
+
+          persisted_target=0
+          if [[ -f "${STATE_DIR}/bootstrap-data/progress.json" ]]; then
+            persisted_target="$(jq -r '.target_tokens // 0' "${STATE_DIR}/bootstrap-data/progress.json")"
+          fi
+          effective_target="${TARGET_TOKENS}"
+          if (( persisted_target > effective_target )); then
+            effective_target="${persisted_target}"
+          fi
+          echo "TARGET_TOKENS=${effective_target}" >> "${GITHUB_ENV}"
+          printf '{"workflow_run_id":%s,"target_tokens":%s,"requested_target_tokens":%s,"started_at":"%s"}\n' \
+            "${GITHUB_RUN_ID}" "${effective_target}" "${TARGET_TOKENS}" "$(date -u +%FT%TZ)" \
             > "${STATE_DIR}/bootstrap-data-active.json"
 
       - name: Run resumable language-first bootstrap segments
