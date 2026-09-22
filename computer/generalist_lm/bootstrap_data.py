@@ -409,7 +409,12 @@ def _load_or_stream_hf_documents(
         return documents, tokens
     cache_path.unlink(missing_ok=True)
 
-    ctx = mp.get_context("spawn")
+    # GitHub Linux prefetch sometimes invokes this function from ``python -``.
+    # ``spawn`` cannot re-import a ``<stdin>`` main module, while ``fork`` can
+    # safely isolate the third-party HTTP finalizers we intentionally avoid.
+    # Fall back to spawn on platforms that do not provide fork.
+    methods = set(mp.get_all_start_methods())
+    ctx = mp.get_context("fork" if "fork" in methods else "spawn")
     worker = ctx.Process(
         target=_stream_hf_cache_worker,
         args=(source, tokenizer, quota, str(cache_path)),
