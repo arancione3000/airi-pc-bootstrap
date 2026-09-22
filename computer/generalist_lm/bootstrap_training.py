@@ -19,7 +19,7 @@ from .airi_pc_lab import (
     snapshot_airi_pc_lab,
     run_airi_pc_lab_probe,
 )
-from .bootstrap_data import build_bootstrap_bundle, write_bootstrap_replay
+from .bootstrap_data import build_bootstrap_bundle, load_bootstrap_replay, write_bootstrap_replay
 from .curriculum import train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
 from .evolution import GeneralistGenome, progressive_scale_candidate
@@ -768,26 +768,69 @@ def run_segment(
 
     previous_manifest = _load_json(manifest_path) if manifest_path.is_file() else None
     corpus_target_tokens = _bootstrap_corpus_target(target_tokens)
-    bundle = build_bootstrap_bundle(
-        champion_runtime.tokenizer,
-        cache_dir=cache,
-        target_tokens=int(corpus_target_tokens),
-        previous_manifest=previous_manifest,
+    bundle = None
+    replay_manifest: dict[str, Any] = {}
+
+    # Fast resume is allowed only when every persisted identity matches the
+    # current reviewed corpus/tokenizer contract.  This avoids reconstructing
+    # the full 20M-token text bundle on every intermediate 100M segment.
+    replay_bundle = load_bootstrap_replay(bootstrap_root)
+    reusable_manifest = bool(
+        isinstance(previous_manifest, dict)
+        and int(previous_manifest.get("target_tokens", 0) or 0) == int(corpus_target_tokens)
+        and int(previous_manifest.get("actual_selected_tokens", 0) or 0)
+            >= int(corpus_target_tokens * 0.95)
+        and str(previous_manifest.get("tokenizer_version") or "")
+            == str(champion_runtime.tokenizer.version)
+        and int(previous_manifest.get("tokenizer_vocab_size", 0) or 0)
+            == int(champion_runtime.tokenizer.vocab_size)
+        and previous_manifest.get("external_pretrained_weights_used") is False
+        and previous_manifest.get("external_model_distillation_used") is False
+        and replay_bundle.manifest.get("available") is True
+        and str(replay_bundle.manifest.get("source_manifest_sha256") or "")
+            == str(previous_manifest.get("manifest_content_sha256") or "")
     )
-    if int(bundle.manifest.get("actual_selected_tokens", 0) or 0) < int(corpus_target_tokens * 0.95):
-        raise RuntimeError(
-            "bootstrap corpus coverage is below 95% of reviewed unique-corpus target: "
-            f"selected={bundle.manifest.get('actual_selected_tokens')} "
-            f"target={corpus_target_tokens}"
+    if reusable_manifest:
+        replay_manifest = dict(replay_bundle.manifest)
+        replay_manifest.pop("available", None)
+
+    def _materialize_bundle():
+        nonlocal bundle, previous_manifest, replay_manifest
+        if bundle is not None:
+            return bundle
+        built = build_bootstrap_bundle(
+            champion_runtime.tokenizer,
+            cache_dir=cache,
+            target_tokens=int(corpus_target_tokens),
+            previous_manifest=previous_manifest,
         )
-    _atomic_json(manifest_path, bundle.manifest)
-    replay_manifest = write_bootstrap_replay(
-        bundle,
-        champion_runtime.tokenizer,
-        output_dir=bootstrap_root,
-        max_tokens=min(1_000_000, max(250_000, int(target_tokens // 4))),
-        max_sft_conversations=512,
-    )
+        if int(built.manifest.get("actual_selected_tokens", 0) or 0) < int(corpus_target_tokens * 0.95):
+            raise RuntimeError(
+                "bootstrap corpus coverage is below 95% of reviewed unique-corpus target: "
+                f"selected={built.manifest.get('actual_selected_tokens')} "
+                f"target={corpus_target_tokens}"
+            )
+        if reusable_manifest:
+            previous_digest = str((previous_manifest or {}).get("manifest_content_sha256") or "")
+            rebuilt_digest = str(built.manifest.get("manifest_content_sha256") or "")
+            if previous_digest != rebuilt_digest:
+                raise RuntimeError(
+                    "reviewed bootstrap manifest changed during fast resume; refusing stale packed blocks"
+                )
+        bundle = built
+        previous_manifest = built.manifest
+        _atomic_json(manifest_path, built.manifest)
+        replay_manifest = write_bootstrap_replay(
+            built,
+            champion_runtime.tokenizer,
+            output_dir=bootstrap_root,
+            max_tokens=min(1_000_000, max(250_000, int(target_tokens // 4))),
+            max_sft_conversations=512,
+        )
+        return bundle
+
+    if not reusable_manifest:
+        _materialize_bundle()
 
     if not before_path.is_file():
         _atomic_json(before_path, evaluate_phase5_language(champion_runtime))
