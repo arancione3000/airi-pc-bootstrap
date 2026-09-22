@@ -22,7 +22,13 @@ from .airi_pc_lab import (
 from .bootstrap_data import build_bootstrap_bundle
 from .curriculum import train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
-from .phase5_diagnostics import evaluate_phase5_language, degeneration_gate
+from .phase5_diagnostics import (
+    degeneration_gate,
+    evaluate_phase5_language,
+    evaluate_sft_validation,
+    protected_bootstrap_texts,
+    sft_validation_gate,
+)
 from .pretraining import pack_causal_blocks, corpus_loss
 from .research_cycle import (
     _continual_candidate_genome,
@@ -38,6 +44,7 @@ from .training import train_sft
 
 
 PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v1"
+PHASE5_SFT_GUARD_VERSION = "phase5-sft-guard-v1"
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -202,7 +209,43 @@ def _causal_curriculum_stage(processed: int, target: int) -> str:
     return "C_causal_next_sentence"
 
 
-def _mixed_replay_rows(root: Path, bootstrap_sft, repo: Path) -> tuple[list, dict[str, int]]:
+def _sft_row_fingerprint(row) -> str:
+    raw = json.dumps(row.messages, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _normal_content(text: str) -> str:
+    return " ".join(str(text).strip().casefold().split())
+
+
+def _filter_protected_replay(rows, *, heldout_sft=()):
+    heldout_hashes = {
+        _sft_row_fingerprint(row)
+        for row in heldout_sft
+    }
+    protected_texts = protected_bootstrap_texts()
+    unique = {}
+    filtered = 0
+    for row in rows:
+        key = _sft_row_fingerprint(row)
+        contents = {
+            _normal_content(message.get("content", ""))
+            for message in row.messages
+        }
+        if key in heldout_hashes or bool(contents & protected_texts):
+            filtered += 1
+            continue
+        unique.setdefault(key, row)
+    return list(unique.values()), int(filtered)
+
+
+def _mixed_replay_rows(
+    root: Path,
+    bootstrap_sft,
+    repo: Path,
+    *,
+    heldout_sft=(),
+) -> tuple[list, dict[str, int]]:
     one_turn = [row for row in bootstrap_sft if len(row.messages) <= 2]
     multi_turn = [row for row in bootstrap_sft if len(row.messages) > 2]
     base = [row.sft() for row in train_rows()]
@@ -227,13 +270,159 @@ def _mixed_replay_rows(root: Path, bootstrap_sft, repo: Path) -> tuple[list, dic
     except Exception:
         counts["persistent_replay"] = 0
 
-    # Deterministic de-duplication without ever adding protected evaluation rows.
-    unique = {}
-    for row in rows:
-        raw = json.dumps(row.messages, ensure_ascii=False, sort_keys=True)
-        key = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-        unique.setdefault(key, row)
-    return list(unique.values()), counts
+    # Deterministic de-duplication plus structural exclusion of every
+    # held-out SFT row and the canonical Phase-5 evaluation strings.
+    filtered_rows, filtered = _filter_protected_replay(
+        rows,
+        heldout_sft=heldout_sft,
+    )
+    counts["held_out_filtered"] = int(filtered)
+    return filtered_rows, counts
+
+
+def _sft_attempt_score(
+    before: dict[str, Any],
+    after: dict[str, Any],
+) -> float:
+    return float(
+        (float(before.get("language_nll", 0.0)) - float(after.get("language_nll", 0.0)))
+        + 0.75 * (
+            float(before.get("repetition_rate", 0.0))
+            - float(after.get("repetition_rate", 0.0))
+        )
+        + 0.25 * (
+            float(after.get("generation_similarity", 0.0))
+            - float(before.get("generation_similarity", 0.0))
+        )
+    )
+
+
+def _run_guarded_sft(
+    runtime: GeneralistRuntime,
+    replay,
+    heldout_sft,
+    *,
+    bootstrap_root: Path,
+    base_model_sha: str,
+    target_tokens: int,
+    seed: int,
+) -> tuple[GeneralistRuntime, dict[str, Any]]:
+    pre_sft_dir = bootstrap_root / "pre-sft"
+    selected_dir = bootstrap_root / ".sft-selected"
+    shutil.rmtree(pre_sft_dir, ignore_errors=True)
+    shutil.rmtree(selected_dir, ignore_errors=True)
+    runtime.save_checkpoint(
+        pre_sft_dir,
+        metadata={
+            "role": "phase5_pre_sft_checkpoint",
+            "production_qualified": False,
+            "base_champion_model_sha256": base_model_sha,
+            "target_tokens": int(target_tokens),
+        },
+    )
+
+    if not replay:
+        return runtime, {
+            "accepted": False,
+            "rolled_back": True,
+            "reason": "no replay rows",
+            "attempts": [],
+        }
+    heldout = list(heldout_sft)
+    if not heldout:
+        return runtime, {
+            "accepted": False,
+            "rolled_back": True,
+            "reason": "no held-out SFT validation rows",
+            "attempts": [],
+        }
+
+    before = evaluate_sft_validation(
+        runtime,
+        heldout,
+        max_examples=24,
+        max_new_tokens=32,
+    )
+    attempts = (
+        {"steps": 80, "learning_rate": 5e-5},
+        {"steps": 40, "learning_rate": 3e-5},
+        {"steps": 20, "learning_rate": 1.5e-5},
+    )
+    reports: list[dict[str, Any]] = []
+    best_score = float("-inf")
+    best_index: int | None = None
+
+    for index, config in enumerate(attempts):
+        trial = GeneralistRuntime.from_checkpoint(pre_sft_dir, device="cpu")
+        train_report = train_sft(
+            trial.model,
+            trial.tokenizer,
+            replay,
+            steps=int(config["steps"]),
+            batch_size=8,
+            learning_rate=float(config["learning_rate"]),
+            weight_decay=0.01,
+            seed=int(seed + index * 101),
+            device="cpu",
+            gradient_accumulation_steps=1,
+            precision="fp32",
+        )
+        after = evaluate_sft_validation(
+            trial,
+            heldout,
+            max_examples=24,
+            max_new_tokens=32,
+        )
+        gate_ok, gate_reasons = sft_validation_gate(before, after)
+        score = _sft_attempt_score(before, after)
+        report = {
+            "index": index,
+            "steps": int(config["steps"]),
+            "learning_rate": float(config["learning_rate"]),
+            "training": train_report,
+            "validation": after,
+            "gate_passed": bool(gate_ok),
+            "gate_reasons": list(gate_reasons),
+            "selection_score": float(score),
+        }
+        reports.append(report)
+        if gate_ok and score > best_score:
+            best_score = float(score)
+            best_index = index
+            shutil.rmtree(selected_dir, ignore_errors=True)
+            trial.save_checkpoint(
+                selected_dir,
+                metadata={
+                    "role": "phase5_guarded_sft_selected",
+                    "production_qualified": False,
+                    "base_champion_model_sha256": base_model_sha,
+                    "target_tokens": int(target_tokens),
+                    "attempt_index": int(index),
+                },
+            )
+
+    if best_index is None:
+        restored = GeneralistRuntime.from_checkpoint(pre_sft_dir, device="cpu")
+        shutil.rmtree(selected_dir, ignore_errors=True)
+        return restored, {
+            "accepted": False,
+            "rolled_back": True,
+            "reason": "all SFT attempts failed held-out degeneration gate",
+            "validation_before": before,
+            "attempts": reports,
+        }
+
+    selected = GeneralistRuntime.from_checkpoint(selected_dir, device="cpu")
+    shutil.rmtree(selected_dir, ignore_errors=True)
+    return selected, {
+        "accepted": True,
+        "rolled_back": False,
+        "reason": "best held-out-safe SFT attempt selected",
+        "validation_before": before,
+        "selected_attempt": int(best_index),
+        "selected_score": float(best_score),
+        "attempts": reports,
+    }
 
 
 def run_segment(
@@ -472,30 +661,59 @@ def run_segment(
     progress["rung_complete"] = bool(rung_complete)
     progress["updated_at_unix"] = int(time.time())
 
-    if rung_complete and target_tokens not in set(progress.get("sft_completed_rungs") or []):
+    completed_sft_before = set(
+        int(x) for x in (progress.get("sft_completed_rungs") or [])
+    )
+    sft_guard_migration = bool(
+        rung_complete
+        and target_tokens in completed_sft_before
+        and str(progress.get("sft_guard_version") or "") != PHASE5_SFT_GUARD_VERSION
+    )
+    needs_sft = bool(
+        rung_complete
+        and (
+            target_tokens not in completed_sft_before
+            or sft_guard_migration
+        )
+    )
+
+    if needs_sft:
         progress["curriculum_stage"] = "D_to_F_supervised_replay"
-        replay, replay_counts = _mixed_replay_rows(root, bundle.sft_train, repo)
-        progress["curriculum_replay_rows"] = replay_counts
-        if replay:
-            sft_report = train_sft(
-                runtime.model,
-                runtime.tokenizer,
-                replay,
-                steps=160,
-                batch_size=8,
-                learning_rate=1e-4,
-                weight_decay=0.01,
-                seed=51 + len(progress.get("completed_rungs") or []),
+        if sft_guard_migration:
+            causal_best_dir = bootstrap_root / "best"
+            if not (causal_best_dir / "model.pt").is_file():
+                raise RuntimeError(
+                    "cannot migrate legacy SFT state without causal-best checkpoint"
+                )
+            runtime = GeneralistRuntime.from_checkpoint(
+                causal_best_dir,
                 device="cpu",
-                gradient_accumulation_steps=1,
-                precision="fp32",
             )
-        else:
-            sft_report = {"ok": False, "reason": "no replay rows"}
+            progress["sft_guard_migrated_from_causal_best"] = True
+        replay, replay_counts = _mixed_replay_rows(
+            root,
+            bundle.sft_train,
+            repo,
+            heldout_sft=bundle.sft_validation,
+        )
+        progress["curriculum_replay_rows"] = replay_counts
+        runtime, sft_report = _run_guarded_sft(
+            runtime,
+            replay,
+            bundle.sft_validation,
+            bootstrap_root=bootstrap_root,
+            base_model_sha=base_model_sha,
+            target_tokens=target_tokens,
+            seed=51 + len(progress.get("completed_rungs") or []),
+        )
         progress["sft_report"] = sft_report
         completed_sft = list(progress.get("sft_completed_rungs") or [])
         completed_sft.append(target_tokens)
         progress["sft_completed_rungs"] = sorted(set(int(x) for x in completed_sft))
+        if bool(sft_report.get("accepted")):
+            accepted_sft = list(progress.get("sft_accepted_rungs") or [])
+            accepted_sft.append(target_tokens)
+            progress["sft_accepted_rungs"] = sorted(set(int(x) for x in accepted_sft))
         runtime.save_checkpoint(
             candidate_dir,
             metadata={
@@ -504,13 +722,21 @@ def run_segment(
                 "base_champion_model_sha256": base_model_sha,
                 "tokens_processed": int(progress["tokens_processed"]),
                 "target_tokens": target_tokens,
-                "sft_replay": True,
+                "sft_replay": bool(sft_report.get("accepted")),
+                "sft_guarded": True,
+                "sft_rolled_back": bool(sft_report.get("rolled_back")),
             },
         )
-        # SFT used a separate optimizer and materially changed the weights.
-        # Do not reuse stale Adam moments on the next causal-pretraining rung.
-        optimizer_path.unlink(missing_ok=True)
-        progress["optimizer_reset_after_sft"] = True
+        # Only accepted SFT changes invalidate the causal Adam moments. If every
+        # SFT attempt is rejected, the restored pre-SFT checkpoint still matches
+        # the persisted causal optimizer exactly.
+        progress["sft_guard_version"] = PHASE5_SFT_GUARD_VERSION
+        progress["sft_guard_migration_applied"] = bool(sft_guard_migration)
+        if bool(sft_report.get("accepted")) or sft_guard_migration:
+            optimizer_path.unlink(missing_ok=True)
+            progress["optimizer_reset_after_sft"] = True
+        else:
+            progress["optimizer_reset_after_sft"] = False
 
     if rung_complete:
         after = evaluate_phase5_language(runtime)
