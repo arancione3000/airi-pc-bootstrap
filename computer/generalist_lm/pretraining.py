@@ -269,8 +269,11 @@ def load_packed_block_cache(
         return None
 
     flat = array(typecode)
-    with target.open("rb") as handle:
-        flat.fromfile(handle, block_size * block_count)
+    try:
+        with target.open("rb") as handle:
+            flat.fromfile(handle, block_size * block_count)
+    except (EOFError, OSError, ValueError):
+        return None
     if len(flat) != block_size * block_count:
         return None
     return PackedBlockArray(flat, block_size)
