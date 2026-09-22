@@ -302,11 +302,12 @@ class CausalTransformerLM:
                 return self.down(F.gelu(self.up(x)))
 
         class SparseMoE(nn.Module):
-            """Token-routed sparse SwiGLU experts.
+            """Top-k routed SwiGLU experts with an ONNX-safe reference kernel.
 
-            Only tokens assigned to an expert are evaluated by that expert.
-            The router itself is tiny and every token activates at most top_k
-            experts, so active compute can stay well below total stored capacity.
+            Routing is sparse: only top_k expert outputs contribute to a token.
+            The reference kernel evaluates all experts so export stays portable;
+            measured latency and FLOP accounting therefore charge the real dense
+            execution cost instead of pretending the sparse kernel already exists.
             """
             def __init__(self):
                 super().__init__()
@@ -321,33 +322,26 @@ class CausalTransformerLM:
                 self.top_k = int(config.moe_top_k)
 
             def forward(self, x):
-                shape = x.shape
-                flat = x.reshape(-1, config.d_model)
-                router_logits = self.router(flat)
+                router_logits = self.router(x)
                 top_values, top_indices = torch.topk(
                     router_logits,
                     k=self.top_k,
                     dim=-1,
                 )
-                weights = torch.softmax(top_values, dim=-1)
-                output = torch.zeros_like(flat)
-                for expert_index, expert in enumerate(self.experts):
-                    for slot in range(self.top_k):
-                        positions = torch.nonzero(
-                            top_indices[:, slot] == expert_index,
-                            as_tuple=False,
-                        ).flatten()
-                        if int(positions.numel()) == 0:
-                            continue
-                        selected = flat.index_select(0, positions)
-                        expert_output = expert(selected)
-                        scale = weights.index_select(0, positions)[:, slot:slot + 1]
-                        output = output.index_add(
-                            0,
-                            positions,
-                            expert_output * scale,
-                        )
-                return output.view(*shape)
+                top_weights = torch.softmax(top_values, dim=-1)
+                gates = torch.zeros_like(router_logits).scatter(
+                    -1,
+                    top_indices,
+                    top_weights,
+                )
+                expert_outputs = torch.stack(
+                    [expert(x) for expert in self.experts],
+                    dim=-2,
+                )
+                return torch.sum(
+                    expert_outputs * gates.unsqueeze(-1),
+                    dim=-2,
+                )
 
         class Block(nn.Module):
             def __init__(self, layer_index: int):
@@ -610,9 +604,11 @@ def estimate_flops_per_token(config: GeneralistLMConfig) -> int:
     if cfg.ff_variant == "gelu":
         active_ff = 2 * cfg.d_model * cfg.d_ff
     elif cfg.ff_variant == "moe_swiglu":
+        # The portable reference kernel evaluates every expert. Top-k routing
+        # is structurally sparse, but compute accounting stays honest.
         active_ff = (
             cfg.moe_experts * cfg.d_model
-            + cfg.moe_top_k * 3 * cfg.d_model * cfg.d_ff
+            + cfg.moe_experts * 3 * cfg.d_model * cfg.d_ff
         )
     else:
         active_ff = 3 * cfg.d_model * cfg.d_ff
