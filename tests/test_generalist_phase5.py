@@ -10,6 +10,7 @@ from generalist_lm.bootstrap_data import (
     BootstrapDataBundle,
     OASST1_REVISION,
     SOURCES,
+    STREAMING_SOURCES,
     _oasst_conversations,
     _parse_oasst,
     load_bootstrap_replay,
@@ -53,6 +54,8 @@ def test_phase5_conversation_rescue_separates_unique_corpus_from_training_budget
     assert _bootstrap_corpus_target(5_000_000) == 5_000_000
     assert _bootstrap_corpus_target(20_000_000) == 5_000_000
     assert _bootstrap_corpus_target(50_000_000) == 5_000_000
+    assert _bootstrap_corpus_target(100_000_000) == 20_000_000
+    assert _bootstrap_corpus_target(500_000_000) == 20_000_000
 
 
 def test_phase5_conversation_rescue_has_explicit_capacity_rungs():
@@ -150,6 +153,17 @@ def test_bootstrap_sources_are_explicitly_licensed_and_pinned():
     assert len(OASST1_REVISION) == 40
     assert all(row["url"].startswith("https://") for row in SOURCES)
     assert all(row["license_url"].startswith("https://") for row in SOURCES)
+
+
+def test_fasttrack_streaming_sources_are_explicit_and_bilingual():
+    by_id = {row["id"]: row for row in STREAMING_SOURCES}
+    assert by_id["fineweb2-it"]["dataset"] == "HuggingFaceFW/fineweb-2"
+    assert by_id["fineweb2-it"]["config"] == "ita_Latn"
+    assert by_id["fineweb-en"]["dataset"] == "HuggingFaceFW/fineweb"
+    assert by_id["fineweb-en"]["config"] == "sample-10BT"
+    assert {row["language"] for row in STREAMING_SOURCES} == {"it", "en"}
+    assert all(row["license"] == "ODC-By-1.0" for row in STREAMING_SOURCES)
+    assert all(row["source_page"].startswith("https://") for row in STREAMING_SOURCES)
 
 
 def test_oasst_parser_excludes_synthetic_and_builds_human_dialogue():
