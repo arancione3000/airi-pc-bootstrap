@@ -265,6 +265,97 @@ def prioritize_architecture_proposals(
     )
 
 
+def _proposal_architecture(row: dict[str, Any]) -> dict[str, Any]:
+    raw = row.get("architecture")
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _is_gqa_proposal(row: dict[str, Any]) -> bool:
+    return str(_proposal_architecture(row).get("attention_type") or "") == "gqa"
+
+
+def _is_local_attention_proposal(row: dict[str, Any]) -> bool:
+    return int(
+        _proposal_architecture(row).get("local_attention_window") or 0
+    ) > 0
+
+
+def select_diverse_architecture_proposals(
+    proposals: Iterable[dict[str, Any]],
+    *,
+    slots: int,
+    attention_slots: int = 2,
+) -> list[dict[str, Any]]:
+    """Fill a bounded population without letting scale crowd out topology.
+
+    Capacity probes remain important, but when verified GQA/local-attention
+    proposals exist we reserve up to two slots for them.  This makes
+    Architecture Search compare "bigger" against "different", rather than
+    accidentally reducing meta-evolution to parameter scaling.
+    """
+    available = [dict(row) for row in proposals]
+    limit = max(0, int(slots))
+    if limit == 0:
+        return []
+
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def take(predicate) -> None:
+        for row in available:
+            fingerprint = str(row.get("fingerprint") or "")
+            if not fingerprint or fingerprint in seen:
+                continue
+            if predicate(row):
+                selected.append(row)
+                seen.add(fingerprint)
+                return
+
+    structural_budget = min(max(0, int(attention_slots)), limit)
+    if structural_budget >= 1:
+        take(_is_gqa_proposal)
+    if structural_budget >= 2 and len(selected) < limit:
+        take(_is_local_attention_proposal)
+
+    for row in prioritize_architecture_proposals(available):
+        if len(selected) >= limit:
+            break
+        fingerprint = str(row.get("fingerprint") or "")
+        if not fingerprint or fingerprint in seen:
+            continue
+        selected.append(row)
+        seen.add(fingerprint)
+    return selected
+
+
+def link_mathesis_hypotheses(
+    proposal: dict[str, Any],
+    hypotheses: Iterable[dict[str, Any]],
+) -> list[str]:
+    """Return MATHESIS hypothesis ids that materially match a proposal."""
+    arch = _proposal_architecture(proposal)
+    out: list[str] = []
+    for hypothesis in hypotheses:
+        mutation = hypothesis.get("mutation")
+        if not isinstance(mutation, dict):
+            continue
+        matched = False
+        if mutation.get("attention_type") == "gqa":
+            matched = str(arch.get("attention_type") or "") == "gqa"
+        elif "local_attention_window_policy" in mutation:
+            matched = int(arch.get("local_attention_window") or 0) > 0
+        elif mutation.get("norm_type") == "rmsnorm":
+            matched = (
+                str(arch.get("norm_type") or "") == "rmsnorm"
+                and str(arch.get("position_encoding") or "") == "rope"
+            )
+        if matched:
+            hypothesis_id = str(hypothesis.get("hypothesis_id") or "").strip()
+            if hypothesis_id:
+                out.append(hypothesis_id)
+    return list(dict.fromkeys(out))
+
+
 def prepare_architecture_search(
     state_dir: str | Path,
     output_path: str | Path,
@@ -354,6 +445,10 @@ def prepare_architecture_search(
         enriched = {
             **proposal,
             "static_verification": verification.report,
+            "mathesis_support": link_mathesis_hypotheses(
+                proposal,
+                mathesis_hypotheses,
+            ),
         }
         if verification.ok:
             verified_proposals.append(enriched)
@@ -408,7 +503,15 @@ def prepare_architecture_search(
         if incumbent_fingerprint and incumbent_fingerprint not in seen:
             candidates.append(incumbent_candidate)
             seen.add(incumbent_fingerprint)
-    ordered_proposals = prioritize_architecture_proposals(verified_proposals)
+    remaining_slots = max(
+        0,
+        int(population_size) - len(candidates),
+    )
+    ordered_proposals = select_diverse_architecture_proposals(
+        verified_proposals,
+        slots=remaining_slots,
+        attention_slots=2,
+    )
     for proposal in ordered_proposals:
         spec = ArchitectureSpec.from_dict(dict(proposal["architecture"]))
         if spec.fingerprint() in seen:
@@ -426,6 +529,7 @@ def prepare_architecture_search(
             "architecture": spec.to_dict(),
             "architecture_fingerprint": spec.fingerprint(),
             "hypothesis": proposal["hypothesis"],
+            "mathesis_support": proposal.get("mathesis_support") or [],
             "falsification": proposal["falsification"],
         })
         if len(candidates) >= max(2, int(population_size)):
@@ -468,6 +572,8 @@ def prepare_architecture_search(
         "architecture_policy": {
             "same_budget_control_required": True,
             "capacity_slots_reserved": True,
+            "attention_structure_slots_reserved": 2,
+            "mathesis_hypotheses_linked_to_candidates": True,
             "same_parent_negative_memory": True,
             "persistent_research_incumbent": True,
             "static_verifier_required": True,
