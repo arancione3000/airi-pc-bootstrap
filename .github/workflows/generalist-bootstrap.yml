@@ -241,6 +241,8 @@ jobs:
           multiword="$(jq -r '.after.multiword_output_rate' "${report}")"
           after_rep="$(jq -r '.after.repetition_rate' "${report}")"
           before_rep="$(jq -r '.before.repetition_rate' "${report}")"
+          pathological="$(jq -r '.after.pathological_repetition // false' "${report}")"
+          model_parameters="$(jq -r '.model_parameters // 0' "${report}")"
           next=""
 
           if [[ "${current}" -lt 5000000 ]]; then
@@ -248,7 +250,12 @@ jobs:
             next=5000000
           elif [[ "${current}" -lt 20000000 ]] && \
                { [[ "${minimum_success}" == "true" ]] || \
+                 [[ "${pathological}" == "true" ]] || \
+                 [[ "${model_parameters}" -lt 1000000 ]] || \
                  awk "BEGIN {exit !(${after_nll} < ${before_nll} - 0.08 && ${after_rep} < ${before_rep})}"; }; then
+            # Conversation rescue rung: bootstrap_training grows the candidate
+            # toward ~1.25M parameters and performs repeated optimization passes
+            # over the pinned ~5M-token reviewed corpus.
             next=20000000
           elif [[ "${minimum_success}" == "true" && "${current}" -lt 50000000 ]] && \
                awk "BEGIN {exit !(${after_nll} < ${before_nll} - 0.25 && ${multiword} >= 0.50)}"; then
