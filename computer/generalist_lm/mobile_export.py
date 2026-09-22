@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import shutil
 import time
@@ -656,6 +657,8 @@ def _active_mobile_summary(
         "candidate_id": active_genome.get("genome_id", "active-lineage"),
         "cycle": int(status.get("cycle", 0) or 0),
         "parameters": int(lineage.get("parameters", 0) or 0),
+        "nll_per_byte": 1_000_000.0,
+        "nll_per_byte_available": False,
         "research_only": False,
         "all_seed_eligible": True,
         "active_lineage": True,
@@ -685,6 +688,13 @@ def _active_mobile_summary(
                     after, "exact_accuracy", 0.0
                 ),
             })
+            try:
+                bits_per_byte = float(after.get("language_bits_per_byte"))
+            except (TypeError, ValueError):
+                bits_per_byte = float("nan")
+            if math.isfinite(bits_per_byte) and bits_per_byte >= 0.0:
+                summary["nll_per_byte"] = bits_per_byte * math.log(2.0)
+                summary["nll_per_byte_available"] = True
     return summary
 
 
