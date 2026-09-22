@@ -61,7 +61,7 @@ jobs:
           set -euo pipefail
           for _ in $(seq 1 120); do
             active=0
-            for workflow in generalist-bootstrap.yml generalist-continuum.yml; do
+            for workflow in generalist-bootstrap.yml generalist-continuum.yml generalist-incumbent-recovery.yml; do
               payload="$(curl --fail-with-body -sS --retry 3 --retry-all-errors \
                 -H "Accept: application/vnd.github+json" \
                 -H "Authorization: Bearer ${GH_TOKEN}" \
