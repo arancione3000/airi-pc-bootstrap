@@ -637,25 +637,21 @@
   },
   "latest_research": {
     "all_seed_eligible": false,
-    "any_generation_pathological_repetition": true,
     "any_seed_eligible": false,
-    "candidate_id": "generalist-3-scale-0e5f96fe",
+    "candidate_id": "phase5-bootstrap-113",
     "cycle": 113,
     "external_pretrained": false,
-    "kind": "progressive_scale",
-    "language_bridge_rows": 32,
-    "max_generation_repeated_token_run": 14,
+    "kind": "language_bootstrap",
     "mean_generation_accuracy": 0.0,
-    "mean_generation_nonempty_rate": 0.9166666666666667,
-    "mean_generation_repetition_rate": 0.7819092827004219,
-    "mean_generation_similarity": 0.2110832823598781,
-    "mean_nll_per_byte": 1.7190904917207153,
-    "parameters": 246912,
+    "mean_generation_nonempty_rate": 1.0,
+    "mean_generation_similarity": 0.13951534422122658,
+    "mean_nll_per_byte": 2.852132775648585,
+    "parameters": 115328,
     "research_only": true,
-    "score": 36.89523119609608,
-    "stage": 3,
+    "score": 25.959529841074673,
+    "stage": 5,
     "tokenizer_vocab_size": 384,
-    "worst_domain_regression": 0.991128104073661
+    "worst_domain_regression": 2.044884872436523
   },
   "mathesis": {
     "curriculum_cursor": 633,
@@ -672,6 +668,1483 @@
     "verifier_available": true
   },
   "ok": true,
+  "phase5_bootstrap": {
+    "after": {
+      "bpe_token_distribution": {
+        "merged_fraction": 0.2648809523809524,
+        "tokenizer_version": "bpe-v1",
+        "vocab_size": 384
+      },
+      "dominant_token_fraction": 0.20689655172413793,
+      "eos_probability": 0.01778690666009468,
+      "exact_accuracy": 0.0,
+      "generation_length": 41.42857142857143,
+      "generation_similarity": 0.05419826801026319,
+      "language_bits_per_byte": 4.523544532407716,
+      "language_nll": 3.1354821387757648,
+      "longest_repeated_token_run": 12,
+      "multiword_output_rate": 0.0,
+      "non_empty_rate": 1.0,
+      "pathological_repetition": true,
+      "prompt_count": 7,
+      "repetition_rate": 0.7261904761904762,
+      "schema": 1,
+      "suite": "phase5-language-holdout-v1",
+      "suite_training_excluded": true,
+      "token_entropy": 3.744559556955383,
+      "token_frequency_distribution": [
+        {
+          "count": 60,
+          "fraction": 0.20689655172413793,
+          "token_id": 40
+        },
+        {
+          "count": 55,
+          "fraction": 0.1896551724137931,
+          "token_id": 120
+        },
+        {
+          "count": 42,
+          "fraction": 0.14482758620689656,
+          "token_id": 272
+        },
+        {
+          "count": 32,
+          "fraction": 0.1103448275862069,
+          "token_id": 367
+        },
+        {
+          "count": 25,
+          "fraction": 0.08620689655172414,
+          "token_id": 119
+        },
+        {
+          "count": 21,
+          "fraction": 0.07241379310344828,
+          "token_id": 113
+        },
+        {
+          "count": 15,
+          "fraction": 0.05172413793103448,
+          "token_id": 56
+        },
+        {
+          "count": 12,
+          "fraction": 0.041379310344827586,
+          "token_id": 327
+        },
+        {
+          "count": 11,
+          "fraction": 0.03793103448275862,
+          "token_id": 123
+        },
+        {
+          "count": 6,
+          "fraction": 0.020689655172413793,
+          "token_id": 105
+        },
+        {
+          "count": 3,
+          "fraction": 0.010344827586206896,
+          "token_id": 57
+        },
+        {
+          "count": 2,
+          "fraction": 0.006896551724137931,
+          "token_id": 116
+        },
+        {
+          "count": 2,
+          "fraction": 0.006896551724137931,
+          "token_id": 376
+        },
+        {
+          "count": 1,
+          "fraction": 0.0034482758620689655,
+          "token_id": 131
+        },
+        {
+          "count": 1,
+          "fraction": 0.0034482758620689655,
+          "token_id": 42
+        },
+        {
+          "count": 1,
+          "fraction": 0.0034482758620689655,
+          "token_id": 291
+        },
+        {
+          "count": 1,
+          "fraction": 0.0034482758620689655,
+          "token_id": 110
+        }
+      ],
+      "top1_probability": 0.1588845477173371,
+      "top5_probability_mass": 0.41935765499337796,
+      "traces": [
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 2,
+            "merged_fraction": 0.0,
+            "merged_tokens": 0
+          },
+          "eos_probability": 0.1113676056265831,
+          "exact": false,
+          "generated_token_ids": [
+            131,
+            42
+          ],
+          "generation_length": 2,
+          "generation_similarity": 0.0,
+          "language": "it",
+          "longest_repeated_token_run": 1,
+          "nonempty": true,
+          "prompt": "Ciao",
+          "raw_output": "{\"",
+          "repetition_rate": 0.0,
+          "target": "Ciao!",
+          "token_entropy": 3.4964664777119956,
+          "token_frequency_distribution": [
+            {
+              "count": 1,
+              "fraction": 0.5,
+              "token_id": 131
+            },
+            {
+              "count": 1,
+              "fraction": 0.5,
+              "token_id": 42
+            }
+          ],
+          "top1_probability": 0.3036740372578303,
+          "top5_probability_mass": 0.5441425244013468,
+          "unique_token_ratio": 1.0
+        },
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 37,
+            "merged_fraction": 0.22916666666666666,
+            "merged_tokens": 11
+          },
+          "eos_probability": 0.0010924980141074532,
+          "exact": false,
+          "generated_token_ids": [
+            40,
+            120,
+            272,
+            40,
+            120,
+            119,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            105,
+            40,
+            123,
+            119,
+            40,
+            120,
+            272,
+            40,
+            120,
+            272,
+            113
+          ],
+          "generation_length": 48,
+          "generation_similarity": 0.08108108108108109,
+          "language": "it",
+          "longest_repeated_token_run": 1,
+          "nonempty": true,
+          "prompt": "Come ti chiami?",
+          "raw_output": " per po peri peri peri peri peri peri peri pera so per peri",
+          "repetition_rate": 0.8541666666666666,
+          "target": "Mi chiamo AIRI.",
+          "token_entropy": 3.6188126504421234,
+          "token_frequency_distribution": [
+            {
+              "count": 13,
+              "fraction": 0.2708333333333333,
+              "token_id": 40
+            },
+            {
+              "count": 12,
+              "fraction": 0.25,
+              "token_id": 120
+            },
+            {
+              "count": 11,
+              "fraction": 0.22916666666666666,
+              "token_id": 272
+            },
+            {
+              "count": 8,
+              "fraction": 0.16666666666666666,
+              "token_id": 113
+            },
+            {
+              "count": 2,
+              "fraction": 0.041666666666666664,
+              "token_id": 119
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 105
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 123
+            }
+          ],
+          "top1_probability": 0.13753072451800108,
+          "top5_probability_mass": 0.4342796504497528,
+          "unique_token_ratio": 0.14583333333333334
+        },
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 40,
+            "merged_fraction": 0.16666666666666666,
+            "merged_tokens": 8
+          },
+          "eos_probability": 0.0011393331299890026,
+          "exact": false,
+          "generated_token_ids": [
+            57,
+            56,
+            56,
+            40,
+            123,
+            119,
+            40,
+            123,
+            119,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            113,
+            40,
+            123,
+            119,
+            40,
+            123,
+            119,
+            40,
+            120,
+            272,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            105,
+            40,
+            120
+          ],
+          "generation_length": 48,
+          "generation_similarity": 0.07317073170731707,
+          "language": "it",
+          "longest_repeated_token_run": 2,
+          "nonempty": true,
+          "prompt": "Scrivi una frase su un gatto.",
+          "raw_output": "100 so so peri peri so so per peri peri peri peri pera p",
+          "repetition_rate": 0.8125,
+          "target": "Il gatto dorme sul divano.",
+          "token_entropy": 3.620345984896024,
+          "token_frequency_distribution": [
+            {
+              "count": 13,
+              "fraction": 0.2708333333333333,
+              "token_id": 40
+            },
+            {
+              "count": 9,
+              "fraction": 0.1875,
+              "token_id": 120
+            },
+            {
+              "count": 8,
+              "fraction": 0.16666666666666666,
+              "token_id": 272
+            },
+            {
+              "count": 6,
+              "fraction": 0.125,
+              "token_id": 113
+            },
+            {
+              "count": 4,
+              "fraction": 0.08333333333333333,
+              "token_id": 123
+            },
+            {
+              "count": 4,
+              "fraction": 0.08333333333333333,
+              "token_id": 119
+            },
+            {
+              "count": 2,
+              "fraction": 0.041666666666666664,
+              "token_id": 56
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 57
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 105
+            }
+          ],
+          "top1_probability": 0.15253824686321119,
+          "top5_probability_mass": 0.438066848864158,
+          "unique_token_ratio": 0.1875
+        },
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 39,
+            "merged_fraction": 0.1875,
+            "merged_tokens": 9
+          },
+          "eos_probability": 0.0007377051567042751,
+          "exact": false,
+          "generated_token_ids": [
+            40,
+            120,
+            272,
+            40,
+            123,
+            119,
+            40,
+            120,
+            272,
+            40,
+            123,
+            119,
+            40,
+            123,
+            119,
+            40,
+            123,
+            119,
+            40,
+            120,
+            272,
+            40,
+            120,
+            272,
+            113,
+            40,
+            123,
+            119,
+            40,
+            120,
+            272,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            40,
+            123,
+            119,
+            40,
+            120,
+            272
+          ],
+          "generation_length": 48,
+          "generation_similarity": 0.06153846153846154,
+          "language": "it",
+          "longest_repeated_token_run": 1,
+          "nonempty": true,
+          "prompt": "Completa: Il cielo è",
+          "raw_output": " per so per so so so per peri so per peri peri per so per",
+          "repetition_rate": 0.875,
+          "target": "azzurro.",
+          "token_entropy": 3.6890812665224075,
+          "token_frequency_distribution": [
+            {
+              "count": 15,
+              "fraction": 0.3125,
+              "token_id": 40
+            },
+            {
+              "count": 9,
+              "fraction": 0.1875,
+              "token_id": 120
+            },
+            {
+              "count": 9,
+              "fraction": 0.1875,
+              "token_id": 272
+            },
+            {
+              "count": 6,
+              "fraction": 0.125,
+              "token_id": 123
+            },
+            {
+              "count": 6,
+              "fraction": 0.125,
+              "token_id": 119
+            },
+            {
+              "count": 3,
+              "fraction": 0.0625,
+              "token_id": 113
+            }
+          ],
+          "top1_probability": 0.1460981584774951,
+          "top5_probability_mass": 0.415006504394114,
+          "unique_token_ratio": 0.125
+        },
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 26,
+            "merged_fraction": 0.4583333333333333,
+            "merged_tokens": 22
+          },
+          "eos_probability": 0.0008753858843040992,
+          "exact": false,
+          "generated_token_ids": [
+            291,
+            367,
+            120,
+            272,
+            40,
+            105,
+            40,
+            367,
+            120,
+            119,
+            327,
+            367,
+            120,
+            119,
+            327,
+            367,
+            120,
+            119,
+            327,
+            367,
+            120,
+            119,
+            327,
+            367,
+            120,
+            119,
+            327,
+            367,
+            120,
+            119,
+            327,
+            367,
+            120,
+            116,
+            116,
+            40,
+            367,
+            120,
+            119,
+            327,
+            367,
+            120,
+            119,
+            327,
+            367,
+            120,
+            119,
+            327
+          ],
+          "generation_length": 48,
+          "generation_similarity": 0.07339449541284404,
+          "language": "it",
+          "longest_repeated_token_run": 2,
+          "nonempty": true,
+          "prompt": "Scrivi tre parole italiane.",
+          "raw_output": "\n    the per a the pof the pof the pof the pof the pof the pof the pll the pof the pof the pof ",
+          "repetition_rate": 0.8125,
+          "target": "casa sole mare",
+          "token_entropy": 4.038496961196263,
+          "token_frequency_distribution": [
+            {
+              "count": 11,
+              "fraction": 0.22916666666666666,
+              "token_id": 367
+            },
+            {
+              "count": 11,
+              "fraction": 0.22916666666666666,
+              "token_id": 120
+            },
+            {
+              "count": 9,
+              "fraction": 0.1875,
+              "token_id": 119
+            },
+            {
+              "count": 9,
+              "fraction": 0.1875,
+              "token_id": 327
+            },
+            {
+              "count": 3,
+              "fraction": 0.0625,
+              "token_id": 40
+            },
+            {
+              "count": 2,
+              "fraction": 0.041666666666666664,
+              "token_id": 116
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 291
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 272
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 105
+            }
+          ],
+          "top1_probability": 0.10864796194558342,
+          "top5_probability_mass": 0.3313021057595809,
+          "unique_token_ratio": 0.1875
+        },
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 22,
+            "merged_fraction": 0.5416666666666666,
+            "merged_tokens": 26
+          },
+          "eos_probability": 0.008551700755560887,
+          "exact": false,
+          "generated_token_ids": [
+            57,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            40,
+            110,
+            376,
+            376,
+            367,
+            367,
+            57,
+            56,
+            40,
+            367,
+            367,
+            367,
+            367,
+            367,
+            367,
+            367,
+            367,
+            367,
+            367,
+            119,
+            327,
+            367,
+            367,
+            367,
+            119,
+            327,
+            367,
+            367,
+            367,
+            119,
+            327,
+            367,
+            367,
+            367,
+            119
+          ],
+          "generation_length": 48,
+          "generation_similarity": 0.016129032258064516,
+          "language": "en",
+          "longest_repeated_token_run": 12,
+          "nonempty": true,
+          "prompt": "Hello",
+          "raw_output": "1000000000000 for or the the 10 the the the the the the the the the the of the the the of the the the of the the the o",
+          "repetition_rate": 0.8333333333333334,
+          "target": "Hello!",
+          "token_entropy": 4.105692570408185,
+          "token_frequency_distribution": [
+            {
+              "count": 21,
+              "fraction": 0.4375,
+              "token_id": 367
+            },
+            {
+              "count": 13,
+              "fraction": 0.2708333333333333,
+              "token_id": 56
+            },
+            {
+              "count": 4,
+              "fraction": 0.08333333333333333,
+              "token_id": 119
+            },
+            {
+              "count": 3,
+              "fraction": 0.0625,
+              "token_id": 327
+            },
+            {
+              "count": 2,
+              "fraction": 0.041666666666666664,
+              "token_id": 57
+            },
+            {
+              "count": 2,
+              "fraction": 0.041666666666666664,
+              "token_id": 40
+            },
+            {
+              "count": 2,
+              "fraction": 0.041666666666666664,
+              "token_id": 376
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 110
+            }
+          ],
+          "top1_probability": 0.12888192331107953,
+          "top5_probability_mass": 0.34564716803530854,
+          "unique_token_ratio": 0.16666666666666666
+        },
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 35,
+            "merged_fraction": 0.2708333333333333,
+            "merged_tokens": 13
+          },
+          "eos_probability": 0.0007441180534139372,
+          "exact": false,
+          "generated_token_ids": [
+            40,
+            120,
+            272,
+            40,
+            120,
+            272,
+            40,
+            120,
+            272,
+            40,
+            120,
+            272,
+            40,
+            120,
+            272,
+            40,
+            120,
+            272,
+            105,
+            40,
+            120,
+            272,
+            113,
+            105,
+            40,
+            120,
+            272,
+            40,
+            120,
+            272,
+            113,
+            105,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            113,
+            40,
+            120,
+            272,
+            40,
+            120,
+            272,
+            40,
+            120
+          ],
+          "generation_length": 48,
+          "generation_similarity": 0.07407407407407407,
+          "language": "en",
+          "longest_repeated_token_run": 1,
+          "nonempty": true,
+          "prompt": "Write one simple sentence.",
+          "raw_output": " per per per per per pera peria per peria peri peri per per p",
+          "repetition_rate": 0.8958333333333334,
+          "target": "The cat is sleeping.",
+          "token_entropy": 3.643020987510681,
+          "token_frequency_distribution": [
+            {
+              "count": 14,
+              "fraction": 0.2916666666666667,
+              "token_id": 40
+            },
+            {
+              "count": 14,
+              "fraction": 0.2916666666666667,
+              "token_id": 120
+            },
+            {
+              "count": 13,
+              "fraction": 0.2708333333333333,
+              "token_id": 272
+            },
+            {
+              "count": 4,
+              "fraction": 0.08333333333333333,
+              "token_id": 113
+            },
+            {
+              "count": 3,
+              "fraction": 0.0625,
+              "token_id": 105
+            }
+          ],
+          "top1_probability": 0.13482078164815903,
+          "top5_probability_mass": 0.42705878304938477,
+          "unique_token_ratio": 0.10416666666666667
+        }
+      ],
+      "unique_token_ratio": 0.27380952380952384,
+      "word_output_rate": 1.0
+    },
+    "before": {
+      "bpe_token_distribution": {
+        "merged_fraction": 0.05952380952380952,
+        "tokenizer_version": "bpe-v1",
+        "vocab_size": 384
+      },
+      "dominant_token_fraction": 0.34104046242774566,
+      "eos_probability": 0.046376203736842266,
+      "exact_accuracy": 0.0,
+      "generation_length": 24.714285714285715,
+      "generation_similarity": 0.0518584356819651,
+      "language_bits_per_byte": 7.092205509628155,
+      "language_nll": 4.915942252950465,
+      "longest_repeated_token_run": 29,
+      "multiword_output_rate": 0.14285714285714285,
+      "non_empty_rate": 0.8571428571428571,
+      "pathological_repetition": true,
+      "prompt_count": 7,
+      "repetition_rate": 0.5170068027210885,
+      "schema": 1,
+      "suite": "phase5-language-holdout-v1",
+      "suite_training_excluded": true,
+      "token_entropy": 3.2747821858199977,
+      "token_frequency_distribution": [
+        {
+          "count": 59,
+          "fraction": 0.34104046242774566,
+          "token_id": 57
+        },
+        {
+          "count": 38,
+          "fraction": 0.21965317919075145,
+          "token_id": 42
+        },
+        {
+          "count": 37,
+          "fraction": 0.2138728323699422,
+          "token_id": 66
+        },
+        {
+          "count": 17,
+          "fraction": 0.09826589595375723,
+          "token_id": 131
+        },
+        {
+          "count": 5,
+          "fraction": 0.028901734104046242,
+          "token_id": 281
+        },
+        {
+          "count": 4,
+          "fraction": 0.023121387283236993,
+          "token_id": 107
+        },
+        {
+          "count": 3,
+          "fraction": 0.017341040462427744,
+          "token_id": 103
+        },
+        {
+          "count": 3,
+          "fraction": 0.017341040462427744,
+          "token_id": 116
+        },
+        {
+          "count": 3,
+          "fraction": 0.017341040462427744,
+          "token_id": 70
+        },
+        {
+          "count": 2,
+          "fraction": 0.011560693641618497,
+          "token_id": 108
+        },
+        {
+          "count": 1,
+          "fraction": 0.005780346820809248,
+          "token_id": 298
+        },
+        {
+          "count": 1,
+          "fraction": 0.005780346820809248,
+          "token_id": 58
+        }
+      ],
+      "top1_probability": 0.2893292589499583,
+      "top5_probability_mass": 0.5418467751013584,
+      "traces": [
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 32,
+            "merged_fraction": 0.0,
+            "merged_tokens": 0
+          },
+          "eos_probability": 0.05689159823073582,
+          "exact": false,
+          "generated_token_ids": [
+            131,
+            42,
+            66,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57
+          ],
+          "generation_length": 32,
+          "generation_similarity": 0.0,
+          "language": "it",
+          "longest_repeated_token_run": 29,
+          "nonempty": true,
+          "prompt": "Ciao",
+          "raw_output": "{\":11111111111111111111111111111",
+          "repetition_rate": 0.875,
+          "target": "Ciao!",
+          "token_entropy": 3.5226798671664614,
+          "token_frequency_distribution": [
+            {
+              "count": 29,
+              "fraction": 0.90625,
+              "token_id": 57
+            },
+            {
+              "count": 1,
+              "fraction": 0.03125,
+              "token_id": 131
+            },
+            {
+              "count": 1,
+              "fraction": 0.03125,
+              "token_id": 42
+            },
+            {
+              "count": 1,
+              "fraction": 0.03125,
+              "token_id": 66
+            }
+          ],
+          "top1_probability": 0.14505108874855618,
+          "top5_probability_mass": 0.45156794063972705,
+          "unique_token_ratio": 0.125
+        },
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 46,
+            "merged_fraction": 0.041666666666666664,
+            "merged_tokens": 2
+          },
+          "eos_probability": 0.00764474127451346,
+          "exact": false,
+          "generated_token_ids": [
+            108,
+            103,
+            107,
+            281,
+            281,
+            116,
+            70,
+            131,
+            42,
+            66,
+            131,
+            42,
+            66,
+            131,
+            42,
+            66,
+            42,
+            66,
+            131,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            131,
+            42,
+            66,
+            131,
+            42,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            57,
+            57
+          ],
+          "generation_length": 48,
+          "generation_similarity": 0.06153846153846154,
+          "language": "it",
+          "longest_repeated_token_run": 2,
+          "nonempty": true,
+          "prompt": "Come ti chiami?",
+          "raw_output": "d_calall>{\":{\":{\":\":{\":\":\":\":\":\":\":\":{\":{\"\":\":\":11",
+          "repetition_rate": 0.7916666666666666,
+          "target": "Mi chiamo AIRI.",
+          "token_entropy": 2.387194269647201,
+          "token_frequency_distribution": [
+            {
+              "count": 17,
+              "fraction": 0.3541666666666667,
+              "token_id": 42
+            },
+            {
+              "count": 16,
+              "fraction": 0.3333333333333333,
+              "token_id": 66
+            },
+            {
+              "count": 6,
+              "fraction": 0.125,
+              "token_id": 131
+            },
+            {
+              "count": 2,
+              "fraction": 0.041666666666666664,
+              "token_id": 281
+            },
+            {
+              "count": 2,
+              "fraction": 0.041666666666666664,
+              "token_id": 57
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 108
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 103
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 107
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 116
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 70
+            }
+          ],
+          "top1_probability": 0.5046994644217193,
+          "top5_probability_mass": 0.7308641870816549,
+          "unique_token_ratio": 0.20833333333333334
+        },
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 4,
+            "merged_fraction": 0.3333333333333333,
+            "merged_tokens": 2
+          },
+          "eos_probability": 0.06555870567847576,
+          "exact": false,
+          "generated_token_ids": [
+            298,
+            103,
+            107,
+            281,
+            116,
+            70
+          ],
+          "generation_length": 6,
+          "generation_similarity": 0.17647058823529413,
+          "language": "it",
+          "longest_repeated_token_run": 1,
+          "nonempty": true,
+          "prompt": "Scrivi una frase su un gatto.",
+          "raw_output": "de_call>",
+          "repetition_rate": 0.0,
+          "target": "Il gatto dorme sul divano.",
+          "token_entropy": 3.650094372885568,
+          "token_frequency_distribution": [
+            {
+              "count": 1,
+              "fraction": 0.16666666666666666,
+              "token_id": 298
+            },
+            {
+              "count": 1,
+              "fraction": 0.16666666666666666,
+              "token_id": 103
+            },
+            {
+              "count": 1,
+              "fraction": 0.16666666666666666,
+              "token_id": 107
+            },
+            {
+              "count": 1,
+              "fraction": 0.16666666666666666,
+              "token_id": 281
+            },
+            {
+              "count": 1,
+              "fraction": 0.16666666666666666,
+              "token_id": 116
+            },
+            {
+              "count": 1,
+              "fraction": 0.16666666666666666,
+              "token_id": 70
+            }
+          ],
+          "top1_probability": 0.28211277616875513,
+          "top5_probability_mass": 0.5167258211544582,
+          "unique_token_ratio": 1.0
+        },
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 7,
+            "merged_fraction": 0.0,
+            "merged_tokens": 0
+          },
+          "eos_probability": 0.05555601844389457,
+          "exact": false,
+          "generated_token_ids": [
+            131,
+            42,
+            66,
+            57,
+            57,
+            57,
+            58
+          ],
+          "generation_length": 7,
+          "generation_similarity": 0.0,
+          "language": "it",
+          "longest_repeated_token_run": 3,
+          "nonempty": true,
+          "prompt": "Completa: Il cielo è",
+          "raw_output": "{\":1112",
+          "repetition_rate": 0.2857142857142857,
+          "target": "azzurro.",
+          "token_entropy": 3.3195948600769043,
+          "token_frequency_distribution": [
+            {
+              "count": 3,
+              "fraction": 0.42857142857142855,
+              "token_id": 57
+            },
+            {
+              "count": 1,
+              "fraction": 0.14285714285714285,
+              "token_id": 131
+            },
+            {
+              "count": 1,
+              "fraction": 0.14285714285714285,
+              "token_id": 42
+            },
+            {
+              "count": 1,
+              "fraction": 0.14285714285714285,
+              "token_id": 66
+            },
+            {
+              "count": 1,
+              "fraction": 0.14285714285714285,
+              "token_id": 58
+            }
+          ],
+          "top1_probability": 0.2655729539692402,
+          "top5_probability_mass": 0.5088564790785313,
+          "unique_token_ratio": 0.7142857142857143
+        },
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 46,
+            "merged_fraction": 0.041666666666666664,
+            "merged_tokens": 2
+          },
+          "eos_probability": 0.007094271057818939,
+          "exact": false,
+          "generated_token_ids": [
+            108,
+            103,
+            107,
+            107,
+            281,
+            281,
+            116,
+            70,
+            131,
+            42,
+            66,
+            131,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            131,
+            42,
+            66,
+            42,
+            66,
+            131,
+            42,
+            66,
+            131,
+            42,
+            66,
+            131,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            42,
+            66,
+            57,
+            57
+          ],
+          "generation_length": 48,
+          "generation_similarity": 0.125,
+          "language": "it",
+          "longest_repeated_token_run": 2,
+          "nonempty": true,
+          "prompt": "Scrivi tre parole italiane.",
+          "raw_output": "d_ccalall>{\":{\":\":\":\":{\":\":{\":{\":{\":\":\":\":\":\":\":11",
+          "repetition_rate": 0.7916666666666666,
+          "target": "casa sole mare",
+          "token_entropy": 2.3805823450287185,
+          "token_frequency_distribution": [
+            {
+              "count": 16,
+              "fraction": 0.3333333333333333,
+              "token_id": 42
+            },
+            {
+              "count": 16,
+              "fraction": 0.3333333333333333,
+              "token_id": 66
+            },
+            {
+              "count": 6,
+              "fraction": 0.125,
+              "token_id": 131
+            },
+            {
+              "count": 2,
+              "fraction": 0.041666666666666664,
+              "token_id": 107
+            },
+            {
+              "count": 2,
+              "fraction": 0.041666666666666664,
+              "token_id": 281
+            },
+            {
+              "count": 2,
+              "fraction": 0.041666666666666664,
+              "token_id": 57
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 108
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 103
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 116
+            },
+            {
+              "count": 1,
+              "fraction": 0.020833333333333332,
+              "token_id": 70
+            }
+          ],
+          "top1_probability": 0.5108464310566584,
+          "top5_probability_mass": 0.7337073137362798,
+          "unique_token_ratio": 0.20833333333333334
+        },
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 32,
+            "merged_fraction": 0.0,
+            "merged_tokens": 0
+          },
+          "eos_probability": 0.041741117743323695,
+          "exact": false,
+          "generated_token_ids": [
+            131,
+            42,
+            66,
+            131,
+            42,
+            66,
+            131,
+            42,
+            66,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57,
+            57
+          ],
+          "generation_length": 32,
+          "generation_similarity": 0.0,
+          "language": "en",
+          "longest_repeated_token_run": 23,
+          "nonempty": true,
+          "prompt": "Hello",
+          "raw_output": "{\":{\":{\":11111111111111111111111",
+          "repetition_rate": 0.875,
+          "target": "Hello!",
+          "token_entropy": 3.2659821356787826,
+          "token_frequency_distribution": [
+            {
+              "count": 23,
+              "fraction": 0.71875,
+              "token_id": 57
+            },
+            {
+              "count": 3,
+              "fraction": 0.09375,
+              "token_id": 131
+            },
+            {
+              "count": 3,
+              "fraction": 0.09375,
+              "token_id": 42
+            },
+            {
+              "count": 3,
+              "fraction": 0.09375,
+              "token_id": 66
+            }
+          ],
+          "top1_probability": 0.22687512455564557,
+          "top5_probability_mass": 0.5116561425454689,
+          "unique_token_ratio": 0.125
+        },
+        {
+          "bpe_token_distribution": {
+            "byte_tokens": 0,
+            "merged_fraction": 0.0,
+            "merged_tokens": 0
+          },
+          "eos_probability": 0.0901469737291336,
+          "exact": false,
+          "generated_token_ids": [],
+          "generation_length": 0,
+          "generation_similarity": 0.0,
+          "language": "en",
+          "longest_repeated_token_run": 0,
+          "nonempty": false,
+          "prompt": "Write one simple sentence.",
+          "raw_output": "",
+          "repetition_rate": 0.0,
+          "target": "The cat is sleeping.",
+          "token_entropy": 4.397347450256348,
+          "token_frequency_distribution": [],
+          "top1_probability": 0.0901469737291336,
+          "top5_probability_mass": 0.33954954147338867,
+          "unique_token_ratio": 0.0
+        }
+      ],
+      "unique_token_ratio": 0.3401360544217687,
+      "word_output_rate": 0.8571428571428571
+    },
+    "degeneration_gate_passed": false,
+    "degeneration_gate_reason": "pathological repetition detected",
+    "manifest_sha256": "e5f0113377fadcc58e644dde7706ffc5d0e6f5af6ee3023e3725f8d1d793533d",
+    "minimum_success": false,
+    "minimum_success_reasons": [
+      "pathological repetition remains",
+      "repetition rate did not improve enough"
+    ],
+    "promoted": false,
+    "promotion_reason": "research=candidate did not reduce held-out NLL per byte by the research margin; degeneration=pathological repetition detected; phase5=pathological repetition remains, repetition rate did not improve enough",
+    "research_gate_passed": false,
+    "research_gate_reason": "candidate did not reduce held-out NLL per byte by the research margin",
+    "steps": 1231,
+    "target_tokens": 5000000,
+    "tokens_processed": 5002160,
+    "version": "phase5-language-bootstrap-v1"
+  },
   "plateau": {
     "generation_exact_accuracy": 0.0,
     "history_rows": 8,
