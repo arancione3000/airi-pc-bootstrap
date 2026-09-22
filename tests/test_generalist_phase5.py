@@ -96,6 +96,19 @@ def test_bootstrap_janitor_preserves_old_worker_without_replacement():
     assert "AIRI_BOOTSTRAP_JANITOR_RESTART=PASS" in workflow
 
 
+def test_phase5_refreshes_mobile_bundle_after_each_persisted_segment():
+    workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
+    assert "generalist-mobile-export.yml/dispatches" in workflow
+    assert "Queued mobile export for the freshly persisted AIRI Live checkpoint." in workflow
+
+
+def test_mobile_export_uses_actual_live_checkpoint_parameters_and_probe():
+    source = Path("computer/generalist_lm/mobile_export.py").read_text(encoding="utf-8")
+    assert '"parameters": int(parameter_count(runtime.model))' in source
+    assert "active_probe = evaluate_phase5_language(active_runtime)" in source
+    assert '"live_probe": active_probe' in source
+
+
 def test_phase5_100m_amortizes_setup_without_changing_batch_or_lr():
     workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
     assert "segment_tokens=1000000" in workflow
