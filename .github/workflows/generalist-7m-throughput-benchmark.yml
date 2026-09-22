@@ -18,6 +18,7 @@ jobs:
       PYTHONPATH: computer
       OMP_NUM_THREADS: '4'
       MKL_NUM_THREADS: '4'
+      TORCHINDUCTOR_CACHE_DIR: ${{ runner.temp }}/airi-generalist-inductor
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,11 +26,15 @@ jobs:
           python-version: '3.12'
       - name: Install CPU torch
         run: python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
-      - name: Benchmark 7M training layouts
+      - name: Benchmark 7M eager/compile cold and reused process cache
         run: |
-          python -m generalist_lm.bench_fasttrack --steps 5 | tee /tmp/fasttrack-benchmark.json
+          rm -rf "${TORCHINDUCTOR_CACHE_DIR}"
+          python -m generalist_lm.bench_fasttrack --steps 5 | tee /tmp/fasttrack-benchmark-cold.json
+          python -m generalist_lm.bench_fasttrack --steps 5 | tee /tmp/fasttrack-benchmark-reused.json
       - uses: actions/upload-artifact@v4
         with:
           name: generalist-7m-throughput-benchmark
-          path: /tmp/fasttrack-benchmark.json
+          path: |
+            /tmp/fasttrack-benchmark-cold.json
+            /tmp/fasttrack-benchmark-reused.json
           retention-days: 3
