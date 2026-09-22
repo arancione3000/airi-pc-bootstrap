@@ -14,7 +14,7 @@ def _torch():
 
 _ALLOWED_NORMS = {"layernorm", "rmsnorm"}
 _ALLOWED_POSITIONS = {"learned", "sinusoidal", "rope"}
-_ALLOWED_FF = {"swiglu", "gelu"}
+_ALLOWED_FF = {"swiglu", "gelu", "moe_swiglu"}
 _ALLOWED_TOKENIZERS = {"byte-v1", "bpe-v1"}
 _ALLOWED_ATTENTION = {"mha", "gqa"}
 _ALLOWED_NORM_PLACEMENT = {"pre", "post"}
@@ -40,6 +40,9 @@ class GeneralistLMConfig:
     local_attention_every: int = 0
     norm_placement: str = "pre"
     tie_embeddings: bool = True
+    recurrent_depth: int = 1
+    moe_experts: int = 1
+    moe_top_k: int = 1
 
     def validate(self) -> "GeneralistLMConfig":
         self.vocab_size = max(16, int(self.vocab_size))
@@ -83,6 +86,14 @@ class GeneralistLMConfig:
             min(self.n_layers, int(self.local_attention_every)),
         )
         self.tie_embeddings = bool(self.tie_embeddings)
+        self.recurrent_depth = max(1, min(4, int(self.recurrent_depth)))
+        self.moe_experts = max(1, min(8, int(self.moe_experts)))
+        self.moe_top_k = max(1, min(self.moe_experts, int(self.moe_top_k)))
+        if self.ff_variant != "moe_swiglu":
+            self.moe_experts = 1
+            self.moe_top_k = 1
+        elif self.moe_experts < 2:
+            raise ValueError("moe_swiglu requires at least two experts")
         return self
 
     def to_dict(self) -> dict[str, Any]:
@@ -290,13 +301,66 @@ class CausalTransformerLM:
             def forward(self, x):
                 return self.down(F.gelu(self.up(x)))
 
+        class SparseMoE(nn.Module):
+            """Token-routed sparse SwiGLU experts.
+
+            Only tokens assigned to an expert are evaluated by that expert.
+            The router itself is tiny and every token activates at most top_k
+            experts, so active compute can stay well below total stored capacity.
+            """
+            def __init__(self):
+                super().__init__()
+                self.router = nn.Linear(
+                    config.d_model,
+                    config.moe_experts,
+                    bias=False,
+                )
+                self.experts = nn.ModuleList([
+                    SwiGLU() for _ in range(config.moe_experts)
+                ])
+                self.top_k = int(config.moe_top_k)
+
+            def forward(self, x):
+                shape = x.shape
+                flat = x.reshape(-1, config.d_model)
+                router_logits = self.router(flat)
+                top_values, top_indices = torch.topk(
+                    router_logits,
+                    k=self.top_k,
+                    dim=-1,
+                )
+                weights = torch.softmax(top_values, dim=-1)
+                output = torch.zeros_like(flat)
+                for expert_index, expert in enumerate(self.experts):
+                    for slot in range(self.top_k):
+                        positions = torch.nonzero(
+                            top_indices[:, slot] == expert_index,
+                            as_tuple=False,
+                        ).flatten()
+                        if int(positions.numel()) == 0:
+                            continue
+                        selected = flat.index_select(0, positions)
+                        expert_output = expert(selected)
+                        scale = weights.index_select(0, positions)[:, slot:slot + 1]
+                        output = output.index_add(
+                            0,
+                            positions,
+                            expert_output * scale,
+                        )
+                return output.view(*shape)
+
         class Block(nn.Module):
             def __init__(self, layer_index: int):
                 super().__init__()
                 self.attn_norm = norm()
                 self.ff_norm = norm()
                 self.attn = CausalSelfAttention(layer_index)
-                self.ff = SwiGLU() if config.ff_variant == "swiglu" else GeluFF()
+                if config.ff_variant == "swiglu":
+                    self.ff = SwiGLU()
+                elif config.ff_variant == "moe_swiglu":
+                    self.ff = SparseMoE()
+                else:
+                    self.ff = GeluFF()
                 self.drop = nn.Dropout(config.dropout)
 
             def forward(self, x, *, past_key_value=None, use_cache: bool = False):
@@ -377,17 +441,20 @@ class CausalTransformerLM:
                     raise ValueError("input_ids must have shape [batch, time]")
                 _bsz, seqlen = input_ids.shape
 
+                recurrent_layers = len(self.blocks) * int(config.recurrent_depth)
                 if past_key_values is not None:
                     if labels is not None:
                         raise ValueError("labels are not supported with past_key_values")
-                    if len(past_key_values) != len(self.blocks):
-                        raise ValueError("past_key_values length must match transformer layers")
+                    if len(past_key_values) != recurrent_layers:
+                        raise ValueError(
+                            "past_key_values length must match physical layers times recurrent_depth"
+                        )
                     past_len = int(past_key_values[0][0].shape[-2]) if past_key_values else 0
                     if any(int(item[0].shape[-2]) != past_len for item in past_key_values):
                         raise ValueError("all KV cache layers must have the same sequence length")
                 else:
                     past_len = 0
-                    past_key_values = [None] * len(self.blocks)
+                    past_key_values = [None] * recurrent_layers
 
                 total_len = past_len + seqlen
                 if total_len > config.context_length:
@@ -400,10 +467,18 @@ class CausalTransformerLM:
                 )
                 x = self.token_embedding(input_ids) + self._position_values(positions)[None, :, :]
                 presents = []
-                for block, past in zip(self.blocks, past_key_values):
-                    x, present = block(x, past_key_value=past, use_cache=use_cache)
-                    if use_cache:
-                        presents.append(present)
+                cache_index = 0
+                for block in self.blocks:
+                    for _recurrent_step in range(int(config.recurrent_depth)):
+                        past = past_key_values[cache_index]
+                        x, present = block(
+                            x,
+                            past_key_value=past,
+                            use_cache=use_cache,
+                        )
+                        if use_cache:
+                            presents.append(present)
+                        cache_index += 1
                 logits = self.lm_head(self.final_norm(x))
                 loss = None
                 if labels is not None:
@@ -531,14 +606,20 @@ def _attention_projection_terms(config: GeneralistLMConfig) -> tuple[int, int]:
 
 def estimate_flops_per_token(config: GeneralistLMConfig) -> int:
     cfg = config.validate()
-    ff_multiplier = 3 if cfg.ff_variant == "swiglu" else 2
     attention_weights, _attention_biases = _attention_projection_terms(cfg)
+    if cfg.ff_variant == "gelu":
+        active_ff = 2 * cfg.d_model * cfg.d_ff
+    elif cfg.ff_variant == "moe_swiglu":
+        active_ff = (
+            cfg.moe_experts * cfg.d_model
+            + cfg.moe_top_k * 3 * cfg.d_model * cfg.d_ff
+        )
+    else:
+        active_ff = 3 * cfg.d_model * cfg.d_ff
     return int(
         cfg.n_layers
-        * (
-            attention_weights
-            + ff_multiplier * cfg.d_model * cfg.d_ff
-        )
+        * cfg.recurrent_depth
+        * (attention_weights + active_ff)
     )
 
 
@@ -550,15 +631,23 @@ def estimate_parameter_count(config: GeneralistLMConfig) -> int:
     embeddings = cfg.vocab_size * d + position_params
     if not cfg.tie_embeddings:
         embeddings += cfg.vocab_size * d
-    ff_multiplier = 3 if cfg.ff_variant == "swiglu" else 2
     norm_params = 4 * d if cfg.norm_type == "layernorm" else 2 * d
     attention_weights, attention_bias = _attention_projection_terms(cfg)
-    per_layer = attention_weights + ff_multiplier * d * ff + norm_params
+    if cfg.ff_variant == "gelu":
+        ff_weights = 2 * d * ff
+        ff_bias = ff + d
+    elif cfg.ff_variant == "moe_swiglu":
+        ff_weights = cfg.moe_experts * (3 * d * ff) + d * cfg.moe_experts
+        ff_bias = cfg.moe_experts * (2 * ff + d)
+    else:
+        ff_weights = 3 * d * ff
+        ff_bias = 2 * ff + d
+    per_layer = attention_weights + ff_weights + norm_params
     if cfg.bias:
-        ff_bias = (2 * ff + d) if cfg.ff_variant == "swiglu" else (ff + d)
         per_layer += attention_bias + ff_bias
     if cfg.norm_placement == "post":
         final_norm = 0
     else:
         final_norm = 2 * d if cfg.norm_type == "layernorm" else d
+    # recurrent_depth reuses the same physical block parameters.
     return int(embeddings + cfg.n_layers * per_layer + final_norm)
