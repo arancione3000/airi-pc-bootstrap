@@ -775,6 +775,8 @@ def run_segment(
         "completed_rungs": [],
         "sft_completed_rungs": [],
     })
+    progress["schema"] = 1
+    progress["version"] = PHASE5_BOOTSTRAP_VERSION
     if str(progress.get("base_champion_model_sha256")) != base_model_sha:
         # A completed previous rung may have promoted the candidate to champion.
         # Otherwise fail closed rather than training on a stale base.
