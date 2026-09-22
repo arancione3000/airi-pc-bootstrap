@@ -20,20 +20,20 @@
       "n_experts": 2,
       "predictive_error_memory": false,
       "rms_eps": 1e-06,
-      "surprise_power": 1.5,
+      "surprise_power": 1.7249999999999999,
       "surprise_threshold": 0.25,
       "tie_embeddings": true,
       "tokenizer_version": "byte-v1",
       "vocab_size": 264
     },
-    "generation": 7,
-    "genome_id": "lattice-7-2696753ee653",
+    "generation": 8,
+    "genome_id": "lattice-8-019658159ff0",
     "learning_rate": 0.0015,
     "min_learning_rate": 0.00015000000000000001,
-    "parent_id": "lattice-6-780d38f0af0f",
+    "parent_id": "lattice-7-2696753ee653",
     "weight_decay": 0.0125
   },
-  "cycle": 18,
+  "cycle": 19,
   "empirical_candidates": 1,
   "generated_candidates": 8,
   "ok": true,
@@ -44,12 +44,12 @@
     "math_prefilter_is_not_promotion": true,
     "research_only": true
   },
-  "promoted": false,
-  "promotion_reason": "no Lattice candidate passed every independent scratch benchmark",
+  "promoted": true,
+  "promotion_reason": "candidate beat matched scratch Transformer on every requested seed",
   "repeat_seeds": 1,
   "trials": [
     {
-      "all_seed_wins": false,
+      "all_seed_wins": true,
       "genome": {
         "config": {
           "active_experts": 1,
@@ -57,7 +57,7 @@
           "context_length": 64,
           "d_expert": 32,
           "d_model": 32,
-          "deep_write_power": 1.8399999999999999,
+          "deep_write_power": 1.6,
           "dropout": 0.0,
           "init_std": 0.02,
           "lattice_mix": 0.08000000000000002,
@@ -70,30 +70,30 @@
           "n_experts": 2,
           "predictive_error_memory": false,
           "rms_eps": 1e-06,
-          "surprise_power": 1.5,
+          "surprise_power": 1.7249999999999999,
           "surprise_threshold": 0.25,
           "tie_embeddings": true,
           "tokenizer_version": "byte-v1",
           "vocab_size": 264
         },
         "generation": 8,
-        "genome_id": "lattice-8-9957997ca7cf",
+        "genome_id": "lattice-8-019658159ff0",
         "learning_rate": 0.0015,
         "min_learning_rate": 0.00015000000000000001,
         "parent_id": "lattice-7-2696753ee653",
         "weight_decay": 0.0125
       },
-      "mean_candidate_loss": 5.531517386436462,
+      "mean_candidate_loss": 5.510614395141602,
       "mutation": {
         "changes": {
-          "deep_write_power": 1.8399999999999999
+          "surprise_power": 1.7249999999999999
         },
-        "family": "memory",
+        "family": "reasoning",
         "mathesis_tags": [
           "reasoning"
         ],
-        "name": "memory-deeper-surprise-write",
-        "rationale": "reserve deep memory more aggressively for high-surprise information"
+        "name": "reasoning-sharper-budget",
+        "rationale": "concentrate extra compute on the most surprising inputs"
       },
       "reports": [
         {
@@ -120,25 +120,25 @@
             "parameters": 20064,
             "state_bytes_at_context": 2048,
             "training": {
-              "best_train_loss": 5.565899848937988,
+              "best_train_loss": 5.51969051361084,
               "final": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.509247899055481
+                  "code": 5.536537170410156
                 },
-                "loss": 5.509247899055481
+                "loss": 5.536537170410156
               },
               "initial": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.5106765031814575
+                  "code": 5.538076758384705
                 },
-                "loss": 5.5106765031814575
+                "loss": 5.538076758384705
               },
               "steps": 1,
-              "tokens_per_second": 19451.43902664746,
+              "tokens_per_second": 21285.22871648616,
               "tokens_processed": 64,
-              "train_seconds": 0.00329024499998809
+              "train_seconds": 0.003006779999992659
             }
           },
           "candidate": {
@@ -149,7 +149,7 @@
               "context_length": 64,
               "d_expert": 32,
               "d_model": 32,
-              "deep_write_power": 1.8399999999999999,
+              "deep_write_power": 1.6,
               "dropout": 0.0,
               "init_std": 0.02,
               "lattice_mix": 0.08000000000000002,
@@ -162,7 +162,7 @@
               "n_experts": 2,
               "predictive_error_memory": false,
               "rms_eps": 1e-06,
-              "surprise_power": 1.5,
+              "surprise_power": 1.7249999999999999,
               "surprise_threshold": 0.25,
               "tie_embeddings": true,
               "tokenizer_version": "byte-v1",
@@ -172,38 +172,38 @@
             "parameters": 23183,
             "state_bytes_at_context": 384,
             "training": {
-              "best_train_loss": 5.5539422035217285,
+              "best_train_loss": 5.448362827301025,
               "final": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.531517386436462
+                  "code": 5.510614395141602
                 },
-                "loss": 5.531517386436462,
+                "loss": 5.510614395141602,
                 "model_stats": {
                   "mean_reasoning_steps": 1.0,
-                  "mean_surprise": 0.4859963208436966
+                  "mean_surprise": 0.48439737409353256
                 }
               },
               "initial": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.532476007938385
+                  "code": 5.511945605278015
                 },
-                "loss": 5.532476007938385,
+                "loss": 5.511945605278015,
                 "model_stats": {
                   "mean_reasoning_steps": 1.0,
-                  "mean_surprise": 0.48604604229331017
+                  "mean_surprise": 0.4844309575855732
                 }
               },
               "steps": 1,
-              "tokens_per_second": 345.3763885439221,
+              "tokens_per_second": 374.55750054875966,
               "tokens_processed": 64,
-              "train_seconds": 0.1853050820000135
+              "train_seconds": 0.170868291000005
             }
           },
-          "candidate_wins": false,
-          "corpus_digest": "c757d40ba49afc28683a4b12711fbfee630cc728d3896e2388f27bd82340b883",
-          "decision": "Lattice did not beat the matched Transformer loss margin",
+          "candidate_wins": true,
+          "corpus_digest": "5ae095427e7faf4daec9f63ca2bec49f9389eaabf6e85e762614bf29c3844f58",
+          "decision": "Lattice beat matched Transformer under the research gate",
           "external_pretrained": false,
           "lab": {
             "batch_size": 1,
@@ -215,16 +215,16 @@
             "max_eval_blocks": 8,
             "min_learning_rate": 0.00015000000000000001,
             "minimum_loss_gain": 0.001,
-            "seed": 701819,
+            "seed": 701920,
             "steps": 1,
             "validation_fraction": 0.2,
             "weight_decay": 0.0125
           },
           "ok": true,
           "research_only": true,
-          "train_blocks": 4024,
+          "train_blocks": 4443,
           "train_documents": 19,
-          "validation_blocks": 1598,
+          "validation_blocks": 1522,
           "validation_documents": 5,
           "version": "airi-lattice-lab-v0"
         }
@@ -232,5 +232,51 @@
     }
   ],
   "version": "airi-lattice-research-state-v0",
-  "winner": null
+  "winner": {
+    "genome": {
+      "config": {
+        "active_experts": 1,
+        "architecture_version": "airi-lattice-v0",
+        "context_length": 64,
+        "d_expert": 32,
+        "d_model": 32,
+        "deep_write_power": 1.6,
+        "dropout": 0.0,
+        "init_std": 0.02,
+        "lattice_mix": 0.08000000000000002,
+        "local_recurrence": false,
+        "max_reasoning_steps": 2,
+        "memory_bands": 3,
+        "memory_decay_max": 0.995,
+        "memory_decay_min": 0.25,
+        "n_cells": 1,
+        "n_experts": 2,
+        "predictive_error_memory": false,
+        "rms_eps": 1e-06,
+        "surprise_power": 1.7249999999999999,
+        "surprise_threshold": 0.25,
+        "tie_embeddings": true,
+        "tokenizer_version": "byte-v1",
+        "vocab_size": 264
+      },
+      "generation": 8,
+      "genome_id": "lattice-8-019658159ff0",
+      "learning_rate": 0.0015,
+      "min_learning_rate": 0.00015000000000000001,
+      "parent_id": "lattice-7-2696753ee653",
+      "weight_decay": 0.0125
+    },
+    "mean_candidate_loss": 5.510614395141602,
+    "mutation": {
+      "changes": {
+        "surprise_power": 1.7249999999999999
+      },
+      "family": "reasoning",
+      "mathesis_tags": [
+        "reasoning"
+      ],
+      "name": "reasoning-sharper-budget",
+      "rationale": "concentrate extra compute on the most surprising inputs"
+    }
+  }
 }
