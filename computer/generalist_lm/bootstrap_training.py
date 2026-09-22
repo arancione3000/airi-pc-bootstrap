@@ -110,6 +110,8 @@ def _bootstrap_capacity_target(training_target_tokens: int) -> int | None:
     become a permanent capacity ceiling after that rung.
     """
     target = max(0, int(training_target_tokens))
+    if target >= 1_000_000_000:
+        return 32_000_000
     if target >= 500_000_000:
         return 20_000_000
     if target >= 250_000_000:
