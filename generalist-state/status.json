@@ -2,10 +2,10 @@
   "adaptive_curriculum": {
     "active_learning": {
       "domain_weights": {
-        "coding": 2.473684210526316,
-        "data": 3.009535530558707,
-        "language": 4.0,
-        "reasoning": 2.797637575742094,
+        "coding": 2.4716981132075473,
+        "data": 4.0,
+        "language": 2.666666666666667,
+        "reasoning": 3.5949089854205836,
         "structured": 3.0,
         "tools": 4.0
       },
@@ -14,10 +14,10 @@
       "verified_tool_experiences": 0
     },
     "domain_weights": {
-      "coding": 2.473684210526316,
-      "data": 3.009535530558707,
-      "language": 4.0,
-      "reasoning": 2.797637575742094,
+      "coding": 2.4716981132075473,
+      "data": 4.0,
+      "language": 2.666666666666667,
+      "reasoning": 3.5949089854205836,
       "structured": 3.0,
       "tools": 4.0
     }
@@ -44,17 +44,6 @@
       "version": "airi-pc-lab-v1"
     },
     "mode": "read_only_sandbox",
-    "research": {
-      "error": "ValueError:model output is not a valid tool-call JSON object",
-      "mode": "read_only_sandbox",
-      "ok": false,
-      "tool_call_valid": false,
-      "version": "airi-pc-lab-v1"
-    },
-    "research_experience": {
-      "reason": "probe_not_verified",
-      "stored": false
-    },
     "snapshot": {
       "capabilities": [
         "list_capabilities",
@@ -212,6 +201,7 @@
     },
     "version": "airi-pc-lab-v1"
   },
+  "architecture_migration": null,
   "automatic_data_growth": {
     "ok": true,
     "reason": "automatic data growth disabled",
@@ -251,14 +241,14 @@
   "champion_report": {
     "bits_per_byte": 3.5308591285186504,
     "canary": {
-      "bits_per_byte": 2.98062768299115,
+      "bits_per_byte": 3.0306263164261744,
       "domain_bits_per_byte": {
-        "coding": 3.8189162851943204,
-        "data": 5.188421683612257,
-        "language": 6.147502519239889,
-        "reasoning": 5.019467486714001,
-        "structured": 3.8366479409278313,
-        "tools": 1.600732506108715
+        "coding": 3.850603709371999,
+        "data": 4.661076555406254,
+        "language": 6.159104331280972,
+        "reasoning": 5.873640648072848,
+        "structured": 4.0168083177012655,
+        "tools": 1.6124195128346062
       },
       "domain_generation_accuracy": {
         "coding": 0.0,
@@ -272,33 +262,33 @@
         "coding": 0.3188405797101449,
         "data": 0.2857142857142857,
         "language": 0.16666666666666666,
-        "reasoning": 0.0,
+        "reasoning": 0.15384615384615385,
         "structured": 0.05263157894736842,
-        "tools": 0.29931972789115646
+        "tools": 0.35374149659863946
       },
       "domain_loss": {
-        "coding": 3.9706065838153544,
-        "data": 3.0825770241873607,
-        "language": 3.8737491260875356,
-        "reasoning": 2.899358113606771,
-        "structured": 2.978485107421875,
-        "tools": 1.473327886862833
+        "coding": 4.003552656907302,
+        "data": 2.7692674909319197,
+        "language": 3.8810598200017754,
+        "reasoning": 3.3927478790283203,
+        "structured": 3.1183480834960937,
+        "tools": 1.484084707791688
       },
       "domain_nll_per_byte": {
-        "coding": 2.647071055876903,
-        "data": 3.5963398615519204,
-        "language": 4.261124038696289,
-        "reasoning": 3.479229736328125,
-        "structured": 2.6593617030552457,
-        "tools": 1.1095432234399112
+        "coding": 2.669035104604868,
+        "data": 3.2308120727539062,
+        "language": 4.269165802001953,
+        "reasoning": 4.071297454833984,
+        "structured": 2.7842393602643694,
+        "tools": 1.1176440392011477
       },
       "domain_token_accuracy": {
         "coding": 0.15384615384615385,
-        "data": 0.2857142857142857,
+        "data": 0.42857142857142855,
         "language": 0.09090909090909091,
-        "reasoning": 0.16666666666666666,
+        "reasoning": 0.0,
         "structured": 0.28,
-        "tools": 0.7049180327868853
+        "tools": 0.7213114754098361
       },
       "finite": true,
       "generated_solved_items": [],
@@ -310,66 +300,66 @@
       "generation_probe": [
         {
           "domain": "coding",
-          "item": "coding:af6f2bc9ab68721c",
+          "item": "coding:e9e77c33980e44fc",
           "ok": false,
           "output": "defff_ccalal_calue xxxxxxxx):1",
           "similarity": 0.3188405797101449,
-          "target": "def canary_sub_124(x):\n    return x - 6"
+          "target": "def canary_sub_125(x):\n    return x - 7"
         },
         {
           "domain": "data",
-          "item": "data:6c89d24a14ab2ffb",
+          "item": "data:1e1fbdb7bed98ae5",
           "ok": false,
           "output": "1",
           "similarity": 0.2857142857142857,
-          "target": "198739"
+          "target": "199132"
         },
         {
           "domain": "language",
-          "item": "language:cce807294eddb850",
+          "item": "language:d9c8a5f3db4c2fd1",
           "ok": false,
           "output": "11",
           "similarity": 0.16666666666666666,
-          "target": "CANARY0124"
+          "target": "CANARY0125"
         },
         {
           "domain": "reasoning",
-          "item": "reasoning:a946f968a6b5e02f",
+          "item": "reasoning:546d97c895e41d77",
           "ok": false,
           "output": "11111111",
-          "similarity": 0.0,
-          "target": "66260"
+          "similarity": 0.15384615384615385,
+          "target": "66391"
         },
         {
           "domain": "structured",
-          "item": "structured:9bd0d761adad96f7",
+          "item": "structured:af697d7e65931c33",
           "ok": false,
           "output": "1111111111",
           "similarity": 0.05263157894736842,
-          "target": "{\"canary\":124,\"value\":66244}"
+          "target": "{\"canary\":125,\"value\":66375}"
         },
         {
           "domain": "tools",
-          "item": "tools:c962f35e723a3c1c",
+          "item": "tools:d5f5ba9675340242",
           "ok": false,
-          "output": "<tool_call>{\":\":{\"\":\"\"\":\":\":\":\":\":{\"\":\":\":\":1111111111111111111111",
-          "similarity": 0.29931972789115646,
-          "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"66244*6\"}}</tool_call>"
+          "output": "<tool_call>{\":{\":\":\":\":\":\":{\":\":\":{\"\":\":\":\":1111111111111111111111",
+          "similarity": 0.35374149659863946,
+          "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"66375*2\"}}</tool_call>"
         }
       ],
       "generation_repetition_rate": 0.8348623853211009,
-      "generation_similarity": 0.187195473154937,
+      "generation_similarity": 0.22190679358054313,
       "generation_unique_token_ratio": 0.1651376146788991,
-      "loss": 2.5673258164349724,
-      "nll_per_byte": 2.066013674764238,
+      "loss": 2.6103915046243107,
+      "nll_per_byte": 2.1006700865615753,
       "solved_items": [],
-      "target_token_accuracy": 0.4264705882352941,
+      "target_token_accuracy": 0.4338235294117647,
       "target_tokens": 136,
       "tokenizer_version": "bpe-v1",
       "validation_target_bytes": 169,
       "validation_target_tokens": 136
     },
-    "canary_cycle": 124,
+    "canary_cycle": 125,
     "domain_bits_per_byte": {
       "coding": 3.0236824045084525,
       "data": 4.843641780328073,
@@ -421,7 +411,7 @@
     "finite": true,
     "fitness": {
       "canary_penalty": 18.174311926605505,
-      "canary_reward": 2.579057121977546,
+      "canary_reward": 2.717902403679971,
       "collapse_penalty": 20.0,
       "domain_balance_penalty": 3.8359039316949453,
       "efficiency_penalty": 0.02167716621942598,
@@ -430,10 +420,10 @@
       "quality_reward": 18.854761497239693,
       "repeated_run_penalty": 8.0,
       "repetition_penalty": 11.395348837209303,
-      "score": -30.884766497447597,
+      "score": -30.74592121574517,
       "teacher_reward": 2.442724458204334,
       "total_penalty": 61.42724186172918,
-      "total_reward": 30.542475364281582
+      "total_reward": 30.68132064598401
     },
     "generated_solved_items": [],
     "generation_dominant_token_fraction": 0.23255813953488372,
@@ -497,7 +487,7 @@
     "loss": 3.2320544016010344,
     "nll_per_byte": 2.447405049887048,
     "parameters": 115328,
-    "score": -30.884766497447597,
+    "score": -30.74592121574517,
     "solved_items": [],
     "target_token_accuracy": 0.4071207430340557,
     "target_tokens": 1292,
@@ -506,46 +496,40 @@
     "validation_target_tokens": 1257
   },
   "compression": {
-    "candidate_id": "generalist-3-compress-ad011d82",
+    "candidate_id": "generalist-5-compress-f433fa2c",
     "enabled": true,
     "policy": "smaller same-width inherited candidate must pass normal gates"
   },
   "converged_champion": {
-    "language_fusion_available": true,
-    "language_teacher": {
+    "language_fusion_available": false,
+    "language_teacher": null,
+    "live_lineage_source": {
       "checkpoint": "bootstrap-data/candidate",
-      "language_nll": 2.8579669708901263,
-      "minimum_success": true,
-      "multiword_output_rate": 0.42857142857142855,
-      "parameters": 1251264,
-      "pathological_repetition": false,
-      "repetition_rate": 0.44345238095238093,
-      "target_tokens": 20000000,
-      "tokens_processed": 20002313,
-      "unique_corpus_target_tokens": 5000000
+      "lineage_id": "airi-5d3d25177d2e83f7",
+      "model_sha256": "126e998654ecc96fde9ec536ffba35500a069023440289f991a6518b1ad5b787"
     },
-    "policy": "completed language checkpoint competes as a normal research candidate; promotion still requires protected generalist and degeneration gates",
+    "policy": "the newest live AIRI checkpoint is the parent of every research candidate; verified descendants return to that same lineage",
     "specialist_fusion_available": false,
     "specialist_teacher": null
   },
   "curriculum_memory": {
-    "added": 10,
-    "cycle": 124,
+    "added": 8,
+    "cycle": 125,
     "domains": {
-      "coding": 140,
-      "data": 241,
-      "language": 212,
-      "reasoning": 248,
-      "structured": 124,
-      "tools": 126
+      "coding": 141,
+      "data": 243,
+      "language": 213,
+      "reasoning": 250,
+      "structured": 125,
+      "tools": 127
     },
     "extra_rows_considered": 10,
     "max_rows": 5000,
     "ok": true,
-    "stored": 1091,
+    "stored": 1099,
     "validation_overlap": []
   },
-  "cycle": 124,
+  "cycle": 125,
   "grounded_pretraining": {
     "adaptive_budget": true,
     "corpus": {
@@ -652,7 +636,7 @@
     "version": "airi-single-lineage-v1"
   },
   "mathesis": {
-    "curriculum_cursor": 773,
+    "curriculum_cursor": 833,
     "mathesis_generation": 15,
     "ok": true,
     "policy": "persisted MATHESIS metadata is untrusted; current verifier re-proof is required before mathematics may influence generalist curriculum/architecture, and generalist promotion remains independently benchmark-gated",
@@ -666,14 +650,15 @@
     "verifier_available": true
   },
   "ok": true,
+  "phase5_bootstrap": null,
   "plateau": {
     "generation_exact_accuracy": 0.0,
     "history_rows": 8,
     "plateau": true,
     "same_champion_cycles": 8,
     "scale_probe": true,
-    "score_span": 65.44056804716394,
-    "under_initial_tier": true
+    "score_span": 65.58728965357729,
+    "under_initial_tier": false
   },
   "policy": {
     "adaptive_curriculum": true,
@@ -695,8 +680,9 @@
       "layout_aware_net2grow": true
     },
     "automatic_best_of_both_fusion": {
-      "enabled": true,
-      "language_checkpoint_competes_in_swarm": true,
+      "enabled": false,
+      "language_checkpoint_competes_in_swarm": false,
+      "live_lineage_is_training_parent": true,
       "protected_reducer_slot_requires_safety_filter": true,
       "self_promotion": false
     },
@@ -711,6 +697,7 @@
       "gradient_accumulation_steps": 1,
       "precision": "fp32"
     },
+    "direct_research_checkpoint_promotion": false,
     "domain_balanced_pretraining": true,
     "external_pretrained": false,
     "external_reducer": true,
@@ -718,6 +705,7 @@
     "language_gap_routing": true,
     "latest_research_checkpoint_isolated": true,
     "parallel_swarm": "8->4->2",
+    "persistent_research_checkpoints": false,
     "production_qualification_separate": true,
     "progressive_scaling_max_parameters": 20000000,
     "research_only": true,
@@ -728,6 +716,7 @@
     },
     "scale_budget_adaptive": true,
     "scale_probe_retention": "reserve one safe scale survivor through reductions",
+    "single_lineage_migration_required": true,
     "tokenizer_research": {
       "allowed": [
         "byte-v1",
@@ -743,16 +732,13 @@
     "weight_inheritance": "layout-aware Net2Grow + identity residual depth expansion"
   },
   "progressive_scaling": {
-    "candidate_count": 2,
-    "candidate_generated": true,
-    "current_parameters": 115328,
+    "candidate_count": 0,
+    "candidate_generated": false,
+    "current_parameters": 7021248,
     "maximum_scale_budget_multiplier": 1.75,
     "minimum_scale_budget_multiplier": 1.25,
-    "strategies": [
-      "progressive_scale",
-      "progressive_scale_balanced"
-    ],
-    "target_parameters": 250000,
+    "strategies": [],
+    "target_parameters": null,
     "tiers": [
       250000,
       500000,
@@ -760,20 +746,26 @@
       3000000,
       7000000,
       12000000,
-      20000000
+      20000000,
+      32000000,
+      50000000,
+      64000000,
+      80000000,
+      96000000
     ]
   },
   "progressive_tokenizer": {
     "current_vocab_size": 384,
     "growth_per_probe": 128,
     "maximum_vocab_size": 1024,
-    "probe_generated": true,
-    "target_vocab_size": 512
+    "probe_generated": false,
+    "target_vocab_size": 384
   },
   "promoted": false,
+  "promotion_candidate": null,
   "promotion_reason": "no finalist passed every independent research gate",
   "rotating_canary": {
-    "cycle": 124,
+    "cycle": 125,
     "domains": [
       "language",
       "coding",
@@ -792,7 +784,7 @@
       "mode": "multiagent_verified",
       "reason": "self-play disabled until language and tool-use readiness gates pass",
       "rejected": 0,
-      "solver_source": "champion"
+      "solver_source": "live_lineage"
     },
     "enabled": false,
     "maximum_generated_tasks_per_cycle": 0,
@@ -802,9 +794,9 @@
     "requires_training_exclusion_for_verifier_cases": true
   },
   "signals": [
-    "language_gap",
     "data_gap",
     "reasoning_gap",
+    "structured_gap",
     "language_collapse",
     "autoregressive_collapse",
     "symbolic_reasoning_signal",
@@ -822,7 +814,7 @@
     "dense_ensemble": false,
     "max_active_experts": 1,
     "mobile_safe": true,
-    "mode": "system_sparse_experts",
+    "mode": "single_lineage_evidence_only",
     "research_only": true,
     "routes": {
       "coding": "coding",
@@ -838,7 +830,7 @@
     "specialists": {}
   },
   "trials": [],
-  "updated_at": 1790098310.3001413,
+  "updated_at": 1790118034.2312248,
   "version": "airi-generalist-free-speed-v5",
   "winner": null
 }
