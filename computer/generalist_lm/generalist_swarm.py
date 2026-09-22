@@ -33,6 +33,7 @@ from .bootstrap_data import load_bootstrap_replay
 from .mathesis_bridge import mathesis_signals
 from .model import estimate_parameter_count, parameter_count
 from .pretraining import CorpusDocument, load_local_corpus
+from .phase5_diagnostics import evaluate_phase5_language
 from .research_cycle import (
     _genome_training_seed,
     _grouped_validation,
@@ -50,7 +51,7 @@ from .research_cycle import (
 from .runtime import GeneralistRuntime
 
 
-GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v4"
+GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v5"
 
 
 def _atomic_json(path: Path, payload: Any) -> None:
@@ -188,6 +189,83 @@ def _unique_candidates(
         if len(out) >= max(1, int(count)):
             break
     return out
+
+
+def _phase5_language_fusion_candidate(
+    root: Path,
+    *,
+    max_params: int,
+) -> dict[str, Any] | None:
+    """Expose a completed Phase-5 language checkpoint as a safe swarm parent.
+
+    The language bootstrap already starts from the current architecture champion.
+    This helper closes the loop in the opposite direction: once a language rung
+    is fully persisted, its learned weights can enter the normal Generalist
+    tournament. It never self-promotes; the usual domain, degeneration and
+    external-reducer gates still decide whether the fused lineage becomes the
+    champion.
+    """
+    bootstrap = root / "bootstrap-data"
+    progress_path = bootstrap / "progress.json"
+    report_path = bootstrap / "report.json"
+    checkpoint = bootstrap / "candidate"
+    if not progress_path.is_file() or not checkpoint.is_dir():
+        return None
+    try:
+        progress = _load_json(progress_path)
+        raw_genome = progress.get("capacity_genome")
+        if not isinstance(raw_genome, dict):
+            return None
+        target_tokens = int(progress.get("target_tokens", 0) or 0)
+        tokens_processed = int(progress.get("tokens_processed", 0) or 0)
+        completed = {
+            int(value)
+            for value in (progress.get("completed_rungs") or [])
+            if isinstance(value, (int, float))
+        }
+        sft_completed = {
+            int(value)
+            for value in (progress.get("sft_completed_rungs") or [])
+            if isinstance(value, (int, float))
+        }
+        if (
+            target_tokens <= 0
+            or tokens_processed < target_tokens
+            or target_tokens not in completed
+            or target_tokens not in sft_completed
+        ):
+            return None
+
+        genome = GeneralistGenome(**raw_genome).validate()
+        runtime = GeneralistRuntime.from_checkpoint(checkpoint, device="cpu")
+        expected = genome.model_config(runtime.tokenizer.vocab_size).to_dict()
+        if runtime.config.to_dict() != expected:
+            return None
+        parameters = int(parameter_count(runtime.model))
+        if parameters > int(max_params):
+            return None
+
+        report = _load_json(report_path) if report_path.is_file() else {}
+        after = report.get("after") if isinstance(report, dict) else {}
+        if not isinstance(after, dict):
+            after = {}
+        return {
+            "genome": genome,
+            "checkpoint": "bootstrap-data/candidate",
+            "parameters": parameters,
+            "target_tokens": target_tokens,
+            "tokens_processed": tokens_processed,
+            "unique_corpus_target_tokens": int(
+                progress.get("unique_corpus_target_tokens", 0) or 0
+            ),
+            "minimum_success": bool(report.get("minimum_success")) if isinstance(report, dict) else False,
+            "language_nll": float(after.get("language_nll", float("inf"))),
+            "repetition_rate": float(after.get("repetition_rate", 1.0) or 1.0),
+            "multiword_output_rate": float(after.get("multiword_output_rate", 0.0) or 0.0),
+            "pathological_repetition": bool(after.get("pathological_repetition", False)),
+        }
+    except Exception:
+        return None
 
 
 def prepare_swarm(
@@ -346,13 +424,35 @@ def prepare_swarm(
         count=max(8, population_size),
         exploration_offset=max(0, cycle - 1),
     )
-    rows: list[tuple[str, GeneralistGenome]] = [
-        ("continual", _continual_genome(champion_genome, cycle)),
-    ]
+    language_fusion = _phase5_language_fusion_candidate(
+        root,
+        max_params=int(max_params),
+    )
+    rows: list[tuple[str, GeneralistGenome]] = []
+    if language_fusion is not None:
+        # Put the learned-language checkpoint first. If its topology is the
+        # same as the champion, topology dedup must retain the better-trained
+        # weights rather than replacing them with a fresh continual copy.
+        rows.append(("language_fusion", language_fusion["genome"]))
+    rows.append(("continual", _continual_genome(champion_genome, cycle)))
     rows.extend(scale_genomes)
     rows.extend(("architecture", genome) for genome in generated)
 
     candidates = _unique_candidates(rows, count=population_size)
+    if language_fusion is not None:
+        fusion_genome = language_fusion["genome"]
+        fusion_evidence = {
+            key: value
+            for key, value in language_fusion.items()
+            if key != "genome"
+        }
+        for candidate in candidates:
+            if candidate.get("candidate_id") != fusion_genome.genome_id:
+                continue
+            candidate["initial_checkpoint"] = str(language_fusion["checkpoint"])
+            candidate["initial_checkpoint_mode"] = "language_fusion"
+            candidate["fusion_evidence"] = fusion_evidence
+            break
     # If a duplicate collapsed the population, rotate deeper into the standard
     # mutation library until the requested matrix is full.
     offset = cycle + population_size
@@ -417,9 +517,33 @@ def prepare_swarm(
             "candidate_generated": bool(scale_genomes),
             "candidate_count": len(scale_genomes),
             "strategies": [kind for kind, _genome in scale_genomes],
-            "tiers": [250_000, 500_000, 1_250_000, 3_000_000, 7_000_000],
+            "tiers": [
+                250_000,
+                500_000,
+                1_250_000,
+                3_000_000,
+                7_000_000,
+                12_000_000,
+                20_000_000,
+            ],
             "minimum_scale_budget_multiplier": 1.25,
             "maximum_scale_budget_multiplier": 1.75,
+        },
+        "converged_champion": {
+            "language_fusion_available": language_fusion is not None,
+            "language_teacher": (
+                {
+                    key: value
+                    for key, value in language_fusion.items()
+                    if key != "genome"
+                }
+                if language_fusion is not None
+                else None
+            ),
+            "policy": (
+                "completed language checkpoint competes as a normal research candidate; "
+                "promotion still requires protected generalist and degeneration gates"
+            ),
         },
         "limits": {
             "max_params": int(max_params),
@@ -448,6 +572,8 @@ def prepare_swarm(
             "progressive_bpe_vocab": 1024,
             "inherited_sft_lr_cap": 0.001,
             "weight_inheritance": True,
+            "automatic_best_of_both_fusion": True,
+            "language_fusion_self_promotion": False,
             "automatic_data_growth_fail_closed": True,
             "airi_pc_lab_read_only": True,
             "airi_pc_lab_training": True,
@@ -685,6 +811,35 @@ def _domain_regression(
     return max(values) if values else 1_000_000.0
 
 
+def _language_fusion_retention_gate(
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    """Require a fused candidate to retain the language checkpoint's gains."""
+    reasons: list[str] = []
+    baseline_nll = float(baseline.get("language_nll", float("inf")))
+    current_nll = float(current.get("language_nll", float("inf")))
+    if not math.isfinite(current_nll) or current_nll > baseline_nll + 0.15:
+        reasons.append("Phase-5 language NLL regressed by more than 0.15")
+
+    baseline_multi = float(baseline.get("multiword_output_rate", 0.0) or 0.0)
+    current_multi = float(current.get("multiword_output_rate", 0.0) or 0.0)
+    if current_multi < max(0.0, baseline_multi - 0.10):
+        reasons.append("multi-word output retention regressed by more than 0.10")
+
+    baseline_rep = float(baseline.get("repetition_rate", 1.0) or 1.0)
+    current_rep = float(current.get("repetition_rate", 1.0) or 1.0)
+    if current_rep > min(1.0, baseline_rep + 0.10):
+        reasons.append("repetition rate regressed by more than 0.10")
+
+    if (
+        not bool(baseline.get("pathological_repetition", False))
+        and bool(current.get("pathological_repetition", False))
+    ):
+        reasons.append("fused candidate reintroduced pathological repetition")
+    return (not reasons), reasons
+
+
 def _load_stage_source(
     checkpoint: str | Path,
     *,
@@ -735,6 +890,31 @@ def _load_research_incumbent_source(
     expected = genome.model_config(runtime.tokenizer.vocab_size).to_dict()
     if runtime.config.to_dict() != expected:
         raise ValueError("research incumbent architecture mismatch")
+    return runtime, metadata
+
+
+def _load_language_fusion_source(
+    checkpoint: str | Path,
+    *,
+    genome: GeneralistGenome,
+) -> tuple[GeneralistRuntime, dict[str, Any]]:
+    root = Path(checkpoint).expanduser().resolve()
+    metadata_path = root / "metadata.json"
+    if not metadata_path.is_file():
+        raise FileNotFoundError("language fusion checkpoint requires metadata.json")
+    metadata = _load_json(metadata_path)
+    if not isinstance(metadata, dict):
+        raise ValueError("language fusion checkpoint metadata must be an object")
+    role = str(metadata.get("role") or "")
+    if not role.startswith("phase5_language_bootstrap"):
+        raise ValueError("language fusion source must come from Phase-5 bootstrap")
+    if bool(metadata.get("production_qualified")):
+        raise ValueError("production-qualified checkpoint must not be relabeled as fusion source")
+
+    runtime = GeneralistRuntime.from_checkpoint(root, device="cpu")
+    expected = genome.model_config(runtime.tokenizer.vocab_size).to_dict()
+    if runtime.config.to_dict() != expected:
+        raise ValueError("language fusion checkpoint architecture mismatch")
     return runtime, metadata
 
 
@@ -789,6 +969,7 @@ def run_candidate(
     source_runtime = champion_runtime
     source_metadata: dict[str, Any] = {}
     continued_from_incumbent = False
+    continued_from_language_fusion = False
     if source_checkpoint is not None:
         source_runtime, source_metadata = _load_stage_source(
             source_checkpoint,
@@ -798,11 +979,18 @@ def run_candidate(
         )
     elif int(stage) == 1 and row.get("initial_checkpoint"):
         initial_checkpoint = root / str(row["initial_checkpoint"])
-        source_runtime, source_metadata = _load_research_incumbent_source(
-            initial_checkpoint,
-            genome=genome,
-        )
-        continued_from_incumbent = True
+        if str(row.get("initial_checkpoint_mode") or "") == "language_fusion":
+            source_runtime, source_metadata = _load_language_fusion_source(
+                initial_checkpoint,
+                genome=genome,
+            )
+            continued_from_language_fusion = True
+        else:
+            source_runtime, source_metadata = _load_research_incumbent_source(
+                initial_checkpoint,
+                genome=genome,
+            )
+            continued_from_incumbent = True
 
     memory = CurriculumMemory(root, max_rows=20_000)
     replay_rows = memory.rows()
@@ -1019,6 +1207,12 @@ def run_candidate(
                 else None
             ),
             "continued_from_incumbent": bool(continued_from_incumbent),
+            "continued_from_language_fusion": bool(continued_from_language_fusion),
+            "language_fusion_target_tokens": (
+                int((row.get("fusion_evidence") or {}).get("target_tokens", 0) or 0)
+                if continued_from_language_fusion
+                else None
+            ),
             "cumulative_steps": (
                 int(source_metadata.get("cumulative_steps", 0) or 0)
                 + int(effective_steps)
@@ -1085,6 +1279,12 @@ def run_candidate(
             else None
         ),
         "continued_from_incumbent": bool(continued_from_incumbent),
+        "continued_from_language_fusion": bool(continued_from_language_fusion),
+        "language_fusion_evidence": (
+            dict(row.get("fusion_evidence") or {})
+            if continued_from_language_fusion
+            else None
+        ),
         "incumbent_source_cycle": (
             int(source_metadata.get("cycle", 0) or 0)
             if continued_from_incumbent
@@ -1211,6 +1411,24 @@ def select_survivors(
             or kind == "architecture_incumbent"
         )
 
+    fusion_rows = [
+        row for row in safe
+        if str(row.get("kind") or "") == "language_fusion"
+    ]
+    protected_language_fusion = False
+    if (
+        survivor_count >= 2
+        and fusion_rows
+        and not any(str(row.get("kind") or "") == "language_fusion" for row in selected)
+    ):
+        # The fusion lane receives one research slot only after passing the same
+        # early safety filter as every other candidate. It cannot bypass final
+        # eligibility or the external reducer.
+        fusion_rows.sort(key=rank_key)
+        selected[-1] = fusion_rows[0]
+        selected.sort(key=rank_key)
+        protected_language_fusion = True
+
     progressive_rows = [
         row for row in safe
         if is_capacity_probe(row)
@@ -1218,11 +1436,12 @@ def select_survivors(
     protected_progressive_scale = False
     if (
         survivor_count >= 2
+        and not protected_language_fusion
         and progressive_rows
         and not any(is_capacity_probe(row) for row in selected)
     ):
         # Only candidates that already survived the safety filter are eligible
-        # for protected exploration.  This reserves one slot for the capacity
+        # for protected exploration. This reserves one slot for the capacity
         # hypothesis without bypassing repetition/domain-regression checks.
         progressive_rows.sort(key=rank_key)
         selected[-1] = progressive_rows[0]
@@ -1245,6 +1464,7 @@ def select_survivors(
             ]
         },
         "protected_progressive_scale": protected_progressive_scale,
+        "protected_language_fusion": protected_language_fusion,
     }
     _atomic_json(Path(output_path), payload)
     return payload
@@ -1384,6 +1604,32 @@ def finalize_swarm(
             minimum_loss_gain=0.01,
             max_domain_regression=0.08,
         )
+        if eligible and str(winner.get("kind") or "") == "language_fusion":
+            plan_candidate = next(
+                (
+                    row for row in (plan.get("candidates") or [])
+                    if str(row.get("candidate_id") or "") == genome.genome_id
+                ),
+                {},
+            )
+            baseline_language = dict(plan_candidate.get("fusion_evidence") or {})
+            current_language = evaluate_phase5_language(runtime)
+            retained, retention_reasons = _language_fusion_retention_gate(
+                baseline_language,
+                current_language,
+            )
+            verified["phase5_language_retention"] = {
+                "passed": bool(retained),
+                "baseline": baseline_language,
+                "current": current_language,
+                "reasons": retention_reasons,
+            }
+            if not retained:
+                eligible = False
+                verify_reason = (
+                    "language_fusion_retention_rejected:"
+                    + "; ".join(retention_reasons)
+                )
         if eligible:
             _save_champion(root, genome, runtime, verified)
             promoted = True
@@ -1521,6 +1767,7 @@ def finalize_swarm(
             },
         },
         "automatic_data_growth": plan.get("data_growth"),
+        "converged_champion": plan.get("converged_champion"),
         "progressive_scaling": plan.get("progressive_scaling"),
         "progressive_tokenizer": plan.get("progressive_tokenizer"),
         "plateau": plan.get("plateau"),
@@ -1540,7 +1787,13 @@ def finalize_swarm(
             "production_qualification_separate": True,
             "external_pretrained": False,
             "adaptive_curriculum": True,
-            "progressive_scaling_max_parameters": 7_000_000,
+            "progressive_scaling_max_parameters": 20_000_000,
+            "automatic_best_of_both_fusion": {
+                "enabled": True,
+                "language_checkpoint_competes_in_swarm": True,
+                "self_promotion": False,
+                "protected_reducer_slot_requires_safety_filter": True,
+            },
             "scale_probe_retention": "reserve one safe scale survivor through reductions",
             "scale_budget_adaptive": True,
             "adaptive_pretraining_budget": {

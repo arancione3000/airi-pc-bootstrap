@@ -30,7 +30,7 @@ concurrency:
 jobs:
   bootstrap:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 330
     env:
       PYTHONPATH: computer
       STATE_REPO: /tmp/airi-generalist-phase5-state-repo
@@ -227,49 +227,43 @@ jobs:
             -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${TARGET_TOKENS}\"}}"
           echo "NEXT_BOOTSTRAP_TARGET=${TARGET_TOKENS}" >> "${GITHUB_ENV}"
 
-      - name: Continue ladder only when measured benefit justifies it
+      - name: Queue the next language rung after one converged swarm cycle
         if: env.RUNG_COMPLETE == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           report="${STATE_DIR}/bootstrap-data/report.json"
           current="$(jq -r '.target_tokens' "${report}")"
-          minimum_success="$(jq -r '.minimum_success' "${report}")"
-          after_nll="$(jq -r '.after.language_nll' "${report}")"
-          before_nll="$(jq -r '.before.language_nll' "${report}")"
-          multiword="$(jq -r '.after.multiword_output_rate' "${report}")"
-          after_rep="$(jq -r '.after.repetition_rate' "${report}")"
-          before_rep="$(jq -r '.before.repetition_rate' "${report}")"
-          pathological="$(jq -r '.after.pathological_repetition // false' "${report}")"
-          model_parameters="$(jq -r '.model_parameters // 0' "${report}")"
           next=""
 
           if [[ "${current}" -lt 5000000 ]]; then
-            # 1M is a bootstrap diagnostic rung, not permission to give up.
             next=5000000
-          elif [[ "${current}" -lt 20000000 ]] && \
-               { [[ "${minimum_success}" == "true" ]] || \
-                 [[ "${pathological}" == "true" ]] || \
-                 [[ "${model_parameters}" -lt 1000000 ]] || \
-                 awk "BEGIN {exit !(${after_nll} < ${before_nll} - 0.08 && ${after_rep} < ${before_rep})}"; }; then
-            # Conversation rescue rung: bootstrap_training grows the candidate
-            # toward ~1.25M parameters and performs repeated optimization passes
-            # over the pinned ~5M-token reviewed corpus.
+          elif [[ "${current}" -lt 20000000 ]]; then
             next=20000000
-          elif [[ "${minimum_success}" == "true" && "${current}" -lt 50000000 ]] && \
-               awk "BEGIN {exit !(${after_nll} < ${before_nll} - 0.25 && ${multiword} >= 0.50)}"; then
+          elif [[ "${current}" -lt 50000000 ]]; then
             next=50000000
+          elif [[ "${current}" -lt 100000000 ]]; then
+            next=100000000
           fi
 
+          marker="${STATE_DIR}/bootstrap-next-target.json"
           if [[ -n "${next}" ]]; then
-            curl --fail-with-body -sS -X POST \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/dispatches" \
-              -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${next}\"}}"
+            printf '{"schema":1,"completed_target_tokens":%s,"target_tokens":%s,"handoff":"converged_swarm_first"}\n' \
+              "${current}" "${next}" > "${marker}"
+          else
+            rm -f "${marker}"
+          fi
+
+          cd "${STATE_REPO}"
+          git add -A generalist-state/bootstrap-next-target.json || true
+          git commit --allow-empty -m "generalist-state: queue post-fusion bootstrap target ${next:-complete}"
+          git push --quiet origin HEAD:generalist-state
+          cd "${GITHUB_WORKSPACE}"
+
+          if [[ -n "${next}" ]]; then
             echo "NEXT_BOOTSTRAP_TARGET=${next}" >> "${GITHUB_ENV}"
+            echo "Queued target ${next}; the Generalist swarm must run once before it is dispatched."
+          else
+            echo "100M bounded language ladder complete; no automatic larger language rung queued."
           fi
 
       # Continuum is resumed by its workflow_run trigger only after this

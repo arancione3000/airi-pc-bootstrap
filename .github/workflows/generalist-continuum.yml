@@ -143,7 +143,7 @@ jobs:
           rm -rf "${BUNDLE}"
           mkdir -p "${BUNDLE}"
 
-          python -m generalist_lm.generalist_swarm prepare             "${STATE_DIR}" "${BUNDLE}/plan.json"             --mathesis-state "${MATHESIS_STATE_DIR}"             --population-size 8             --max-params 7000000             --max-context 512             --max-width 384             --max-layers 10             --curriculum-max-rows 4000             --data-max-new-bytes 8000000             --data-max-total-bytes 50000000
+          python -m generalist_lm.generalist_swarm prepare             "${STATE_DIR}" "${BUNDLE}/plan.json"             --mathesis-state "${MATHESIS_STATE_DIR}"             --population-size 8             --max-params 20000000             --max-context 1024             --max-width 512             --max-layers 12             --curriculum-max-rows 8000             --data-max-new-bytes 12000000             --data-max-total-bytes 100000000
 
           cp -a "${STATE_DIR}" "${BUNDLE}/state"
           matrix="$(jq -c '.matrix' "${BUNDLE}/plan.json")"
@@ -164,7 +164,7 @@ jobs:
       max-parallel: 8
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       PYTHONPATH: computer
     steps:
@@ -220,7 +220,7 @@ jobs:
       max-parallel: 4
       matrix: ${{ fromJSON(needs.reduce1.outputs.matrix) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     env:
       PYTHONPATH: computer
     steps:
@@ -242,7 +242,7 @@ jobs:
           path: /tmp/previous
       - name: Continue survivor to cumulative 28-step base budget
         run: |
-          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 2 --steps 20 --repeat-seeds 1 --pretrain-steps 4             --source-checkpoint /tmp/previous/best-checkpoint             --max-repo-bytes 10000000 --max-external-bytes 20000000
+          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 2 --steps 20 --repeat-seeds 1 --pretrain-steps 4             --source-checkpoint /tmp/previous/best-checkpoint             --max-repo-bytes 10000000 --max-external-bytes 40000000
       - uses: actions/upload-artifact@v4
         with:
           name: generalist-stage2-${{ matrix.index }}
@@ -280,7 +280,7 @@ jobs:
       max-parallel: 2
       matrix: ${{ fromJSON(needs.reduce2.outputs.matrix) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
       PYTHONPATH: computer
     steps:
@@ -302,7 +302,7 @@ jobs:
           path: /tmp/previous
       - name: Continue finalist to cumulative 76-step multi-seed base budget
         run: |
-          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 3 --steps 48 --repeat-seeds 2 --pretrain-steps 8             --source-checkpoint /tmp/previous/best-checkpoint             --max-repo-bytes 20000000 --max-external-bytes 50000000
+          python -m generalist_lm.generalist_swarm worker             /tmp/plan/plan.json /tmp/plan/state "${GITHUB_WORKSPACE}"             "/tmp/out-${{ matrix.index }}"             --index "${{ matrix.index }}"             --stage 3 --steps 48 --repeat-seeds 2 --pretrain-steps 8             --source-checkpoint /tmp/previous/best-checkpoint             --max-repo-bytes 20000000 --max-external-bytes 100000000
       - uses: actions/upload-artifact@v4
         with:
           name: generalist-stage3-${{ matrix.index }}
@@ -403,6 +403,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+
+          next_target_file="${STATE_DIR}/bootstrap-next-target.json"
+          if [[ -s "${next_target_file}" ]]; then
+            next_target="$(jq -r '.target_tokens // 0' "${next_target_file}")"
+            completed_target="$(jq -r '.completed_target_tokens // 0' "${next_target_file}")"
+            if (( next_target > completed_target && next_target <= 100000000 )); then
+              # Consume the marker transactionally before dispatch so a later
+              # scheduled Continuum cycle cannot fan out duplicate bootstraps.
+              rm -f "${next_target_file}"
+              cd "${STATE_REPO}"
+              rm -f generalist-state/bootstrap-next-target.json
+              git add -A generalist-state/bootstrap-next-target.json || true
+              git commit --allow-empty -m "generalist-state: consume bootstrap target ${next_target}"
+              git push --quiet origin HEAD:generalist-state
+              cd "${GITHUB_WORKSPACE}"
+
+              curl --fail-with-body -sS --retry 3 --retry-all-errors -X POST \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/dispatches" \
+                -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${next_target}\"}}"
+              echo "Converged swarm complete; dispatched next language rung ${next_target}."
+              exit 0
+            fi
+            echo "Ignoring invalid/stale bootstrap-next-target marker." >&2
+          fi
 
           bootstrap_api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/runs"
           curl_common=(

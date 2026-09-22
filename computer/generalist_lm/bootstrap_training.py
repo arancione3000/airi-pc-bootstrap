@@ -46,10 +46,10 @@ from .tokenizer import PAD
 from .training import causal_training_objective, train_sft
 
 
-PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v2"
+PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v3"
 PHASE5_SFT_GUARD_VERSION = "phase5-sft-guard-v2"
 PHASE5_ANTICOLLAPSE_VERSION = "phase5-anticollapse-v2"
-PHASE5_CAPACITY_GROWTH_VERSION = "phase5-capacity-growth-v1"
+PHASE5_CAPACITY_GROWTH_VERSION = "phase5-capacity-growth-v2"
 PHASE5_MAX_UNIQUE_CORPUS_TOKENS = 5_000_000
 
 
@@ -95,8 +95,19 @@ def _bootstrap_corpus_target(training_target_tokens: int) -> int:
 
 
 def _bootstrap_capacity_target(training_target_tokens: int) -> int | None:
-    """Capacity ladder paired with the expensive language-bootstrap rungs."""
+    """Capacity ladder paired with cumulative language optimization.
+
+    The 100M rung is the requested conversational/knowledge bootstrap budget.
+    Larger explicit targets remain supported so the language lane does not
+    become a permanent capacity ceiling after that rung.
+    """
     target = max(0, int(training_target_tokens))
+    if target >= 500_000_000:
+        return 20_000_000
+    if target >= 250_000_000:
+        return 12_000_000
+    if target >= 100_000_000:
+        return 7_000_000
     if target >= 50_000_000:
         return 3_000_000
     if target >= 20_000_000:
@@ -117,8 +128,8 @@ def _grow_bootstrap_runtime(
         base_genome,
         target_parameters=target,
         vocab_size=runtime.tokenizer.vocab_size,
-        max_width=384,
-        max_layers=10,
+        max_width=512,
+        max_layers=12,
         prefer_function_preserving=False,
     )
     config = grown_genome.model_config(runtime.tokenizer.vocab_size)
@@ -597,7 +608,13 @@ def _run_guarded_sft(
     parameters = parameter_count(runtime.model)
     sft_anti_collapse_weight = 0.08 if collapsed else 0.0
     sft_eos_loss_weight = 1.75 if collapsed else 1.0
-    if int(target_tokens) >= 20_000_000 or parameters >= 750_000:
+    if int(target_tokens) >= 100_000_000 or parameters >= 3_000_000:
+        attempts = (
+            {"steps": 1600, "learning_rate": 4e-5},
+            {"steps": 800, "learning_rate": 2.5e-5},
+            {"steps": 320, "learning_rate": 1.25e-5},
+        )
+    elif int(target_tokens) >= 20_000_000 or parameters >= 750_000:
         attempts = (
             {"steps": 800, "learning_rate": 5e-5},
             {"steps": 400, "learning_rate": 3e-5},
@@ -777,12 +794,26 @@ def run_segment(
     })
     progress["schema"] = 1
     progress["version"] = PHASE5_BOOTSTRAP_VERSION
+    rebase_to_champion = False
     if str(progress.get("base_champion_model_sha256")) != base_model_sha:
-        # A completed previous rung may have promoted the candidate to champion.
-        # Otherwise fail closed rather than training on a stale base.
-        if int(progress.get("tokens_processed", 0) or 0) < int(progress.get("target_tokens", 0) or 0):
+        # A completed previous rung may have gone through the converged swarm
+        # and promoted a jointly-trained descendant. Resume the next language
+        # rung from that stronger champion, never from stale pre-fusion weights.
+        # A mid-rung champion change still fails closed.
+        previous_target = int(progress.get("target_tokens", 0) or 0)
+        previous_processed = int(progress.get("tokens_processed", 0) or 0)
+        previous_sft = {
+            int(value)
+            for value in (progress.get("sft_completed_rungs") or [])
+            if isinstance(value, (int, float))
+        }
+        if (
+            previous_processed < previous_target
+            or previous_target not in previous_sft
+        ):
             raise RuntimeError("champion changed during an incomplete Phase 5 bootstrap")
         progress["base_champion_model_sha256"] = base_model_sha
+        rebase_to_champion = True
 
     progress["target_tokens"] = max(int(progress.get("target_tokens", 0) or 0), int(target_tokens))
     target_tokens = int(progress["target_tokens"])
@@ -793,11 +824,24 @@ def run_segment(
 
     candidate_genome = champion_genome
     capacity_genome_raw = progress.get("capacity_genome")
-    if isinstance(capacity_genome_raw, dict):
+    if not rebase_to_champion and isinstance(capacity_genome_raw, dict):
         try:
             candidate_genome = GeneralistGenome(**capacity_genome_raw).validate()
         except Exception:
             candidate_genome = champion_genome
+
+    if rebase_to_champion:
+        shutil.rmtree(candidate_dir, ignore_errors=True)
+        optimizer_path.unlink(missing_ok=True)
+        shutil.rmtree(bootstrap_root / "best", ignore_errors=True)
+        shutil.rmtree(bootstrap_root / "pre-sft", ignore_errors=True)
+        shutil.rmtree(bootstrap_root / "pre-anticollapse", ignore_errors=True)
+        progress["capacity_genome"] = champion_genome.to_dict()
+        progress["capacity_rebased_from_champion"] = {
+            "model_sha256": base_model_sha,
+            "parameters": int(parameter_count(champion_runtime.model)),
+            "training_target_tokens": int(target_tokens),
+        }
 
     if candidate_dir.is_dir():
         runtime = GeneralistRuntime.from_checkpoint(candidate_dir, device="cpu")
@@ -814,12 +858,13 @@ def run_segment(
                 "role": "phase5_language_bootstrap_candidate",
                 "production_qualified": False,
                 "base_champion_model_sha256": base_model_sha,
+                "rebased_from_converged_champion": bool(rebase_to_champion),
             },
         )
 
     desired_capacity = _bootstrap_capacity_target(target_tokens)
-    applied_capacity = int(progress.get("capacity_target_parameters", 0) or 0)
-    if desired_capacity is not None and applied_capacity < int(desired_capacity):
+    current_capacity = int(parameter_count(runtime.model))
+    if desired_capacity is not None and current_capacity < int(desired_capacity):
         candidate_genome, runtime, growth = _grow_bootstrap_runtime(
             candidate_genome,
             runtime,
@@ -1020,9 +1065,11 @@ def run_segment(
         )
     )
     if rescue_due:
+        runtime_parameters = parameter_count(runtime.model)
         rescue_steps = (
-            512 if parameter_count(runtime.model) >= 750_000
-            else 256 if parameter_count(runtime.model) >= 250_000
+            1024 if runtime_parameters >= 3_000_000
+            else 512 if runtime_parameters >= 750_000
+            else 256 if runtime_parameters >= 250_000
             else 128
         )
         runtime, rescue_report = _run_anti_collapse_rescue(

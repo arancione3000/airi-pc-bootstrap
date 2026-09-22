@@ -365,8 +365,16 @@ def progressive_scale_candidate(
 def progressive_scale_target(
     current_parameters: int,
     *,
-    tiers: tuple[int, ...] = (250_000, 500_000, 1_250_000, 3_000_000, 7_000_000),
-    max_parameters: int = 7_000_000,
+    tiers: tuple[int, ...] = (
+        250_000,
+        500_000,
+        1_250_000,
+        3_000_000,
+        7_000_000,
+        12_000_000,
+        20_000_000,
+    ),
+    max_parameters: int = 20_000_000,
 ) -> int | None:
     current = max(0, int(current_parameters))
     cap = max(current, int(max_parameters))

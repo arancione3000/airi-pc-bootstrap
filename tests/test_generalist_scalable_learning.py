@@ -250,6 +250,9 @@ def test_progressive_scaling_builds_larger_bounded_generalist():
     assert candidate.generation == champion.generation + 1
     assert 1e-4 <= candidate.learning_rate <= 1e-3
     assert candidate.learning_rate < champion.learning_rate
+    assert progressive_scale_target(7_000_000, max_parameters=20_000_000) == 12_000_000
+    assert progressive_scale_target(12_000_000, max_parameters=20_000_000) == 20_000_000
+    assert progressive_scale_target(20_000_000, max_parameters=20_000_000) is None
 
 
 def test_adaptive_curriculum_weights_weak_domains_more_heavily():
@@ -503,7 +506,7 @@ def test_generalist_swarm_reducer_prefers_safe_generation_and_nll(tmp_path: Path
         folder.mkdir()
         payload = {
             "ok": True,
-            "version": "airi-generalist-free-speed-v4",
+            "version": "airi-generalist-free-speed-v5",
             "cycle": 1,
             "stage": 1,
             "steps": 3,
@@ -594,6 +597,206 @@ def test_generalist_swarm_plan_contains_progressive_scale_and_adaptive_policy(tm
     assert plan["progressive_scaling"]["target_parameters"] == 250_000
     assert plan["progressive_scaling"]["candidate_generated"] is True
     assert any(row["kind"] == "progressive_scale" for row in plan["candidates"])
+
+
+def test_generalist_swarm_plan_imports_completed_phase5_language_fusion(tmp_path: Path):
+    pytest.importorskip("torch")
+    from generalist_lm.evolution import GeneralistGenome
+    from generalist_lm.generalist_swarm import (
+        _load_language_fusion_source,
+        prepare_swarm,
+    )
+    from generalist_lm.runtime import GeneralistRuntime
+
+    state = tmp_path / "state"
+    state.mkdir()
+
+    champion_genome = GeneralistGenome(
+        generation=1,
+        parent_id="seed",
+        genome_id="fusion-base",
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        retrieval_adapter=False,
+        symbolic_adapter=False,
+        code_adapter=False,
+        data_adapter=False,
+        reasoning_depth=1,
+    ).validate()
+    GeneralistRuntime.fresh(
+        champion_genome.model_config(264)
+    ).save_checkpoint(
+        state / "champion",
+        metadata={"role": "research_champion", "production_qualified": False},
+    )
+    (state / "champion-genome.json").write_text(
+        json.dumps(champion_genome.to_dict()),
+        encoding="utf-8",
+    )
+
+    fusion_genome = GeneralistGenome(
+        generation=2,
+        parent_id=champion_genome.genome_id,
+        genome_id="phase5-fusion-1",
+        context_length=64,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=128,
+        retrieval_adapter=False,
+        symbolic_adapter=False,
+        code_adapter=False,
+        data_adapter=False,
+        reasoning_depth=1,
+    ).validate()
+    bootstrap = state / "bootstrap-data"
+    GeneralistRuntime.fresh(
+        fusion_genome.model_config(264)
+    ).save_checkpoint(
+        bootstrap / "candidate",
+        metadata={
+            "role": "phase5_language_bootstrap_candidate",
+            "production_qualified": False,
+        },
+    )
+    (bootstrap / "progress.json").write_text(
+        json.dumps({
+            "target_tokens": 20_000_000,
+            "tokens_processed": 20_000_000,
+            "completed_rungs": [5_000_000, 20_000_000],
+            "sft_completed_rungs": [5_000_000, 20_000_000],
+            "capacity_genome": fusion_genome.to_dict(),
+            "unique_corpus_target_tokens": 5_000_000,
+        }),
+        encoding="utf-8",
+    )
+    (bootstrap / "report.json").write_text(
+        json.dumps({
+            "target_tokens": 20_000_000,
+            "minimum_success": False,
+            "after": {
+                "language_nll": 2.5,
+                "repetition_rate": 0.30,
+                "multiword_output_rate": 0.75,
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    loaded, metadata = _load_language_fusion_source(
+        bootstrap / "candidate",
+        genome=fusion_genome,
+    )
+    assert loaded.config.to_dict() == fusion_genome.model_config(264).to_dict()
+    assert metadata["role"] == "phase5_language_bootstrap_candidate"
+
+    plan = prepare_swarm(
+        state,
+        tmp_path / "fusion-plan.json",
+        population_size=4,
+        max_params=2_000_000,
+        max_context=512,
+        max_width=256,
+        max_layers=6,
+        grow_data=False,
+    )
+    fusion_rows = [
+        row for row in plan["candidates"]
+        if row["kind"] == "language_fusion"
+    ]
+    assert len(fusion_rows) == 1
+    assert fusion_rows[0]["candidate_id"] == fusion_genome.genome_id
+    assert fusion_rows[0]["initial_checkpoint"] == "bootstrap-data/candidate"
+    assert fusion_rows[0]["initial_checkpoint_mode"] == "language_fusion"
+    assert fusion_rows[0]["fusion_evidence"]["target_tokens"] == 20_000_000
+    assert plan["converged_champion"]["language_fusion_available"] is True
+    assert plan["policy"]["automatic_best_of_both_fusion"] is True
+
+
+def test_language_fusion_retention_gate_preserves_language_gains():
+    from generalist_lm.generalist_swarm import _language_fusion_retention_gate
+
+    baseline = {
+        "language_nll": 2.4,
+        "multiword_output_rate": 0.70,
+        "repetition_rate": 0.25,
+        "pathological_repetition": False,
+    }
+    retained = {
+        "language_nll": 2.45,
+        "multiword_output_rate": 0.65,
+        "repetition_rate": 0.30,
+        "pathological_repetition": False,
+    }
+    ok, reasons = _language_fusion_retention_gate(baseline, retained)
+    assert ok, reasons
+
+    forgotten = dict(retained)
+    forgotten["multiword_output_rate"] = 0.40
+    forgotten["pathological_repetition"] = True
+    ok, reasons = _language_fusion_retention_gate(baseline, forgotten)
+    assert not ok
+    assert any("multi-word" in reason for reason in reasons)
+    assert any("pathological" in reason for reason in reasons)
+
+
+def test_generalist_swarm_reducer_protects_safe_language_fusion(tmp_path: Path):
+    from generalist_lm.generalist_swarm import select_survivors
+
+    root = tmp_path / "fusion-results"
+    root.mkdir()
+    rows = [
+        (0, "architecture", 2.0),
+        (1, "architecture", 2.1),
+        (2, "architecture", 2.2),
+        (3, "language_fusion", 4.0),
+    ]
+    for index, kind, nll in rows:
+        folder = root / str(index)
+        folder.mkdir()
+        payload = {
+            "ok": True,
+            "version": "airi-generalist-free-speed-v5",
+            "cycle": 1,
+            "stage": 1,
+            "steps": 3,
+            "candidate_index": index,
+            "candidate_id": f"fusion-{index}",
+            "kind": kind,
+            "genome": {},
+            "reports": [],
+            "all_seed_eligible": False,
+            "any_seed_eligible": False,
+            "mean_nll_per_byte": nll,
+            "best_nll_per_byte": nll,
+            "mean_generation_accuracy": 0.0,
+            "mean_generation_similarity": 0.0,
+            "mean_generation_nonempty_rate": 1.0,
+            "mean_generation_repetition_rate": 0.1,
+            "any_generation_pathological_repetition": False,
+            "worst_domain_regression": 0.02,
+            "parameters": 100_000 + index,
+            "score": 10.0,
+            "corpus": {},
+            "checkpoint_dir": "best-checkpoint",
+            "external_pretrained": False,
+        }
+        (folder / "result.json").write_text(
+            json.dumps(payload),
+            encoding="utf-8",
+        )
+
+    result = select_survivors(
+        [root],
+        tmp_path / "fusion-selection.json",
+        survivors=2,
+    )
+    selected = [row["index"] for row in result["selected"]]
+    assert 3 in selected
+    assert result["protected_language_fusion"] is True
 
 
 
@@ -1009,7 +1212,7 @@ def test_generalist_swarm_reducer_reserves_one_safe_scale_probe(tmp_path: Path):
         folder.mkdir()
         payload = {
             "ok": True,
-            "version": "airi-generalist-free-speed-v4",
+            "version": "airi-generalist-free-speed-v5",
             "cycle": 1,
             "stage": 1,
             "steps": 3,
@@ -1303,7 +1506,7 @@ def test_generalist_swarm_reducer_prefers_partial_generation_before_nll(tmp_path
         folder.mkdir()
         payload = {
             "ok": True,
-            "version": "airi-generalist-free-speed-v4",
+            "version": "airi-generalist-free-speed-v5",
             "cycle": 1,
             "stage": 1,
             "steps": 3,
