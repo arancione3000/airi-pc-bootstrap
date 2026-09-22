@@ -59,6 +59,7 @@ from .research_cycle import (
     research_seed,
 )
 from .runtime import GeneralistRuntime
+from .verified_self_play import generate_verified_self_play_rows
 
 
 GENERALIST_SWARM_VERSION = "airi-generalist-free-speed-v5"
@@ -369,19 +370,25 @@ def prepare_swarm(
         verified_experience_rows=len(lab_experience_rows),
     )
 
+    self_play = self_play_policy(
+        champion_report,
+        verified_tool_experiences=len(lab_experience_rows),
+    )
+    self_play_rows, self_play_report = generate_verified_self_play_rows(
+        champion_runtime,
+        self_play,
+        cycle=cycle,
+        max_tasks=12,
+    )
     memory = CurriculumMemory(root, max_rows=curriculum_max_rows)
     curriculum = memory.expand(
         cycle,
         signals=signals,
-        extra_rows=lab_training_rows,
+        extra_rows=[*lab_training_rows, *self_play_rows],
     )
     domain_weights = active_learning_weights(
         champion_report,
         base_weights=adaptive_domain_weights(champion_report),
-        verified_tool_experiences=len(lab_experience_rows),
-    )
-    self_play = self_play_policy(
-        champion_report,
         verified_tool_experiences=len(lab_experience_rows),
     )
 
@@ -562,7 +569,10 @@ def prepare_swarm(
         "sparse_experts": sparse_expert_plan(
             available_islands=sorted({str(row.get("island") or "") for row in candidates}),
         ),
-        "self_play": self_play,
+        "self_play": {
+            **dict(self_play),
+            "cycle_report": self_play_report,
+        },
         "compression": {
             "enabled": compressed_genome is not None,
             "candidate_id": (
