@@ -686,6 +686,30 @@ def prepare_swarm(
         candidate["domain_weights"] = island_weights(domain_weights, island)
         candidate["sparse_expert_role"] = island
 
+    # _unique_candidates() intentionally rebuilds rows during population refill.
+    # Re-attach learned checkpoint provenance after that step so a language or
+    # specialist fusion candidate never silently falls back to fresh weights.
+    if language_fusion is not None:
+        fusion_genome = language_fusion["genome"]
+        for candidate in candidates:
+            if candidate.get("candidate_id") == fusion_genome.genome_id:
+                candidate["initial_checkpoint"] = str(language_fusion["checkpoint"])
+                candidate["initial_checkpoint_mode"] = "language_fusion"
+                candidate["fusion_evidence"] = {
+                    key: value
+                    for key, value in language_fusion.items()
+                    if key != "genome"
+                }
+                break
+    if specialist_fusion is not None:
+        specialist_genome = specialist_fusion["genome"]
+        for candidate in candidates:
+            if candidate.get("candidate_id") == specialist_genome.genome_id:
+                candidate["initial_checkpoint"] = str(specialist_fusion["checkpoint"])
+                candidate["initial_checkpoint_mode"] = "specialist_fusion"
+                candidate["specialist_evidence"] = dict(specialist_fusion["summary"])
+                break
+
     champion_vocab_size = int(getattr(champion_runtime.tokenizer, "vocab_size", 0) or 0)
     bpe_growth_target = champion_vocab_size
     if (
@@ -1703,6 +1727,14 @@ def _persist_specialist_checkpoints(
             ),
             "mean_generation_repetition_rate": float(
                 row.get("mean_generation_repetition_rate", 0.0) or 0.0
+            ),
+            "all_seed_eligible": bool(row.get("all_seed_eligible")),
+            "any_seed_eligible": bool(row.get("any_seed_eligible")),
+            "any_generation_pathological_repetition": bool(
+                row.get("any_generation_pathological_repetition")
+            ),
+            "worst_domain_regression": float(
+                row.get("worst_domain_regression", 1_000_000.0) or 0.0
             ),
             "research_only": True,
             "production_qualified": False,
