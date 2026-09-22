@@ -260,7 +260,12 @@ jobs:
             echo "Queued mobile export for the freshly persisted AIRI Live checkpoint."
 
             rung_complete="$(jq -r '.rung_complete' /tmp/phase5-segment.json)"
+            capacity_growth_only="$(jq -r '.capacity_growth_only // false' /tmp/phase5-segment.json)"
             if [[ "${rung_complete}" == "true" ]]; then
+              break
+            fi
+            if [[ "${capacity_growth_only}" == "true" ]]; then
+              echo "AIRI 50M assisted growth persisted; resume training in a fresh run."
               break
             fi
 
