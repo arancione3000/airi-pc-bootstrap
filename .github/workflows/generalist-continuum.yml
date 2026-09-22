@@ -21,7 +21,7 @@ permissions:
 
 concurrency:
   group: airi-generalist-free-speed
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   bootstrap-gate:
