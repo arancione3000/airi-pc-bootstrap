@@ -1223,6 +1223,33 @@ def _load_language_fusion_source(
     return runtime, metadata
 
 
+
+def _load_live_lineage_source(
+    checkpoint: str | Path,
+) -> tuple[GeneralistRuntime, dict[str, Any]]:
+    """Load the newest persisted AIRI weights as a research starting point.
+
+    Unlike a stage/incumbent checkpoint, the live lineage is intentionally
+    allowed to have a different topology from the candidate. _train_genome()
+    performs the safe architecture-aware transfer into each challenger.
+    """
+    root = Path(checkpoint).expanduser().resolve()
+    metadata_path = root / "metadata.json"
+    if not metadata_path.is_file():
+        raise FileNotFoundError("live lineage checkpoint requires metadata.json")
+    metadata = _load_json(metadata_path)
+    if not isinstance(metadata, dict):
+        raise ValueError("live lineage checkpoint metadata must be an object")
+    role = str(metadata.get("role") or "")
+    if not (
+        role.startswith("phase5_language_bootstrap")
+        or role == "active_airi_lineage"
+        or role == "production_champion"
+    ):
+        raise ValueError(f"unsupported live-lineage checkpoint role: {role}")
+    runtime = GeneralistRuntime.from_checkpoint(root, device="cpu")
+    return runtime, metadata
+
 def _capacity_budget_multiplier(
     kind: str,
     *,
@@ -1284,12 +1311,17 @@ def run_candidate(
         )
     elif int(stage) == 1 and row.get("initial_checkpoint"):
         initial_checkpoint = root / str(row["initial_checkpoint"])
-        if str(row.get("initial_checkpoint_mode") or "") == "language_fusion":
+        initial_mode = str(row.get("initial_checkpoint_mode") or "")
+        if initial_mode == "language_fusion":
             source_runtime, source_metadata = _load_language_fusion_source(
                 initial_checkpoint,
                 genome=genome,
             )
             continued_from_language_fusion = True
+        elif initial_mode == "live_lineage":
+            source_runtime, source_metadata = _load_live_lineage_source(
+                initial_checkpoint,
+            )
         else:
             source_runtime, source_metadata = _load_research_incumbent_source(
                 initial_checkpoint,
