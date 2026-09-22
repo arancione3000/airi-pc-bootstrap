@@ -172,11 +172,12 @@ def efficiency_profile(
     generation_similarity = max(0.0, min(1.0, _finite(report.get("generation_similarity"), 0.0)))
     nll = max(0.0, _finite(report.get("nll_per_byte", report.get("loss")), 1_000.0))
     quality_proxy = max(0.0, score) + 10.0 * generation_similarity + 10.0 / (1.0 + nll)
-    active_fraction = (
+    routing_fraction = (
         float(cfg.moe_top_k) / float(cfg.moe_experts)
         if cfg.ff_variant == "moe_swiglu"
         else 1.0
     )
+    active_fraction = 1.0  # portable MoE reference kernel evaluates all experts
     latency = dict(latency or {})
     latency_ms = max(0.0, _finite(latency.get("forward_median_ms"), 0.0))
     quality_per_ms = quality_proxy / latency_ms if latency_ms > 0.0 else 0.0
@@ -187,6 +188,12 @@ def efficiency_profile(
         "quality_per_million_parameters": float(quality_proxy * 1_000_000.0 / params),
         "quality_per_million_flops": float(quality_proxy * 1_000_000.0 / flops),
         "active_compute_fraction": float(active_fraction),
+        "routing_activation_fraction": float(routing_fraction),
+        "moe_kernel": (
+            "dense_reference_topk_routing"
+            if cfg.ff_variant == "moe_swiglu"
+            else "not_applicable"
+        ),
         "recurrent_depth": int(cfg.recurrent_depth),
         "moe_experts": int(cfg.moe_experts),
         "moe_top_k": int(cfg.moe_top_k),
