@@ -29,6 +29,7 @@ from generalist_lm.bootstrap_training import (
     _filter_protected_replay,
     _grow_bootstrap_runtime,
     _phase5_success,
+    _phase5_training_acceleration,
 )
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig
 from generalist_lm.pretraining import (
@@ -49,6 +50,31 @@ from generalist_lm.tokenizer import ByteTokenizer
 from generalist_lm.training import SFTExample, causal_training_objective
 
 
+
+
+def test_phase5_large_cpu_rung_uses_benchmark_proven_fast_path(monkeypatch):
+    monkeypatch.delenv("AIRI_PHASE5_DISABLE_CPU_ACCEL", raising=False)
+    policy = _phase5_training_acceleration(7_021_248, device="cpu")
+    assert policy["enabled"] is True
+    assert policy["precision"] == "bf16"
+    assert policy["compile"] is True
+    assert policy["compile_mode"] == "reduce-overhead"
+    assert policy["benchmark"]["batch_size"] == 32
+    assert policy["benchmark"]["throughput_multiplier"] > 1.9
+
+
+def test_phase5_acceleration_is_conservative_and_can_be_disabled(monkeypatch):
+    monkeypatch.delenv("AIRI_PHASE5_DISABLE_CPU_ACCEL", raising=False)
+    small = _phase5_training_acceleration(1_251_264, device="cpu")
+    assert small["enabled"] is False
+    assert small["precision"] == "fp32"
+    assert small["compile"] is False
+
+    monkeypatch.setenv("AIRI_PHASE5_DISABLE_CPU_ACCEL", "1")
+    disabled = _phase5_training_acceleration(7_021_248, device="cpu")
+    assert disabled["enabled"] is False
+    assert disabled["precision"] == "fp32"
+    assert disabled["compile"] is False
 
 
 def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
