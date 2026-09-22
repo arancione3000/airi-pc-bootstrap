@@ -130,7 +130,7 @@ def _grow_bootstrap_runtime(
         vocab_size=runtime.tokenizer.vocab_size,
         max_width=512,
         max_layers=12,
-        prefer_function_preserving=False,
+        prefer_function_preserving=True,
     )
     config = grown_genome.model_config(runtime.tokenizer.vocab_size)
     model = CausalTransformerLM(config)
@@ -140,6 +140,11 @@ def _grow_bootstrap_runtime(
         source_tokenizer=runtime.tokenizer,
         target_tokenizer=runtime.tokenizer,
     )
+    if not bool(transfer.get("function_preserving_growth")):
+        raise RuntimeError(
+            "Phase-5 capacity growth must preserve the learned function; "
+            "refusing destructive width/topology reset"
+        )
     grown = GeneralistRuntime(
         model,
         config,
