@@ -467,8 +467,98 @@
     ]
   },
   "generalist_version": "airi-generalist-free-speed-v5",
-  "generated_at": 1790109923,
-  "lineage": {},
+  "generated_at": 1790111495,
+  "lineage": {
+    "active_architecture": {
+      "architecture": {
+        "architecture_id": "generalist-4-scale-367e26e1",
+        "attention_type": "mha",
+        "code_adapter": false,
+        "context_length": 128,
+        "d_ff": 1888,
+        "d_model": 96,
+        "data_adapter": false,
+        "dropout": 0.0,
+        "family": "decoder_transformer_v1",
+        "ff_variant": "swiglu",
+        "generation": 4,
+        "learning_rate": 0.0001875,
+        "local_attention_every": 0,
+        "local_attention_window": 0,
+        "moe_experts": 1,
+        "moe_top_k": 1,
+        "n_heads": 4,
+        "n_kv_heads": null,
+        "n_layers": 12,
+        "norm_placement": "pre",
+        "norm_type": "layernorm",
+        "parent_id": "generalist-3-scale-56d0056e",
+        "position_encoding": "learned",
+        "reasoning_depth": 1,
+        "recurrent_depth": 1,
+        "retrieval_adapter": false,
+        "symbolic_adapter": false,
+        "target_vocab_size": 384,
+        "tie_embeddings": true,
+        "tokenizer_version": "bpe-v1",
+        "tool_protocol": "tool-json-v1"
+      },
+      "executable_payload_allowed": false,
+      "external_pretrained_weights": false,
+      "fingerprint": "6d96d99dc88772b62fc3b87d67a0a5b94cdc20a16ab5634d2dc9a522f1bcd500",
+      "parameter_estimate": 7021248,
+      "schema": 1,
+      "version": "airi-architecture-ir-v1"
+    },
+    "active_checkpoint": "bootstrap-data/candidate",
+    "active_genome": {
+      "attention_type": "mha",
+      "code_adapter": false,
+      "context_length": 128,
+      "d_ff": 1888,
+      "d_model": 96,
+      "data_adapter": false,
+      "dropout": 0.0,
+      "ff_variant": "swiglu",
+      "generation": 4,
+      "genome_id": "generalist-4-scale-367e26e1",
+      "learning_rate": 0.0001875,
+      "local_attention_every": 0,
+      "local_attention_window": 0,
+      "moe_experts": 1,
+      "moe_top_k": 1,
+      "n_heads": 4,
+      "n_kv_heads": null,
+      "n_layers": 12,
+      "norm_placement": "pre",
+      "norm_type": "layernorm",
+      "parent_id": "generalist-3-scale-56d0056e",
+      "position_encoding": "learned",
+      "reasoning_depth": 1,
+      "recurrent_depth": 1,
+      "retrieval_adapter": false,
+      "symbolic_adapter": false,
+      "tie_embeddings": true,
+      "tokenizer_version": "bpe-v1",
+      "tool_protocol": "tool-json-v1"
+    },
+    "active_model_sha256": "5d3d25177d2e83f79aa3199edaac7695f507a32b3c3717fa90ec8762f7fa2bbc",
+    "bootstrap_active": true,
+    "last_refresh_reason": "phase5_segment_checkpoint",
+    "lineage_id": "airi-5d3d25177d2e83f7",
+    "migrations": [],
+    "parameters": 7021248,
+    "research_challengers_are_temporary": true,
+    "rollback_snapshots_are_not_competing_models": true,
+    "schema": 1,
+    "single_active_model": true,
+    "target_tokens": 100000000,
+    "tokenizer_version": "bpe-v1",
+    "tokenizer_vocab_size": 384,
+    "tokens_processed": 28536545,
+    "updated_at": 1790110818.4722624,
+    "version": "airi-single-lineage-v1"
+  },
   "promoted_this_cycle": false,
   "promotion_reason": "no finalist passed every independent research gate",
   "schema": 1,
@@ -479,16 +569,16 @@
       "cycle": 124,
       "files": {
         "config.json": {
-          "bytes": 492,
-          "sha256": "002867b4248ebeeb68de5609e953b06025c2ccecf5936595f8caa729d946752c"
+          "bytes": 494,
+          "sha256": "36b0ab9146faae6bc2e43898f21faf2a027af9670b4f12e4ad473e0e0b19281c"
         },
         "metadata.json": {
-          "bytes": 311,
-          "sha256": "b88774c4f0e9b4cbcec04c0b21f0dad8a18ef372891d93770017e6eb406f1d1f"
+          "bytes": 431,
+          "sha256": "06c06300da018f0b44f1ac0150975d85cb51a6949325490269040bf25d3440ac"
         },
         "model.onnx": {
-          "bytes": 677174,
-          "sha256": "71ab898f93c639035ec3f186ce1c5b218f33e1d1ad416c0261f7993a0e43ad6f"
+          "bytes": 29296339,
+          "sha256": "605f259952aa0d121aed4fce89de8fd3f3038e5d70a7afaf84b635cb81c0502b"
         },
         "tokenizer.json": {
           "bytes": 4183,
@@ -498,257 +588,8 @@
       "generation_exact_accuracy": 0.0,
       "generation_nonempty_rate": 0.8333333333333334,
       "generation_similarity": 0.18469332364660263,
-      "id": "generalist-2-0-57f3721a",
+      "id": "generalist-4-scale-367e26e1",
       "name": "champion",
-      "neural": {
-        "architecture": {
-          "attention_type": "mha",
-          "context_length": 128,
-          "d_ff": 128,
-          "d_model": 64,
-          "ff_variant": "swiglu",
-          "head_dim": 16,
-          "local_attention_every": 0,
-          "local_attention_window": 0,
-          "n_heads": 4,
-          "n_kv_heads": 4,
-          "n_layers": 2,
-          "norm_placement": "pre",
-          "norm_type": "layernorm",
-          "position_encoding": "learned",
-          "tied_embedding_lm_head": true,
-          "type": "decoder_only_causal_transformer",
-          "vocab_size": 384
-        },
-        "components": [
-          {
-            "id": "embedding",
-            "label": "Embedding",
-            "max_abs_weight": 0.2352016121149063,
-            "mean_abs_weight": 0.08146044611930847,
-            "parameters": 24576,
-            "rms_weight": 0.09769787854802192
-          },
-          {
-            "id": "position_embedding",
-            "label": "Position Embedding",
-            "max_abs_weight": 0.1408221423625946,
-            "mean_abs_weight": 0.027717091143131256,
-            "parameters": 8192,
-            "rms_weight": 0.03520658981844743
-          },
-          {
-            "id": "layer_0_attention",
-            "label": "Layer 0 Attention",
-            "max_abs_weight": 0.1364440768957138,
-            "mean_abs_weight": 0.02396095870062709,
-            "parameters": 16384,
-            "rms_weight": 0.030335086685812578
-          },
-          {
-            "id": "layer_0_norm",
-            "label": "Layer 0 Norm",
-            "max_abs_weight": 1.1252257823944092,
-            "mean_abs_weight": 0.511349284555763,
-            "parameters": 256,
-            "rms_weight": 0.7110854243983075
-          },
-          {
-            "id": "layer_0_ffn",
-            "label": "Layer 0 Ffn",
-            "max_abs_weight": 0.18006658554077148,
-            "mean_abs_weight": 0.03401487196485201,
-            "parameters": 24576,
-            "rms_weight": 0.042411997026614835
-          },
-          {
-            "id": "layer_1_attention",
-            "label": "Layer 1 Attention",
-            "max_abs_weight": 0.14151355624198914,
-            "mean_abs_weight": 0.024569383822381496,
-            "parameters": 16384,
-            "rms_weight": 0.03091783282211833
-          },
-          {
-            "id": "layer_1_norm",
-            "label": "Layer 1 Norm",
-            "max_abs_weight": 1.0416266918182373,
-            "mean_abs_weight": 0.4998234179802239,
-            "parameters": 256,
-            "rms_weight": 0.6891168074188811
-          },
-          {
-            "id": "layer_1_ffn",
-            "label": "Layer 1 Ffn",
-            "max_abs_weight": 0.1498902291059494,
-            "mean_abs_weight": 0.028826590006550152,
-            "parameters": 24576,
-            "rms_weight": 0.03606964617101268
-          },
-          {
-            "id": "final_norm",
-            "label": "Final Norm",
-            "max_abs_weight": 1.1979912519454956,
-            "mean_abs_weight": 0.6576062217354774,
-            "parameters": 128,
-            "rms_weight": 0.8394082170991488
-          }
-        ],
-        "connections": [
-          {
-            "from": "embedding",
-            "kind": "residual_flow",
-            "to": "position_embedding"
-          },
-          {
-            "from": "position_embedding",
-            "kind": "residual_flow",
-            "to": "layer_0_attention"
-          },
-          {
-            "from": "layer_0_attention",
-            "kind": "residual_flow",
-            "to": "layer_0_norm"
-          },
-          {
-            "from": "layer_0_norm",
-            "kind": "residual_flow",
-            "to": "layer_0_ffn"
-          },
-          {
-            "from": "layer_0_ffn",
-            "kind": "residual_flow",
-            "to": "layer_1_attention"
-          },
-          {
-            "from": "layer_1_attention",
-            "kind": "residual_flow",
-            "to": "layer_1_norm"
-          },
-          {
-            "from": "layer_1_norm",
-            "kind": "residual_flow",
-            "to": "layer_1_ffn"
-          },
-          {
-            "from": "layer_1_ffn",
-            "kind": "residual_flow",
-            "to": "final_norm"
-          }
-        ],
-        "heads": [
-          {
-            "head": 0,
-            "kind": "mha_qkv",
-            "layer": 0,
-            "max_abs_weight": 0.13608510792255402,
-            "mean_abs_weight": 0.025500604882836342,
-            "parameters": 3072,
-            "rms_weight": 0.032166026532649994
-          },
-          {
-            "head": 1,
-            "kind": "mha_qkv",
-            "layer": 0,
-            "max_abs_weight": 0.1364440768957138,
-            "mean_abs_weight": 0.024278515949845314,
-            "parameters": 3072,
-            "rms_weight": 0.03081079199910164
-          },
-          {
-            "head": 2,
-            "kind": "mha_qkv",
-            "layer": 0,
-            "max_abs_weight": 0.10939045250415802,
-            "mean_abs_weight": 0.024038532748818398,
-            "parameters": 3072,
-            "rms_weight": 0.029946375638246536
-          },
-          {
-            "head": 3,
-            "kind": "mha_qkv",
-            "layer": 0,
-            "max_abs_weight": 0.11839597672224045,
-            "mean_abs_weight": 0.02543315477669239,
-            "parameters": 3072,
-            "rms_weight": 0.032581876963377
-          },
-          {
-            "head": 0,
-            "kind": "mha_qkv",
-            "layer": 1,
-            "max_abs_weight": 0.11913395673036575,
-            "mean_abs_weight": 0.026155121624469757,
-            "parameters": 3072,
-            "rms_weight": 0.032763827592134476
-          },
-          {
-            "head": 1,
-            "kind": "mha_qkv",
-            "layer": 1,
-            "max_abs_weight": 0.0986587181687355,
-            "mean_abs_weight": 0.024065805599093437,
-            "parameters": 3072,
-            "rms_weight": 0.03018440306186676
-          },
-          {
-            "head": 2,
-            "kind": "mha_qkv",
-            "layer": 1,
-            "max_abs_weight": 0.14151355624198914,
-            "mean_abs_weight": 0.02646651305258274,
-            "parameters": 3072,
-            "rms_weight": 0.03366565331816673
-          },
-          {
-            "head": 3,
-            "kind": "mha_qkv",
-            "layer": 1,
-            "max_abs_weight": 0.10939116775989532,
-            "mean_abs_weight": 0.025266289710998535,
-            "parameters": 3072,
-            "rms_weight": 0.031476013362407684
-          }
-        ],
-        "kind": "aggregated_checkpoint_weights",
-        "note": "This is a truthful aggregate view of checkpoint weights and model topology, not a claim to display every biological-style neuron."
-      },
-      "nll_per_byte": 2.447405049887048,
-      "onnx_max_abs_error": 2.86102294921875e-06,
-      "parameters": 115328,
-      "path": "champion",
-      "research_only": false,
-      "score": -30.884766497447597,
-      "tokenizer_version": "bpe-v1",
-      "tokenizer_vocab_size": 384
-    },
-    "research": {
-      "all_seed_eligible": false,
-      "context_length": 128,
-      "cycle": 124,
-      "files": {
-        "config.json": {
-          "bytes": 494,
-          "sha256": "36b0ab9146faae6bc2e43898f21faf2a027af9670b4f12e4ad473e0e0b19281c"
-        },
-        "metadata.json": {
-          "bytes": 431,
-          "sha256": "f006f2364870ff15b0d541ff088a4612d91703cfd06c6960fed00782a1569760"
-        },
-        "model.onnx": {
-          "bytes": 29296339,
-          "sha256": "b184b23c76e78324c5f4bee9cc6ff09cfa5a7afe9452217b09d24a93bef8cb14"
-        },
-        "tokenizer.json": {
-          "bytes": 4183,
-          "sha256": "1099cf0cd718706212492967cb607034ef5fa8321a3e81125a106761b2d247f3"
-        }
-      },
-      "generation_exact_accuracy": 0.0,
-      "generation_nonempty_rate": 0.0,
-      "generation_similarity": 0.0,
-      "id": "phase5-live-100000000-27532737",
-      "name": "research",
       "neural": {
         "architecture": {
           "attention_type": "mha",
@@ -773,314 +614,314 @@
           {
             "id": "embedding",
             "label": "Embedding",
-            "max_abs_weight": 0.5120373964309692,
-            "mean_abs_weight": 0.1204854514863756,
+            "max_abs_weight": 0.507079541683197,
+            "mean_abs_weight": 0.12098691198560926,
             "parameters": 36864,
-            "rms_weight": 0.16138825895558934
+            "rms_weight": 0.16170401493254016
           },
           {
             "id": "position_embedding",
             "label": "Position Embedding",
-            "max_abs_weight": 0.12223190814256668,
-            "mean_abs_weight": 0.008018657565116882,
+            "max_abs_weight": 0.12436874210834503,
+            "mean_abs_weight": 0.008142643918593725,
             "parameters": 12288,
-            "rms_weight": 0.011503262878970771
+            "rms_weight": 0.01167176599842115
           },
           {
             "id": "layer_0_attention",
             "label": "Layer 0 Attention",
-            "max_abs_weight": 0.13640406727790833,
-            "mean_abs_weight": 0.018856386343638103,
+            "max_abs_weight": 0.1372980773448944,
+            "mean_abs_weight": 0.018934542106257543,
             "parameters": 36864,
-            "rms_weight": 0.024170928510260568
+            "rms_weight": 0.024311616453289213
           },
           {
             "id": "layer_0_norm",
             "label": "Layer 0 Norm",
-            "max_abs_weight": 1.0884681940078735,
-            "mean_abs_weight": 0.4977849048251907,
+            "max_abs_weight": 1.088571548461914,
+            "mean_abs_weight": 0.496582403468589,
             "parameters": 384,
-            "rms_weight": 0.6945992928254001
+            "rms_weight": 0.692666222088364
           },
           {
             "id": "layer_0_ffn",
             "label": "Layer 0 Ffn",
-            "max_abs_weight": 0.12150716781616211,
-            "mean_abs_weight": 0.0029733073239946095,
+            "max_abs_weight": 0.12137279659509659,
+            "mean_abs_weight": 0.002981904648567099,
             "parameters": 543744,
-            "rms_weight": 0.0095366211619359
+            "rms_weight": 0.009566522401456803
           },
           {
             "id": "layer_1_attention",
             "label": "Layer 1 Attention",
-            "max_abs_weight": 0.16295070946216583,
-            "mean_abs_weight": 0.01927743934922748,
+            "max_abs_weight": 0.16728605329990387,
+            "mean_abs_weight": 0.019312244322564866,
             "parameters": 36864,
-            "rms_weight": 0.025157260540462037
+            "rms_weight": 0.02526081225611443
           },
           {
             "id": "layer_1_norm",
             "label": "Layer 1 Norm",
-            "max_abs_weight": 1.0564336776733398,
-            "mean_abs_weight": 0.49365216462562483,
+            "max_abs_weight": 1.0587645769119263,
+            "mean_abs_weight": 0.4926620468807717,
             "parameters": 384,
-            "rms_weight": 0.6901673627182278
+            "rms_weight": 0.6883338027915008
           },
           {
             "id": "layer_1_ffn",
             "label": "Layer 1 Ffn",
-            "max_abs_weight": 0.10065128654241562,
-            "mean_abs_weight": 0.0028752675613216536,
+            "max_abs_weight": 0.10294045507907867,
+            "mean_abs_weight": 0.0028818441649614756,
             "parameters": 543744,
-            "rms_weight": 0.009245726173973347
+            "rms_weight": 0.009270745747199164
           },
           {
             "id": "layer_2_attention",
             "label": "Layer 2 Attention",
-            "max_abs_weight": 0.27393004298210144,
-            "mean_abs_weight": 0.02761691560347875,
+            "max_abs_weight": 0.276712566614151,
+            "mean_abs_weight": 0.027879354026582506,
             "parameters": 36864,
-            "rms_weight": 0.037583066192912455
+            "rms_weight": 0.03796926720999083
           },
           {
             "id": "layer_2_norm",
             "label": "Layer 2 Norm",
-            "max_abs_weight": 1.1616146564483643,
-            "mean_abs_weight": 0.5160446887214979,
+            "max_abs_weight": 1.1641414165496826,
+            "mean_abs_weight": 0.5160965540756782,
             "parameters": 384,
-            "rms_weight": 0.7193121033003878
+            "rms_weight": 0.71903302034135
           },
           {
             "id": "layer_2_ffn",
             "label": "Layer 2 Ffn",
-            "max_abs_weight": 0.12727013230323792,
-            "mean_abs_weight": 0.003117145791565631,
+            "max_abs_weight": 0.12961795926094055,
+            "mean_abs_weight": 0.0031438587749071712,
             "parameters": 543744,
-            "rms_weight": 0.010006787156297022
+            "rms_weight": 0.010094791106432618
           },
           {
             "id": "layer_3_attention",
             "label": "Layer 3 Attention",
-            "max_abs_weight": 0.28950372338294983,
-            "mean_abs_weight": 0.027055573132303026,
+            "max_abs_weight": 0.29307878017425537,
+            "mean_abs_weight": 0.02731488396724065,
             "parameters": 36864,
-            "rms_weight": 0.03744151395540019
+            "rms_weight": 0.03787156509968227
           },
           {
             "id": "layer_3_norm",
             "label": "Layer 3 Norm",
-            "max_abs_weight": 1.1354670524597168,
-            "mean_abs_weight": 0.5209500867252549,
+            "max_abs_weight": 1.1389137506484985,
+            "mean_abs_weight": 0.5212510771428546,
             "parameters": 384,
-            "rms_weight": 0.728440406397148
+            "rms_weight": 0.7284923062837034
           },
           {
             "id": "layer_3_ffn",
             "label": "Layer 3 Ffn",
-            "max_abs_weight": 0.11861040443181992,
-            "mean_abs_weight": 0.0033424391135882074,
+            "max_abs_weight": 0.1201886236667633,
+            "mean_abs_weight": 0.0033764171286042354,
             "parameters": 543744,
-            "rms_weight": 0.010720720869321434
+            "rms_weight": 0.010831850539247614
           },
           {
             "id": "layer_4_attention",
             "label": "Layer 4 Attention",
-            "max_abs_weight": 0.26106226444244385,
-            "mean_abs_weight": 0.028641700330707762,
+            "max_abs_weight": 0.2622980773448944,
+            "mean_abs_weight": 0.029088221904304292,
             "parameters": 36864,
-            "rms_weight": 0.039414471816445494
+            "rms_weight": 0.04007955202546252
           },
           {
             "id": "layer_4_norm",
             "label": "Layer 4 Norm",
-            "max_abs_weight": 1.1336356401443481,
-            "mean_abs_weight": 0.5285490928217769,
+            "max_abs_weight": 1.1328718662261963,
+            "mean_abs_weight": 0.5289277446766695,
             "parameters": 384,
-            "rms_weight": 0.7407333666563943
+            "rms_weight": 0.741165406503365
           },
           {
             "id": "layer_4_ffn",
             "label": "Layer 4 Ffn",
-            "max_abs_weight": 0.1334148347377777,
-            "mean_abs_weight": 0.003593334145914139,
+            "max_abs_weight": 0.13605549931526184,
+            "mean_abs_weight": 0.0036338727128483257,
             "parameters": 543744,
-            "rms_weight": 0.011535166349061519
+            "rms_weight": 0.011663635052351752
           },
           {
             "id": "layer_5_attention",
             "label": "Layer 5 Attention",
-            "max_abs_weight": 0.2535935938358307,
-            "mean_abs_weight": 0.025095129592551127,
+            "max_abs_weight": 0.2605522871017456,
+            "mean_abs_weight": 0.02563905467589696,
             "parameters": 36864,
-            "rms_weight": 0.03491021799938216
+            "rms_weight": 0.0357318965848581
           },
           {
             "id": "layer_5_norm",
             "label": "Layer 5 Norm",
-            "max_abs_weight": 1.1486995220184326,
-            "mean_abs_weight": 0.5275471607844034,
+            "max_abs_weight": 1.1507043838500977,
+            "mean_abs_weight": 0.5283097336068749,
             "parameters": 384,
-            "rms_weight": 0.7378011632912249
+            "rms_weight": 0.7384912571821872
           },
           {
             "id": "layer_5_ffn",
             "label": "Layer 5 Ffn",
-            "max_abs_weight": 0.1368737369775772,
-            "mean_abs_weight": 0.003729856395901035,
+            "max_abs_weight": 0.1383090764284134,
+            "mean_abs_weight": 0.00377337205207954,
             "parameters": 543744,
-            "rms_weight": 0.01197361634801081
+            "rms_weight": 0.012111497462091373
           },
           {
             "id": "layer_6_attention",
             "label": "Layer 6 Attention",
-            "max_abs_weight": 0.1897430568933487,
-            "mean_abs_weight": 0.02155630849301815,
+            "max_abs_weight": 0.19166286289691925,
+            "mean_abs_weight": 0.021750566860040028,
             "parameters": 36864,
-            "rms_weight": 0.0288507058116452
+            "rms_weight": 0.029207873479354596
           },
           {
             "id": "layer_6_norm",
             "label": "Layer 6 Norm",
-            "max_abs_weight": 1.1804556846618652,
-            "mean_abs_weight": 0.5238911849446595,
+            "max_abs_weight": 1.181844711303711,
+            "mean_abs_weight": 0.5238309977576137,
             "parameters": 384,
-            "rms_weight": 0.7351498273292533
+            "rms_weight": 0.7350646039847683
           },
           {
             "id": "layer_6_ffn",
             "label": "Layer 6 Ffn",
-            "max_abs_weight": 0.1328512728214264,
-            "mean_abs_weight": 0.003879414103125448,
+            "max_abs_weight": 0.1335304230451584,
+            "mean_abs_weight": 0.003925729044862162,
             "parameters": 543744,
-            "rms_weight": 0.012451167508261845
+            "rms_weight": 0.012596233639944205
           },
           {
             "id": "layer_7_attention",
             "label": "Layer 7 Attention",
-            "max_abs_weight": 0.14960573613643646,
-            "mean_abs_weight": 0.020937212225463655,
+            "max_abs_weight": 0.15387320518493652,
+            "mean_abs_weight": 0.021150466261638537,
             "parameters": 36864,
-            "rms_weight": 0.02783867248322131
+            "rms_weight": 0.028216485456556587
           },
           {
             "id": "layer_7_norm",
             "label": "Layer 7 Norm",
-            "max_abs_weight": 1.205486536026001,
-            "mean_abs_weight": 0.5279693570919335,
+            "max_abs_weight": 1.213550090789795,
+            "mean_abs_weight": 0.5280356922497352,
             "parameters": 384,
-            "rms_weight": 0.741020644724876
+            "rms_weight": 0.7409442489458373
           },
           {
             "id": "layer_7_ffn",
             "label": "Layer 7 Ffn",
-            "max_abs_weight": 0.15136635303497314,
-            "mean_abs_weight": 0.004023705498646881,
+            "max_abs_weight": 0.15244734287261963,
+            "mean_abs_weight": 0.004067842120729148,
             "parameters": 543744,
-            "rms_weight": 0.012924341390557927
+            "rms_weight": 0.013067924346012215
           },
           {
             "id": "layer_8_attention",
             "label": "Layer 8 Attention",
-            "max_abs_weight": 0.14912894368171692,
-            "mean_abs_weight": 0.02184916867150201,
+            "max_abs_weight": 0.14795717597007751,
+            "mean_abs_weight": 0.02215632837679651,
             "parameters": 36864,
-            "rms_weight": 0.028976220466056097
+            "rms_weight": 0.02947878193442756
           },
           {
             "id": "layer_8_norm",
             "label": "Layer 8 Norm",
-            "max_abs_weight": 1.2174001932144165,
-            "mean_abs_weight": 0.5347657523428401,
+            "max_abs_weight": 1.220894694328308,
+            "mean_abs_weight": 0.5351651419575015,
             "parameters": 384,
-            "rms_weight": 0.7505392712073929
+            "rms_weight": 0.7508940102076488
           },
           {
             "id": "layer_8_ffn",
             "label": "Layer 8 Ffn",
-            "max_abs_weight": 0.14161062240600586,
-            "mean_abs_weight": 0.004140960519147682,
+            "max_abs_weight": 0.1443369835615158,
+            "mean_abs_weight": 0.004185796345245591,
             "parameters": 543744,
-            "rms_weight": 0.01327412972131037
+            "rms_weight": 0.013416793276466542
           },
           {
             "id": "layer_9_attention",
             "label": "Layer 9 Attention",
-            "max_abs_weight": 0.17178650200366974,
-            "mean_abs_weight": 0.022802655067708757,
+            "max_abs_weight": 0.17065618932247162,
+            "mean_abs_weight": 0.023082006722688675,
             "parameters": 36864,
-            "rms_weight": 0.03004951644902256
+            "rms_weight": 0.030468426753466386
           },
           {
             "id": "layer_9_norm",
             "label": "Layer 9 Norm",
-            "max_abs_weight": 1.272077202796936,
-            "mean_abs_weight": 0.5449930566052595,
+            "max_abs_weight": 1.2733992338180542,
+            "mean_abs_weight": 0.5452417967220148,
             "parameters": 384,
-            "rms_weight": 0.7618561925496223
+            "rms_weight": 0.7620239763930791
           },
           {
             "id": "layer_9_ffn",
             "label": "Layer 9 Ffn",
-            "max_abs_weight": 0.1692432314157486,
-            "mean_abs_weight": 0.004360925567576665,
+            "max_abs_weight": 0.1708400547504425,
+            "mean_abs_weight": 0.004402019097531133,
             "parameters": 543744,
-            "rms_weight": 0.014064464244327479
+            "rms_weight": 0.014198614161215218
           },
           {
             "id": "layer_10_attention",
             "label": "Layer 10 Attention",
-            "max_abs_weight": 0.1416221410036087,
-            "mean_abs_weight": 0.017599679115745757,
+            "max_abs_weight": 0.13915303349494934,
+            "mean_abs_weight": 0.018106867455773883,
             "parameters": 36864,
-            "rms_weight": 0.02400000379294886
+            "rms_weight": 0.02470305908213256
           },
           {
             "id": "layer_10_norm",
             "label": "Layer 10 Norm",
-            "max_abs_weight": 1.2050132751464844,
-            "mean_abs_weight": 0.522579839763542,
+            "max_abs_weight": 1.2157304286956787,
+            "mean_abs_weight": 0.5238244213784734,
             "parameters": 384,
-            "rms_weight": 0.7253044170386135
+            "rms_weight": 0.7264759909353181
           },
           {
             "id": "layer_10_ffn",
             "label": "Layer 10 Ffn",
-            "max_abs_weight": 0.13475316762924194,
-            "mean_abs_weight": 0.018762159257734338,
+            "max_abs_weight": 0.13918840885162354,
+            "mean_abs_weight": 0.01932245324560478,
             "parameters": 543744,
-            "rms_weight": 0.024292657004083347
+            "rms_weight": 0.024959453786913353
           },
           {
             "id": "layer_11_attention",
             "label": "Layer 11 Attention",
-            "max_abs_weight": 0.17020070552825928,
-            "mean_abs_weight": 0.018751143167416256,
+            "max_abs_weight": 0.18087975680828094,
+            "mean_abs_weight": 0.019756495331724484,
             "parameters": 36864,
-            "rms_weight": 0.025595110447543465
+            "rms_weight": 0.02697449159167206
           },
           {
             "id": "layer_11_norm",
             "label": "Layer 11 Norm",
-            "max_abs_weight": 1.190427303314209,
-            "mean_abs_weight": 0.5224462182571491,
+            "max_abs_weight": 1.2005044221878052,
+            "mean_abs_weight": 0.5243936888873577,
             "parameters": 384,
-            "rms_weight": 0.7256795518802175
+            "rms_weight": 0.7278753564321726
           },
           {
             "id": "layer_11_ffn",
             "label": "Layer 11 Ffn",
-            "max_abs_weight": 0.1541615128517151,
-            "mean_abs_weight": 0.018608493769011705,
+            "max_abs_weight": 0.16128262877464294,
+            "mean_abs_weight": 0.019178729946330443,
             "parameters": 543744,
-            "rms_weight": 0.024086518027183604
+            "rms_weight": 0.02475908825195621
           },
           {
             "id": "final_norm",
             "label": "Final Norm",
-            "max_abs_weight": 1.8371126651763916,
-            "mean_abs_weight": 0.834104523062706,
+            "max_abs_weight": 1.8608944416046143,
+            "mean_abs_weight": 0.8429526487986246,
             "parameters": 192,
-            "rms_weight": 1.1072025210778975
+            "rms_weight": 1.118477144790189
           }
         ],
         "connections": [
@@ -1280,440 +1121,1439 @@
             "head": 0,
             "kind": "mha_qkv",
             "layer": 0,
-            "max_abs_weight": 0.13640406727790833,
-            "mean_abs_weight": 0.020647171884775162,
+            "max_abs_weight": 0.1372980773448944,
+            "mean_abs_weight": 0.02081662230193615,
             "parameters": 6912,
-            "rms_weight": 0.026485415175557137
+            "rms_weight": 0.026764996349811554
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 0,
-            "max_abs_weight": 0.1168232262134552,
-            "mean_abs_weight": 0.020473213866353035,
+            "max_abs_weight": 0.11648251116275787,
+            "mean_abs_weight": 0.02058378793299198,
             "parameters": 6912,
-            "rms_weight": 0.026201043277978897
+            "rms_weight": 0.026373667642474174
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 0,
-            "max_abs_weight": 0.1259244680404663,
-            "mean_abs_weight": 0.01929965429008007,
+            "max_abs_weight": 0.12896503508090973,
+            "mean_abs_weight": 0.01936582662165165,
             "parameters": 6912,
-            "rms_weight": 0.02454320341348648
+            "rms_weight": 0.024678435176610947
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 0,
-            "max_abs_weight": 0.11183327436447144,
-            "mean_abs_weight": 0.01898079179227352,
+            "max_abs_weight": 0.11689702421426773,
+            "mean_abs_weight": 0.019065232947468758,
             "parameters": 6912,
-            "rms_weight": 0.024266237393021584
+            "rms_weight": 0.024393277242779732
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 1,
-            "max_abs_weight": 0.13480666279792786,
-            "mean_abs_weight": 0.019624127075076103,
+            "max_abs_weight": 0.1382029503583908,
+            "mean_abs_weight": 0.019607434049248695,
             "parameters": 6912,
-            "rms_weight": 0.025334635749459267
+            "rms_weight": 0.02536810375750065
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 1,
-            "max_abs_weight": 0.16295070946216583,
-            "mean_abs_weight": 0.0219434704631567,
+            "max_abs_weight": 0.16728605329990387,
+            "mean_abs_weight": 0.022056054323911667,
             "parameters": 6912,
-            "rms_weight": 0.02867049351334572
+            "rms_weight": 0.02886749990284443
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 1,
-            "max_abs_weight": 0.15132135152816772,
-            "mean_abs_weight": 0.020298516377806664,
+            "max_abs_weight": 0.15152707695960999,
+            "mean_abs_weight": 0.020384620875120163,
             "parameters": 6912,
-            "rms_weight": 0.026594726368784904
+            "rms_weight": 0.02674265019595623
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 1,
-            "max_abs_weight": 0.1398972123861313,
-            "mean_abs_weight": 0.019327260553836823,
+            "max_abs_weight": 0.14419375360012054,
+            "mean_abs_weight": 0.019357290118932724,
             "parameters": 6912,
-            "rms_weight": 0.025118373334407806
+            "rms_weight": 0.025226600468158722
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 2,
-            "max_abs_weight": 0.2633433938026428,
-            "mean_abs_weight": 0.03021773137152195,
+            "max_abs_weight": 0.26759737730026245,
+            "mean_abs_weight": 0.030561979860067368,
             "parameters": 6912,
-            "rms_weight": 0.04169734567403793
+            "rms_weight": 0.04221963509917259
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 2,
-            "max_abs_weight": 0.24071665108203888,
-            "mean_abs_weight": 0.02617749758064747,
+            "max_abs_weight": 0.2442854940891266,
+            "mean_abs_weight": 0.026308104395866394,
             "parameters": 6912,
-            "rms_weight": 0.03527289256453514
+            "rms_weight": 0.035482168197631836
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 2,
-            "max_abs_weight": 0.27393004298210144,
-            "mean_abs_weight": 0.032324206084012985,
+            "max_abs_weight": 0.276712566614151,
+            "mean_abs_weight": 0.03269588202238083,
             "parameters": 6912,
-            "rms_weight": 0.04418300837278366
+            "rms_weight": 0.04471627250313759
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 2,
-            "max_abs_weight": 0.21638870239257812,
-            "mean_abs_weight": 0.030800284817814827,
+            "max_abs_weight": 0.21898901462554932,
+            "mean_abs_weight": 0.031054258346557617,
             "parameters": 6912,
-            "rms_weight": 0.04105020686984062
+            "rms_weight": 0.04139809310436249
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 3,
-            "max_abs_weight": 0.28950372338294983,
-            "mean_abs_weight": 0.038022711873054504,
+            "max_abs_weight": 0.29307878017425537,
+            "mean_abs_weight": 0.03848715126514435,
             "parameters": 6912,
-            "rms_weight": 0.05187574774026871
+            "rms_weight": 0.052538156509399414
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 3,
-            "max_abs_weight": 0.2640467584133148,
-            "mean_abs_weight": 0.03277460113167763,
+            "max_abs_weight": 0.26816239953041077,
+            "mean_abs_weight": 0.03325340151786804,
             "parameters": 6912,
-            "rms_weight": 0.044618092477321625
+            "rms_weight": 0.045358289033174515
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 3,
-            "max_abs_weight": 0.1983814239501953,
-            "mean_abs_weight": 0.02554967626929283,
+            "max_abs_weight": 0.19975389540195465,
+            "mean_abs_weight": 0.02571173571050167,
             "parameters": 6912,
-            "rms_weight": 0.03387515991926193
+            "rms_weight": 0.03410288318991661
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 3,
-            "max_abs_weight": 0.17005479335784912,
-            "mean_abs_weight": 0.02235722355544567,
+            "max_abs_weight": 0.1706908643245697,
+            "mean_abs_weight": 0.022477252408862114,
             "parameters": 6912,
-            "rms_weight": 0.02921215072274208
+            "rms_weight": 0.02937462367117405
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 4,
-            "max_abs_weight": 0.2317550778388977,
-            "mean_abs_weight": 0.029748715460300446,
+            "max_abs_weight": 0.23645272850990295,
+            "mean_abs_weight": 0.030406024307012558,
             "parameters": 6912,
-            "rms_weight": 0.03979812562465668
+            "rms_weight": 0.0407867431640625
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 4,
-            "max_abs_weight": 0.19922105967998505,
-            "mean_abs_weight": 0.026046620681881905,
+            "max_abs_weight": 0.20460478961467743,
+            "mean_abs_weight": 0.026617826893925667,
             "parameters": 6912,
-            "rms_weight": 0.034727513790130615
+            "rms_weight": 0.035567596554756165
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 4,
-            "max_abs_weight": 0.23942910134792328,
-            "mean_abs_weight": 0.0338539183139801,
+            "max_abs_weight": 0.24264001846313477,
+            "mean_abs_weight": 0.03438125178217888,
             "parameters": 6912,
-            "rms_weight": 0.04564370587468147
+            "rms_weight": 0.046378158032894135
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 4,
-            "max_abs_weight": 0.26106226444244385,
-            "mean_abs_weight": 0.03830975666642189,
+            "max_abs_weight": 0.2622980773448944,
+            "mean_abs_weight": 0.03872208297252655,
             "parameters": 6912,
-            "rms_weight": 0.05167350172996521
+            "rms_weight": 0.05227956548333168
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 5,
-            "max_abs_weight": 0.16322799026966095,
-            "mean_abs_weight": 0.023945709690451622,
+            "max_abs_weight": 0.16909676790237427,
+            "mean_abs_weight": 0.024651816114783287,
             "parameters": 6912,
-            "rms_weight": 0.03162601590156555
+            "rms_weight": 0.03267264738678932
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 5,
-            "max_abs_weight": 0.2535935938358307,
-            "mean_abs_weight": 0.030355870723724365,
+            "max_abs_weight": 0.2605522871017456,
+            "mean_abs_weight": 0.031026149168610573,
             "parameters": 6912,
-            "rms_weight": 0.04140016809105873
+            "rms_weight": 0.04234577715396881
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 5,
-            "max_abs_weight": 0.2533811628818512,
-            "mean_abs_weight": 0.03082556463778019,
+            "max_abs_weight": 0.25530290603637695,
+            "mean_abs_weight": 0.03141272813081741,
             "parameters": 6912,
-            "rms_weight": 0.0424579493701458
+            "rms_weight": 0.04319009557366371
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 5,
-            "max_abs_weight": 0.2077733427286148,
-            "mean_abs_weight": 0.02821820229291916,
+            "max_abs_weight": 0.21302616596221924,
+            "mean_abs_weight": 0.02902064472436905,
             "parameters": 6912,
-            "rms_weight": 0.03852397948503494
+            "rms_weight": 0.0397038534283638
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 6,
-            "max_abs_weight": 0.1897430568933487,
-            "mean_abs_weight": 0.024643780663609505,
+            "max_abs_weight": 0.19166286289691925,
+            "mean_abs_weight": 0.02504582516849041,
             "parameters": 6912,
-            "rms_weight": 0.032632723450660706
+            "rms_weight": 0.033259231597185135
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 6,
-            "max_abs_weight": 0.15496595203876495,
-            "mean_abs_weight": 0.02500941976904869,
+            "max_abs_weight": 0.1574026495218277,
+            "mean_abs_weight": 0.0253901407122612,
             "parameters": 6912,
-            "rms_weight": 0.03296911343932152
+            "rms_weight": 0.03354281932115555
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 6,
-            "max_abs_weight": 0.14914394915103912,
-            "mean_abs_weight": 0.023604508489370346,
+            "max_abs_weight": 0.14917929470539093,
+            "mean_abs_weight": 0.023717164993286133,
             "parameters": 6912,
-            "rms_weight": 0.03087645210325718
+            "rms_weight": 0.03103981353342533
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 6,
-            "max_abs_weight": 0.1700679212808609,
-            "mean_abs_weight": 0.023748811334371567,
+            "max_abs_weight": 0.17505723237991333,
+            "mean_abs_weight": 0.023994818329811096,
             "parameters": 6912,
-            "rms_weight": 0.03085593320429325
+            "rms_weight": 0.031259916722774506
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 7,
-            "max_abs_weight": 0.14283674955368042,
-            "mean_abs_weight": 0.023312585428357124,
+            "max_abs_weight": 0.14814095199108124,
+            "mean_abs_weight": 0.023626228794455528,
             "parameters": 6912,
-            "rms_weight": 0.030715446919202805
+            "rms_weight": 0.031186819076538086
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 7,
-            "max_abs_weight": 0.14960573613643646,
-            "mean_abs_weight": 0.023973288014531136,
+            "max_abs_weight": 0.15085530281066895,
+            "mean_abs_weight": 0.024298347532749176,
             "parameters": 6912,
-            "rms_weight": 0.031418826431035995
+            "rms_weight": 0.031912911683321
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 7,
-            "max_abs_weight": 0.1479843407869339,
-            "mean_abs_weight": 0.023136762902140617,
+            "max_abs_weight": 0.15387320518493652,
+            "mean_abs_weight": 0.023428382351994514,
             "parameters": 6912,
-            "rms_weight": 0.03000807948410511
+            "rms_weight": 0.030439144000411034
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 7,
-            "max_abs_weight": 0.1359635591506958,
-            "mean_abs_weight": 0.023118268698453903,
+            "max_abs_weight": 0.13903053104877472,
+            "mean_abs_weight": 0.02346203103661537,
             "parameters": 6912,
-            "rms_weight": 0.03019646555185318
+            "rms_weight": 0.030710982158780098
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 8,
-            "max_abs_weight": 0.12461511045694351,
-            "mean_abs_weight": 0.02274339646100998,
+            "max_abs_weight": 0.12514038383960724,
+            "mean_abs_weight": 0.02307458221912384,
             "parameters": 6912,
-            "rms_weight": 0.02961449883878231
+            "rms_weight": 0.030118634924292564
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 8,
-            "max_abs_weight": 0.1447840929031372,
-            "mean_abs_weight": 0.023778356611728668,
+            "max_abs_weight": 0.14474087953567505,
+            "mean_abs_weight": 0.02429446205496788,
             "parameters": 6912,
-            "rms_weight": 0.03114096075296402
+            "rms_weight": 0.03187744691967964
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 8,
-            "max_abs_weight": 0.14912894368171692,
-            "mean_abs_weight": 0.026193950325250626,
+            "max_abs_weight": 0.14795717597007751,
+            "mean_abs_weight": 0.026574043557047844,
             "parameters": 6912,
-            "rms_weight": 0.034446366131305695
+            "rms_weight": 0.03499729931354523
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 8,
-            "max_abs_weight": 0.13277214765548706,
-            "mean_abs_weight": 0.02444854937493801,
+            "max_abs_weight": 0.14373576641082764,
+            "mean_abs_weight": 0.024871865287423134,
             "parameters": 6912,
-            "rms_weight": 0.031693972647190094
+            "rms_weight": 0.03234497085213661
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 9,
-            "max_abs_weight": 0.13718070089817047,
-            "mean_abs_weight": 0.025290472432971,
+            "max_abs_weight": 0.1423225700855255,
+            "mean_abs_weight": 0.025581665337085724,
             "parameters": 6912,
-            "rms_weight": 0.03289775922894478
+            "rms_weight": 0.033276334404945374
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 9,
-            "max_abs_weight": 0.17178650200366974,
-            "mean_abs_weight": 0.027646280825138092,
+            "max_abs_weight": 0.17065618932247162,
+            "mean_abs_weight": 0.02798382379114628,
             "parameters": 6912,
-            "rms_weight": 0.036179590970277786
+            "rms_weight": 0.03664591908454895
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 9,
-            "max_abs_weight": 0.13088126480579376,
-            "mean_abs_weight": 0.023363180458545685,
+            "max_abs_weight": 0.13708160817623138,
+            "mean_abs_weight": 0.023753123357892036,
             "parameters": 6912,
-            "rms_weight": 0.030175693333148956
+            "rms_weight": 0.030746815726161003
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 9,
-            "max_abs_weight": 0.15988720953464508,
-            "mean_abs_weight": 0.024541471153497696,
+            "max_abs_weight": 0.1574539989233017,
+            "mean_abs_weight": 0.024966338649392128,
             "parameters": 6912,
-            "rms_weight": 0.03165215253829956
+            "rms_weight": 0.03226238861680031
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 10,
-            "max_abs_weight": 0.09885239601135254,
-            "mean_abs_weight": 0.019275594502687454,
+            "max_abs_weight": 0.10556745529174805,
+            "mean_abs_weight": 0.01975421793758869,
             "parameters": 6912,
-            "rms_weight": 0.02438444457948208
+            "rms_weight": 0.025094427168369293
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 10,
-            "max_abs_weight": 0.1416221410036087,
-            "mean_abs_weight": 0.021287260577082634,
+            "max_abs_weight": 0.13915303349494934,
+            "mean_abs_weight": 0.02213398553431034,
             "parameters": 6912,
-            "rms_weight": 0.02730177715420723
+            "rms_weight": 0.028423989191651344
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 10,
-            "max_abs_weight": 0.11064665764570236,
-            "mean_abs_weight": 0.020377513021230698,
+            "max_abs_weight": 0.11616700142621994,
+            "mean_abs_weight": 0.020859822630882263,
             "parameters": 6912,
-            "rms_weight": 0.025937439873814583
+            "rms_weight": 0.026639437302947044
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 10,
-            "max_abs_weight": 0.12707862257957458,
-            "mean_abs_weight": 0.02423875778913498,
+            "max_abs_weight": 0.12705260515213013,
+            "mean_abs_weight": 0.024635901674628258,
             "parameters": 6912,
-            "rms_weight": 0.03106425702571869
+            "rms_weight": 0.03165855258703232
           },
           {
             "head": 0,
             "kind": "mha_qkv",
             "layer": 11,
-            "max_abs_weight": 0.12648774683475494,
-            "mean_abs_weight": 0.022010385990142822,
+            "max_abs_weight": 0.12688013911247253,
+            "mean_abs_weight": 0.022967007011175156,
             "parameters": 6912,
-            "rms_weight": 0.028074469417333603
+            "rms_weight": 0.029301276430487633
           },
           {
             "head": 1,
             "kind": "mha_qkv",
             "layer": 11,
-            "max_abs_weight": 0.17020070552825928,
-            "mean_abs_weight": 0.023960717022418976,
+            "max_abs_weight": 0.18087975680828094,
+            "mean_abs_weight": 0.0254050362855196,
             "parameters": 6912,
-            "rms_weight": 0.03121589869260788
+            "rms_weight": 0.03317762538790703
           },
           {
             "head": 2,
             "kind": "mha_qkv",
             "layer": 11,
-            "max_abs_weight": 0.13178075850009918,
-            "mean_abs_weight": 0.020960476249456406,
+            "max_abs_weight": 0.1293543577194214,
+            "mean_abs_weight": 0.0215741116553545,
             "parameters": 6912,
-            "rms_weight": 0.026608411222696304
+            "rms_weight": 0.027434036135673523
           },
           {
             "head": 3,
             "kind": "mha_qkv",
             "layer": 11,
-            "max_abs_weight": 0.1327894926071167,
-            "mean_abs_weight": 0.02355850115418434,
+            "max_abs_weight": 0.14436890184879303,
+            "mean_abs_weight": 0.025087686255574226,
             "parameters": 6912,
-            "rms_weight": 0.03012395277619362
+            "rms_weight": 0.03214649856090546
+          }
+        ],
+        "kind": "aggregated_checkpoint_weights",
+        "note": "This is a truthful aggregate view of checkpoint weights and model topology, not a claim to display every biological-style neuron."
+      },
+      "nll_per_byte": 2.447405049887048,
+      "onnx_max_abs_error": 7.62939453125e-06,
+      "parameters": 115328,
+      "path": "champion",
+      "research_only": false,
+      "score": -30.884766497447597,
+      "tokenizer_version": "bpe-v1",
+      "tokenizer_vocab_size": 384
+    },
+    "research": {
+      "all_seed_eligible": false,
+      "context_length": 128,
+      "cycle": 124,
+      "files": {
+        "config.json": {
+          "bytes": 494,
+          "sha256": "36b0ab9146faae6bc2e43898f21faf2a027af9670b4f12e4ad473e0e0b19281c"
+        },
+        "metadata.json": {
+          "bytes": 431,
+          "sha256": "06c06300da018f0b44f1ac0150975d85cb51a6949325490269040bf25d3440ac"
+        },
+        "model.onnx": {
+          "bytes": 29296339,
+          "sha256": "605f259952aa0d121aed4fce89de8fd3f3038e5d70a7afaf84b635cb81c0502b"
+        },
+        "tokenizer.json": {
+          "bytes": 4183,
+          "sha256": "1099cf0cd718706212492967cb607034ef5fa8321a3e81125a106761b2d247f3"
+        }
+      },
+      "generation_exact_accuracy": 0.0,
+      "generation_nonempty_rate": 0.0,
+      "generation_similarity": 0.0,
+      "id": "phase5-live-100000000-28536545",
+      "name": "research",
+      "neural": {
+        "architecture": {
+          "attention_type": "mha",
+          "context_length": 128,
+          "d_ff": 1888,
+          "d_model": 96,
+          "ff_variant": "swiglu",
+          "head_dim": 24,
+          "local_attention_every": 0,
+          "local_attention_window": 0,
+          "n_heads": 4,
+          "n_kv_heads": 4,
+          "n_layers": 12,
+          "norm_placement": "pre",
+          "norm_type": "layernorm",
+          "position_encoding": "learned",
+          "tied_embedding_lm_head": true,
+          "type": "decoder_only_causal_transformer",
+          "vocab_size": 384
+        },
+        "components": [
+          {
+            "id": "embedding",
+            "label": "Embedding",
+            "max_abs_weight": 0.507079541683197,
+            "mean_abs_weight": 0.12098691198560926,
+            "parameters": 36864,
+            "rms_weight": 0.16170401493254016
+          },
+          {
+            "id": "position_embedding",
+            "label": "Position Embedding",
+            "max_abs_weight": 0.12436874210834503,
+            "mean_abs_weight": 0.008142643918593725,
+            "parameters": 12288,
+            "rms_weight": 0.01167176599842115
+          },
+          {
+            "id": "layer_0_attention",
+            "label": "Layer 0 Attention",
+            "max_abs_weight": 0.1372980773448944,
+            "mean_abs_weight": 0.018934542106257543,
+            "parameters": 36864,
+            "rms_weight": 0.024311616453289213
+          },
+          {
+            "id": "layer_0_norm",
+            "label": "Layer 0 Norm",
+            "max_abs_weight": 1.088571548461914,
+            "mean_abs_weight": 0.496582403468589,
+            "parameters": 384,
+            "rms_weight": 0.692666222088364
+          },
+          {
+            "id": "layer_0_ffn",
+            "label": "Layer 0 Ffn",
+            "max_abs_weight": 0.12137279659509659,
+            "mean_abs_weight": 0.002981904648567099,
+            "parameters": 543744,
+            "rms_weight": 0.009566522401456803
+          },
+          {
+            "id": "layer_1_attention",
+            "label": "Layer 1 Attention",
+            "max_abs_weight": 0.16728605329990387,
+            "mean_abs_weight": 0.019312244322564866,
+            "parameters": 36864,
+            "rms_weight": 0.02526081225611443
+          },
+          {
+            "id": "layer_1_norm",
+            "label": "Layer 1 Norm",
+            "max_abs_weight": 1.0587645769119263,
+            "mean_abs_weight": 0.4926620468807717,
+            "parameters": 384,
+            "rms_weight": 0.6883338027915008
+          },
+          {
+            "id": "layer_1_ffn",
+            "label": "Layer 1 Ffn",
+            "max_abs_weight": 0.10294045507907867,
+            "mean_abs_weight": 0.0028818441649614756,
+            "parameters": 543744,
+            "rms_weight": 0.009270745747199164
+          },
+          {
+            "id": "layer_2_attention",
+            "label": "Layer 2 Attention",
+            "max_abs_weight": 0.276712566614151,
+            "mean_abs_weight": 0.027879354026582506,
+            "parameters": 36864,
+            "rms_weight": 0.03796926720999083
+          },
+          {
+            "id": "layer_2_norm",
+            "label": "Layer 2 Norm",
+            "max_abs_weight": 1.1641414165496826,
+            "mean_abs_weight": 0.5160965540756782,
+            "parameters": 384,
+            "rms_weight": 0.71903302034135
+          },
+          {
+            "id": "layer_2_ffn",
+            "label": "Layer 2 Ffn",
+            "max_abs_weight": 0.12961795926094055,
+            "mean_abs_weight": 0.0031438587749071712,
+            "parameters": 543744,
+            "rms_weight": 0.010094791106432618
+          },
+          {
+            "id": "layer_3_attention",
+            "label": "Layer 3 Attention",
+            "max_abs_weight": 0.29307878017425537,
+            "mean_abs_weight": 0.02731488396724065,
+            "parameters": 36864,
+            "rms_weight": 0.03787156509968227
+          },
+          {
+            "id": "layer_3_norm",
+            "label": "Layer 3 Norm",
+            "max_abs_weight": 1.1389137506484985,
+            "mean_abs_weight": 0.5212510771428546,
+            "parameters": 384,
+            "rms_weight": 0.7284923062837034
+          },
+          {
+            "id": "layer_3_ffn",
+            "label": "Layer 3 Ffn",
+            "max_abs_weight": 0.1201886236667633,
+            "mean_abs_weight": 0.0033764171286042354,
+            "parameters": 543744,
+            "rms_weight": 0.010831850539247614
+          },
+          {
+            "id": "layer_4_attention",
+            "label": "Layer 4 Attention",
+            "max_abs_weight": 0.2622980773448944,
+            "mean_abs_weight": 0.029088221904304292,
+            "parameters": 36864,
+            "rms_weight": 0.04007955202546252
+          },
+          {
+            "id": "layer_4_norm",
+            "label": "Layer 4 Norm",
+            "max_abs_weight": 1.1328718662261963,
+            "mean_abs_weight": 0.5289277446766695,
+            "parameters": 384,
+            "rms_weight": 0.741165406503365
+          },
+          {
+            "id": "layer_4_ffn",
+            "label": "Layer 4 Ffn",
+            "max_abs_weight": 0.13605549931526184,
+            "mean_abs_weight": 0.0036338727128483257,
+            "parameters": 543744,
+            "rms_weight": 0.011663635052351752
+          },
+          {
+            "id": "layer_5_attention",
+            "label": "Layer 5 Attention",
+            "max_abs_weight": 0.2605522871017456,
+            "mean_abs_weight": 0.02563905467589696,
+            "parameters": 36864,
+            "rms_weight": 0.0357318965848581
+          },
+          {
+            "id": "layer_5_norm",
+            "label": "Layer 5 Norm",
+            "max_abs_weight": 1.1507043838500977,
+            "mean_abs_weight": 0.5283097336068749,
+            "parameters": 384,
+            "rms_weight": 0.7384912571821872
+          },
+          {
+            "id": "layer_5_ffn",
+            "label": "Layer 5 Ffn",
+            "max_abs_weight": 0.1383090764284134,
+            "mean_abs_weight": 0.00377337205207954,
+            "parameters": 543744,
+            "rms_weight": 0.012111497462091373
+          },
+          {
+            "id": "layer_6_attention",
+            "label": "Layer 6 Attention",
+            "max_abs_weight": 0.19166286289691925,
+            "mean_abs_weight": 0.021750566860040028,
+            "parameters": 36864,
+            "rms_weight": 0.029207873479354596
+          },
+          {
+            "id": "layer_6_norm",
+            "label": "Layer 6 Norm",
+            "max_abs_weight": 1.181844711303711,
+            "mean_abs_weight": 0.5238309977576137,
+            "parameters": 384,
+            "rms_weight": 0.7350646039847683
+          },
+          {
+            "id": "layer_6_ffn",
+            "label": "Layer 6 Ffn",
+            "max_abs_weight": 0.1335304230451584,
+            "mean_abs_weight": 0.003925729044862162,
+            "parameters": 543744,
+            "rms_weight": 0.012596233639944205
+          },
+          {
+            "id": "layer_7_attention",
+            "label": "Layer 7 Attention",
+            "max_abs_weight": 0.15387320518493652,
+            "mean_abs_weight": 0.021150466261638537,
+            "parameters": 36864,
+            "rms_weight": 0.028216485456556587
+          },
+          {
+            "id": "layer_7_norm",
+            "label": "Layer 7 Norm",
+            "max_abs_weight": 1.213550090789795,
+            "mean_abs_weight": 0.5280356922497352,
+            "parameters": 384,
+            "rms_weight": 0.7409442489458373
+          },
+          {
+            "id": "layer_7_ffn",
+            "label": "Layer 7 Ffn",
+            "max_abs_weight": 0.15244734287261963,
+            "mean_abs_weight": 0.004067842120729148,
+            "parameters": 543744,
+            "rms_weight": 0.013067924346012215
+          },
+          {
+            "id": "layer_8_attention",
+            "label": "Layer 8 Attention",
+            "max_abs_weight": 0.14795717597007751,
+            "mean_abs_weight": 0.02215632837679651,
+            "parameters": 36864,
+            "rms_weight": 0.02947878193442756
+          },
+          {
+            "id": "layer_8_norm",
+            "label": "Layer 8 Norm",
+            "max_abs_weight": 1.220894694328308,
+            "mean_abs_weight": 0.5351651419575015,
+            "parameters": 384,
+            "rms_weight": 0.7508940102076488
+          },
+          {
+            "id": "layer_8_ffn",
+            "label": "Layer 8 Ffn",
+            "max_abs_weight": 0.1443369835615158,
+            "mean_abs_weight": 0.004185796345245591,
+            "parameters": 543744,
+            "rms_weight": 0.013416793276466542
+          },
+          {
+            "id": "layer_9_attention",
+            "label": "Layer 9 Attention",
+            "max_abs_weight": 0.17065618932247162,
+            "mean_abs_weight": 0.023082006722688675,
+            "parameters": 36864,
+            "rms_weight": 0.030468426753466386
+          },
+          {
+            "id": "layer_9_norm",
+            "label": "Layer 9 Norm",
+            "max_abs_weight": 1.2733992338180542,
+            "mean_abs_weight": 0.5452417967220148,
+            "parameters": 384,
+            "rms_weight": 0.7620239763930791
+          },
+          {
+            "id": "layer_9_ffn",
+            "label": "Layer 9 Ffn",
+            "max_abs_weight": 0.1708400547504425,
+            "mean_abs_weight": 0.004402019097531133,
+            "parameters": 543744,
+            "rms_weight": 0.014198614161215218
+          },
+          {
+            "id": "layer_10_attention",
+            "label": "Layer 10 Attention",
+            "max_abs_weight": 0.13915303349494934,
+            "mean_abs_weight": 0.018106867455773883,
+            "parameters": 36864,
+            "rms_weight": 0.02470305908213256
+          },
+          {
+            "id": "layer_10_norm",
+            "label": "Layer 10 Norm",
+            "max_abs_weight": 1.2157304286956787,
+            "mean_abs_weight": 0.5238244213784734,
+            "parameters": 384,
+            "rms_weight": 0.7264759909353181
+          },
+          {
+            "id": "layer_10_ffn",
+            "label": "Layer 10 Ffn",
+            "max_abs_weight": 0.13918840885162354,
+            "mean_abs_weight": 0.01932245324560478,
+            "parameters": 543744,
+            "rms_weight": 0.024959453786913353
+          },
+          {
+            "id": "layer_11_attention",
+            "label": "Layer 11 Attention",
+            "max_abs_weight": 0.18087975680828094,
+            "mean_abs_weight": 0.019756495331724484,
+            "parameters": 36864,
+            "rms_weight": 0.02697449159167206
+          },
+          {
+            "id": "layer_11_norm",
+            "label": "Layer 11 Norm",
+            "max_abs_weight": 1.2005044221878052,
+            "mean_abs_weight": 0.5243936888873577,
+            "parameters": 384,
+            "rms_weight": 0.7278753564321726
+          },
+          {
+            "id": "layer_11_ffn",
+            "label": "Layer 11 Ffn",
+            "max_abs_weight": 0.16128262877464294,
+            "mean_abs_weight": 0.019178729946330443,
+            "parameters": 543744,
+            "rms_weight": 0.02475908825195621
+          },
+          {
+            "id": "final_norm",
+            "label": "Final Norm",
+            "max_abs_weight": 1.8608944416046143,
+            "mean_abs_weight": 0.8429526487986246,
+            "parameters": 192,
+            "rms_weight": 1.118477144790189
+          }
+        ],
+        "connections": [
+          {
+            "from": "embedding",
+            "kind": "residual_flow",
+            "to": "position_embedding"
+          },
+          {
+            "from": "position_embedding",
+            "kind": "residual_flow",
+            "to": "layer_0_attention"
+          },
+          {
+            "from": "layer_0_attention",
+            "kind": "residual_flow",
+            "to": "layer_0_norm"
+          },
+          {
+            "from": "layer_0_norm",
+            "kind": "residual_flow",
+            "to": "layer_0_ffn"
+          },
+          {
+            "from": "layer_0_ffn",
+            "kind": "residual_flow",
+            "to": "layer_1_attention"
+          },
+          {
+            "from": "layer_1_attention",
+            "kind": "residual_flow",
+            "to": "layer_1_norm"
+          },
+          {
+            "from": "layer_1_norm",
+            "kind": "residual_flow",
+            "to": "layer_1_ffn"
+          },
+          {
+            "from": "layer_1_ffn",
+            "kind": "residual_flow",
+            "to": "layer_2_attention"
+          },
+          {
+            "from": "layer_2_attention",
+            "kind": "residual_flow",
+            "to": "layer_2_norm"
+          },
+          {
+            "from": "layer_2_norm",
+            "kind": "residual_flow",
+            "to": "layer_2_ffn"
+          },
+          {
+            "from": "layer_2_ffn",
+            "kind": "residual_flow",
+            "to": "layer_3_attention"
+          },
+          {
+            "from": "layer_3_attention",
+            "kind": "residual_flow",
+            "to": "layer_3_norm"
+          },
+          {
+            "from": "layer_3_norm",
+            "kind": "residual_flow",
+            "to": "layer_3_ffn"
+          },
+          {
+            "from": "layer_3_ffn",
+            "kind": "residual_flow",
+            "to": "layer_4_attention"
+          },
+          {
+            "from": "layer_4_attention",
+            "kind": "residual_flow",
+            "to": "layer_4_norm"
+          },
+          {
+            "from": "layer_4_norm",
+            "kind": "residual_flow",
+            "to": "layer_4_ffn"
+          },
+          {
+            "from": "layer_4_ffn",
+            "kind": "residual_flow",
+            "to": "layer_5_attention"
+          },
+          {
+            "from": "layer_5_attention",
+            "kind": "residual_flow",
+            "to": "layer_5_norm"
+          },
+          {
+            "from": "layer_5_norm",
+            "kind": "residual_flow",
+            "to": "layer_5_ffn"
+          },
+          {
+            "from": "layer_5_ffn",
+            "kind": "residual_flow",
+            "to": "layer_6_attention"
+          },
+          {
+            "from": "layer_6_attention",
+            "kind": "residual_flow",
+            "to": "layer_6_norm"
+          },
+          {
+            "from": "layer_6_norm",
+            "kind": "residual_flow",
+            "to": "layer_6_ffn"
+          },
+          {
+            "from": "layer_6_ffn",
+            "kind": "residual_flow",
+            "to": "layer_7_attention"
+          },
+          {
+            "from": "layer_7_attention",
+            "kind": "residual_flow",
+            "to": "layer_7_norm"
+          },
+          {
+            "from": "layer_7_norm",
+            "kind": "residual_flow",
+            "to": "layer_7_ffn"
+          },
+          {
+            "from": "layer_7_ffn",
+            "kind": "residual_flow",
+            "to": "layer_8_attention"
+          },
+          {
+            "from": "layer_8_attention",
+            "kind": "residual_flow",
+            "to": "layer_8_norm"
+          },
+          {
+            "from": "layer_8_norm",
+            "kind": "residual_flow",
+            "to": "layer_8_ffn"
+          },
+          {
+            "from": "layer_8_ffn",
+            "kind": "residual_flow",
+            "to": "layer_9_attention"
+          },
+          {
+            "from": "layer_9_attention",
+            "kind": "residual_flow",
+            "to": "layer_9_norm"
+          },
+          {
+            "from": "layer_9_norm",
+            "kind": "residual_flow",
+            "to": "layer_9_ffn"
+          },
+          {
+            "from": "layer_9_ffn",
+            "kind": "residual_flow",
+            "to": "layer_10_attention"
+          },
+          {
+            "from": "layer_10_attention",
+            "kind": "residual_flow",
+            "to": "layer_10_norm"
+          },
+          {
+            "from": "layer_10_norm",
+            "kind": "residual_flow",
+            "to": "layer_10_ffn"
+          },
+          {
+            "from": "layer_10_ffn",
+            "kind": "residual_flow",
+            "to": "layer_11_attention"
+          },
+          {
+            "from": "layer_11_attention",
+            "kind": "residual_flow",
+            "to": "layer_11_norm"
+          },
+          {
+            "from": "layer_11_norm",
+            "kind": "residual_flow",
+            "to": "layer_11_ffn"
+          },
+          {
+            "from": "layer_11_ffn",
+            "kind": "residual_flow",
+            "to": "final_norm"
+          }
+        ],
+        "heads": [
+          {
+            "head": 0,
+            "kind": "mha_qkv",
+            "layer": 0,
+            "max_abs_weight": 0.1372980773448944,
+            "mean_abs_weight": 0.02081662230193615,
+            "parameters": 6912,
+            "rms_weight": 0.026764996349811554
+          },
+          {
+            "head": 1,
+            "kind": "mha_qkv",
+            "layer": 0,
+            "max_abs_weight": 0.11648251116275787,
+            "mean_abs_weight": 0.02058378793299198,
+            "parameters": 6912,
+            "rms_weight": 0.026373667642474174
+          },
+          {
+            "head": 2,
+            "kind": "mha_qkv",
+            "layer": 0,
+            "max_abs_weight": 0.12896503508090973,
+            "mean_abs_weight": 0.01936582662165165,
+            "parameters": 6912,
+            "rms_weight": 0.024678435176610947
+          },
+          {
+            "head": 3,
+            "kind": "mha_qkv",
+            "layer": 0,
+            "max_abs_weight": 0.11689702421426773,
+            "mean_abs_weight": 0.019065232947468758,
+            "parameters": 6912,
+            "rms_weight": 0.024393277242779732
+          },
+          {
+            "head": 0,
+            "kind": "mha_qkv",
+            "layer": 1,
+            "max_abs_weight": 0.1382029503583908,
+            "mean_abs_weight": 0.019607434049248695,
+            "parameters": 6912,
+            "rms_weight": 0.02536810375750065
+          },
+          {
+            "head": 1,
+            "kind": "mha_qkv",
+            "layer": 1,
+            "max_abs_weight": 0.16728605329990387,
+            "mean_abs_weight": 0.022056054323911667,
+            "parameters": 6912,
+            "rms_weight": 0.02886749990284443
+          },
+          {
+            "head": 2,
+            "kind": "mha_qkv",
+            "layer": 1,
+            "max_abs_weight": 0.15152707695960999,
+            "mean_abs_weight": 0.020384620875120163,
+            "parameters": 6912,
+            "rms_weight": 0.02674265019595623
+          },
+          {
+            "head": 3,
+            "kind": "mha_qkv",
+            "layer": 1,
+            "max_abs_weight": 0.14419375360012054,
+            "mean_abs_weight": 0.019357290118932724,
+            "parameters": 6912,
+            "rms_weight": 0.025226600468158722
+          },
+          {
+            "head": 0,
+            "kind": "mha_qkv",
+            "layer": 2,
+            "max_abs_weight": 0.26759737730026245,
+            "mean_abs_weight": 0.030561979860067368,
+            "parameters": 6912,
+            "rms_weight": 0.04221963509917259
+          },
+          {
+            "head": 1,
+            "kind": "mha_qkv",
+            "layer": 2,
+            "max_abs_weight": 0.2442854940891266,
+            "mean_abs_weight": 0.026308104395866394,
+            "parameters": 6912,
+            "rms_weight": 0.035482168197631836
+          },
+          {
+            "head": 2,
+            "kind": "mha_qkv",
+            "layer": 2,
+            "max_abs_weight": 0.276712566614151,
+            "mean_abs_weight": 0.03269588202238083,
+            "parameters": 6912,
+            "rms_weight": 0.04471627250313759
+          },
+          {
+            "head": 3,
+            "kind": "mha_qkv",
+            "layer": 2,
+            "max_abs_weight": 0.21898901462554932,
+            "mean_abs_weight": 0.031054258346557617,
+            "parameters": 6912,
+            "rms_weight": 0.04139809310436249
+          },
+          {
+            "head": 0,
+            "kind": "mha_qkv",
+            "layer": 3,
+            "max_abs_weight": 0.29307878017425537,
+            "mean_abs_weight": 0.03848715126514435,
+            "parameters": 6912,
+            "rms_weight": 0.052538156509399414
+          },
+          {
+            "head": 1,
+            "kind": "mha_qkv",
+            "layer": 3,
+            "max_abs_weight": 0.26816239953041077,
+            "mean_abs_weight": 0.03325340151786804,
+            "parameters": 6912,
+            "rms_weight": 0.045358289033174515
+          },
+          {
+            "head": 2,
+            "kind": "mha_qkv",
+            "layer": 3,
+            "max_abs_weight": 0.19975389540195465,
+            "mean_abs_weight": 0.02571173571050167,
+            "parameters": 6912,
+            "rms_weight": 0.03410288318991661
+          },
+          {
+            "head": 3,
+            "kind": "mha_qkv",
+            "layer": 3,
+            "max_abs_weight": 0.1706908643245697,
+            "mean_abs_weight": 0.022477252408862114,
+            "parameters": 6912,
+            "rms_weight": 0.02937462367117405
+          },
+          {
+            "head": 0,
+            "kind": "mha_qkv",
+            "layer": 4,
+            "max_abs_weight": 0.23645272850990295,
+            "mean_abs_weight": 0.030406024307012558,
+            "parameters": 6912,
+            "rms_weight": 0.0407867431640625
+          },
+          {
+            "head": 1,
+            "kind": "mha_qkv",
+            "layer": 4,
+            "max_abs_weight": 0.20460478961467743,
+            "mean_abs_weight": 0.026617826893925667,
+            "parameters": 6912,
+            "rms_weight": 0.035567596554756165
+          },
+          {
+            "head": 2,
+            "kind": "mha_qkv",
+            "layer": 4,
+            "max_abs_weight": 0.24264001846313477,
+            "mean_abs_weight": 0.03438125178217888,
+            "parameters": 6912,
+            "rms_weight": 0.046378158032894135
+          },
+          {
+            "head": 3,
+            "kind": "mha_qkv",
+            "layer": 4,
+            "max_abs_weight": 0.2622980773448944,
+            "mean_abs_weight": 0.03872208297252655,
+            "parameters": 6912,
+            "rms_weight": 0.05227956548333168
+          },
+          {
+            "head": 0,
+            "kind": "mha_qkv",
+            "layer": 5,
+            "max_abs_weight": 0.16909676790237427,
+            "mean_abs_weight": 0.024651816114783287,
+            "parameters": 6912,
+            "rms_weight": 0.03267264738678932
+          },
+          {
+            "head": 1,
+            "kind": "mha_qkv",
+            "layer": 5,
+            "max_abs_weight": 0.2605522871017456,
+            "mean_abs_weight": 0.031026149168610573,
+            "parameters": 6912,
+            "rms_weight": 0.04234577715396881
+          },
+          {
+            "head": 2,
+            "kind": "mha_qkv",
+            "layer": 5,
+            "max_abs_weight": 0.25530290603637695,
+            "mean_abs_weight": 0.03141272813081741,
+            "parameters": 6912,
+            "rms_weight": 0.04319009557366371
+          },
+          {
+            "head": 3,
+            "kind": "mha_qkv",
+            "layer": 5,
+            "max_abs_weight": 0.21302616596221924,
+            "mean_abs_weight": 0.02902064472436905,
+            "parameters": 6912,
+            "rms_weight": 0.0397038534283638
+          },
+          {
+            "head": 0,
+            "kind": "mha_qkv",
+            "layer": 6,
+            "max_abs_weight": 0.19166286289691925,
+            "mean_abs_weight": 0.02504582516849041,
+            "parameters": 6912,
+            "rms_weight": 0.033259231597185135
+          },
+          {
+            "head": 1,
+            "kind": "mha_qkv",
+            "layer": 6,
+            "max_abs_weight": 0.1574026495218277,
+            "mean_abs_weight": 0.0253901407122612,
+            "parameters": 6912,
+            "rms_weight": 0.03354281932115555
+          },
+          {
+            "head": 2,
+            "kind": "mha_qkv",
+            "layer": 6,
+            "max_abs_weight": 0.14917929470539093,
+            "mean_abs_weight": 0.023717164993286133,
+            "parameters": 6912,
+            "rms_weight": 0.03103981353342533
+          },
+          {
+            "head": 3,
+            "kind": "mha_qkv",
+            "layer": 6,
+            "max_abs_weight": 0.17505723237991333,
+            "mean_abs_weight": 0.023994818329811096,
+            "parameters": 6912,
+            "rms_weight": 0.031259916722774506
+          },
+          {
+            "head": 0,
+            "kind": "mha_qkv",
+            "layer": 7,
+            "max_abs_weight": 0.14814095199108124,
+            "mean_abs_weight": 0.023626228794455528,
+            "parameters": 6912,
+            "rms_weight": 0.031186819076538086
+          },
+          {
+            "head": 1,
+            "kind": "mha_qkv",
+            "layer": 7,
+            "max_abs_weight": 0.15085530281066895,
+            "mean_abs_weight": 0.024298347532749176,
+            "parameters": 6912,
+            "rms_weight": 0.031912911683321
+          },
+          {
+            "head": 2,
+            "kind": "mha_qkv",
+            "layer": 7,
+            "max_abs_weight": 0.15387320518493652,
+            "mean_abs_weight": 0.023428382351994514,
+            "parameters": 6912,
+            "rms_weight": 0.030439144000411034
+          },
+          {
+            "head": 3,
+            "kind": "mha_qkv",
+            "layer": 7,
+            "max_abs_weight": 0.13903053104877472,
+            "mean_abs_weight": 0.02346203103661537,
+            "parameters": 6912,
+            "rms_weight": 0.030710982158780098
+          },
+          {
+            "head": 0,
+            "kind": "mha_qkv",
+            "layer": 8,
+            "max_abs_weight": 0.12514038383960724,
+            "mean_abs_weight": 0.02307458221912384,
+            "parameters": 6912,
+            "rms_weight": 0.030118634924292564
+          },
+          {
+            "head": 1,
+            "kind": "mha_qkv",
+            "layer": 8,
+            "max_abs_weight": 0.14474087953567505,
+            "mean_abs_weight": 0.02429446205496788,
+            "parameters": 6912,
+            "rms_weight": 0.03187744691967964
+          },
+          {
+            "head": 2,
+            "kind": "mha_qkv",
+            "layer": 8,
+            "max_abs_weight": 0.14795717597007751,
+            "mean_abs_weight": 0.026574043557047844,
+            "parameters": 6912,
+            "rms_weight": 0.03499729931354523
+          },
+          {
+            "head": 3,
+            "kind": "mha_qkv",
+            "layer": 8,
+            "max_abs_weight": 0.14373576641082764,
+            "mean_abs_weight": 0.024871865287423134,
+            "parameters": 6912,
+            "rms_weight": 0.03234497085213661
+          },
+          {
+            "head": 0,
+            "kind": "mha_qkv",
+            "layer": 9,
+            "max_abs_weight": 0.1423225700855255,
+            "mean_abs_weight": 0.025581665337085724,
+            "parameters": 6912,
+            "rms_weight": 0.033276334404945374
+          },
+          {
+            "head": 1,
+            "kind": "mha_qkv",
+            "layer": 9,
+            "max_abs_weight": 0.17065618932247162,
+            "mean_abs_weight": 0.02798382379114628,
+            "parameters": 6912,
+            "rms_weight": 0.03664591908454895
+          },
+          {
+            "head": 2,
+            "kind": "mha_qkv",
+            "layer": 9,
+            "max_abs_weight": 0.13708160817623138,
+            "mean_abs_weight": 0.023753123357892036,
+            "parameters": 6912,
+            "rms_weight": 0.030746815726161003
+          },
+          {
+            "head": 3,
+            "kind": "mha_qkv",
+            "layer": 9,
+            "max_abs_weight": 0.1574539989233017,
+            "mean_abs_weight": 0.024966338649392128,
+            "parameters": 6912,
+            "rms_weight": 0.03226238861680031
+          },
+          {
+            "head": 0,
+            "kind": "mha_qkv",
+            "layer": 10,
+            "max_abs_weight": 0.10556745529174805,
+            "mean_abs_weight": 0.01975421793758869,
+            "parameters": 6912,
+            "rms_weight": 0.025094427168369293
+          },
+          {
+            "head": 1,
+            "kind": "mha_qkv",
+            "layer": 10,
+            "max_abs_weight": 0.13915303349494934,
+            "mean_abs_weight": 0.02213398553431034,
+            "parameters": 6912,
+            "rms_weight": 0.028423989191651344
+          },
+          {
+            "head": 2,
+            "kind": "mha_qkv",
+            "layer": 10,
+            "max_abs_weight": 0.11616700142621994,
+            "mean_abs_weight": 0.020859822630882263,
+            "parameters": 6912,
+            "rms_weight": 0.026639437302947044
+          },
+          {
+            "head": 3,
+            "kind": "mha_qkv",
+            "layer": 10,
+            "max_abs_weight": 0.12705260515213013,
+            "mean_abs_weight": 0.024635901674628258,
+            "parameters": 6912,
+            "rms_weight": 0.03165855258703232
+          },
+          {
+            "head": 0,
+            "kind": "mha_qkv",
+            "layer": 11,
+            "max_abs_weight": 0.12688013911247253,
+            "mean_abs_weight": 0.022967007011175156,
+            "parameters": 6912,
+            "rms_weight": 0.029301276430487633
+          },
+          {
+            "head": 1,
+            "kind": "mha_qkv",
+            "layer": 11,
+            "max_abs_weight": 0.18087975680828094,
+            "mean_abs_weight": 0.0254050362855196,
+            "parameters": 6912,
+            "rms_weight": 0.03317762538790703
+          },
+          {
+            "head": 2,
+            "kind": "mha_qkv",
+            "layer": 11,
+            "max_abs_weight": 0.1293543577194214,
+            "mean_abs_weight": 0.0215741116553545,
+            "parameters": 6912,
+            "rms_weight": 0.027434036135673523
+          },
+          {
+            "head": 3,
+            "kind": "mha_qkv",
+            "layer": 11,
+            "max_abs_weight": 0.14436890184879303,
+            "mean_abs_weight": 0.025087686255574226,
+            "parameters": 6912,
+            "rms_weight": 0.03214649856090546
           }
         ],
         "kind": "aggregated_checkpoint_weights",
         "note": "This is a truthful aggregate view of checkpoint weights and model topology, not a claim to display every biological-style neuron."
       },
       "nll_per_byte": 1000000.0,
-      "onnx_max_abs_error": 8.58306884765625e-06,
+      "onnx_max_abs_error": 7.62939453125e-06,
       "parameters": 7021248,
       "path": "research",
       "research_only": true,
@@ -1723,5 +2563,5 @@
       "tokenizer_vocab_size": 384
     }
   },
-  "state_sha": "6c3a2e122bc18180ea044f25e54b29d941807513"
+  "state_sha": "a90862249d92e7215a983476a21e2e018bcfc5e5"
 }
