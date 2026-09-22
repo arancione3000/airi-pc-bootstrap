@@ -6,6 +6,7 @@ on:
     workflows:
       - AIRI Generalist Language Bootstrap
       - AIRI Generalist Architecture Search
+      - AIRI Generalist Incumbent Recovery
     types: [completed]
   schedule:
     - cron: '*/5 * * * *'
@@ -44,7 +45,7 @@ jobs:
             --retry-all-errors
           )
           active=0
-          for workflow in generalist-bootstrap.yml generalist-architecture-search.yml; do
+          for workflow in generalist-bootstrap.yml generalist-architecture-search.yml generalist-incumbent-recovery.yml; do
             api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?per_page=20"
             if payload="$(curl "${curl_common[@]}" \
               -H "Accept: application/vnd.github+json" \
@@ -67,7 +68,7 @@ jobs:
             fi
           done
           if (( active > 0 )); then
-            echo "Bootstrap/Architecture Search owns the Generalist state-write window."
+            echo "Bootstrap/Architecture Search/Incumbent Recovery owns the Generalist state-write window."
             echo "active=true" >> "${GITHUB_OUTPUT}"
           else
             echo "active=false" >> "${GITHUB_OUTPUT}"
@@ -423,6 +424,30 @@ jobs:
             ' <<<"${bootstrap_payload}")"
             if (( bootstrap_active > 0 )); then
               echo "Phase 5 language bootstrap is active; pausing continuum handoff."
+              exit 0
+            fi
+          fi
+
+          recovery_api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-incumbent-recovery.yml/runs"
+          if recovery_payload="$(curl "${curl_common[@]}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${recovery_api}?per_page=20")"; then
+            recovery_active="$(jq '
+              [
+                .workflow_runs[]
+                | select(
+                    .status == "pending"
+                    or .status == "queued"
+                    or .status == "in_progress"
+                    or .status == "waiting"
+                    or .status == "requested"
+                  )
+              ] | length
+            ' <<<"${recovery_payload}")"
+            if (( recovery_active > 0 )); then
+              echo "Architecture incumbent recovery is active; pausing continuum handoff."
               exit 0
             fi
           fi
