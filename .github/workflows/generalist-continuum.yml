@@ -191,6 +191,7 @@ jobs:
 
   reduce1:
     needs: [plan, stage1]
+    if: ${{ always() && needs.plan.result == 'success' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.reduce.outputs.matrix }}
@@ -247,6 +248,7 @@ jobs:
 
   reduce2:
     needs: [plan, stage2]
+    if: ${{ always() && needs.plan.result == 'success' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.reduce.outputs.matrix }}
@@ -303,6 +305,7 @@ jobs:
 
   finalize:
     needs: [plan, stage3]
+    if: ${{ always() && needs.plan.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
