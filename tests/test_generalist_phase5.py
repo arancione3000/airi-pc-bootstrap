@@ -71,6 +71,19 @@ def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
     assert "airi-generalist-phase5-packed-v1-" in workflow
     assert "github.run_id" in workflow
 
+
+def test_architecture_push_yields_to_explicit_live_lineage_handoff():
+    workflow = Path(".github/workflows/generalist-architecture-search.yml").read_text(
+        encoding="utf-8"
+    )
+    assert 'EVENT_NAME: ${{ github.event_name }}' in workflow
+    assert "live-lineage-handoff.json" in workflow
+    assert '"${EVENT_NAME}" == "push"' in workflow
+    assert "live_lineage_handoff_owns_architecture_window" in workflow
+    assert "run_search=false" in workflow
+    assert "matrix=[]" in workflow
+
+
 def test_phase5_100m_amortizes_setup_without_changing_batch_or_lr():
     workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
     assert "segment_tokens=1000000" in workflow
