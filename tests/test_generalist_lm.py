@@ -528,6 +528,26 @@ def test_curriculum_train_and_validation_are_disjoint_and_multi_domain():
     assert all(count >= 5 for count in manifest["validation_domains"].values())
 
 
+def test_curriculum_teaches_web_search_and_web_read_tool_calls():
+    from generalist_lm.curriculum import train_rows, validation_rows
+
+    train_targets = [
+        message["content"]
+        for row in train_rows()
+        for message in row.messages
+        if message["role"] == "assistant"
+    ]
+    validation_targets = [
+        message["content"]
+        for row in validation_rows()
+        for message in row.messages
+        if message["role"] == "assistant"
+    ]
+    all_targets = train_targets + validation_targets
+    assert any('"name":"web_search"' in target for target in all_targets)
+    assert any('"name":"web_read"' in target for target in all_targets)
+
+
 def test_research_promotion_rejects_generalist_forgetting():
     from generalist_lm.research_cycle import _research_eligible
 
