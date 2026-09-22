@@ -955,7 +955,12 @@ def run_segment(
     # every resumable segment.  Cache the exact fixed-width token blocks in the
     # job-local data cache.  The cache identity includes the reviewed manifest,
     # tokenizer and context length, so stale data fails closed and is rebuilt.
-    manifest_identity = str(bundle.manifest.get("manifest_content_sha256") or "")
+    manifest_for_blocks = bundle.manifest if bundle is not None else (previous_manifest or {})
+    manifest_identity = str(manifest_for_blocks.get("manifest_content_sha256") or "")
+    if not manifest_identity:
+        _materialize_bundle()
+        manifest_for_blocks = bundle.manifest
+        manifest_identity = str(manifest_for_blocks.get("manifest_content_sha256") or "")
     packed_cache_root = cache / "phase5-packed-blocks-v1"
     packed_cache_root.mkdir(parents=True, exist_ok=True)
     packed_cache_base = {
@@ -995,6 +1000,8 @@ def run_segment(
             packed_cache_hits[stage] = False
 
     missing_stages = [stage for stage in stage_names if stage not in stage_blocks]
+    if missing_stages:
+        _materialize_bundle()
     if "A_frequent_word_contexts" in missing_stages:
         documents = _frequent_word_documents(bundle.train_documents)
         packed = pack_causal_blocks(
@@ -1049,6 +1056,7 @@ def run_segment(
     )
     packed_cache_hits["validation"] = validation_blocks is not None
     if validation_blocks is None:
+        _materialize_bundle()
         validation_blocks = pack_causal_blocks(
             bundle.validation_documents,
             runtime.tokenizer,
