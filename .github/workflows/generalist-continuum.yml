@@ -369,9 +369,19 @@ jobs:
             and .policy.external_pretrained == false
           ' /tmp/final-status.json
 
+      - name: Resolve active AIRI lineage for qualification
+        run: |
+          set -euo pipefail
+          active_rel="champion"
+          if [[ -s "${STATE_DIR}/lineage.json" ]]; then
+            active_rel="$(jq -r '.active_checkpoint // "champion"' "${STATE_DIR}/lineage.json")"
+          fi
+          test -s "${STATE_DIR}/${active_rel}/model.pt"
+          echo "AIRI_GENERALIST_ACTIVE_CHECKPOINT=${STATE_DIR}/${active_rel}" >> "${GITHUB_ENV}"
+
       - name: Attempt normal production qualification
         env:
-          AIRI_GENERALIST_RESEARCH_CHECKPOINT: ${{ env.STATE_DIR }}/champion
+          AIRI_GENERALIST_RESEARCH_CHECKPOINT: ${{ env.AIRI_GENERALIST_ACTIVE_CHECKPOINT }}
           AIRI_GENERALIST_PRODUCTION_STATE: ${{ env.STATE_DIR }}/production
           AIRI_GENERALIST_PRODUCTION_MIN_SCORE: '85'
           AIRI_GENERALIST_PRODUCTION_MIN_GAIN: '2'
@@ -379,7 +389,8 @@ jobs:
           AIRI_GENERALIST_RESEARCH_STATE: ${{ env.STATE_DIR }}
         run: |
           set -euo pipefail
-          python -m generalist_lm.production_promotion             | tee "${STATE_DIR}/last-production-attempt.json"
+          python -m generalist_lm.production_promotion \
+            | tee "${STATE_DIR}/last-production-attempt.json"
           python -m generalist_lm.research_health
 
       - name: Persist health-gated Free-Speed state
