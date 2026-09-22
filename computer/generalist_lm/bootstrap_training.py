@@ -40,11 +40,12 @@ from .research_cycle import (
 )
 from .runtime import GeneralistRuntime
 from .tokenizer import PAD
-from .training import train_sft
+from .training import causal_training_objective, train_sft
 
 
 PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v1"
 PHASE5_SFT_GUARD_VERSION = "phase5-sft-guard-v1"
+PHASE5_ANTICOLLAPSE_VERSION = "phase5-anticollapse-v1"
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -207,6 +208,181 @@ def _causal_curriculum_stage(processed: int, target: int) -> str:
     if ratio < 0.40:
         return "B_short_sentence_completion"
     return "C_causal_next_sentence"
+
+
+def _anti_collapse_weights(
+    stage: str,
+    diagnostics: dict[str, Any],
+) -> tuple[float, float]:
+    pathological = bool(diagnostics.get("pathological_repetition"))
+    repetition = float(diagnostics.get("repetition_rate", 0.0) or 0.0)
+    if not pathological and repetition < 0.60:
+        return 0.0, 1.0
+    if stage == "A_frequent_word_contexts":
+        return 0.0, 1.20
+    if stage == "B_short_sentence_completion":
+        return 0.035, 1.50
+    return 0.060, 1.75
+
+
+def _anti_collapse_rescue_gate(
+    before: dict[str, Any],
+    after: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    reasons: list[str] = []
+    before_rep = float(before.get("repetition_rate", 1.0) or 1.0)
+    after_rep = float(after.get("repetition_rate", 1.0) or 1.0)
+    before_nll = float(before.get("language_nll", float("inf")))
+    after_nll = float(after.get("language_nll", float("inf")))
+
+    if after_nll > before_nll + 0.08:
+        reasons.append("language NLL regressed by more than 0.08")
+    if float(after.get("non_empty_rate", 0.0) or 0.0) < max(
+        0.50,
+        float(before.get("non_empty_rate", 0.0) or 0.0) - 0.15,
+    ):
+        reasons.append("non-empty generation rate regressed")
+    if float(after.get("token_entropy", 0.0) or 0.0) < max(
+        1.50,
+        float(before.get("token_entropy", 0.0) or 0.0) - 0.50,
+    ):
+        reasons.append("token entropy collapsed")
+    if float(after.get("generation_similarity", 0.0) or 0.0) < (
+        float(before.get("generation_similarity", 0.0) or 0.0) - 0.05
+    ):
+        reasons.append("generation similarity regressed")
+    if (
+        bool(after.get("pathological_repetition"))
+        and before_rep - after_rep < 0.025
+    ):
+        reasons.append("pathological repetition did not improve by at least 0.025")
+    if int(after.get("longest_repeated_token_run", 0) or 0) > (
+        int(before.get("longest_repeated_token_run", 0) or 0) + 3
+    ):
+        reasons.append("longest repeated-token run worsened")
+    return (not reasons), reasons
+
+
+def _run_anti_collapse_rescue(
+    runtime: GeneralistRuntime,
+    stage_blocks: dict[str, list[list[int]]],
+    *,
+    bootstrap_root: Path,
+    base_model_sha: str,
+    seed: int,
+    steps: int = 128,
+    batch_size: int = 16,
+) -> tuple[GeneralistRuntime, dict[str, Any]]:
+    import torch
+
+    before = evaluate_phase5_language(runtime)
+    if (
+        not bool(before.get("pathological_repetition"))
+        and float(before.get("repetition_rate", 0.0) or 0.0) < 0.60
+    ):
+        return runtime, {
+            "accepted": False,
+            "rolled_back": False,
+            "reason": "anti-collapse rescue not needed",
+            "validation_before": before,
+            "validation_after": before,
+            "steps": 0,
+            "tokens_processed": 0,
+        }
+
+    pre_dir = bootstrap_root / "pre-anticollapse"
+    trial_dir = bootstrap_root / ".anticollapse-selected"
+    shutil.rmtree(pre_dir, ignore_errors=True)
+    shutil.rmtree(trial_dir, ignore_errors=True)
+    runtime.save_checkpoint(
+        pre_dir,
+        metadata={
+            "role": "phase5_pre_anticollapse_checkpoint",
+            "production_qualified": False,
+            "base_champion_model_sha256": base_model_sha,
+        },
+    )
+    trial = GeneralistRuntime.from_checkpoint(pre_dir, device="cpu")
+    optimizer = torch.optim.AdamW(
+        trial.model.parameters(),
+        lr=5e-5,
+        weight_decay=0.01,
+    )
+    rng = random.Random(int(seed))
+    objective_tail: dict[str, Any] = {}
+    losses: list[float] = []
+    trained_tokens = 0
+    trial.model.train()
+
+    for step in range(max(1, int(steps))):
+        stage = (
+            "B_short_sentence_completion"
+            if step % 3 != 2
+            else "C_causal_next_sentence"
+        )
+        blocks = stage_blocks[stage]
+        indices = [
+            rng.randrange(len(blocks))
+            for _ in range(max(1, int(batch_size)))
+        ]
+        ids, labels = _batch(blocks, indices, device=trial.device)
+        optimizer.zero_grad(set_to_none=True)
+        result = trial.model(ids)
+        loss, objective_tail = causal_training_objective(
+            result["logits"],
+            labels,
+            ids,
+            eos_loss_weight=2.0,
+            repetition_unlikelihood_weight=0.08,
+            repetition_window=16,
+        )
+        if not torch.isfinite(loss):
+            raise RuntimeError("non-finite anti-collapse rescue loss")
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(trial.model.parameters(), 1.0)
+        optimizer.step()
+        losses.append(float(loss.detach().cpu()))
+        trained_tokens += int((labels[:, 1:] != -100).sum().item())
+
+    after = evaluate_phase5_language(trial)
+    accepted, reasons = _anti_collapse_rescue_gate(before, after)
+    report = {
+        "accepted": bool(accepted),
+        "rolled_back": not bool(accepted),
+        "reason": (
+            "held-out anti-collapse rescue improved degeneration safely"
+            if accepted
+            else "anti-collapse rescue rejected by held-out safety gate"
+        ),
+        "gate_reasons": reasons,
+        "validation_before": before,
+        "validation_after": after,
+        "steps": max(1, int(steps)),
+        "tokens_processed": int(trained_tokens),
+        "mean_objective_loss": sum(losses) / max(1, len(losses)),
+        "last_objective": objective_tail,
+        "external_pretrained_weights": False,
+        "decoding_modified": False,
+    }
+
+    if not accepted:
+        restored = GeneralistRuntime.from_checkpoint(pre_dir, device="cpu")
+        shutil.rmtree(trial_dir, ignore_errors=True)
+        return restored, report
+
+    trial.save_checkpoint(
+        trial_dir,
+        metadata={
+            "role": "phase5_anticollapse_rescue_selected",
+            "production_qualified": False,
+            "base_champion_model_sha256": base_model_sha,
+            "steps": max(1, int(steps)),
+            "tokens_processed": int(trained_tokens),
+        },
+    )
+    selected = GeneralistRuntime.from_checkpoint(trial_dir, device="cpu")
+    shutil.rmtree(trial_dir, ignore_errors=True)
+    return selected, report
 
 
 def _sft_row_fingerprint(row) -> str:
@@ -596,7 +772,16 @@ def run_segment(
         for group in optimizer.param_groups:
             group["lr"] = lr
 
-        loss = runtime.model(ids, labels=labels)["loss"]
+        result = runtime.model(ids)
+        anti_weight, eos_weight = _anti_collapse_weights(stage, before)
+        loss, objective_stats = causal_training_objective(
+            result["logits"],
+            labels,
+            ids,
+            eos_loss_weight=eos_weight,
+            repetition_unlikelihood_weight=anti_weight,
+            repetition_window=16,
+        )
         if not torch.isfinite(loss):
             raise RuntimeError("non-finite Phase 5 bootstrap loss")
         loss.backward()
@@ -609,6 +794,8 @@ def run_segment(
         progress["learning_rate"] = float(lr)
         last_train_loss = float(loss.detach().cpu())
         progress["last_train_loss"] = last_train_loss
+        progress["last_objective"] = objective_stats
+        progress["anti_collapse_training_enabled"] = bool(anti_weight > 0.0)
 
         if int(progress["steps"]) % eval_every_steps == 0:
             last_validation_loss = corpus_loss(
@@ -661,6 +848,46 @@ def run_segment(
     progress["rung_complete"] = bool(rung_complete)
     progress["updated_at_unix"] = int(time.time())
 
+    rescue_accepted = False
+    rescue_due = bool(
+        rung_complete
+        and (
+            str(progress.get("anti_collapse_rescue_version") or "")
+            != PHASE5_ANTICOLLAPSE_VERSION
+            or str(progress.get("anti_collapse_base_model_sha256") or "")
+            != base_model_sha
+        )
+    )
+    if rescue_due:
+        runtime, rescue_report = _run_anti_collapse_rescue(
+            runtime,
+            stage_blocks,
+            bootstrap_root=bootstrap_root,
+            base_model_sha=base_model_sha,
+            seed=71 + int(cycle),
+        )
+        rescue_accepted = bool(rescue_report.get("accepted"))
+        progress["anti_collapse_rescue"] = rescue_report
+        progress["anti_collapse_rescue_version"] = PHASE5_ANTICOLLAPSE_VERSION
+        progress["anti_collapse_base_model_sha256"] = base_model_sha
+        progress["anti_collapse_rescue_tokens"] = int(
+            progress.get("anti_collapse_rescue_tokens", 0) or 0
+        ) + int(rescue_report.get("tokens_processed", 0) or 0)
+        if rescue_accepted:
+            optimizer_path.unlink(missing_ok=True)
+            progress["optimizer_reset_after_anticollapse"] = True
+        runtime.save_checkpoint(
+            candidate_dir,
+            metadata={
+                "role": "phase5_language_bootstrap_candidate",
+                "production_qualified": False,
+                "base_champion_model_sha256": base_model_sha,
+                "tokens_processed": int(progress["tokens_processed"]),
+                "target_tokens": target_tokens,
+                "anti_collapse_rescue": bool(rescue_accepted),
+            },
+        )
+
     completed_sft_before = set(
         int(x) for x in (progress.get("sft_completed_rungs") or [])
     )
@@ -674,6 +901,7 @@ def run_segment(
         and (
             target_tokens not in completed_sft_before
             or sft_guard_migration
+            or rescue_accepted
         )
     )
 
