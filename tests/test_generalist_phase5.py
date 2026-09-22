@@ -91,9 +91,24 @@ def test_phase5_capacity_growth_builds_a_larger_compatible_runtime():
     assert report["source_parameters"] == before
     assert report["parameters"] == parameter_count(grown.model)
     assert report["weight_transfer"]["copied_parameters"] > 0
+    assert report["weight_transfer"]["function_preserving_growth"] is True
+    assert grown.config.d_model == runtime.config.d_model
     assert grown.config.to_dict() == grown_genome.model_config(
         grown.tokenizer.vocab_size
     ).to_dict()
+
+    # Capacity growth itself must not erase the function already learned.
+    torch = __import__("torch")
+    ids = torch.tensor(
+        [[1, 40, 41, 42, 43, 44, 45, 46]],
+        dtype=torch.long,
+    )
+    runtime.model.eval()
+    grown.model.eval()
+    with torch.no_grad():
+        before_logits = runtime.model(ids)["logits"]
+        grown_logits = grown.model(ids)["logits"]
+    assert torch.allclose(before_logits, grown_logits, atol=1e-6, rtol=1e-6)
 
 
 def test_phase5_success_requires_multiword_output():
