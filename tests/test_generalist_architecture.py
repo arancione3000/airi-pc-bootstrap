@@ -48,12 +48,20 @@ def test_architecture_ir_roundtrips_current_genome():
         local_attention_window=64,
         local_attention_every=2,
         n_layers=4,
+        recurrent_depth=2,
+        ff_variant="moe_swiglu",
+        moe_experts=4,
+        moe_top_k=1,
     ).validate()
     spec = ArchitectureSpec.from_genome(genome, target_vocab_size=768)
     restored = spec.to_genome()
     assert restored.attention_type == "gqa"
     assert restored.n_kv_heads == 2
     assert restored.local_attention_window == 64
+    assert restored.recurrent_depth == 2
+    assert restored.ff_variant == "moe_swiglu"
+    assert restored.moe_experts == 4
+    assert restored.moe_top_k == 1
     assert spec.fingerprint() == ArchitectureSpec.from_dict(spec.to_dict()).fingerprint()
 
 
@@ -730,3 +738,25 @@ def test_gqa_local_attention_and_postnorm_pass_real_verifier():
     cfg = spec.to_model_config(vocab_size=384)
     model = CausalTransformerLM(cfg)
     assert estimate_parameter_count(cfg) == parameter_count(model)
+
+
+
+def test_structural_mutations_include_recurrent_and_internal_moe_lanes():
+    parent = ArchitectureSpec(
+        architecture_id="frontier-parent",
+        generation=4,
+        parent_id=None,
+        context_length=128,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=128,
+        tokenizer_version="bpe-v1",
+        target_vocab_size=384,
+    ).validate()
+    mutations = structural_mutations(parent, signals=["reasoning_gap"])
+    assert any(row.recurrent_depth > 1 for row in mutations)
+    moe = [row for row in mutations if row.ff_variant == "moe_swiglu"]
+    assert moe
+    assert all(row.moe_experts >= 2 and row.moe_top_k >= 1 for row in moe)
+    assert len({row.fingerprint() for row in mutations}) == len(mutations)
