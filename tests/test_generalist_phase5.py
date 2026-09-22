@@ -13,6 +13,8 @@ from generalist_lm.bootstrap_data import (
     STREAMING_SOURCES,
     _oasst_conversations,
     _parse_oasst,
+    _quality_web_text,
+    _web_chunks,
     load_bootstrap_replay,
     write_bootstrap_replay,
 )
@@ -164,6 +166,18 @@ def test_fasttrack_streaming_sources_are_explicit_and_bilingual():
     assert {row["language"] for row in STREAMING_SOURCES} == {"it", "en"}
     assert all(row["license"] == "ODC-By-1.0" for row in STREAMING_SOURCES)
     assert all(row["source_page"].startswith("https://") for row in STREAMING_SOURCES)
+
+
+def test_fasttrack_web_chunking_is_bounded_and_normalizes_whitespace():
+    raw = (
+        "Questa è una frase italiana abbastanza lunga da essere utile al modello.\n\n"
+        "Seconda frase con   spazi multipli e altro testo naturale per il training."
+    )
+    chunks = _web_chunks(raw, max_chars=120)
+    assert len(chunks) >= 2
+    assert all(len(row) <= 120 for row in chunks)
+    assert all("   " not in row for row in chunks)
+    assert all(_quality_web_text(row) for row in chunks)
 
 
 def test_oasst_parser_excludes_synthetic_and_builds_human_dialogue():
