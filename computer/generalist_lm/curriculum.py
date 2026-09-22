@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Iterable
 
 from .training import SFTExample
@@ -109,6 +110,32 @@ def _tool_rows(expressions: Iterable[tuple[int, str, int]]) -> list[ResearchRow]
     return rows
 
 
+def _web_tool_rows(specs: Iterable[tuple[str, str]]) -> list[ResearchRow]:
+    rows: list[ResearchRow] = []
+    for mode, value in specs:
+        if mode == "search":
+            prompt = f"Search the web for: {value}"
+            target = (
+                '<tool_call>{"name":"web_search","arguments":{"query":'
+                + json.dumps(value, ensure_ascii=False)
+                + ',"limit":6}}</tool_call>'
+            )
+        elif mode == "read":
+            prompt = f"Read this public web source before answering: {value}"
+            target = (
+                '<tool_call>{"name":"web_read","arguments":{"url":'
+                + json.dumps(value, ensure_ascii=False)
+                + '}}</tool_call>'
+            )
+        else:
+            raise ValueError(mode)
+        rows.append(ResearchRow("tools", [
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": target},
+        ]))
+    return rows
+
+
 def _structured_rows(values: Iterable[int]) -> list[ResearchRow]:
     return [
         ResearchRow("structured", [
@@ -134,6 +161,12 @@ def _generated_train_rows() -> list[ResearchRow]:
     rows.extend(_data_rows(range(31, 43, 2)))
     rows.extend(_reasoning_rows([(21, 3), (22, 4), (24, 5), (26, 3), (28, 4), (32, 3)]))
     rows.extend(_tool_rows([(14, "+", 9), (15, "*", 4), (28, "-", 11), (9, "*", 8), (44, "+", 7), (63, "-", 19)]))
+    rows.extend(_web_tool_rows([
+        ("search", "latest Python release"),
+        ("search", "AIRI language model research"),
+        ("search", "Italian open data portal"),
+        ("read", "https://en.wikipedia.org/wiki/Artificial_intelligence"),
+    ]))
     rows.extend(_structured_rows(range(11, 17)))
     return rows
 
@@ -151,6 +184,11 @@ def _generated_validation_rows() -> list[ResearchRow]:
     rows.extend(_data_rows(range(51, 59, 2)))
     rows.extend(_reasoning_rows([(33, 3), (27, 5), (34, 4), (29, 6)]))
     rows.extend(_tool_rows([(37, "+", 8), (12, "*", 6), (71, "-", 23), (16, "*", 5)]))
+    rows.extend(_web_tool_rows([
+        ("search", "current Linux kernel release"),
+        ("search", "European Space Agency news"),
+        ("read", "https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)"),
+    ]))
     rows.extend(_structured_rows(range(21, 25)))
     return rows
 
