@@ -50,6 +50,7 @@ jobs:
       MATHESIS_STATE_DIR: /tmp/airi-mathesis/mathesis-state
       BUNDLE: /tmp/architecture-plan
       FORCE_SEARCH: ${{ github.event.inputs.force_search || 'false' }}
+      EVENT_NAME: ${{ github.event_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -127,6 +128,29 @@ jobs:
           set -euo pipefail
           rm -rf "${BUNDLE}"
           mkdir -p "${BUNDLE}"
+
+          handoff_file="${STATE_DIR}/architecture-research/live-lineage-handoff.json"
+          if [[ "${EVENT_NAME}" == "push" && -s "${handoff_file}" ]]; then
+            echo "A live-lineage handoff already owns the next architecture window; skipping generic push-triggered search."
+            cycle="$(jq -r '.cycle // 0' "${STATE_DIR}/status.json" 2>/dev/null || echo 0)"
+            base_state_sha="$(git -C "${STATE_REPO}" rev-parse HEAD)"
+            jq -n \
+              --argjson cycle "${cycle}" \
+              '{
+                run_search: false,
+                matrix: [],
+                cycle: $cycle,
+                skip_reason: "live_lineage_handoff_owns_architecture_window"
+              }' > "${BUNDLE}/plan.json"
+            cp -a "${STATE_DIR}" "${BUNDLE}/state"
+            {
+              echo "run_search=false"
+              echo "matrix=[]"
+              echo "cycle=${cycle}"
+              echo "base_state_sha=${base_state_sha}"
+            } >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
 
           force_arg=()
           if [[ "${FORCE_SEARCH}" == "true" ]]; then
