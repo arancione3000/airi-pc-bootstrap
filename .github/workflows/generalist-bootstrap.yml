@@ -26,6 +26,7 @@ permissions:
 concurrency:
   group: airi-generalist-language-bootstrap
   cancel-in-progress: ${{ github.event_name == 'push' }}
+# The state-writer janitor also cancels older bootstrap commits on code pushes.
 
 jobs:
   bootstrap:
