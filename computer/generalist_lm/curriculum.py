@@ -143,6 +143,7 @@ def _runtime_tool_rows(specs: Iterable[tuple[str, dict]]) -> list[ResearchRow]:
         "file_search": "Search the workspace for {query}.",
         "project_analyze": "Inspect the project structure at {path}.",
         "memory_search": "Search verified AIRI memory for {query}.",
+        "sandbox_patch_test": "Safely patch {path} in the sandbox and verify it.",
     }
     rows: list[ResearchRow] = []
     for name, arguments in specs:
@@ -203,6 +204,12 @@ def _generated_train_rows() -> list[ResearchRow]:
         ("project_analyze", {"path": "computer/generalist_lm"}),
         ("memory_search", {"query": "safe task lifecycle", "limit": 5}),
         ("memory_search", {"query": "verified tool use", "limit": 3}),
+        ("sandbox_patch_test", {
+            "path": ".ai/generalist-sandbox/example.py",
+            "old": "VALUE = 1",
+            "new": "VALUE = 2",
+            "verifier": "python_compile",
+        }),
     ]))
     rows.extend(_structured_rows(range(11, 17)))
     return rows
@@ -231,6 +238,12 @@ def _generated_validation_rows() -> list[ResearchRow]:
         ("file_search", {"query": "qualification", "path": "computer/generalist_lm"}),
         ("project_analyze", {"path": "computer/control_plane"}),
         ("memory_search", {"query": "verified lifecycle result", "limit": 4}),
+        ("sandbox_patch_test", {
+            "path": ".ai/generalist-sandbox/check.json",
+            "old": "{\"ok\":false}",
+            "new": "{\"ok\":true}",
+            "verifier": "json_parse",
+        }),
     ]))
     rows.extend(_structured_rows(range(21, 25)))
     return rows
