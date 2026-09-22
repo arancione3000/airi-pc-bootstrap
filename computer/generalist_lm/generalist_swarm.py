@@ -33,6 +33,7 @@ from .bootstrap_data import load_bootstrap_replay
 from .mathesis_bridge import mathesis_signals
 from .model import estimate_parameter_count, parameter_count
 from .pretraining import CorpusDocument, load_local_corpus
+from .phase5_diagnostics import evaluate_phase5_language
 from .research_cycle import (
     _genome_training_seed,
     _grouped_validation,
@@ -261,6 +262,7 @@ def _phase5_language_fusion_candidate(
             "language_nll": float(after.get("language_nll", float("inf"))),
             "repetition_rate": float(after.get("repetition_rate", 1.0) or 1.0),
             "multiword_output_rate": float(after.get("multiword_output_rate", 0.0) or 0.0),
+            "pathological_repetition": bool(after.get("pathological_repetition", False)),
         }
     except Exception:
         return None
@@ -807,6 +809,35 @@ def _domain_regression(
     # Missing comparable held-out domains must remain fail-closed, but the
     # persisted swarm report is strict JSON and must never emit Infinity.
     return max(values) if values else 1_000_000.0
+
+
+def _language_fusion_retention_gate(
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    """Require a fused candidate to retain the language checkpoint's gains."""
+    reasons: list[str] = []
+    baseline_nll = float(baseline.get("language_nll", float("inf")))
+    current_nll = float(current.get("language_nll", float("inf")))
+    if not math.isfinite(current_nll) or current_nll > baseline_nll + 0.15:
+        reasons.append("Phase-5 language NLL regressed by more than 0.15")
+
+    baseline_multi = float(baseline.get("multiword_output_rate", 0.0) or 0.0)
+    current_multi = float(current.get("multiword_output_rate", 0.0) or 0.0)
+    if current_multi < max(0.0, baseline_multi - 0.10):
+        reasons.append("multi-word output retention regressed by more than 0.10")
+
+    baseline_rep = float(baseline.get("repetition_rate", 1.0) or 1.0)
+    current_rep = float(current.get("repetition_rate", 1.0) or 1.0)
+    if current_rep > min(1.0, baseline_rep + 0.10):
+        reasons.append("repetition rate regressed by more than 0.10")
+
+    if (
+        not bool(baseline.get("pathological_repetition", False))
+        and bool(current.get("pathological_repetition", False))
+    ):
+        reasons.append("fused candidate reintroduced pathological repetition")
+    return (not reasons), reasons
 
 
 def _load_stage_source(
@@ -1573,6 +1604,32 @@ def finalize_swarm(
             minimum_loss_gain=0.01,
             max_domain_regression=0.08,
         )
+        if eligible and str(winner.get("kind") or "") == "language_fusion":
+            plan_candidate = next(
+                (
+                    row for row in (plan.get("candidates") or [])
+                    if str(row.get("candidate_id") or "") == genome.genome_id
+                ),
+                {},
+            )
+            baseline_language = dict(plan_candidate.get("fusion_evidence") or {})
+            current_language = evaluate_phase5_language(runtime)
+            retained, retention_reasons = _language_fusion_retention_gate(
+                baseline_language,
+                current_language,
+            )
+            verified["phase5_language_retention"] = {
+                "passed": bool(retained),
+                "baseline": baseline_language,
+                "current": current_language,
+                "reasons": retention_reasons,
+            }
+            if not retained:
+                eligible = False
+                verify_reason = (
+                    "language_fusion_retention_rejected:"
+                    + "; ".join(retention_reasons)
+                )
         if eligible:
             _save_champion(root, genome, runtime, verified)
             promoted = True
