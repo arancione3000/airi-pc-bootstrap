@@ -17,6 +17,7 @@ on:
       - 'computer/generalist_lm/runtime.py'
       - 'computer/generalist_lm/research_cycle.py'
       - 'computer/generalist_lm/generalist_swarm.py'
+      - 'computer/generalist_lm/lineage_migration.py'
       - '.github/workflows/generalist-bootstrap.yml'
 
 permissions:
@@ -38,6 +39,8 @@ jobs:
       STATE_DIR: /tmp/airi-generalist-phase5-state-repo/generalist-state
       CACHE_DIR: /tmp/airi-generalist-phase5-cache
       TARGET_TOKENS: ${{ github.event.inputs.target_tokens || '1000000' }}
+      ARCHITECTURE_INTERVAL_TOKENS: '5000000'
+      ARCHITECTURE_HANDOFF: 'false'
     steps:
       - uses: actions/checkout@v4
 
@@ -214,6 +217,18 @@ jobs:
           }
 
           rung_complete=false
+          architecture_handoff=false
+          progress_file="${STATE_DIR}/bootstrap-data/progress.json"
+          handoff_file="${STATE_DIR}/architecture-research/live-lineage-handoff.json"
+          initial_tokens="$(jq -r '.tokens_processed // 0' "${progress_file}" 2>/dev/null || echo 0)"
+          last_architecture_tokens=""
+          if [[ -s "${handoff_file}" ]]; then
+            last_architecture_tokens="$(jq -r '.last_requested_tokens // empty' "${handoff_file}")"
+          fi
+          if [[ -z "${last_architecture_tokens}" ]]; then
+            last_architecture_tokens="$(( (initial_tokens / ARCHITECTURE_INTERVAL_TOKENS) * ARCHITECTURE_INTERVAL_TOKENS ))"
+          fi
+
           segment_tokens=250000
           if (( TARGET_TOKENS >= 100000000 )); then
             # The 7M model is compute-efficient; repeatedly rebuilding/loading
@@ -240,9 +255,32 @@ jobs:
             if [[ "${rung_complete}" == "true" ]]; then
               break
             fi
+
+            if (( TARGET_TOKENS >= 100000000 )); then
+              current_tokens="$(jq -r '.tokens_processed // 0' "${progress_file}")"
+              since_architecture="$(( current_tokens - last_architecture_tokens ))"
+              if (( since_architecture >= ARCHITECTURE_INTERVAL_TOKENS )); then
+                mkdir -p "$(dirname "${handoff_file}")"
+                jq -n \
+                  --argjson last_requested_tokens "${current_tokens}" \
+                  --argjson target_tokens "${TARGET_TOKENS}" \
+                  --arg reason "periodic-single-lineage-architecture-window" \
+                  '{
+                    schema: 1,
+                    version: "airi-live-lineage-handoff-v1",
+                    last_requested_tokens: $last_requested_tokens,
+                    target_tokens: $target_tokens,
+                    reason: $reason
+                  }' > "${handoff_file}"
+                persist_state "architecture handoff at ${current_tokens} tokens"
+                architecture_handoff=true
+                break
+              fi
+            fi
           done
 
           echo "RUNG_COMPLETE=${rung_complete}" >> "${GITHUB_ENV}"
+          echo "ARCHITECTURE_HANDOFF=${architecture_handoff}" >> "${GITHUB_ENV}"
           if [[ "${rung_complete}" == "true" ]]; then
             test -s "${STATE_DIR}/bootstrap-data/report.json"
             jq -e '.external_pretrained_weights_used == false and .external_model_distillation_used == false' \
@@ -268,8 +306,22 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Hand the live AIRI lineage to a bounded architecture window
+        if: env.RUNG_COMPLETE != 'true' && env.ARCHITECTURE_HANDOFF == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body -sS --retry 3 --retry-all-errors -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-architecture-search.yml/dispatches" \
+            -d "{\"ref\":\"main\",\"inputs\":{\"force_search\":\"true\",\"resume_bootstrap_target\":\"${TARGET_TOKENS}\"}}"
+          echo "Architecture window dispatched for the same live lineage at target ${TARGET_TOKENS}."
+
       - name: Resume an incomplete rung from its persisted checkpoint
-        if: env.RUNG_COMPLETE != 'true'
+        if: env.RUNG_COMPLETE != 'true' && env.ARCHITECTURE_HANDOFF != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -297,14 +349,18 @@ jobs:
           elif [[ "${current}" -lt 20000000 ]]; then
             next=20000000
           elif [[ "${current}" -lt 100000000 ]]; then
-            # Keep the exact persisted Phase-5 candidate used by the app.
-            # The next run will grow this same checkpoint to the 7M tier.
             next=100000000
+          elif [[ "${current}" -lt 250000000 ]]; then
+            next=250000000
+          elif [[ "${current}" -lt 500000000 ]]; then
+            next=500000000
+          elif [[ "${current}" -lt 1000000000 ]]; then
+            next=1000000000
           fi
 
-          # Remove legacy swarm-handoff markers.  This prevents an unrelated
-          # architecture winner from replacing the live app lineage between
-          # the completed 20M rung and the 100M/7M continuation.
+          # Remove only the retired swarm-handoff marker. Architecture research
+          # now returns through the single-lineage migration protocol instead
+          # of replacing AIRI with an independently trained checkpoint.
           marker="${STATE_DIR}/bootstrap-next-target.json"
           rm -f "${marker}"
           cd "${STATE_REPO}"
@@ -324,7 +380,7 @@ jobs:
             echo "NEXT_BOOTSTRAP_TARGET=${next}" >> "${GITHUB_ENV}"
             echo "Dispatched the same persisted AIRI Phase-5 lineage directly to target ${next}."
           else
-            echo "100M bounded language ladder complete; no larger automatic rung queued."
+            echo "1B cumulative-token AIRI lineage rung complete; no larger automatic rung is configured yet."
           fi
 
       # The next bootstrap is queued before this workflow finishes.  The
