@@ -222,7 +222,17 @@ def _phase5_language_fusion_candidate(
             for value in (progress.get("completed_rungs") or [])
             if isinstance(value, (int, float))
         }
-        if target_tokens <= 0 or tokens_processed < target_tokens or target_tokens not in completed:
+        sft_completed = {
+            int(value)
+            for value in (progress.get("sft_completed_rungs") or [])
+            if isinstance(value, (int, float))
+        }
+        if (
+            target_tokens <= 0
+            or tokens_processed < target_tokens
+            or target_tokens not in completed
+            or target_tokens not in sft_completed
+        ):
             return None
 
         genome = GeneralistGenome(**raw_genome).validate()
@@ -416,11 +426,13 @@ def prepare_swarm(
         root,
         max_params=int(max_params),
     )
-    rows: list[tuple[str, GeneralistGenome]] = [
-        ("continual", _continual_genome(champion_genome, cycle)),
-    ]
+    rows: list[tuple[str, GeneralistGenome]] = []
     if language_fusion is not None:
+        # Put the learned-language checkpoint first. If its topology is the
+        # same as the champion, topology dedup must retain the better-trained
+        # weights rather than replacing them with a fresh continual copy.
         rows.append(("language_fusion", language_fusion["genome"]))
+    rows.append(("continual", _continual_genome(champion_genome, cycle)))
     rows.extend(scale_genomes)
     rows.extend(("architecture", genome) for genome in generated)
 
