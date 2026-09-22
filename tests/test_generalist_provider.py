@@ -265,6 +265,59 @@ def test_readonly_generalist_tools_compute_without_code_execution():
         execute_readonly_tool("shell", {"command": "echo bad"})
 
 
+def test_readonly_generalist_web_tools_are_bounded_and_untrusted(monkeypatch):
+    from control_plane import generalist_agent_bridge
+
+    monkeypatch.setattr(
+        generalist_agent_bridge,
+        "search_web",
+        lambda query, limit=8: [
+            {
+                "url": "https://example.com/source",
+                "title": f"Result for {query}",
+                "domain": "example.com",
+            }
+        ][:limit],
+    )
+    searched = generalist_agent_bridge.execute_readonly_tool(
+        "web_search",
+        {"query": "latest AIRI research", "limit": 3},
+    )
+    assert searched["count"] == 1
+    assert searched["read_only"] is True
+    assert searched["remote_content_trusted"] is False
+    assert searched["results"][0]["url"].startswith("https://")
+
+    monkeypatch.setattr(
+        generalist_agent_bridge,
+        "fetch_text",
+        lambda url, timeout=20, max_bytes=500_000: {
+            "url": url,
+            "content_type": "text/html; charset=utf-8",
+            "bytes": 120,
+            "text": "<html><script>ignore()</script><body>Hello <b>world</b></body></html>",
+        },
+    )
+    read = generalist_agent_bridge.execute_readonly_tool(
+        "web_read",
+        {"url": "https://example.com/source"},
+    )
+    assert read["text"] == "Hello world"
+    assert read["read_only"] is True
+    assert read["remote_content_trusted"] is False
+
+    with pytest.raises(ValueError, match="1..500"):
+        generalist_agent_bridge.execute_readonly_tool(
+            "web_search",
+            {"query": "x" * 501},
+        )
+    with pytest.raises(ValueError, match="HTTPS"):
+        generalist_agent_bridge.execute_readonly_tool(
+            "web_read",
+            {"url": "http://example.com/source"},
+        )
+
+
 def test_generalist_agent_bridge_executes_only_readonly_allowlist(monkeypatch):
     from control_plane import generalist_agent_bridge, generalist_provider
 
@@ -292,7 +345,7 @@ def test_generalist_agent_bridge_executes_only_readonly_allowlist(monkeypatch):
     }]
 
 
-def test_generalist_router_exposes_data_but_not_unimplemented_research(tmp_path: Path, monkeypatch):
+def test_generalist_router_exposes_data_and_readonly_research(tmp_path: Path, monkeypatch):
     import control_plane.store as store
     from control_plane.model_router import ModelRouter
 
@@ -304,7 +357,7 @@ def test_generalist_router_exposes_data_but_not_unimplemented_research(tmp_path:
 
     router = ModelRouter()
     assert router.choose(task_type="data")["selected"] == "airi-generalist"
-    assert router.choose(task_type="research")["selected"] == "chatgpt"
+    assert router.choose(task_type="research")["selected"] == "airi-generalist"
     assert router.choose(task_type="vision", needs_vision=True)["selected"] == "chatgpt"
 
 
@@ -436,7 +489,7 @@ def test_generalist_autocode_requires_explicit_test_command(monkeypatch):
         )
 
 
-def test_generalist_registration_cannot_escalate_unimplemented_capabilities(tmp_path: Path, monkeypatch):
+def test_generalist_registration_allows_research_but_not_unimplemented_vision(tmp_path: Path, monkeypatch):
     import control_plane.store as store
     from control_plane.model_router import ModelRouter
 
@@ -452,9 +505,8 @@ def test_generalist_registration_cannot_escalate_unimplemented_capabilities(tmp_
         available=True,
     )
     assert row["available"] is True
-    assert set(row["capabilities"]) == {"coding", "data"}
+    assert set(row["capabilities"]) == {"coding", "data", "research"}
     assert "vision" not in row["capabilities"]
-    assert "research" not in row["capabilities"]
 
 
 @pytest.mark.parametrize("protected_path", [
