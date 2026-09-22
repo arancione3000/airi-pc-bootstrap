@@ -343,13 +343,10 @@ def _internal_distillation_rows(
         max_new_tokens=128,
         max_output_chars=4000,
     )
+    distilled_domain = island if island in {"language", "coding"} else "reasoning"
     rows = [
-        ResearchRow(
-            prompts[index].domain,
-            list(example.messages),
-        )
-        for index, example in enumerate(examples)
-        if index < len(prompts)
+        ResearchRow(distilled_domain, list(example.messages))
+        for example in examples
     ]
     return rows, {
         "enabled": True,
