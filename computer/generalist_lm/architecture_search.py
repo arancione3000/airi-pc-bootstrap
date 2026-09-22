@@ -25,8 +25,8 @@ from .model import estimate_parameter_count
 from .lineage_migration import (
     active_lineage_snapshot,
     adaptive_architecture_parameter_cap,
+    adopt_verified_descendant,
     evaluate_lineage_runtime,
-    migrate_live_lineage,
 )
 
 
@@ -431,8 +431,21 @@ def prepare_architecture_search(
         live["runtime"],
         cycle=int(base.get("cycle", 1) or 1),
     )
+    inherited_live_source = dict(base.get("live_lineage_source") or {})
+    live_model_sha = str(
+        inherited_live_source.get("model_sha256")
+        or hashlib.sha256(
+            (Path(live["checkpoint"]) / "model.pt").read_bytes()
+        ).hexdigest()
+    )
+    lineage_id = str(
+        inherited_live_source.get("lineage_id")
+        or f"airi-{live_model_sha[:16]}"
+    )
     base["live_lineage_source"] = {
         "checkpoint": str(live["checkpoint_rel"]),
+        "lineage_id": lineage_id,
+        "model_sha256": live_model_sha,
         "bootstrap_active": bool(live["bootstrap_active"]),
         "tokens_processed": int(live.get("tokens_processed", 0) or 0),
         "target_tokens": int(live.get("target_tokens", 0) or 0),
@@ -533,23 +546,11 @@ def prepare_architecture_search(
     })
 
     seen = {parent.fingerprint()}
-    incumbent_candidate, incumbent_report = _load_incumbent_candidate(
-        root,
-        parent_fingerprint=parent.fingerprint(),
-        current_vocab=current_vocab,
-        parameter_cap=int(parameter_cap),
-    )
-    if incumbent_candidate is not None:
-        incumbent_candidate = {
-            **incumbent_candidate,
-            "index": len(candidates),
-        }
-        incumbent_fingerprint = str(
-            incumbent_candidate.get("architecture_fingerprint") or ""
-        )
-        if incumbent_fingerprint and incumbent_fingerprint not in seen:
-            candidates.append(incumbent_candidate)
-            seen.add(incumbent_fingerprint)
+    incumbent_candidate = None
+    incumbent_report = {
+        "available": False,
+        "reason": "single_lineage_policy_discards_persistent_research_weights",
+    }
     remaining_slots = max(
         0,
         int(population_size) - len(candidates),
@@ -583,6 +584,12 @@ def prepare_architecture_search(
         })
         if len(candidates) >= max(2, int(population_size)):
             break
+
+    for candidate in candidates:
+        candidate["initial_checkpoint"] = str(live["checkpoint_rel"])
+        candidate["initial_checkpoint_mode"] = "live_lineage"
+        candidate["lineage_id"] = lineage_id
+        candidate["lineage_parent_model_sha256"] = live_model_sha
 
     run_search = (
         (bool(force_search) or decision.get("action") == "architecture_search")
@@ -764,13 +771,18 @@ def finalize_architecture_search(
                 }
             else:
                 try:
-                    migration_result = migrate_live_lineage(
+                    migration_result = adopt_verified_descendant(
                         root,
-                        target_checkpoint=approved_checkpoint,
-                        target_genome=dict(approved_row["genome"]),
+                        candidate_checkpoint=approved_checkpoint,
+                        candidate_genome=dict(approved_row["genome"]),
                         cycle=int(plan.get("cycle", 0) or 0),
                         candidate_id=str(approved.get("candidate_id") or ""),
                         research_kind=str(approved.get("kind") or ""),
+                        expected_parent_model_sha256=str(
+                            approved_row.get("lineage_parent_model_sha256")
+                            or approved.get("lineage_parent_model_sha256")
+                            or ""
+                        ),
                     )
                 except Exception as exc:
                     migration_result = {
@@ -781,9 +793,9 @@ def finalize_architecture_search(
 
     base_result["promoted"] = bool(migration_result.get("accepted"))
     base_result["promotion_reason"] = (
-        "single live lineage migrated to externally verified architecture"
+        "verified architecture descendant adopted into the live AIRI lineage"
         if migration_result.get("accepted")
-        else str(migration_result.get("reason") or "lineage migration rejected")
+        else str(migration_result.get("reason") or "lineage adoption rejected")
     )
     base_result["lineage_migration"] = migration_result
 
