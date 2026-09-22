@@ -377,11 +377,10 @@ jobs:
             active_rel="$(jq -r '.active_checkpoint // "champion"' "${STATE_DIR}/lineage.json")"
           fi
           test -s "${STATE_DIR}/${active_rel}/model.pt"
-          echo "AIRI_GENERALIST_ACTIVE_CHECKPOINT=${STATE_DIR}/${active_rel}" >> "${GITHUB_ENV}"
+          echo "AIRI_GENERALIST_RESEARCH_CHECKPOINT=${STATE_DIR}/${active_rel}" >> "${GITHUB_ENV}"
 
       - name: Attempt normal production qualification
         env:
-          AIRI_GENERALIST_RESEARCH_CHECKPOINT: ${{ env.AIRI_GENERALIST_ACTIVE_CHECKPOINT }}
           AIRI_GENERALIST_PRODUCTION_STATE: ${{ env.STATE_DIR }}/production
           AIRI_GENERALIST_PRODUCTION_MIN_SCORE: '85'
           AIRI_GENERALIST_PRODUCTION_MIN_GAIN: '2'
