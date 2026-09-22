@@ -214,14 +214,22 @@ jobs:
           }
 
           rung_complete=false
+          segment_tokens=250000
+          if (( TARGET_TOKENS >= 100000000 )); then
+            # The 7M model is compute-efficient; repeatedly rebuilding/loading
+            # the reviewed 20M-token corpus dominates tiny 250k segments.
+            # Amortize that fixed cost while still persisting transactionally
+            # after every 1M-token unit of work.
+            segment_tokens=1000000
+          fi
           for segment in $(seq 1 4); do
-            echo "Phase 5 segment ${segment}; target=${TARGET_TOKENS}"
+            echo "Phase 5 segment ${segment}; target=${TARGET_TOKENS}; budget=${segment_tokens}"
             python -m generalist_lm.bootstrap_training \
               --state-dir "${STATE_DIR}" \
               --repo-root "${GITHUB_WORKSPACE}" \
               --cache-dir "${CACHE_DIR}" \
               --target-tokens "${TARGET_TOKENS}" \
-              --segment-tokens 250000 \
+              --segment-tokens "${segment_tokens}" \
               --batch-size 32 \
               --learning-rate 0.0003 \
               | tee /tmp/phase5-segment.json
