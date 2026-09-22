@@ -1464,6 +1464,109 @@ def _scan_results(paths: Iterable[str | Path]) -> list[tuple[Path, dict[str, Any
     return list(by_index.values())
 
 
+def _persist_specialist_checkpoints(
+    root: Path,
+    scanned: list[tuple[Path, dict[str, Any]]],
+    *,
+    cycle: int,
+) -> dict[str, Any]:
+    """Keep the best safe research checkpoint for each specialist island.
+
+    Specialists are research-only and never bypass normal champion/production
+    promotion. Persisting them prevents useful domain discoveries from being
+    discarded just because another candidate wins the global tournament.
+    """
+    allowed = {"language", "coding", "reasoning", "tools", "efficiency"}
+    grouped: dict[str, list[tuple[Path, dict[str, Any]]]] = {}
+    for path, row in scanned:
+        island = str(row.get("island") or "")
+        if island not in allowed:
+            continue
+        if bool(row.get("any_generation_pathological_repetition")):
+            continue
+        if float(row.get("worst_domain_regression", float("inf"))) > 0.18:
+            continue
+        checkpoint = path.parent / str(row.get("checkpoint_dir") or "best-checkpoint")
+        if not checkpoint.is_dir():
+            continue
+        grouped.setdefault(island, []).append((checkpoint, row))
+
+    specialists_root = root / "specialists"
+    specialists_root.mkdir(parents=True, exist_ok=True)
+    summary: dict[str, Any] = {}
+    for island in sorted(allowed):
+        options = grouped.get(island) or []
+        if not options:
+            existing = _load_json(specialists_root / island / "summary.json") if (
+                specialists_root / island / "summary.json"
+            ).is_file() else None
+            if isinstance(existing, dict):
+                summary[island] = existing
+            continue
+
+        options.sort(
+            key=lambda pair: (
+                0 if bool(pair[1].get("all_seed_eligible")) else 1,
+                -float(pair[1].get("mean_fitness_score", pair[1].get("score", 0.0))),
+                float(pair[1].get("mean_nll_per_byte", float("inf"))),
+                int(pair[1].get("parameters", 1 << 60)),
+            )
+        )
+        checkpoint, row = options[0]
+        candidate_summary = {
+            "island": island,
+            "candidate_id": str(row.get("candidate_id") or ""),
+            "cycle": int(cycle),
+            "stage": int(row.get("stage", 0) or 0),
+            "parameters": int(row.get("parameters", 0) or 0),
+            "score": float(row.get("score", 0.0) or 0.0),
+            "mean_fitness_score": float(
+                row.get("mean_fitness_score", row.get("score", 0.0)) or 0.0
+            ),
+            "mean_nll_per_byte": float(row.get("mean_nll_per_byte", 0.0) or 0.0),
+            "mean_generation_similarity": float(
+                row.get("mean_generation_similarity", 0.0) or 0.0
+            ),
+            "mean_generation_repetition_rate": float(
+                row.get("mean_generation_repetition_rate", 0.0) or 0.0
+            ),
+            "research_only": True,
+            "production_qualified": False,
+            "external_pretrained": False,
+        }
+        destination = specialists_root / island
+        existing_summary = (
+            _load_json(destination / "summary.json")
+            if (destination / "summary.json").is_file()
+            else {}
+        )
+        existing_score = float(
+            existing_summary.get("mean_fitness_score", float("-inf"))
+            if isinstance(existing_summary, dict)
+            else float("-inf")
+        )
+        if candidate_summary["mean_fitness_score"] > existing_score:
+            tmp = specialists_root / f".{island}-next"
+            shutil.rmtree(tmp, ignore_errors=True)
+            shutil.copytree(checkpoint, tmp)
+            _atomic_json(tmp / "summary.json", candidate_summary)
+            backup = specialists_root / f".{island}-old"
+            shutil.rmtree(backup, ignore_errors=True)
+            if destination.exists():
+                destination.replace(backup)
+            tmp.replace(destination)
+            shutil.rmtree(backup, ignore_errors=True)
+            summary[island] = candidate_summary
+        elif isinstance(existing_summary, dict):
+            summary[island] = existing_summary
+    return {
+        "mode": "system_sparse_experts",
+        "max_active_experts": 1,
+        "specialists": summary,
+        "research_only": True,
+    }
+
+
 def select_survivors(
     result_paths: Iterable[str | Path],
     output_path: str | Path,
@@ -1587,6 +1690,11 @@ def finalize_swarm(
         for path, row in scanned
         if row.get("all_seed_eligible")
     ]
+    specialist_state = _persist_specialist_checkpoints(
+        root,
+        scanned,
+        cycle=int(plan["cycle"]),
+    )
 
     # Persist the best Stage-3 research checkpoint independently from the
     # production champion. This is explicitly research-only: the Android lab
@@ -1863,7 +1971,10 @@ def finalize_swarm(
             "domain_weights": plan.get("domain_weights") or {},
             "active_learning": plan.get("active_learning") or {},
         },
-        "sparse_experts": plan.get("sparse_experts") or {},
+        "sparse_experts": {
+            **dict(plan.get("sparse_experts") or {}),
+            **dict(specialist_state or {}),
+        },
         "self_play": plan.get("self_play") or {},
         "compression": plan.get("compression") or {},
         "rotating_canary": {
