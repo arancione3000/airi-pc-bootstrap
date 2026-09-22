@@ -1244,6 +1244,7 @@ def _load_live_lineage_source(
     if not (
         role.startswith("phase5_language_bootstrap")
         or role == "active_airi_lineage"
+        or role == "research_champion"
         or role == "production_champion"
     ):
         raise ValueError(f"unsupported live-lineage checkpoint role: {role}")
