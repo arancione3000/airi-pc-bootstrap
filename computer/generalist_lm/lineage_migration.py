@@ -247,6 +247,293 @@ def refresh_live_lineage_manifest(
     return payload
 
 
+
+def adopt_verified_descendant(
+    state_dir: str | Path,
+    *,
+    candidate_checkpoint: str | Path,
+    candidate_genome: dict[str, Any] | GeneralistGenome,
+    cycle: int,
+    candidate_id: str,
+    research_kind: str | None = None,
+    expected_parent_model_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Adopt a verified trained descendant into the one live AIRI lineage.
+
+    Unlike architecture-only migration, this path keeps the candidate's newly
+    trained weights. It is allowed only when the candidate proves it descended
+    from the exact live checkpoint that still exists at adoption time. That
+    parent-hash lock prevents an independently trained or stale model from
+    replacing AIRI while preserving cumulative token/step counters.
+    """
+    root = Path(state_dir).expanduser().resolve()
+    source = active_lineage_snapshot(root)
+    source_runtime: GeneralistRuntime = source["runtime"]
+    source_genome: GeneralistGenome = source["genome"]
+    source_checkpoint = Path(source["checkpoint"])
+    source_model_sha = _sha256_file(source_checkpoint / "model.pt")
+
+    candidate_path = Path(candidate_checkpoint).expanduser().resolve()
+    target_genome = (
+        candidate_genome
+        if isinstance(candidate_genome, GeneralistGenome)
+        else GeneralistGenome(**dict(candidate_genome)).validate()
+    )
+    candidate_runtime = GeneralistRuntime.from_checkpoint(
+        candidate_path,
+        device="cpu",
+    )
+    if not _config_matches(target_genome, candidate_runtime):
+        raise RuntimeError("descendant checkpoint does not match candidate genome")
+
+    metadata = _read_json(candidate_path / "metadata.json", {})
+    metadata = metadata if isinstance(metadata, dict) else {}
+    declared_parent = str(
+        metadata.get("lineage_parent_model_sha256")
+        or metadata.get("parent_model_sha256")
+        or ""
+    )
+    required_parent = str(expected_parent_model_sha256 or declared_parent or "")
+    parent_lock_ok = bool(required_parent and required_parent == source_model_sha)
+    if declared_parent and declared_parent != source_model_sha:
+        parent_lock_ok = False
+
+    source_eval = evaluate_lineage_runtime(source_runtime, cycle=cycle)
+    candidate_eval = evaluate_lineage_runtime(candidate_runtime, cycle=cycle)
+    retention_ok, retention_reason = _research_eligible(
+        source_eval,
+        candidate_eval,
+        minimum_loss_gain=0.0,
+        max_domain_regression=0.05,
+    )
+    source_language = evaluate_phase5_language(source_runtime)
+    candidate_language = evaluate_phase5_language(candidate_runtime)
+    degeneration_ok, degeneration_reason = degeneration_gate(
+        source_language,
+        candidate_language,
+        max_repetition_regression=0.04,
+        max_entropy_collapse_fraction=0.70,
+    )
+    accepted = bool(parent_lock_ok and retention_ok and degeneration_ok)
+
+    lineage_state_path = root / "lineage.json"
+    previous_lineage = _read_json(lineage_state_path, {})
+    previous_lineage = (
+        previous_lineage if isinstance(previous_lineage, dict) else {}
+    )
+    lineage_id = str(
+        previous_lineage.get("lineage_id")
+        or (source.get("progress") or {}).get("lineage_id")
+        or f"airi-{source_model_sha[:16]}"
+    )
+    target_architecture = ArchitectureSpec.from_genome(
+        target_genome,
+        target_vocab_size=candidate_runtime.tokenizer.vocab_size,
+    )
+    report: dict[str, Any] = {
+        "schema": LINEAGE_SCHEMA,
+        "version": LINEAGE_VERSION,
+        "mode": "verified_trained_descendant",
+        "accepted": accepted,
+        "lineage_id": lineage_id,
+        "cycle": int(cycle),
+        "candidate_id": str(candidate_id),
+        "research_kind": research_kind,
+        "source_checkpoint": str(source["checkpoint_rel"]),
+        "source_model_sha256": source_model_sha,
+        "declared_parent_model_sha256": declared_parent or None,
+        "required_parent_model_sha256": required_parent or None,
+        "parent_lock_passed": bool(parent_lock_ok),
+        "tokens_processed_before": int(source.get("tokens_processed", 0) or 0),
+        "target_tokens": int(source.get("target_tokens", 0) or 0),
+        "source_parameters": int(source["parameters"]),
+        "target_parameters": int(parameter_count(candidate_runtime.model)),
+        "source_genome": source_genome.to_dict(),
+        "target_genome": target_genome.to_dict(),
+        "target_architecture": architecture_manifest(target_architecture),
+        "retention_gate_passed": bool(retention_ok),
+        "retention_gate_reason": retention_reason,
+        "degeneration_gate_passed": bool(degeneration_ok),
+        "degeneration_gate_reason": degeneration_reason,
+        "source_validation": source_eval,
+        "candidate_validation": candidate_eval,
+        "source_language": source_language,
+        "candidate_language": candidate_language,
+        "candidate_weights_preserved": True,
+        "research_checkpoint_becomes_independent_model": False,
+        "rollback_available": False,
+    }
+
+    evidence_root = root / "lineage-research"
+    evidence_root.mkdir(parents=True, exist_ok=True)
+    if not accepted:
+        _atomic_json(evidence_root / "last-adoption.json", report)
+        return report
+
+    lineage_genome = _lineage_genome(
+        source_genome,
+        target_genome,
+        cycle,
+        target_vocab_size=candidate_runtime.tokenizer.vocab_size,
+    )
+    lineage_architecture = ArchitectureSpec.from_genome(
+        lineage_genome,
+        target_vocab_size=candidate_runtime.tokenizer.vocab_size,
+    )
+
+    staging = root / ".lineage-descendant-next"
+    shutil.rmtree(staging, ignore_errors=True)
+    candidate_runtime.save_checkpoint(
+        staging,
+        metadata={
+            "role": "active_airi_lineage",
+            "lineage_id": lineage_id,
+            "lineage_version": LINEAGE_VERSION,
+            "parent_model_sha256": source_model_sha,
+            "descendant_candidate_id": str(candidate_id),
+            "descendant_research_kind": research_kind,
+            "tokens_processed_inherited": int(
+                source.get("tokens_processed", 0) or 0
+            ),
+            "external_pretrained": False,
+            "research_checkpoint_becomes_independent_model": False,
+        },
+    )
+    adopted_model_sha = _sha256_file(staging / "model.pt")
+
+    rollback_root = root / "lineage-rollback"
+    shutil.rmtree(rollback_root, ignore_errors=True)
+    rollback_root.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source_checkpoint, rollback_root / "checkpoint")
+    for extra in (
+        root / "bootstrap-data" / "progress.json",
+        root / "status.json",
+        root / "lineage.json",
+    ):
+        if extra.is_file():
+            shutil.copy2(extra, rollback_root / extra.name)
+    report["rollback_available"] = True
+    report["rollback_checkpoint"] = "lineage-rollback/checkpoint"
+
+    if bool(source["bootstrap_active"]):
+        active_path = source_checkpoint
+        old_path = root / ".lineage-descendant-previous"
+        shutil.rmtree(old_path, ignore_errors=True)
+        try:
+            active_path.rename(old_path)
+            staging.rename(active_path)
+        except Exception:
+            if active_path.exists():
+                shutil.rmtree(active_path, ignore_errors=True)
+            if old_path.exists():
+                old_path.rename(active_path)
+            raise
+        shutil.rmtree(old_path, ignore_errors=True)
+
+        progress_path = root / "bootstrap-data" / "progress.json"
+        progress = _read_json(progress_path, {})
+        inherited_tokens = int(progress.get("tokens_processed", 0) or 0)
+        inherited_steps = int(progress.get("steps", 0) or 0)
+        progress["lineage_id"] = lineage_id
+        progress["capacity_genome"] = lineage_genome.to_dict()
+        history = list(progress.get("lineage_descendant_adoptions") or [])
+        history.append({
+            "cycle": int(cycle),
+            "candidate_id": str(candidate_id),
+            "research_kind": research_kind,
+            "source_model_sha256": source_model_sha,
+            "adopted_model_sha256": adopted_model_sha,
+            "tokens_processed": inherited_tokens,
+            "steps": inherited_steps,
+        })
+        progress["lineage_descendant_adoptions"] = history[-64:]
+        progress["tokens_processed"] = inherited_tokens
+        progress["steps"] = inherited_steps
+        progress["optimizer_reset_after_lineage_adoption"] = True
+        _atomic_json(progress_path, progress)
+        (root / "bootstrap-data" / "optimizer.pt").unlink(missing_ok=True)
+        shutil.rmtree(root / "bootstrap-data" / "best", ignore_errors=True)
+        shutil.rmtree(root / "bootstrap-data" / "pre-sft", ignore_errors=True)
+        shutil.rmtree(
+            root / "bootstrap-data" / "pre-anticollapse",
+            ignore_errors=True,
+        )
+        active_rel = "bootstrap-data/candidate"
+    else:
+        shutil.rmtree(staging, ignore_errors=True)
+        _save_champion(
+            root,
+            lineage_genome,
+            candidate_runtime,
+            candidate_eval,
+        )
+        active_rel = "champion"
+
+    migrations = list(previous_lineage.get("migrations") or [])
+    migrations.append({
+        "type": "trained_descendant_adoption",
+        "cycle": int(cycle),
+        "candidate_id": str(candidate_id),
+        "research_kind": research_kind,
+        "source_model_sha256": source_model_sha,
+        "adopted_model_sha256": adopted_model_sha,
+        "tokens_processed": int(source.get("tokens_processed", 0) or 0),
+    })
+    lineage_payload = {
+        "schema": LINEAGE_SCHEMA,
+        "version": LINEAGE_VERSION,
+        "lineage_id": lineage_id,
+        "single_active_model": True,
+        "active_checkpoint": active_rel,
+        "active_model_sha256": adopted_model_sha,
+        "active_genome": lineage_genome.to_dict(),
+        "active_architecture": architecture_manifest(lineage_architecture),
+        "tokens_processed": int(source.get("tokens_processed", 0) or 0),
+        "target_tokens": int(source.get("target_tokens", 0) or 0),
+        "parameters": int(parameter_count(candidate_runtime.model)),
+        "tokenizer_version": str(candidate_runtime.tokenizer.version),
+        "tokenizer_vocab_size": int(candidate_runtime.tokenizer.vocab_size),
+        "bootstrap_active": bool(source["bootstrap_active"]),
+        "rollback_snapshots_are_not_competing_models": True,
+        "research_challengers_are_temporary": True,
+        "migrations": migrations[-64:],
+        "updated_at": time.time(),
+    }
+    _atomic_json(lineage_state_path, lineage_payload)
+
+    status = _read_json(root / "status.json", {})
+    status = dict(status) if isinstance(status, dict) else {}
+    status["lineage"] = lineage_payload
+    status["lineage_adoption"] = {
+        "accepted": True,
+        "candidate_id": str(candidate_id),
+        "research_kind": research_kind,
+        "source_model_sha256": source_model_sha,
+        "adopted_model_sha256": adopted_model_sha,
+        "tokens_preserved": int(source.get("tokens_processed", 0) or 0),
+    }
+    _atomic_json(root / "status.json", status)
+
+    report.update({
+        "accepted": True,
+        "active_checkpoint": active_rel,
+        "adopted_model_sha256": adopted_model_sha,
+        "lineage_genome": lineage_genome.to_dict(),
+        "tokens_processed_after": int(source.get("tokens_processed", 0) or 0),
+        "token_progress_preserved": True,
+    })
+    _atomic_json(evidence_root / "last-adoption.json", report)
+    with (evidence_root / "adoptions.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(report, ensure_ascii=False, sort_keys=True) + "\n"
+        )
+
+    # Any laboratory model weights are no longer needed after the verdict.
+    shutil.rmtree(root / "latest-research", ignore_errors=True)
+    shutil.rmtree(root / "specialists", ignore_errors=True)
+    return report
+
+
 def migrate_live_lineage(
     state_dir: str | Path,
     *,
