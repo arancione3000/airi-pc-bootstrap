@@ -151,7 +151,7 @@ def adaptive_architecture_parameter_cap(
     return min(int(absolute_cap), max(requested, live_parameters, headroom))
 
 
-def _evaluation(runtime: GeneralistRuntime, *, cycle: int) -> dict[str, Any]:
+def evaluate_lineage_runtime(runtime: GeneralistRuntime, *, cycle: int) -> dict[str, Any]:
     report = _grouped_validation(
         runtime.model,
         runtime.tokenizer,
@@ -254,8 +254,8 @@ def migrate_live_lineage(
         device="cpu",
     )
 
-    source_eval = _evaluation(source_runtime, cycle=cycle)
-    migrated_eval = _evaluation(migrated, cycle=cycle)
+    source_eval = evaluate_lineage_runtime(source_runtime, cycle=cycle)
+    migrated_eval = evaluate_lineage_runtime(migrated, cycle=cycle)
     retention_ok, retention_reason = _research_eligible(
         source_eval,
         migrated_eval,
