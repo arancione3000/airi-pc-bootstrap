@@ -74,4 +74,22 @@ class SyncStateTest {
             )
         )
     }
+
+
+    @Test
+    fun pinnedMobileRevisionDoesNotNeedFallback() {
+        var fallbackCalls = 0
+        val resolved = resolveDownloadRevision("abc123") {
+            fallbackCalls += 1
+            "fallback"
+        }
+        assertEquals("abc123", resolved)
+        assertEquals(0, fallbackCalls)
+    }
+
+    @Test
+    fun missingMobileRevisionIsRecoveredFromBranchResolver() {
+        val resolved = resolveDownloadRevision("") { "fresh-branch-sha" }
+        assertEquals("fresh-branch-sha", resolved)
+    }
 }
