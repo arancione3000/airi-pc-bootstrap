@@ -794,12 +794,26 @@ def run_segment(
     })
     progress["schema"] = 1
     progress["version"] = PHASE5_BOOTSTRAP_VERSION
+    rebase_to_champion = False
     if str(progress.get("base_champion_model_sha256")) != base_model_sha:
-        # A completed previous rung may have promoted the candidate to champion.
-        # Otherwise fail closed rather than training on a stale base.
-        if int(progress.get("tokens_processed", 0) or 0) < int(progress.get("target_tokens", 0) or 0):
+        # A completed previous rung may have gone through the converged swarm
+        # and promoted a jointly-trained descendant. Resume the next language
+        # rung from that stronger champion, never from stale pre-fusion weights.
+        # A mid-rung champion change still fails closed.
+        previous_target = int(progress.get("target_tokens", 0) or 0)
+        previous_processed = int(progress.get("tokens_processed", 0) or 0)
+        previous_sft = {
+            int(value)
+            for value in (progress.get("sft_completed_rungs") or [])
+            if isinstance(value, (int, float))
+        }
+        if (
+            previous_processed < previous_target
+            or previous_target not in previous_sft
+        ):
             raise RuntimeError("champion changed during an incomplete Phase 5 bootstrap")
         progress["base_champion_model_sha256"] = base_model_sha
+        rebase_to_champion = True
 
     progress["target_tokens"] = max(int(progress.get("target_tokens", 0) or 0), int(target_tokens))
     target_tokens = int(progress["target_tokens"])
@@ -810,11 +824,24 @@ def run_segment(
 
     candidate_genome = champion_genome
     capacity_genome_raw = progress.get("capacity_genome")
-    if isinstance(capacity_genome_raw, dict):
+    if not rebase_to_champion and isinstance(capacity_genome_raw, dict):
         try:
             candidate_genome = GeneralistGenome(**capacity_genome_raw).validate()
         except Exception:
             candidate_genome = champion_genome
+
+    if rebase_to_champion:
+        shutil.rmtree(candidate_dir, ignore_errors=True)
+        optimizer_path.unlink(missing_ok=True)
+        shutil.rmtree(bootstrap_root / "best", ignore_errors=True)
+        shutil.rmtree(bootstrap_root / "pre-sft", ignore_errors=True)
+        shutil.rmtree(bootstrap_root / "pre-anticollapse", ignore_errors=True)
+        progress["capacity_genome"] = champion_genome.to_dict()
+        progress["capacity_rebased_from_champion"] = {
+            "model_sha256": base_model_sha,
+            "parameters": int(parameter_count(champion_runtime.model)),
+            "training_target_tokens": int(target_tokens),
+        }
 
     if candidate_dir.is_dir():
         runtime = GeneralistRuntime.from_checkpoint(candidate_dir, device="cpu")
@@ -831,12 +858,13 @@ def run_segment(
                 "role": "phase5_language_bootstrap_candidate",
                 "production_qualified": False,
                 "base_champion_model_sha256": base_model_sha,
+                "rebased_from_converged_champion": bool(rebase_to_champion),
             },
         )
 
     desired_capacity = _bootstrap_capacity_target(target_tokens)
-    applied_capacity = int(progress.get("capacity_target_parameters", 0) or 0)
-    if desired_capacity is not None and applied_capacity < int(desired_capacity):
+    current_capacity = int(parameter_count(runtime.model))
+    if desired_capacity is not None and current_capacity < int(desired_capacity):
         candidate_genome, runtime, growth = _grow_bootstrap_runtime(
             candidate_genome,
             runtime,
