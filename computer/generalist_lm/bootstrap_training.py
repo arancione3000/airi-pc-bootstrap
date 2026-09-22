@@ -327,7 +327,10 @@ def _phase5_training_acceleration(
             "compile": False,
             "reason": "disabled by AIRI_PHASE5_DISABLE_CPU_ACCEL",
         }
-    enabled = str(device) == "cpu" and int(parameters) >= 3_000_000
+    enabled = (
+        str(device) == "cpu"
+        and 6_500_000 <= int(parameters) <= 8_000_000
+    )
     return {
         "enabled": bool(enabled),
         "precision": "bf16" if enabled else "fp32",
@@ -336,7 +339,7 @@ def _phase5_training_acceleration(
         "reason": (
             "benchmark-proven 7M CPU fast path"
             if enabled
-            else "conservative small-model/eager path"
+            else "conservative unbenchmarked-size/eager path"
         ),
         "benchmark": (
             {
