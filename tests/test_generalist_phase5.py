@@ -34,6 +34,7 @@ from generalist_lm.bootstrap_training import (
     _grow_bootstrap_runtime,
     _dead_capacity_revival_due,
     _dead_capacity_source_ff_width,
+    _revive_dead_ffn_model_capacity,
     _historical_language_recovery_due,
     _historical_language_source_genome,
     _language_rehabilitation_attempts,
@@ -694,6 +695,66 @@ def test_dead_capacity_revival_precedes_historical_replacement():
         "historical_language_recovery": {"completed": True},
     }
     assert _historical_language_recovery_due(completed) is False
+
+
+def test_dead_capacity_revival_preserves_logits_and_enables_new_gradients():
+    torch = pytest.importorskip("torch")
+    source_ff = 64
+    target_ff = 96
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=2,
+        d_ff=target_ff,
+        dropout=0.0,
+        tokenizer_version="byte-v1",
+        ff_variant="swiglu",
+    ).validate()
+    runtime = GeneralistRuntime(
+        CausalTransformerLM(cfg),
+        cfg,
+        tokenizer=ByteTokenizer(),
+        device="cpu",
+    )
+
+    # Reproduce the legacy 7M->50M transfer bug: both sides of the newly added
+    # SwiGLU branch were zero, so it was function preserving but gradient dead.
+    with torch.no_grad():
+        for block in runtime.model.blocks:
+            block.ff.up.weight[source_ff:target_ff].zero_()
+            block.ff.up.weight[target_ff + source_ff : 2 * target_ff].zero_()
+            block.ff.down.weight[:, source_ff:target_ff].zero_()
+
+    ids = torch.tensor([[1, 40, 41, 42, 43, 44, 45, 46]], dtype=torch.long)
+    runtime.model.eval()
+    with torch.no_grad():
+        before = runtime.model(ids)["logits"].clone()
+
+    report = _revive_dead_ffn_model_capacity(
+        runtime,
+        source_d_ff=source_ff,
+        seed=123,
+    )
+
+    runtime.model.eval()
+    with torch.no_grad():
+        after = runtime.model(ids)["logits"]
+    assert torch.equal(before, after)
+    assert report["max_logit_delta"] == 0.0
+    assert report["new_down_gradient_sum"] > 0.0
+
+    for block in runtime.model.blocks:
+        assert torch.count_nonzero(
+            block.ff.up.weight[source_ff:target_ff]
+        ).item() > 0
+        assert torch.count_nonzero(
+            block.ff.up.weight[target_ff + source_ff : 2 * target_ff]
+        ).item() > 0
+        assert torch.count_nonzero(
+            block.ff.down.weight[:, source_ff:target_ff]
+        ).item() == 0
 
 
 def test_dead_capacity_source_width_resolves_pre_50m_ffn():
