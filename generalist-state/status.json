@@ -5,7 +5,7 @@
         "coding": 2.4716981132075473,
         "data": 4.0,
         "language": 2.666666666666667,
-        "reasoning": 3.5949089854205836,
+        "reasoning": 3.5949084661749633,
         "structured": 3.0,
         "tools": 4.0
       },
@@ -17,7 +17,7 @@
       "coding": 2.4716981132075473,
       "data": 4.0,
       "language": 2.666666666666667,
-      "reasoning": 3.5949089854205836,
+      "reasoning": 3.5949084661749633,
       "structured": 3.0,
       "tools": 4.0
     }
@@ -203,9 +203,324 @@
   },
   "architecture_migration": null,
   "automatic_data_growth": {
+    "added_bytes": 0,
+    "added_files": 0,
+    "approved_dir": "/tmp/airi-generalist-state/autodata/approved",
+    "desired_domains": [
+      "reasoning",
+      "data",
+      "general",
+      "code"
+    ],
+    "domain_bytes": {
+      "code": 9817082,
+      "data": 15232441,
+      "general": 4990341,
+      "reasoning": 56579
+    },
+    "domain_files": {
+      "code": 804,
+      "data": 322,
+      "general": 448,
+      "reasoning": 20
+    },
+    "external_pretrained": false,
+    "manifest": "/tmp/airi-generalist-state/autodata/manifest.json",
     "ok": true,
-    "reason": "automatic data growth disabled",
-    "skipped": true
+    "queries": [
+      "reasoning dataset license:mit",
+      "mathematics proofs license:mit",
+      "csv dataset license:mit",
+      "json dataset license:mit",
+      "text corpus license:mit",
+      "educational corpus license:apache-2.0",
+      "algorithms license:mit",
+      "dataset license:cc0-1.0"
+    ],
+    "rejected": [
+      {
+        "path": "modeling/evaluate_gpt3.py",
+        "reason": "secret_like_content",
+        "repo": "hendrycks/math"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "xid32/SoundMind"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "OpenBioLink/ThoughtSource"
+      },
+      {
+        "path": "models/Gemini.py",
+        "reason": "secret_like_content",
+        "repo": "mathllm/MATH-V"
+      },
+      {
+        "path": "models/GPT4V.py",
+        "reason": "secret_like_content",
+        "repo": "mathllm/MATH-V"
+      },
+      {
+        "path": "models/GPT4.py",
+        "reason": "secret_like_content",
+        "repo": "mathllm/MATH-V"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "Paper-Proof/paperproof"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "lotchuazzz-crypto/papergraph-mcp"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "Intrafere/MOTO-Autonomous-ASI"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "turnstilelabs/adjoint"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "adaltas/node-csv"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "shencangsheng/easydb_app"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "SEC-API-io/sec-api-python"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "openbrewerydb/openbrewerydb"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "TheAlgorithms/Python"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "trekhleb/javascript-algorithms"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "yangshun/tech-interview-handbook"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "TheAlgorithms/Java"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "kdn251/interviews"
+      },
+      {
+        "path": "CODE_OF_CONDUCT.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "algorithm-visualizer/algorithm-visualizer"
+      },
+      {
+        "path": "README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "algorithm-visualizer/algorithm-visualizer"
+      },
+      {
+        "path": "CONTRIBUTING.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "algorithm-visualizer/algorithm-visualizer"
+      },
+      {
+        "path": "src/files/scratch-paper/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "algorithm-visualizer/algorithm-visualizer"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "halfrost/LeetCode-Go"
+      },
+      {
+        "reason": "persistent_repo_cap",
+        "repo": "eriklindernoren/ML-From-Scratch"
+      },
+      {
+        "path": "README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "bytewax/awesome-public-real-time-datasets"
+      },
+      {
+        "path": "CODE_OF_CONDUCT.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "bytewax/awesome-public-real-time-datasets"
+      },
+      {
+        "path": "contributing.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "bytewax/awesome-public-real-time-datasets"
+      },
+      {
+        "path": "README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "MobilityData/awesome-transit"
+      },
+      {
+        "path": "README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "zwang4/awesome-machine-learning-in-compilers"
+      },
+      {
+        "path": "lidar.csv",
+        "reason": "encoding_damage",
+        "repo": "szenergy/awesome-lidar"
+      },
+      {
+        "path": "README.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "szenergy/awesome-lidar"
+      },
+      {
+        "path": "contributing.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "szenergy/awesome-lidar"
+      },
+      {
+        "path": "assets/architectures/CREDITS.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "gokayfem/awesome-vlm-architectures"
+      },
+      {
+        "path": "README.rst",
+        "reason": "quality_v4:url_spam",
+        "repo": "shaypal5/awesome-twitter-data"
+      },
+      {
+        "path": ".lychee.toml",
+        "reason": "quality_v4:url_spam",
+        "repo": "shaypal5/awesome-twitter-data"
+      },
+      {
+        "path": "README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "allisonhorst/palmerpenguins"
+      },
+      {
+        "path": "LICENSE.md",
+        "reason": "near_duplicate",
+        "repo": "allisonhorst/palmerpenguins"
+      },
+      {
+        "path": "_pkgdown.yml",
+        "reason": "quality_v4:url_spam",
+        "repo": "allisonhorst/palmerpenguins"
+      },
+      {
+        "path": "docs/index.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/README.full.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/README.ja.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "README.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/README.en.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/README.zh-hant.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/README.zh-hans.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/huggingface.ja.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/huggingface.en.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/huggingface.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/huggingface.zh-hant.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/huggingface.zh-hans.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/multilingual.ja.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/multilingual.en.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/multilingual.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/multilingual.zh-hant.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "docs/multilingual.zh-hans.md",
+        "reason": "quality_v4:lexical_repetition,url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "plugins/awesome-japanese-nlp-resources/skills/discover/SKILL.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "plugins/awesome-japanese-nlp-resources/README.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      },
+      {
+        "path": "contributing.md",
+        "reason": "quality_v4:url_spam",
+        "repo": "taishi-i/awesome-japanese-nlp-resources"
+      }
+    ],
+    "repositories_used": 0,
+    "total_bytes": 30096443,
+    "total_files": 1594,
+    "version": "generalist-data-growth-v4"
   },
   "champion": {
     "attention_type": "mha",
@@ -239,16 +554,16 @@
     "tool_protocol": "tool-json-v1"
   },
   "champion_report": {
-    "bits_per_byte": 3.5308591285186504,
+    "bits_per_byte": 3.530859340699656,
     "canary": {
-      "bits_per_byte": 3.008223603516873,
+      "bits_per_byte": 3.054238895306178,
       "domain_bits_per_byte": {
-        "coding": 3.8241712777107577,
-        "data": 5.0242328278661486,
-        "language": 6.165654531314793,
-        "reasoning": 5.2869591204930835,
-        "structured": 4.018572171768515,
-        "tools": 1.576226957222871
+        "coding": 3.866014766029006,
+        "data": 4.70732796435789,
+        "language": 6.27876298044528,
+        "reasoning": 5.79987357429253,
+        "structured": 4.088941969056749,
+        "tools": 1.615685161874041
       },
       "domain_generation_accuracy": {
         "coding": 0.0,
@@ -259,40 +574,40 @@
         "tools": 0.0
       },
       "domain_generation_similarity": {
-        "coding": 0.17721518987341772,
-        "data": 0.2857142857142857,
+        "coding": 0.3188405797101449,
+        "data": 0.0,
         "language": 0.16666666666666666,
-        "reasoning": 0.15384615384615385,
+        "reasoning": 0.0,
         "structured": 0.05263157894736842,
-        "tools": 0.29931972789115646
+        "tools": 0.35374149659863946
       },
       "domain_loss": {
-        "coding": 3.926983020923756,
-        "data": 2.9850281306675504,
-        "language": 3.8851873224431817,
-        "reasoning": 3.0538673400878906,
-        "structured": 3.1197174072265623,
-        "tools": 1.4507727701155866
+        "coding": 4.0195758526141825,
+        "data": 2.7967466626848494,
+        "language": 3.956460779363459,
+        "reasoning": 3.3501383463541665,
+        "structured": 3.174347229003906,
+        "tools": 1.4870904390929176
       },
       "domain_nll_per_byte": {
-        "coding": 2.6507135391235352,
-        "data": 3.482532819112142,
-        "language": 4.2737060546875,
-        "reasoning": 3.6646408081054687,
-        "structured": 2.785461970738002,
-        "tools": 1.0925572713216145
+        "coding": 2.679717235076122,
+        "data": 3.2628711064656577,
+        "language": 4.3521068572998045,
+        "reasoning": 4.020166015625,
+        "structured": 2.8342385973249162,
+        "tools": 1.1199076146255305
       },
       "domain_token_accuracy": {
-        "coding": 0.14814814814814814,
+        "coding": 0.15384615384615385,
         "data": 0.14285714285714285,
         "language": 0.09090909090909091,
-        "reasoning": 0.16666666666666666,
+        "reasoning": 0.0,
         "structured": 0.28,
-        "tools": 0.7049180327868853
+        "tools": 0.7213114754098361
       },
       "finite": true,
       "generated_solved_items": [],
-      "generation_dominant_token_fraction": 0.3805309734513274,
+      "generation_dominant_token_fraction": 0.4036697247706422,
       "generation_exact_accuracy": 0.0,
       "generation_longest_repeated_token_run": 22,
       "generation_nonempty_rate": 1.0,
@@ -300,71 +615,71 @@
       "generation_probe": [
         {
           "domain": "coding",
-          "item": "coding:20c2f9b267ba4f2b",
+          "item": "coding:f2763f08f927eb47",
           "ok": false,
-          "output": "de_ccccalall_ccall_calalalallcal_call_c",
-          "similarity": 0.17721518987341772,
-          "target": "def canary_sub_142(x):\n    return x - 13"
+          "output": "defff_ccalal_calue xxxxxxxx):1",
+          "similarity": 0.3188405797101449,
+          "target": "def canary_sub_143(x):\n    return x - 3"
         },
         {
           "domain": "data",
-          "item": "data:e14c40ba4ff270f5",
+          "item": "data:5622775eb04150ad",
           "ok": false,
           "output": "1",
-          "similarity": 0.2857142857142857,
-          "target": "205813"
+          "similarity": 0.0,
+          "target": "206206"
         },
         {
           "domain": "language",
-          "item": "language:0b2bface24d46613",
+          "item": "language:383f1ac62270cd6a",
           "ok": false,
           "output": "11",
           "similarity": 0.16666666666666666,
-          "target": "CANARY0142"
+          "target": "CANARY0143"
         },
         {
           "domain": "reasoning",
-          "item": "reasoning:435f3153e9446a84",
+          "item": "reasoning:e2b23ea472ed4607",
           "ok": false,
           "output": "11111111",
-          "similarity": 0.15384615384615385,
-          "target": "68618"
+          "similarity": 0.0,
+          "target": "68749"
         },
         {
           "domain": "structured",
-          "item": "structured:d53414779cf77173",
+          "item": "structured:1ab2f51deefb13da",
           "ok": false,
           "output": "1111111111",
           "similarity": 0.05263157894736842,
-          "target": "{\"canary\":142,\"value\":68602}"
+          "target": "{\"canary\":143,\"value\":68733}"
         },
         {
           "domain": "tools",
-          "item": "tools:ea24171a2de87448",
+          "item": "tools:097d35b9a26dfe1d",
           "ok": false,
-          "output": "<tool_call>{\":\":{\"\":\"\"\":\":\":\":\":\":{\"\":\":\":\":1111111111111111111111",
-          "similarity": 0.29931972789115646,
-          "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"68602*4\"}}</tool_call>"
+          "output": "<tool_call>{\":{\":\"\":\"\"\":\":\":\":\":\":{\"\":\":\":\":1111111111111111111111",
+          "similarity": 0.35374149659863946,
+          "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"68733*5\"}}</tool_call>"
         }
       ],
-      "generation_repetition_rate": 0.8849557522123894,
-      "generation_similarity": 0.18923226715650818,
-      "generation_unique_token_ratio": 0.11504424778761062,
-      "loss": 2.5874021209939553,
-      "nll_per_byte": 2.0851417092715994,
+      "generation_repetition_rate": 0.8348623853211009,
+      "generation_similarity": 0.14864672032046988,
+      "generation_unique_token_ratio": 0.1651376146788991,
+      "loss": 2.6307298996869255,
+      "nll_per_byte": 2.117037079037999,
       "solved_items": [],
-      "target_token_accuracy": 0.41605839416058393,
-      "target_tokens": 137,
+      "target_token_accuracy": 0.41911764705882354,
+      "target_tokens": 136,
       "tokenizer_version": "bpe-v1",
-      "validation_target_bytes": 170,
-      "validation_target_tokens": 137
+      "validation_target_bytes": 169,
+      "validation_target_tokens": 136
     },
-    "canary_cycle": 142,
+    "canary_cycle": 143,
     "domain_bits_per_byte": {
       "coding": 3.0236824045084525,
-      "data": 4.843641780328073,
+      "data": 4.843642330672556,
       "language": 6.297878918310038,
-      "reasoning": 4.532526304916538,
+      "reasoning": 4.532525911813336,
       "structured": 1.893167898869445,
       "tools": 3.4732224695680523
     },
@@ -386,17 +701,17 @@
     },
     "domain_loss": {
       "coding": 3.304278949359516,
-      "data": 2.238237762451172,
+      "data": 2.2382380167643228,
       "language": 5.431316287018532,
-      "reasoning": 2.314942610891242,
+      "reasoning": 2.3149424101177014,
       "structured": 1.5106064552484557,
       "tools": 3.2142076857546544
     },
     "domain_nll_per_byte": {
       "coding": 2.09585693359375,
-      "data": 3.357356643676758,
+      "data": 3.3573570251464844,
       "language": 4.365357015734521,
-      "reasoning": 3.1417078290666853,
+      "reasoning": 3.141707556588309,
       "structured": 1.3122439914279513,
       "tools": 2.407454362238546
     },
@@ -410,20 +725,20 @@
     },
     "finite": true,
     "fitness": {
-      "canary_penalty": 18.424778761061948,
-      "canary_reward": 2.487017564201254,
+      "canary_penalty": 18.174311926605505,
+      "canary_reward": 2.424862110639678,
       "collapse_penalty": 20.0,
-      "domain_balance_penalty": 3.8359039316949453,
+      "domain_balance_penalty": 3.835903637549614,
       "efficiency_penalty": 0.02167716621942598,
       "generation_reward": 6.6659322868600075,
       "pathological_repetition": true,
-      "quality_reward": 18.854761497239693,
+      "quality_reward": 18.854760692860783,
       "repeated_run_penalty": 8.0,
       "repetition_penalty": 11.395348837209303,
-      "score": -31.22727288968033,
+      "score": -31.038962019019046,
       "teacher_reward": 2.442724458204334,
-      "total_penalty": 61.67770869618562,
-      "total_reward": 30.45043580650529
+      "total_penalty": 61.42724156758385,
+      "total_reward": 30.388279548564803
     },
     "generated_solved_items": [],
     "generation_dominant_token_fraction": 0.23255813953488372,
@@ -484,10 +799,10 @@
     "generation_repetition_rate": 0.813953488372093,
     "generation_similarity": 0.18469332364660263,
     "generation_unique_token_ratio": 0.18604651162790697,
-    "loss": 3.2320544016010344,
-    "nll_per_byte": 2.447405049887048,
+    "loss": 3.232054595825875,
+    "nll_per_byte": 2.4474051969597137,
     "parameters": 115328,
-    "score": -31.22727288968033,
+    "score": -31.038962019019046,
     "solved_items": [],
     "target_token_accuracy": 0.4071207430340557,
     "target_tokens": 1292,
@@ -514,22 +829,22 @@
   },
   "curriculum_memory": {
     "added": 8,
-    "cycle": 142,
+    "cycle": 143,
     "domains": {
-      "coding": 158,
-      "data": 277,
-      "language": 230,
-      "reasoning": 284,
-      "structured": 142,
-      "tools": 144
+      "coding": 159,
+      "data": 279,
+      "language": 231,
+      "reasoning": 286,
+      "structured": 143,
+      "tools": 145
     },
     "extra_rows_considered": 10,
-    "max_rows": 5000,
+    "max_rows": 8000,
     "ok": true,
-    "stored": 1235,
+    "stored": 1243,
     "validation_overlap": []
   },
-  "cycle": 142,
+  "cycle": 143,
   "grounded_pretraining": {
     "adaptive_budget": true,
     "corpus": {
@@ -635,8 +950,12 @@
     "updated_at": 1790116088.4028635,
     "version": "airi-single-lineage-v1"
   },
+  "lineage_adoption": {
+    "accepted": false,
+    "reason": "no externally approved trained descendant"
+  },
   "mathesis": {
-    "curriculum_cursor": 866,
+    "curriculum_cursor": 868,
     "mathesis_generation": 15,
     "ok": true,
     "policy": "persisted MATHESIS metadata is untrusted; current verifier re-proof is required before mathematics may influence generalist curriculum/architecture, and generalist promotion remains independently benchmark-gated",
@@ -732,13 +1051,16 @@
     "weight_inheritance": "layout-aware Net2Grow + identity residual depth expansion"
   },
   "progressive_scaling": {
-    "candidate_count": 0,
-    "candidate_generated": false,
+    "candidate_count": 2,
+    "candidate_generated": true,
     "current_parameters": 7021248,
     "maximum_scale_budget_multiplier": 1.75,
     "minimum_scale_budget_multiplier": 1.25,
-    "strategies": [],
-    "target_parameters": null,
+    "strategies": [
+      "progressive_scale",
+      "progressive_scale_balanced"
+    ],
+    "target_parameters": 12000000,
     "tiers": [
       250000,
       500000,
@@ -763,9 +1085,9 @@
   },
   "promoted": false,
   "promotion_candidate": null,
-  "promotion_reason": "no finalist passed every independent research gate",
+  "promotion_reason": "no externally approved trained descendant",
   "rotating_canary": {
-    "cycle": 142,
+    "cycle": 143,
     "domains": [
       "language",
       "coding",
@@ -830,7 +1152,7 @@
     "specialists": {}
   },
   "trials": [],
-  "updated_at": 1790128395.925081,
+  "updated_at": 1790129014.800881,
   "version": "airi-generalist-free-speed-v5",
   "winner": null
 }
