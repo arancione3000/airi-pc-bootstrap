@@ -27,6 +27,9 @@ internal class GitHubSnapshotClient(
             accept = "*/*",
         )
 
+    fun getBytesFromUrl(url: String): ByteArray =
+        getBytes(url, accept = "*/*")
+
     fun getJson(url: String): JSONObject =
         JSONObject(getBytes(url, accept = "application/vnd.github+json").toString(Charsets.UTF_8))
 
