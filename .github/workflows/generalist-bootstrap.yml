@@ -98,7 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf "${STATE_REPO}" "${CACHE_DIR}"
-          git clone --quiet --branch generalist-state --single-branch \
+          git clone --quiet --depth 1 --branch generalist-state --single-branch \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             "${STATE_REPO}"
           git -C "${STATE_REPO}" config user.name "AIRI Generalist Phase 5"
@@ -195,6 +195,11 @@ jobs:
               git fetch --quiet origin generalist-state
               remote_sha="$(git rev-parse origin/generalist-state)"
               if ! git merge-base --is-ancestor "${remote_sha}" HEAD; then
+                if [[ "$(git rev-parse --is-shallow-repository)" == "true" ]]; then
+                  echo "generalist-state advanced; expanding shallow history only for safe reconciliation."
+                  git fetch --quiet --unshallow origin generalist-state
+                  remote_sha="$(git rev-parse origin/generalist-state)"
+                fi
                 echo "generalist-state advanced during Phase-5 compute; rebasing checkpoint (attempt ${attempt})."
                 if ! GIT_EDITOR=true git rebase origin/generalist-state; then
                   git rebase --abort || true
