@@ -456,6 +456,221 @@ def _grow_bootstrap_runtime(
     }
 
 
+def _historical_language_recovery_due(progress: dict[str, Any]) -> bool:
+    """Escalate from repeated SFT rollback to a known-good checkpoint recovery."""
+    rehabilitation = dict(progress.get("language_rehabilitation") or {})
+    recovery = dict(progress.get("historical_language_recovery") or {})
+    return bool(
+        str(progress.get("lineage_id") or "") == ASSISTED_CAPACITY_LINEAGE_ID
+        and int(rehabilitation.get("consecutive_rejections", 0) or 0) >= 4
+        and not bool(recovery.get("completed"))
+    )
+
+
+def _historical_language_source_genome(
+    progress: dict[str, Any],
+    *,
+    source_parameters: int,
+) -> GeneralistGenome:
+    """Recover the exact genome that produced a historical checkpoint."""
+    matches: list[dict[str, Any]] = []
+    for entry in progress.get("capacity_growth_history") or []:
+        if int(entry.get("parameters", 0) or 0) != int(source_parameters):
+            continue
+        genome = entry.get("genome")
+        if isinstance(genome, dict):
+            matches.append(genome)
+    if not matches:
+        raise RuntimeError(
+            "historical language recovery cannot identify the source genome "
+            f"for {int(source_parameters)} parameters"
+        )
+    return GeneralistGenome(**matches[-1]).validate()
+
+
+def _recover_historical_language_best(
+    root: Path,
+    progress: dict[str, Any],
+    *,
+    source_dir: Path,
+    base_model_sha: str,
+) -> tuple[GeneralistGenome, GeneralistRuntime, dict[str, Any]]:
+    """Rebuild the live large model from a verified healthy historical best.
+
+    Repeated rehabilitation failures mean the active weights are no longer a
+    useful optimization starting point.  This path deliberately rolls effective
+    checkpoint token accounting back to the historical best, then regrows the
+    *same lineage* with an exactly function-preserving, trainable expansion.
+    Historical compute is retained as provenance but is not misreported as
+    effective live-checkpoint training.
+    """
+    import torch
+
+    bootstrap_root = root / "bootstrap-data"
+    candidate_dir = bootstrap_root / "candidate"
+    optimizer_path = bootstrap_root / "optimizer.pt"
+    recovery_report_path = bootstrap_root / "language-recovery.json"
+
+    if not source_dir.is_dir():
+        raise RuntimeError(f"historical recovery source is missing: {source_dir}")
+    source_metadata = _load_json(source_dir / "metadata.json")
+    source_tokens = int(source_metadata.get("tokens_processed", 0) or 0)
+    if source_tokens <= 0:
+        raise RuntimeError("historical recovery source has no token provenance")
+
+    source_runtime = GeneralistRuntime.from_checkpoint(source_dir, device="cpu")
+    source_parameters = int(parameter_count(source_runtime.model))
+    source_genome = _historical_language_source_genome(
+        progress,
+        source_parameters=source_parameters,
+    )
+    expected_source_config = source_genome.model_config(
+        source_runtime.tokenizer.vocab_size
+    ).to_dict()
+    if source_runtime.config.to_dict() != expected_source_config:
+        raise RuntimeError("historical recovery source config does not match its genome")
+
+    source_language = evaluate_phase5_language(source_runtime)
+    if bool(source_language.get("pathological_repetition")):
+        raise RuntimeError("historical recovery source is itself pathologically repetitive")
+    if float(source_language.get("multiword_output_rate", 0.0) or 0.0) < 0.35:
+        raise RuntimeError("historical recovery source lacks usable multi-word language")
+
+    target_parameters = max(
+        int(progress.get("capacity_target_parameters", 0) or 0),
+        ASSISTED_CAPACITY_TARGET_PARAMETERS,
+    )
+    grown_genome, grown, growth = _grow_bootstrap_runtime(
+        source_genome,
+        source_runtime,
+        target_parameters=target_parameters,
+    )
+    if not bool((growth.get("weight_transfer") or {}).get("function_preserving_growth")):
+        raise RuntimeError("historical recovery regrowth is not function preserving")
+
+    # Verify the actual function, not merely the structural compatibility flag.
+    source_language = evaluate_phase5_language(source_runtime)
+    grown_language = evaluate_phase5_language(grown)
+    source_traces = source_language.get("traces") or []
+    grown_traces = grown_language.get("traces") or []
+    if len(source_traces) != len(grown_traces):
+        raise RuntimeError("historical recovery probe count changed after regrowth")
+    for before_trace, after_trace in zip(source_traces, grown_traces):
+        if before_trace.get("generated_token_ids") != after_trace.get("generated_token_ids"):
+            raise RuntimeError("historical recovery changed greedy language outputs")
+    if abs(
+        float(source_language.get("language_nll", float("inf")))
+        - float(grown_language.get("language_nll", float("inf")))
+    ) > 1.0e-5:
+        raise RuntimeError("historical recovery changed protected language NLL")
+    if bool(grown_language.get("pathological_repetition")):
+        raise RuntimeError("historical recovery regrowth reintroduced repetition collapse")
+
+    # A second direct-logit check catches transfer errors outside the protected
+    # generation traces while remaining independent of decoding.
+    probe_ids = torch.tensor(
+        [[1, 40, 41, 42, 43, 44, 45, 46]],
+        dtype=torch.long,
+    )
+    source_runtime.model.eval()
+    grown.model.eval()
+    with torch.no_grad():
+        source_logits = source_runtime.model(probe_ids)["logits"]
+        grown_logits = grown.model(probe_ids)["logits"]
+    max_logit_delta = float((source_logits - grown_logits).abs().max().item())
+    if max_logit_delta > 1.0e-5:
+        raise RuntimeError(
+            f"historical recovery logit mismatch after regrowth: {max_logit_delta}"
+        )
+
+    lineage_before = str(_load_json(root / "lineage.json").get("lineage_id") or "")
+    if lineage_before and lineage_before != ASSISTED_CAPACITY_LINEAGE_ID:
+        raise RuntimeError("historical recovery attempted on an unexpected lineage")
+
+    valid_before = int(progress.get("valid_tokens_processed", 0) or 0)
+    causal_before = int(progress.get("tokens_processed", 0) or 0)
+    shutil.rmtree(candidate_dir, ignore_errors=True)
+    shutil.rmtree(bootstrap_root / "best", ignore_errors=True)
+    shutil.rmtree(bootstrap_root / ".segment-best", ignore_errors=True)
+    _remove_optimizer_checkpoint(optimizer_path)
+    grown.save_checkpoint(
+        candidate_dir,
+        metadata={
+            "role": "phase5_historical_language_recovery_candidate",
+            "production_qualified": False,
+            "base_champion_model_sha256": base_model_sha,
+            "tokens_processed": source_tokens,
+            "valid_tokens_processed": source_tokens,
+            "historical_source_parameters": source_parameters,
+            "historical_source_tokens": source_tokens,
+        },
+    )
+
+    progress["tokens_processed"] = source_tokens
+    progress["valid_tokens_processed"] = source_tokens
+    progress["accepted_rehabilitation_tokens"] = 0
+    progress["best_validation_loss"] = None
+    progress["bad_eval_count"] = 0
+    progress["capacity_target_parameters"] = int(parameter_count(grown.model))
+    progress["capacity_genome"] = grown_genome.to_dict()
+    progress["assisted_capacity_growth_completed"] = True
+    progress["segment_guard_consecutive_rejections"] = 0
+    progress["segment_guard_lr_scale"] = min(
+        float(progress.get("segment_guard_lr_scale", 1.0) or 1.0),
+        1.0 / 64.0,
+    )
+    progress["segment_guard_recovery_hold"] = True
+    progress["language_rehabilitation"] = {
+        "version": PHASE5_LANGUAGE_REHABILITATION_VERSION,
+        "next_stage_index": 0,
+        "completed_cycles": 0,
+        "consecutive_rejections": 0,
+        "last_accepted": False,
+        "last_stage": "historical_best_recovery",
+        "updated_at_unix": int(time.time()),
+    }
+    progress["historical_language_recovery"] = {
+        "completed": True,
+        "version": "phase5-historical-language-recovery-v1",
+        "source_parameters": source_parameters,
+        "source_tokens": source_tokens,
+        "target_parameters": int(parameter_count(grown.model)),
+        "valid_tokens_before_recovery": valid_before,
+        "causal_tokens_before_recovery": causal_before,
+        "discarded_effective_tokens": max(0, valid_before - source_tokens),
+        "function_preserving_growth": True,
+        "max_logit_delta": max_logit_delta,
+        "source_language": source_language,
+        "grown_language": grown_language,
+        "completed_at_unix": int(time.time()),
+    }
+    progress["updated_at_unix"] = int(time.time())
+    _atomic_json(bootstrap_root / "progress.json", progress)
+    _atomic_json(
+        recovery_report_path,
+        {
+            "schema": 1,
+            **progress["historical_language_recovery"],
+            "lineage_id_before": lineage_before,
+        },
+    )
+
+    lineage_manifest = refresh_live_lineage_manifest(
+        root,
+        reason="phase5_historical_language_recovery",
+    )
+    lineage_after = str(lineage_manifest.get("lineage_id") or "")
+    if lineage_before and lineage_after != lineage_before:
+        raise RuntimeError("historical language recovery changed the live lineage id")
+    report = _load_json(recovery_report_path)
+    report["lineage_id_after"] = lineage_after
+    report["lineage_preserved"] = bool(
+        not lineage_before or lineage_after == lineage_before
+    )
+    _atomic_json(recovery_report_path, report)
+    return grown_genome, grown, report
+
+
 def _phase5_memory_safe_batch_plan(
     *,
     parameters: int,
@@ -1877,6 +2092,7 @@ def run_segment(
     batch_size: int = 16,
     base_learning_rate: float = 3e-4,
     eval_every_steps: int = 32,
+    historical_recovery_source: str | Path | None = None,
 ) -> dict[str, Any]:
     import torch
 
@@ -1991,6 +2207,38 @@ def run_segment(
             candidate_genome = GeneralistGenome(**capacity_genome_raw).validate()
         except Exception:
             candidate_genome = champion_genome
+
+    recovery_source = (
+        Path(historical_recovery_source).expanduser().resolve()
+        if historical_recovery_source
+        else None
+    )
+    if _historical_language_recovery_due(progress):
+        if recovery_source is None:
+            raise RuntimeError(
+                "historical language recovery is due but no recovery source was provided"
+            )
+        candidate_genome, runtime, recovery_report = _recover_historical_language_best(
+            root,
+            progress,
+            source_dir=recovery_source,
+            base_model_sha=base_model_sha,
+        )
+        return {
+            "ok": True,
+            "lineage_id": recovery_report.get("lineage_id_after"),
+            "version": PHASE5_BOOTSTRAP_VERSION,
+            "target_tokens": int(target_tokens),
+            "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
+            "valid_tokens_processed": int(progress.get("valid_tokens_processed", 0) or 0),
+            "accepted_rehabilitation_tokens": 0,
+            "segment_tokens_processed": 0,
+            "parameters": int(parameter_count(runtime.model)),
+            "historical_recovery_only": True,
+            "historical_recovery_report": recovery_report,
+            "rung_complete": False,
+            "early_stopped": False,
+        }
 
     if rebase_to_champion:
         shutil.rmtree(candidate_dir, ignore_errors=True)
@@ -3193,6 +3441,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--segment-tokens", type=int, default=250_000)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--historical-recovery-source")
     args = parser.parse_args(argv)
     result = run_segment(
         args.state_dir,
@@ -3202,6 +3451,7 @@ def main(argv: list[str] | None = None) -> int:
         segment_tokens=args.segment_tokens,
         batch_size=args.batch_size,
         base_learning_rate=args.learning_rate,
+        historical_recovery_source=args.historical_recovery_source,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
