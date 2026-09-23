@@ -10,7 +10,7 @@ from .curriculum_memory import CurriculumMemory
 from .evolution import GeneralistGenome
 from .model import parameter_count
 from .qualification import qualification_status
-from .runtime import GeneralistRuntime
+from .runtime import GeneralistRuntime, checkpoint_model_files, checkpoint_model_size
 
 
 def research_health(state_dir: str | Path) -> dict[str, Any]:
@@ -43,16 +43,41 @@ def research_health(state_dir: str | Path) -> dict[str, Any]:
     except Exception as exc:
         check("checkpoint:loadable", False, repr(exc))
 
-    model_path = root / "champion" / "model.pt"
+    checkpoint_root = root / "champion"
     max_persisted_bytes = max(
         65_536,
-        int(os.environ.get("AIRI_GENERALIST_MAX_PERSISTED_CHECKPOINT_BYTES", str(32 * 1024 * 1024))),
+        int(
+            os.environ.get(
+                "AIRI_GENERALIST_MAX_PERSISTED_CHECKPOINT_BYTES",
+                str(512 * 1024 * 1024),
+            )
+        ),
     )
-    model_bytes = model_path.stat().st_size if model_path.exists() else 0
+    try:
+        model_files = checkpoint_model_files(checkpoint_root)
+        model_bytes = checkpoint_model_size(checkpoint_root)
+        largest_model_file = max(path.stat().st_size for path in model_files)
+    except Exception:
+        model_files = []
+        model_bytes = 0
+        largest_model_file = 0
     check(
         "checkpoint:persistence_size",
         bool(model_bytes and model_bytes <= max_persisted_bytes),
-        {"bytes": model_bytes, "max_bytes": max_persisted_bytes},
+        {
+            "bytes": model_bytes,
+            "max_bytes": max_persisted_bytes,
+            "files": len(model_files),
+            "largest_file_bytes": largest_model_file,
+        },
+    )
+    check(
+        "checkpoint:git_file_size",
+        bool(model_files and largest_model_file < 90 * 1024 * 1024),
+        {
+            "largest_file_bytes": largest_model_file,
+            "limit_bytes": 90 * 1024 * 1024,
+        },
     )
 
     if genome is not None and runtime is not None:
