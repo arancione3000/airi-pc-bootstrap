@@ -15,6 +15,7 @@ private const val MOBILE_BRANCH = "generalist-mobile"
 data class BundleFileInfo(
     val sha256: String,
     val bytes: Long,
+    val downloadUrl: String? = null,
 )
 
 data class ModelSlot(
@@ -128,10 +129,13 @@ class BundleRepository(context: Context) {
                     github.resolveBranchSha(MOBILE_BRANCH)
                 }
                 check(downloadRevision.isNotBlank()) { "Revisione mobile mancante" }
-                val bytes = github.getBytesAtRevision(
-                    downloadRevision,
-                    "${slot.path}/$name",
-                )
+                val bytes = info.downloadUrl
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { github.getBytesFromUrl(it) }
+                    ?: github.getBytesAtRevision(
+                        downloadRevision,
+                        "${slot.path}/$name",
+                    )
                 val tmp = File(directory, "$name.tmp")
                 tmp.writeBytes(bytes)
                 check(sha256(tmp) == info.sha256) {
@@ -190,6 +194,8 @@ class BundleRepository(context: Context) {
                 files[fileName] = BundleFileInfo(
                     sha256 = f.getString("sha256"),
                     bytes = f.getLong("bytes"),
+                    downloadUrl = f.optString("download_url")
+                        .takeIf { it.isNotBlank() && it != "null" },
                 )
             }
             slots[name] = ModelSlot(
