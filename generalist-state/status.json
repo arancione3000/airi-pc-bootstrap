@@ -556,14 +556,14 @@
   "champion_report": {
     "bits_per_byte": 3.530859340699656,
     "canary": {
-      "bits_per_byte": 3.038133926984379,
+      "bits_per_byte": 3.128723624804968,
       "domain_bits_per_byte": {
-        "coding": 3.82036778348911,
-        "data": 5.851645488750742,
-        "language": 6.171987345277925,
-        "reasoning": 5.1702442639670645,
-        "structured": 4.047228608985879,
-        "tools": 1.5857647668279353
+        "coding": 3.8607848000751366,
+        "data": 5.633520580592045,
+        "language": 6.197187068799067,
+        "reasoning": 5.591152677483012,
+        "structured": 4.2202604522947516,
+        "tools": 1.6825637028567895
       },
       "domain_generation_accuracy": {
         "coding": 0.0,
@@ -577,25 +577,25 @@
         "coding": 0.3188405797101449,
         "data": 0.0,
         "language": 0.16666666666666666,
-        "reasoning": 0.0,
+        "reasoning": 0.3076923076923077,
         "structured": 0.05263157894736842,
         "tools": 0.29931972789115646
       },
       "domain_loss": {
-        "coding": 3.9721157367412863,
-        "data": 3.4766156332833424,
-        "language": 3.889177842573686,
-        "reasoning": 2.9864501953125,
-        "structured": 3.141964111328125,
-        "tools": 1.4595514516361425
+        "coding": 4.01413814838116,
+        "data": 3.347021920340402,
+        "language": 3.905057040127841,
+        "reasoning": 3.2295764287312827,
+        "structured": 3.2762930297851565,
+        "tools": 1.548646020107582
       },
       "domain_nll_per_byte": {
-        "coding": 2.648077157827524,
-        "data": 4.056051572163899,
-        "language": 4.278095626831055,
-        "reasoning": 3.583740234375,
-        "structured": 2.8053250994001115,
-        "tools": 1.0991683771580825
+        "coding": 2.676092098920773,
+        "data": 3.9048589070638022,
+        "language": 4.295562744140625,
+        "reasoning": 3.875491714477539,
+        "structured": 2.9252616337367465,
+        "tools": 1.1662642867476851
       },
       "domain_token_accuracy": {
         "coding": 0.15384615384615385,
@@ -615,58 +615,58 @@
       "generation_probe": [
         {
           "domain": "coding",
-          "item": "coding:6f1565a1a696a686",
+          "item": "coding:19c4ab8d2f15b0d0",
           "ok": false,
           "output": "defff_ccalal_calue xxxxxxxx):1",
           "similarity": 0.3188405797101449,
-          "target": "def canary_sub_144(x):\n    return x - 4"
+          "target": "def canary_sub_145(x):\n    return x - 5"
         },
         {
           "domain": "data",
-          "item": "data:39be2ef3a5719c0d",
+          "item": "data:447ed2d7d62a5bfb",
           "ok": false,
           "output": "1",
           "similarity": 0.0,
-          "target": "206599"
+          "target": "206992"
         },
         {
           "domain": "language",
-          "item": "language:af0ad5a4289aab60",
+          "item": "language:34710cfbb05614e8",
           "ok": false,
           "output": "11",
           "similarity": 0.16666666666666666,
-          "target": "CANARY0144"
+          "target": "CANARY0145"
         },
         {
           "domain": "reasoning",
-          "item": "reasoning:d67169343338fcf1",
+          "item": "reasoning:f89cb429138f8f21",
           "ok": false,
           "output": "11111111",
-          "similarity": 0.0,
-          "target": "68880"
+          "similarity": 0.3076923076923077,
+          "target": "69011"
         },
         {
           "domain": "structured",
-          "item": "structured:9b874e7aa76c8202",
+          "item": "structured:380b6e3ffaf3c9f1",
           "ok": false,
           "output": "1111111111",
           "similarity": 0.05263157894736842,
-          "target": "{\"canary\":144,\"value\":68864}"
+          "target": "{\"canary\":145,\"value\":68995}"
         },
         {
           "domain": "tools",
-          "item": "tools:6d1df37ed8dbd586",
+          "item": "tools:29948afeb1baaa14",
           "ok": false,
           "output": "<tool_call>{\":\":{\"\":\"\"\":\":\":\":\":\":{\"\":\":\":\":1111111111111111111111",
           "similarity": 0.29931972789115646,
-          "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"68864*6\"}}</tool_call>"
+          "target": "<tool_call>{\"name\":\"calculator\",\"arguments\":{\"expression\":\"68995*2\"}}</tool_call>"
         }
       ],
       "generation_repetition_rate": 0.8348623853211009,
-      "generation_similarity": 0.1395764255358894,
+      "generation_similarity": 0.19085847681794066,
       "generation_unique_token_ratio": 0.1651376146788991,
-      "loss": 2.6168580896714153,
-      "nll_per_byte": 2.1058739656527368,
+      "loss": 2.694886375876034,
+      "nll_per_byte": 2.168665959284856,
       "solved_items": [],
       "target_token_accuracy": 0.41911764705882354,
       "target_tokens": 136,
@@ -674,7 +674,7 @@
       "validation_target_bytes": 169,
       "validation_target_tokens": 136
     },
-    "canary_cycle": 144,
+    "canary_cycle": 145,
     "domain_bits_per_byte": {
       "coding": 3.0236824045084525,
       "data": 4.843642330672556,
@@ -726,7 +726,7 @@
     "finite": true,
     "fitness": {
       "canary_penalty": 18.174311926605505,
-      "canary_reward": 2.3885809315013553,
+      "canary_reward": 2.5937091366295606,
       "collapse_penalty": 20.0,
       "domain_balance_penalty": 3.835903637549614,
       "efficiency_penalty": 0.02167716621942598,
@@ -735,10 +735,10 @@
       "quality_reward": 18.854760692860783,
       "repeated_run_penalty": 8.0,
       "repetition_penalty": 11.395348837209303,
-      "score": -31.07524319815737,
+      "score": -30.870114993029166,
       "teacher_reward": 2.442724458204334,
       "total_penalty": 61.42724156758385,
-      "total_reward": 30.35199836942648
+      "total_reward": 30.557126574554683
     },
     "generated_solved_items": [],
     "generation_dominant_token_fraction": 0.23255813953488372,
@@ -802,7 +802,7 @@
     "loss": 3.232054595825875,
     "nll_per_byte": 2.4474051969597137,
     "parameters": 115328,
-    "score": -31.07524319815737,
+    "score": -30.870114993029166,
     "solved_items": [],
     "target_token_accuracy": 0.4071207430340557,
     "target_tokens": 1292,
@@ -829,22 +829,22 @@
   },
   "curriculum_memory": {
     "added": 8,
-    "cycle": 144,
+    "cycle": 145,
     "domains": {
-      "coding": 160,
-      "data": 281,
-      "language": 232,
-      "reasoning": 288,
-      "structured": 144,
-      "tools": 146
+      "coding": 161,
+      "data": 283,
+      "language": 233,
+      "reasoning": 290,
+      "structured": 145,
+      "tools": 147
     },
     "extra_rows_considered": 10,
     "max_rows": 8000,
     "ok": true,
-    "stored": 1251,
+    "stored": 1259,
     "validation_overlap": []
   },
-  "cycle": 144,
+  "cycle": 145,
   "grounded_pretraining": {
     "adaptive_budget": true,
     "corpus": {
@@ -955,7 +955,7 @@
     "reason": "no externally approved trained descendant"
   },
   "mathesis": {
-    "curriculum_cursor": 870,
+    "curriculum_cursor": 872,
     "mathesis_generation": 15,
     "ok": true,
     "policy": "persisted MATHESIS metadata is untrusted; current verifier re-proof is required before mathematics may influence generalist curriculum/architecture, and generalist promotion remains independently benchmark-gated",
@@ -1087,7 +1087,7 @@
   "promotion_candidate": null,
   "promotion_reason": "no externally approved trained descendant",
   "rotating_canary": {
-    "cycle": 144,
+    "cycle": 145,
     "domains": [
       "language",
       "coding",
@@ -1152,7 +1152,7 @@
     "specialists": {}
   },
   "trials": [],
-  "updated_at": 1790129595.0351872,
+  "updated_at": 1790130147.7663124,
   "version": "airi-generalist-free-speed-v5",
   "winner": null
 }
