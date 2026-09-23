@@ -1208,6 +1208,7 @@ def _rehabilitation_replay_rows(
     *,
     heldout_sft=(),
     max_replay_rows: int = 192,
+    replay_offset: int = 0,
 ) -> tuple[list[SFTExample], dict[str, int]]:
     if stage not in PHASE5_LANGUAGE_REHABILITATION_STAGES:
         raise ValueError(f"unknown language rehabilitation stage: {stage}")
@@ -1222,7 +1223,14 @@ def _rehabilitation_replay_rows(
         heldout_sft=heldout_sft,
     )
     safe_replay = sorted(safe_replay, key=_sft_row_fingerprint)
-    selected_replay = safe_replay[: max(0, int(max_replay_rows))]
+    replay_limit = max(0, int(max_replay_rows))
+    offset = max(0, int(replay_offset))
+    if safe_replay and replay_limit:
+        offset %= len(safe_replay)
+        rotated = safe_replay[offset:] + safe_replay[:offset]
+        selected_replay = rotated[:replay_limit]
+    else:
+        selected_replay = []
     elementary: list[SFTExample] = []
     for it_row, en_row in zip(italian, english):
         elementary.extend((it_row, en_row))
@@ -1236,6 +1244,7 @@ def _rehabilitation_replay_rows(
         "elementary_it_rows": len(italian),
         "elementary_en_rows": len(english),
         "protected_replay_rows": len(selected_replay),
+        "protected_replay_offset": int(offset),
         "protected_rows_filtered": int(filtered + second_filtered),
         "total_rows": len(combined),
     }
@@ -1366,7 +1375,7 @@ def _rehabilitation_replay_limit(stage: str, consecutive_rejections: int) -> int
         "R2_simple_responses": 64,
         "R3_short_dialogue": 96,
     }[stage]
-    multiplier = 1 + min(2, max(0, int(consecutive_rejections)))
+    multiplier = 1 + min(3, max(0, int(consecutive_rejections)))
     return min(192, int(base * multiplier))
 
 
@@ -1401,10 +1410,32 @@ def _language_rehabilitation_attempts(
             "R3_short_dialogue": ((160, 3.75e-6, 0.10, 1.35), (96, 1.875e-6, 0.08, 1.35)),
         }
     elif large:
+        # After two failed 50M rehabilitation attempts, the remaining failure
+        # mode is usually a long greedy repeated-token run rather than basic
+        # language loss.  Break that loop without weakening any held-out gate:
+        # keep LR tiny, increase target-safe unlikelihood, and strongly teach
+        # EOS on the short reviewed responses.  Later rejections become even
+        # gentler in LR while retaining the repetition-breaking objective.
+        extra = min(3, max(0, rejected - 2))
+        lr_scale = 0.5 ** extra
+        anti_scale = 1.0 + 0.20 * extra
+        eos_scale = 1.0 + 0.15 * extra
         plans = {
-            "R1_bilingual_foundations": ((48, 2.5e-6, 0.24, 1.35), (32, 1.25e-6, 0.20, 1.35)),
-            "R2_simple_responses": ((64, 2.5e-6, 0.16, 1.35), (40, 1.25e-6, 0.14, 1.35)),
-            "R3_short_dialogue": ((80, 1.875e-6, 0.12, 1.25), (48, 0.9375e-6, 0.10, 1.25)),
+            "R1_bilingual_foundations": (
+                (96, 2.5e-6 * lr_scale, 0.75 * anti_scale, 4.00 * eos_scale),
+                (64, 1.25e-6 * lr_scale, 1.00 * anti_scale, 5.00 * eos_scale),
+                (48, 0.625e-6 * lr_scale, 1.25 * anti_scale, 6.00 * eos_scale),
+            ),
+            "R2_simple_responses": (
+                (96, 2.5e-6 * lr_scale, 0.40 * anti_scale, 2.50 * eos_scale),
+                (64, 1.25e-6 * lr_scale, 0.55 * anti_scale, 3.00 * eos_scale),
+                (48, 0.625e-6 * lr_scale, 0.70 * anti_scale, 3.50 * eos_scale),
+            ),
+            "R3_short_dialogue": (
+                (112, 1.875e-6 * lr_scale, 0.25 * anti_scale, 2.00 * eos_scale),
+                (72, 0.9375e-6 * lr_scale, 0.35 * anti_scale, 2.50 * eos_scale),
+                (48, 0.46875e-6 * lr_scale, 0.45 * anti_scale, 3.00 * eos_scale),
+            ),
         }
     elif rejected <= 0:
         plans = {
@@ -1419,10 +1450,23 @@ def _language_rehabilitation_attempts(
             "R3_short_dialogue": ((96, 5.0e-6, 0.10, 1.35), (48, 2.5e-6, 0.08, 1.35)),
         }
     else:
+        extra = min(3, max(0, rejected - 2))
+        lr_scale = 0.5 ** extra
+        anti_scale = 1.0 + 0.20 * extra
+        eos_scale = 1.0 + 0.15 * extra
         plans = {
-            "R1_bilingual_foundations": ((32, 3.75e-6, 0.24, 1.35), (16, 1.875e-6, 0.20, 1.35)),
-            "R2_simple_responses": ((40, 3.75e-6, 0.16, 1.35), (20, 1.875e-6, 0.14, 1.35)),
-            "R3_short_dialogue": ((48, 2.5e-6, 0.12, 1.25), (24, 1.25e-6, 0.10, 1.25)),
+            "R1_bilingual_foundations": (
+                (48, 3.75e-6 * lr_scale, 0.60 * anti_scale, 3.00 * eos_scale),
+                (24, 1.875e-6 * lr_scale, 0.85 * anti_scale, 4.00 * eos_scale),
+            ),
+            "R2_simple_responses": (
+                (56, 3.75e-6 * lr_scale, 0.35 * anti_scale, 2.25 * eos_scale),
+                (28, 1.875e-6 * lr_scale, 0.50 * anti_scale, 2.75 * eos_scale),
+            ),
+            "R3_short_dialogue": (
+                (64, 2.5e-6 * lr_scale, 0.25 * anti_scale, 1.75 * eos_scale),
+                (32, 1.25e-6 * lr_scale, 0.35 * anti_scale, 2.25 * eos_scale),
+            ),
         }
     return plans[stage]
 
@@ -2281,6 +2325,7 @@ def run_segment(
                 stage,
                 rejection_count,
             ),
+            replay_offset=rejection_count * 37,
         )
         lineage_before = str(
             _load_json(root / "lineage.json").get("lineage_id") or ""
@@ -2294,7 +2339,7 @@ def run_segment(
             guard_anchor,
             bootstrap_root=bootstrap_root,
             base_model_sha=base_model_sha,
-            seed=91 + next_stage_index * 1009,
+            seed=91 + next_stage_index * 1009 + rejection_count * 100_003,
             consecutive_rejections=rejection_count,
         )
         rehabilitation_report.update({

@@ -44,6 +44,7 @@ from generalist_lm.bootstrap_training import (
     _rehabilitation_needed,
     _rehabilitation_replay_rows,
     _run_language_rehabilitation_stage,
+    _sft_row_fingerprint,
     _load_optimizer_checkpoint,
     _optimizer_manifest,
     _optimizer_shard_paths,
@@ -989,7 +990,7 @@ def test_language_rehabilitation_replay_filters_holdouts_and_stays_bounded():
     )
 
 
-def test_language_rehabilitation_retries_become_more_conservative_after_rollback():
+def test_language_rehabilitation_retries_become_repetition_breakers_after_two_rollbacks():
     base = _language_rehabilitation_attempts(
         parameters=50_041_536,
         stage="R1_bilingual_foundations",
@@ -1005,23 +1006,63 @@ def test_language_rehabilitation_retries_become_more_conservative_after_rollback
         stage="R1_bilingual_foundations",
         consecutive_rejections=2,
     )
+    later_rescue = _language_rehabilitation_attempts(
+        parameters=50_041_536,
+        stage="R1_bilingual_foundations",
+        consecutive_rejections=3,
+    )
 
     assert retry != base
     assert rescue != retry
-    assert retry[0][0] < base[0][0]
+    assert len(rescue) == 3
     assert retry[0][1] < base[0][1]
-    assert retry[0][2] >= base[0][2]
-    assert rescue[0][0] < retry[0][0]
     assert rescue[0][1] < retry[0][1]
-    assert rescue[0][2] >= retry[0][2]
+    assert rescue[0][2] > retry[0][2]
+    assert rescue[0][3] > retry[0][3]
+    assert later_rescue[0][1] < rescue[0][1]
+    assert later_rescue[0][2] > rescue[0][2]
+    assert later_rescue[0][3] > rescue[0][3]
 
 
 def test_language_rehabilitation_retry_expands_protected_replay_diversity():
     assert _rehabilitation_replay_limit("R1_bilingual_foundations", 0) == 48
     assert _rehabilitation_replay_limit("R1_bilingual_foundations", 1) == 96
     assert _rehabilitation_replay_limit("R1_bilingual_foundations", 2) == 144
+    assert _rehabilitation_replay_limit("R1_bilingual_foundations", 3) == 192
     assert _rehabilitation_replay_limit("R3_short_dialogue", 1) == 192
     assert _rehabilitation_replay_limit("R3_short_dialogue", 10) == 192
+
+
+def test_language_rehabilitation_retry_rotates_protected_replay_rows():
+    curriculum = _elementary_rehabilitation_rows()
+    replay = [
+        SFTExample([
+            {"role": "user", "content": f"safe replay prompt {index}"},
+            {"role": "assistant", "content": f"safe replay answer {index}"},
+        ])
+        for index in range(12)
+    ]
+
+    rows_a, counts_a = _rehabilitation_replay_rows(
+        "R1_bilingual_foundations",
+        curriculum,
+        replay,
+        max_replay_rows=4,
+        replay_offset=0,
+    )
+    rows_b, counts_b = _rehabilitation_replay_rows(
+        "R1_bilingual_foundations",
+        curriculum,
+        replay,
+        max_replay_rows=4,
+        replay_offset=3,
+    )
+
+    replay_a = {_sft_row_fingerprint(row) for row in rows_a[-4:]}
+    replay_b = {_sft_row_fingerprint(row) for row in rows_b[-4:]}
+    assert replay_a != replay_b
+    assert counts_a["protected_replay_offset"] == 0
+    assert counts_b["protected_replay_offset"] == 3
 
 
 def test_language_rehabilitation_uses_progressive_fail_closed_gates():
