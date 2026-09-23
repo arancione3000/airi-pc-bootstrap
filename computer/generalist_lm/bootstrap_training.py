@@ -773,6 +773,11 @@ def _recover_historical_language_best(
         raise RuntimeError(f"historical recovery source is missing: {source_dir}")
     source_metadata = _load_json(source_dir / "metadata.json")
     source_tokens = int(source_metadata.get("tokens_processed", 0) or 0)
+    source_valid_tokens = max(
+        source_tokens,
+        int(source_metadata.get("valid_tokens_processed", source_tokens) or source_tokens),
+    )
+    source_stage = str(source_metadata.get("language_rehabilitation_stage") or "")
     if source_tokens <= 0:
         raise RuntimeError("historical recovery source has no token provenance")
 
@@ -788,7 +793,36 @@ def _recover_historical_language_best(
     if source_runtime.config.to_dict() != expected_source_config:
         raise RuntimeError("historical recovery source config does not match its genome")
 
-    source_language = evaluate_phase5_language(source_runtime)
+    # The pinned R2 recovery checkpoint was already evaluated transactionally
+    # on the exact held-out Phase-5 suite when it was accepted. Reuse that
+    # immutable evidence instead of spending another long 50M CPU generation
+    # pass. Any other source still gets a fresh evaluation.
+    source_language = None
+    source_evidence_reused = False
+    evidence_path = source_dir.parent / "language-rehabilitation.json"
+    if source_stage == "R2_simple_responses" and evidence_path.is_file():
+        evidence = _load_json(evidence_path, {})
+        selected_index = int(evidence.get("selected_attempt", -1) or 0)
+        attempts = list(evidence.get("attempts") or [])
+        if (
+            bool(evidence.get("accepted"))
+            and str(evidence.get("stage") or "") == source_stage
+            and 0 <= selected_index < len(attempts)
+            and bool(attempts[selected_index].get("accepted"))
+        ):
+            selected_report = dict(
+                attempts[selected_index].get("validation_after") or {}
+            )
+            if (
+                str(selected_report.get("suite") or "")
+                == "phase5-language-holdout-v1"
+                and bool(selected_report.get("suite_training_excluded"))
+            ):
+                source_language = selected_report
+                source_evidence_reused = True
+    if source_language is None:
+        source_language = evaluate_phase5_language(source_runtime)
+
     current_live_language = _load_json(bootstrap_root / "before.json", {})
     source_multi = float(source_language.get("multiword_output_rate", 0.0) or 0.0)
     source_nll = float(source_language.get("language_nll", float("inf")))
@@ -862,7 +896,15 @@ def _recover_historical_language_best(
             raise RuntimeError("historical recovery regrowth reintroduced repetition collapse")
 
     revival_report = None
-    if direct_capacity_restore:
+    source_post_revival = bool(
+        source_stage in {
+            "R1_bilingual_foundations",
+            "R2_simple_responses",
+            "R3_short_dialogue",
+        }
+        and source_valid_tokens > source_tokens
+    )
+    if direct_capacity_restore and not source_post_revival:
         source_d_ff = _dead_capacity_source_ff_width(
             progress,
             current_d_ff=int(grown.config.d_ff),
@@ -914,29 +956,50 @@ def _recover_historical_language_best(
             "production_qualified": False,
             "base_champion_model_sha256": base_model_sha,
             "tokens_processed": source_tokens,
-            "valid_tokens_processed": source_tokens,
+            "valid_tokens_processed": source_valid_tokens,
+            "language_rehabilitation_stage": source_stage or None,
             "historical_source_parameters": source_parameters,
             "historical_source_tokens": source_tokens,
         },
     )
 
     progress["tokens_processed"] = source_tokens
-    progress["valid_tokens_processed"] = source_tokens
-    progress["accepted_rehabilitation_tokens"] = 0
+    progress["valid_tokens_processed"] = source_valid_tokens
+    progress["accepted_rehabilitation_tokens"] = max(
+        0,
+        int(source_valid_tokens - source_tokens),
+    )
     progress["best_validation_loss"] = None
     progress["bad_eval_count"] = 0
     progress["capacity_target_parameters"] = int(parameter_count(grown.model))
     progress["capacity_genome"] = grown_genome.to_dict()
     progress["assisted_capacity_growth_completed"] = True
     progress["segment_guard_consecutive_rejections"] = 0
-    progress["segment_guard_lr_scale"] = min(
-        float(progress.get("segment_guard_lr_scale", 1.0) or 1.0),
-        1.0 / 64.0,
+
+    anchor_payload = _load_json(bootstrap_root / "language-guard.json", {})
+    anchor_report = dict(anchor_payload.get("report") or {})
+    source_anchor_violations = (
+        _language_guard_violations(anchor_report, source_language)
+        if anchor_report
+        else []
     )
-    progress["segment_guard_recovery_hold"] = True
-    progress["segment_guard_last_accepted"] = False
-    progress["segment_guard_stable_fast_lane"] = False
-    progress["causal_recovery_mode"] = True
+    source_needs_recovery = bool(source_anchor_violations)
+    progress["segment_guard_recovery_hold"] = source_needs_recovery
+    progress["segment_guard_last_accepted"] = not source_needs_recovery
+    progress["segment_guard_stable_fast_lane"] = not source_needs_recovery
+    progress["causal_recovery_mode"] = source_needs_recovery
+    # The accepted R2 checkpoint is already stable. Give causal training enough
+    # signal to move again (1/32 base LR) while retaining transactional rollback.
+    if source_needs_recovery:
+        progress["segment_guard_lr_scale"] = min(
+            float(progress.get("segment_guard_lr_scale", 1.0) or 1.0),
+            1.0 / 64.0,
+        )
+    else:
+        progress["segment_guard_lr_scale"] = max(
+            float(progress.get("segment_guard_lr_scale", 1.0) or 1.0),
+            1.0 / 32.0,
+        )
     if revival_report is not None:
         progress["dead_capacity_revival"] = {
             "completed": True,
@@ -948,19 +1011,29 @@ def _recover_historical_language_best(
         }
     progress["language_rehabilitation"] = {
         "version": PHASE5_LANGUAGE_REHABILITATION_VERSION,
-        "next_stage_index": 0,
-        "completed_cycles": 0,
+        "next_stage_index": len(PHASE5_LANGUAGE_REHABILITATION_STAGES),
+        "completed_cycles": 1,
         "consecutive_rejections": 0,
-        "last_accepted": False,
-        "last_stage": "historical_best_recovery",
+        "residual_consecutive_rejections": 0,
+        "last_accepted": True,
+        "last_accepted_stage": source_stage or "R2_simple_responses",
+        "last_accepted_tokens": int(
+            max(0, source_valid_tokens - source_tokens)
+        ),
+        "last_stage": "accepted_R2_checkpoint_resume",
         "updated_at_unix": int(time.time()),
     }
     progress["historical_language_recovery"] = {
         "completed": True,
-        "version": "phase5-historical-language-recovery-v2",
+        "version": "phase5-historical-language-recovery-v3",
         "source_parameters": source_parameters,
+        "source_stage": source_stage,
+        "source_valid_tokens": source_valid_tokens,
+        "source_evidence_reused": bool(source_evidence_reused),
         "direct_capacity_restore": bool(direct_capacity_restore),
-        "causal_recovery_mode": True,
+        "source_post_revival": bool(source_post_revival),
+        "causal_recovery_mode": bool(source_needs_recovery),
+        "source_anchor_violations": source_anchor_violations,
         "dead_capacity_revival": revival_report,
         "source_tokens": source_tokens,
         "target_parameters": int(parameter_count(grown.model)),
@@ -1398,7 +1471,14 @@ def _language_guard_violations(
         reasons.append("multiword output rate fell below durable anchor")
     if cand_nonempty < max(0.50, ref_nonempty - 0.10):
         reasons.append("non-empty generation rate fell below durable anchor")
-    if cand_entropy < max(1.25, ref_entropy - 0.60):
+    if (
+        cand_entropy < max(1.25, ref_entropy - 0.60)
+        and (
+            bool(candidate.get("pathological_repetition"))
+            or cand_multi < max(0.25, ref_multi - 0.10)
+            or cand_nonempty < max(0.70, ref_nonempty - 0.10)
+        )
+    ):
         reasons.append("token entropy fell below durable anchor")
     return reasons
 
