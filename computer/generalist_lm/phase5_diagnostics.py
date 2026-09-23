@@ -67,6 +67,7 @@ def _single_greedy_trace_messages(
     messages: list[dict[str, str]],
     *,
     max_new_tokens: int,
+    use_cache: bool = True,
 ) -> dict[str, Any]:
     torch = runtime.torch
     tokenizer = runtime.tokenizer
@@ -82,11 +83,36 @@ def _single_greedy_trace_messages(
     step_eos: list[float] = []
 
     runtime.model.eval()
+    past_key_values = None
     with torch.no_grad():
         for _ in range(max(1, int(max_new_tokens))):
             window = context[-runtime.config.context_length:]
-            tensor = torch.tensor([window], dtype=torch.long, device=runtime.device)
-            logits = runtime.model(tensor)["logits"][0, -1, :]
+            if bool(use_cache) and past_key_values is not None:
+                past_len = int(past_key_values[0][0].shape[-2])
+                # Learned absolute positions are re-indexed when the legacy
+                # sliding window drops an old token. Reset the cache exactly at
+                # that boundary so cached greedy evaluation remains bit-for-bit
+                # equivalent to the full-window reference path.
+                if past_len >= int(runtime.config.context_length):
+                    past_key_values = None
+
+            if bool(use_cache) and past_key_values is not None:
+                tensor = torch.tensor(
+                    [[int(context[-1])]],
+                    dtype=torch.long,
+                    device=runtime.device,
+                )
+                result = runtime.model(
+                    tensor,
+                    past_key_values=past_key_values,
+                    use_cache=True,
+                )
+            else:
+                tensor = torch.tensor([window], dtype=torch.long, device=runtime.device)
+                result = runtime.model(tensor, use_cache=bool(use_cache))
+
+            logits = result["logits"][0, -1, :]
+            past_key_values = result.get("past_key_values") if bool(use_cache) else None
             probs = torch.softmax(logits.float(), dim=-1)
             entropy = -(probs * torch.log(probs.clamp_min(1e-12))).sum()
             top = torch.topk(probs, k=min(5, int(probs.numel())))
@@ -131,11 +157,18 @@ def _single_greedy_trace_messages(
     }
 
 
-def _single_greedy_trace(runtime, prompt: str, *, max_new_tokens: int) -> dict[str, Any]:
+def _single_greedy_trace(
+    runtime,
+    prompt: str,
+    *,
+    max_new_tokens: int,
+    use_cache: bool = True,
+) -> dict[str, Any]:
     return _single_greedy_trace_messages(
         runtime,
         [{"role": "user", "content": prompt}],
         max_new_tokens=max_new_tokens,
+        use_cache=use_cache,
     )
 
 
