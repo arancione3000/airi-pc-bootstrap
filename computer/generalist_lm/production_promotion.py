@@ -9,6 +9,7 @@ from typing import Any
 
 from .evolution import promotion_decision
 from .qualification import QUALIFICATION_VERSION, checkpoint_digest, qualification_status, qualify_checkpoint
+from .runtime import checkpoint_model_files
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -34,11 +35,18 @@ def _copy_checkpoint(source: Path, target: Path, *, source_digest: str) -> None:
         raise ValueError("research checkpoint config must be a JSON object")
     tokenizer_version = str(config.get("tokenizer_version", "byte-v1"))
 
-    names = ["config.json", "model.pt", "metadata.json"]
+    names = ["config.json", "metadata.json"]
     if tokenizer_version == "bpe-v1":
         names.append("tokenizer.json")
     elif tokenizer_version != "byte-v1":
         raise ValueError(f"unsupported checkpoint tokenizer version: {tokenizer_version}")
+
+    model_files = checkpoint_model_files(source)
+    if not model_files:
+        raise FileNotFoundError("research checkpoint is missing model payload")
+    if (source / "model.index.json").is_file():
+        names.append("model.index.json")
+    names.extend(path.name for path in model_files)
 
     for name in names:
         src = source / name
