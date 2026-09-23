@@ -41,7 +41,7 @@ jobs:
       TARGET_TOKENS: ${{ github.event.inputs.target_tokens || '1000000' }}
       ARCHITECTURE_INTERVAL_TOKENS: '5000000'
       ARCHITECTURE_HANDOFF: 'false'
-      HISTORICAL_LANGUAGE_RECOVERY_REF: 'd9bb8508cd3688711aa51aab76757803c388bae5'
+      HISTORICAL_LANGUAGE_RECOVERY_REF: 'a33056c2beef538ec68a7d3c88bd65c2fc69b079'
     steps:
       - uses: actions/checkout@v4
 
@@ -160,14 +160,16 @@ jobs:
             recovery_root="/tmp/airi-historical-language-recovery"
             rm -rf "${recovery_root}"
             mkdir -p "${recovery_root}"
-            git -C "${STATE_REPO}" archive "${HISTORICAL_LANGUAGE_RECOVERY_REF}"               generalist-state/bootstrap-data/candidate               | tar -xf - -C "${recovery_root}"
-            recovery_source="${recovery_root}/generalist-state/bootstrap-data/candidate"
+            git -C "${STATE_REPO}" archive "${HISTORICAL_LANGUAGE_RECOVERY_REF}" \
+              generalist-state/bootstrap-data/best \
+              | tar -xf - -C "${recovery_root}"
+            recovery_source="${recovery_root}/generalist-state/bootstrap-data/best"
             test -f "${recovery_source}/model.pt"
             test -f "${recovery_source}/config.json"
             test -f "${recovery_source}/metadata.json"
             jq -e '
-              .parameters == 1251264
-              and .tokens_processed == 20002313
+              .parameters == 7021248
+              and .tokens_processed == 31210573
             ' "${recovery_source}/metadata.json" >/dev/null
           fi
           echo "HISTORICAL_RECOVERY_SOURCE=${recovery_source}" >> "${GITHUB_ENV}"
