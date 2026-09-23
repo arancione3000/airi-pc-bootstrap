@@ -95,7 +95,6 @@ def loss_on_examples(
     import torch
     if not examples:
         raise ValueError("no SFT examples")
-    anchors = list(anchor_examples or [])
     model.eval()
     chunk = max(1, int(batch_size))
     total_weighted_loss = 0.0
@@ -457,6 +456,7 @@ def train_sft_residual_recovery(
 
     if not examples:
         raise ValueError("no SFT examples")
+    anchors = list(anchor_examples or [])
     if str(getattr(model.config, "ff_variant", "")) != "swiglu":
         raise ValueError("residual recovery requires a SwiGLU model")
     if tuple(model.state_dict().keys()) != tuple(reference_model.state_dict().keys()):
