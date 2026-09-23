@@ -31,6 +31,8 @@ from generalist_lm.bootstrap_training import (
     _grow_bootstrap_runtime,
     _phase5_memory_safe_batch_plan,
     _phase5_recovery_segment_budget,
+    _load_phase5_optimizer_state,
+    _save_phase5_optimizer_state,
     _phase5_success,
     _segment_language_gate,
     _language_quality,
@@ -299,6 +301,90 @@ def test_50m_assist_has_a_same_width_function_preserving_candidate():
     assert grown.n_layers >= live.n_layers
     assert grown.d_ff >= live.d_ff
     assert 49_000_000 <= parameters <= 51_000_000
+
+
+
+def test_phase5_optimizer_shards_roundtrip(tmp_path: Path):
+    torch = pytest.importorskip("torch")
+    model = CausalTransformerLM(
+        GeneralistLMConfig(
+            vocab_size=64,
+            context_length=16,
+            d_model=32,
+            n_heads=4,
+            n_layers=2,
+            d_ff=64,
+            dropout=0.0,
+        ).validate()
+    )
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    ids = torch.randint(0, 64, (2, 16))
+    labels = ids.clone()
+    loss = model(ids, labels=labels)["loss"]
+    loss.backward()
+    optimizer.step()
+
+    original = optimizer.state_dict()
+    optimizer_path = tmp_path / "optimizer.pt"
+    storage = _save_phase5_optimizer_state(
+        torch,
+        optimizer_path,
+        original,
+        shard_raw_bytes=2_048,
+    )
+
+    assert storage["storage"] == "sharded"
+    assert int(storage["shards"]) >= 2
+    assert optimizer_path.is_file()
+    assert max(
+        path.stat().st_size
+        for path in tmp_path.glob("optimizer-shard-*.pt")
+    ) < 1_000_000
+
+    restored = _load_phase5_optimizer_state(torch, optimizer_path)
+    assert restored["param_groups"] == original["param_groups"]
+    assert restored["state"].keys() == original["state"].keys()
+    for key in original["state"]:
+        for field, value in original["state"][key].items():
+            other = restored["state"][key][field]
+            if torch.is_tensor(value):
+                assert torch.equal(value, other)
+            else:
+                assert value == other
+
+
+def test_phase5_optimizer_shards_reject_tampering(tmp_path: Path):
+    torch = pytest.importorskip("torch")
+    model = CausalTransformerLM(
+        GeneralistLMConfig(
+            vocab_size=64,
+            context_length=16,
+            d_model=32,
+            n_heads=4,
+            n_layers=2,
+            d_ff=64,
+            dropout=0.0,
+        ).validate()
+    )
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    ids = torch.randint(0, 64, (2, 16))
+    loss = model(ids, labels=ids)["loss"]
+    loss.backward()
+    optimizer.step()
+
+    optimizer_path = tmp_path / "optimizer.pt"
+    _save_phase5_optimizer_state(
+        torch,
+        optimizer_path,
+        optimizer.state_dict(),
+        shard_raw_bytes=2_048,
+    )
+    shard = sorted(tmp_path.glob("optimizer-shard-*.pt"))[0]
+    with shard.open("ab") as handle:
+        handle.write(b"tamper")
+
+    with pytest.raises(ValueError, match="optimizer shard (size|digest) mismatch"):
+        _load_phase5_optimizer_state(torch, optimizer_path)
 
 
 def test_phase5_recovery_budget_shrinks_after_rejected_segments():
