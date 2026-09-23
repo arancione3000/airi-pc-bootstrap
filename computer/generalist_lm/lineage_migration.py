@@ -22,7 +22,7 @@ from .research_cycle import (
     _save_champion,
     _transfer_compatible_weights,
 )
-from .runtime import GeneralistRuntime
+from .runtime import GeneralistRuntime, checkpoint_has_model, checkpoint_model_sha256
 
 
 LINEAGE_SCHEMA = 1
@@ -79,7 +79,7 @@ def active_lineage_snapshot(state_dir: str | Path) -> dict[str, Any]:
     progress = _read_json(progress_path, {})
     if (
         isinstance(progress, dict)
-        and (candidate_path / "model.pt").is_file()
+        and checkpoint_has_model(candidate_path)
         and (candidate_path / "config.json").is_file()
     ):
         raw = progress.get("capacity_genome")
@@ -199,7 +199,7 @@ def refresh_live_lineage_manifest(
     root = Path(state_dir).expanduser().resolve()
     live = active_lineage_snapshot(root)
     checkpoint = Path(live["checkpoint"])
-    model_sha = _sha256_file(checkpoint / "model.pt")
+    model_sha = checkpoint_model_sha256(checkpoint)
     previous = _read_json(root / "lineage.json", {})
     previous = previous if isinstance(previous, dict) else {}
     lineage_id = str(
@@ -271,7 +271,7 @@ def adopt_verified_descendant(
     source_runtime: GeneralistRuntime = source["runtime"]
     source_genome: GeneralistGenome = source["genome"]
     source_checkpoint = Path(source["checkpoint"])
-    source_model_sha = _sha256_file(source_checkpoint / "model.pt")
+    source_model_sha = checkpoint_model_sha256(source_checkpoint)
 
     candidate_path = Path(candidate_checkpoint).expanduser().resolve()
     target_genome = (
@@ -399,7 +399,7 @@ def adopt_verified_descendant(
             "research_checkpoint_becomes_independent_model": False,
         },
     )
-    adopted_model_sha = _sha256_file(staging / "model.pt")
+    adopted_model_sha = checkpoint_model_sha256(staging)
 
     rollback_root = root / "lineage-rollback"
     shutil.rmtree(rollback_root, ignore_errors=True)
@@ -571,7 +571,7 @@ def migrate_live_lineage(
     if research_runtime.config.to_dict() != expected_target:
         raise RuntimeError("research checkpoint does not match target architecture genome")
 
-    source_model_sha = _sha256_file(Path(source["checkpoint"]) / "model.pt")
+    source_model_sha = checkpoint_model_sha256(Path(source["checkpoint"]))
     lineage_state_path = root / "lineage.json"
     lineage_state = _read_json(lineage_state_path, {})
     lineage_id = str(
@@ -687,7 +687,7 @@ def migrate_live_lineage(
             "research_checkpoint_becomes_independent_model": False,
         },
     )
-    migrated_model_sha = _sha256_file(staging / "model.pt")
+    migrated_model_sha = checkpoint_model_sha256(staging)
 
     safe_id = "".join(
         char if char.isalnum() or char in "-_" else "_"
