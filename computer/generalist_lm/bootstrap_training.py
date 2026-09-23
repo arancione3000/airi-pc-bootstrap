@@ -229,6 +229,31 @@ def _phase5_memory_safe_batch_plan(
     return int(micro), max(1, accumulation)
 
 
+def _phase5_recovery_segment_budget(
+    requested_tokens: int,
+    *,
+    consecutive_rejections: int,
+) -> int:
+    """Shrink only the next attempted segment after language-guard rollbacks.
+
+    A million-token retry is useful while AIRI is healthy, but it can
+    repeatedly overshoot a recovery basin once the held-out language guard is
+    already rejecting updates. Keep rejected tokens uncounted and make the
+    retry progressively more conservative instead of weakening the guard.
+    """
+    requested = max(1, int(requested_tokens))
+    rejected = max(0, int(consecutive_rejections))
+    if rejected <= 0:
+        return requested
+    if rejected == 1:
+        divisor = 2
+    elif rejected == 2:
+        divisor = 4
+    else:
+        divisor = 8
+    return max(62_500, min(requested, int(math.ceil(requested / divisor))))
+
+
 def _batch(blocks: list[list[int]], indices: list[int], *, device):
     import torch
     ids = torch.tensor([blocks[i] for i in indices], dtype=torch.long, device=device)
@@ -1350,7 +1375,16 @@ def run_segment(
     shutil.rmtree(segment_best_dir, ignore_errors=True)
 
     processed_before_segment = int(progress.get("tokens_processed", 0) or 0)
-    segment_budget = max(1, int(segment_tokens))
+    requested_segment_budget = max(1, int(segment_tokens))
+    segment_budget = _phase5_recovery_segment_budget(
+        requested_segment_budget,
+        consecutive_rejections=consecutive_rejections,
+    )
+    progress["segment_guard_requested_budget_tokens"] = int(requested_segment_budget)
+    progress["segment_guard_effective_budget_tokens"] = int(segment_budget)
+    progress["segment_guard_recovery_budget_active"] = bool(
+        segment_budget < requested_segment_budget
+    )
     eval_every_steps = max(8, int(eval_every_steps))
     best_loss = progress.get("best_validation_loss")
     best_loss = float(best_loss) if best_loss is not None else float("inf")
