@@ -1457,6 +1457,76 @@ def test_language_rehabilitation_retry_rotates_protected_replay_rows():
     assert counts_b["protected_replay_offset"] == 3
 
 
+def test_r1_recovery_entropy_uses_durable_anchor_not_collapsed_baseline():
+    anchor_report = _language_report(
+        nll=2.858,
+        repetition=0.443,
+        similarity=0.115,
+        multiword=0.429,
+        pathological=False,
+    )
+    anchor_report["token_entropy"] = 2.674
+    anchor_report["longest_repeated_token_run"] = 2
+
+    collapsed = _language_report(
+        nll=4.100,
+        repetition=0.449,
+        similarity=0.033,
+        multiword=0.0,
+        pathological=True,
+    )
+    collapsed["token_entropy"] = 4.241
+    collapsed["longest_repeated_token_run"] = 39
+
+    recovered = _language_report(
+        nll=2.647,
+        repetition=0.277,
+        similarity=0.183,
+        multiword=0.286,
+        pathological=False,
+    )
+    recovered["token_entropy"] = 2.386
+    recovered["longest_repeated_token_run"] = 4
+
+    accepted, report = _language_rehabilitation_gate(
+        "R1_bilingual_foundations",
+        collapsed,
+        recovered,
+        anchor_report,
+    )
+
+    assert accepted is True
+    assert report["recovery_mode"] is True
+    assert report["protected_entropy_floor"] == pytest.approx(2.074)
+    assert report["anchor_violations_after"] == []
+    assert "protected token entropy collapsed" not in report["reasons"]
+
+
+def test_r1_non_recovery_still_rejects_material_entropy_collapse():
+    stable = _language_report(
+        nll=2.6,
+        repetition=0.30,
+        similarity=0.20,
+        multiword=0.50,
+        pathological=False,
+    )
+    stable["token_entropy"] = 4.0
+    candidate = dict(stable)
+    candidate["token_entropy"] = 2.5
+
+    accepted, report = _language_rehabilitation_gate(
+        "R1_bilingual_foundations",
+        stable,
+        candidate,
+        stable,
+    )
+
+    assert accepted is False
+    assert report["recovery_mode"] is False
+    assert report["protected_entropy_floor"] == pytest.approx(3.25)
+    assert "protected token entropy collapsed" in report["reasons"]
+
+
 def test_language_rehabilitation_uses_progressive_fail_closed_gates():
     anchor = _language_report(
         nll=2.80,
