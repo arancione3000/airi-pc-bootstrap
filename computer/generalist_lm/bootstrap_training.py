@@ -720,7 +720,6 @@ def _historical_language_recovery_due(progress: dict[str, Any]) -> bool:
     return bool(
         str(progress.get("lineage_id") or "") == ASSISTED_CAPACITY_LINEAGE_ID
         and bool(revival.get("completed"))
-        and bool(progress.get("historical_language_recovery_source_verified"))
         and int(rehabilitation.get("consecutive_rejections", 0) or 0) >= 6
         and not bool(recovery.get("completed"))
     )

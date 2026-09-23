@@ -845,14 +845,12 @@ def test_dead_capacity_revival_precedes_historical_replacement():
 
     almost_due = {
         **revived,
-        "historical_language_recovery_source_verified": True,
         "language_rehabilitation": {"consecutive_rejections": 5},
     }
     assert _historical_language_recovery_due(almost_due) is False
 
     historical_due = {
         **revived,
-        "historical_language_recovery_source_verified": True,
         "language_rehabilitation": {"consecutive_rejections": 6},
     }
     assert _historical_language_recovery_due(historical_due) is True
@@ -862,6 +860,13 @@ def test_dead_capacity_revival_precedes_historical_replacement():
         "historical_language_recovery": {"completed": True},
     }
     assert _historical_language_recovery_due(completed) is False
+
+
+def test_bootstrap_historical_recovery_fetch_is_not_circular():
+    workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
+    assert "historical_language_recovery_source_verified" not in workflow
+    assert ".parameters == 7021248" in workflow
+    assert "and .tokens_processed == 31210573" in workflow
 
 
 def test_dead_capacity_revival_preserves_logits_and_enables_new_gradients():
