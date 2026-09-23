@@ -962,32 +962,7 @@ def run_segment(
     persisted_progress = _load_json(progress_path, {}) if progress_path.is_file() else {}
     target_tokens = _effective_bootstrap_target(target_tokens, persisted_progress)
 
-    previous_manifest = _load_json(manifest_path) if manifest_path.is_file() else None
     corpus_target_tokens = _bootstrap_corpus_target(target_tokens)
-    bundle = build_bootstrap_bundle(
-        champion_runtime.tokenizer,
-        cache_dir=cache,
-        target_tokens=int(corpus_target_tokens),
-        previous_manifest=previous_manifest,
-    )
-    if int(bundle.manifest.get("actual_selected_tokens", 0) or 0) < int(corpus_target_tokens * 0.95):
-        raise RuntimeError(
-            "bootstrap corpus coverage is below 95% of reviewed unique-corpus target: "
-            f"selected={bundle.manifest.get('actual_selected_tokens')} "
-            f"target={corpus_target_tokens}"
-        )
-    _atomic_json(manifest_path, bundle.manifest)
-    replay_manifest = write_bootstrap_replay(
-        bundle,
-        champion_runtime.tokenizer,
-        output_dir=bootstrap_root,
-        max_tokens=min(1_000_000, max(250_000, int(target_tokens // 4))),
-        max_sft_conversations=512,
-    )
-
-    if not before_path.is_file():
-        _atomic_json(before_path, evaluate_phase5_language(champion_runtime))
-    before = _load_json(before_path)
 
     progress = _load_json(progress_path, {
         "schema": 1,
@@ -1166,6 +1141,32 @@ def run_segment(
                 "rung_complete": False,
                 "early_stopped": False,
             }
+
+    previous_manifest = _load_json(manifest_path) if manifest_path.is_file() else None
+    bundle = build_bootstrap_bundle(
+        champion_runtime.tokenizer,
+        cache_dir=cache,
+        target_tokens=int(corpus_target_tokens),
+        previous_manifest=previous_manifest,
+    )
+    if int(bundle.manifest.get("actual_selected_tokens", 0) or 0) < int(corpus_target_tokens * 0.95):
+        raise RuntimeError(
+            "bootstrap corpus coverage is below 95% of reviewed unique-corpus target: "
+            f"selected={bundle.manifest.get('actual_selected_tokens')} "
+            f"target={corpus_target_tokens}"
+        )
+    _atomic_json(manifest_path, bundle.manifest)
+    replay_manifest = write_bootstrap_replay(
+        bundle,
+        champion_runtime.tokenizer,
+        output_dir=bootstrap_root,
+        max_tokens=min(1_000_000, max(250_000, int(target_tokens // 4))),
+        max_sft_conversations=512,
+    )
+
+    if not before_path.is_file():
+        _atomic_json(before_path, evaluate_phase5_language(champion_runtime))
+    before = _load_json(before_path)
 
     # Packing a 20M-token corpus is expensive and previously repeated for
     # every resumable segment.  Cache the exact fixed-width token blocks in the
