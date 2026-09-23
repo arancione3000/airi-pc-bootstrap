@@ -4799,7 +4799,7 @@
     "validation_blocks": 7826,
     "version": "phase5-stage-block-cache-v1"
   },
-  "parameter_segment_cap_tokens": 250000,
+  "parameter_segment_cap_tokens": 62500,
   "rung_complete": false,
   "schema": 1,
   "segment_guard_acceptances": [
@@ -4852,11 +4852,11 @@
       "tokens_processed": 32149357
     }
   ],
-  "segment_guard_consecutive_rejections": 1,
-  "segment_guard_effective_budget_tokens": 250000,
+  "segment_guard_consecutive_rejections": 2,
+  "segment_guard_effective_budget_tokens": 31250,
   "segment_guard_last_accepted": false,
-  "segment_guard_last_attempted_steps": 62,
-  "segment_guard_last_attempted_tokens": 251968,
+  "segment_guard_last_attempted_steps": 8,
+  "segment_guard_last_attempted_tokens": 32512,
   "segment_guard_lr_scale": 0.015625,
   "segment_guard_optimizer_reset_for_stall": true,
   "segment_guard_recovery_accept_streak": 0,
@@ -5204,6 +5204,19 @@
         "segment repetition rate regressed by more than 0.06",
         "segment multiword output rate regressed",
         "repetition rate exceeds durable anchor by more than 0.08",
+        "multiword output rate fell below durable anchor"
+      ],
+      "recovery_mode": false,
+      "tokens_processed": 32149357
+    },
+    {
+      "after_quality": -1.5234934385923935,
+      "attempted_steps": 8,
+      "attempted_tokens": 32512,
+      "before_quality": -1.4110275140017359,
+      "learning_rate_scale": 0.015625,
+      "reasons": [
+        "segment multiword output rate regressed",
         "multiword output rate fell below durable anchor"
       ],
       "recovery_mode": false,
@@ -17335,7 +17348,7 @@
     "parameters": 50041536
   },
   "unique_corpus_target_tokens": 20000000,
-  "updated_at_unix": 1790203783,
+  "updated_at_unix": 1790204687,
   "valid_tokens_processed": 32155011,
   "version": "phase5-language-bootstrap-v3"
 }
