@@ -19,7 +19,7 @@ from .foundation_benchmarks import (
     foundation_suite_digest,
 )
 from .foundation_probe import FOUNDATION_PREFLIGHT_VERSION, foundation_preflight
-from .runtime import GeneralistRuntime
+from .runtime import GeneralistRuntime, checkpoint_model_files
 
 QUALIFICATION_VERSION = 2
 FOUNDATION_QUALIFICATION_VERSION = 4
@@ -35,7 +35,7 @@ def _checkpoint_files(root: Path) -> list[Path]:
     if not isinstance(config, dict):
         raise ValueError("checkpoint config must be a JSON object")
     tokenizer_version = str(config.get("tokenizer_version", "byte-v1"))
-    files = [config_path, root / "model.pt", root / "metadata.json"]
+    files = [config_path, *checkpoint_model_files(root), root / "metadata.json"]
     if tokenizer_version == "bpe-v1":
         files.append(root / "tokenizer.json")
     elif tokenizer_version != "byte-v1":
