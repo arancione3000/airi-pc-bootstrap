@@ -46,8 +46,8 @@ jobs:
           git clone --quiet --branch generalist-state --single-branch \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             "${STATE_REPO}"
-          test -f "${STATE_DIR}/bootstrap-data/best/model.pt"
-          test -f "${STATE_DIR}/bootstrap-data/candidate/model.pt"
+          test -f "${STATE_DIR}/bootstrap-data/best/model.pt" -o -f "${STATE_DIR}/bootstrap-data/best/model.index.json"
+          test -f "${STATE_DIR}/bootstrap-data/candidate/model.pt" -o -f "${STATE_DIR}/bootstrap-data/candidate/model.index.json"
 
       - name: Compare causal-best and post-SFT generation
         run: |
