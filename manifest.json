@@ -21,17 +21,6 @@
       "version": "airi-pc-lab-v1"
     },
     "mode": "read_only_sandbox",
-    "research": {
-      "error": "ValueError:model output is not a valid tool-call JSON object",
-      "mode": "read_only_sandbox",
-      "ok": false,
-      "tool_call_valid": false,
-      "version": "airi-pc-lab-v1"
-    },
-    "research_experience": {
-      "reason": "probe_not_verified",
-      "stored": false
-    },
     "snapshot": {
       "capabilities": [
         "list_capabilities",
@@ -189,33 +178,64 @@
     },
     "version": "airi-pc-lab-v1"
   },
-  "cycle": 124,
+  "cycle": 165,
   "evolution": {
     "curriculum_memory": {
-      "added": 10,
-      "cycle": 124,
+      "added": 8,
+      "cycle": 165,
       "domains": {
-        "coding": 140,
-        "data": 241,
-        "language": 212,
-        "reasoning": 248,
-        "structured": 124,
-        "tools": 126
+        "coding": 181,
+        "data": 323,
+        "language": 253,
+        "reasoning": 330,
+        "structured": 165,
+        "tools": 167
       },
       "extra_rows_considered": 10,
-      "max_rows": 5000,
+      "max_rows": 8000,
       "ok": true,
-      "stored": 1091,
+      "stored": 1419,
       "validation_overlap": []
     },
     "data_growth": {
       "added_bytes": 0,
       "added_files": 0,
-      "desired_domains": [],
-      "domain_bytes": {},
-      "domain_files": {},
-      "queries": [],
-      "rejection_counts": {},
+      "desired_domains": [
+        "reasoning",
+        "data",
+        "general",
+        "code"
+      ],
+      "domain_bytes": {
+        "code": 9817082,
+        "data": 15232441,
+        "general": 4990341,
+        "reasoning": 56579
+      },
+      "domain_files": {
+        "code": 804,
+        "data": 322,
+        "general": 448,
+        "reasoning": 20
+      },
+      "queries": [
+        "reasoning dataset license:mit",
+        "mathematics proofs license:mit",
+        "csv dataset license:mit",
+        "json dataset license:mit",
+        "text corpus license:mit",
+        "educational corpus license:apache-2.0",
+        "algorithms license:mit",
+        "dataset license:cc0-1.0"
+      ],
+      "rejection_counts": {
+        "encoding_damage": 1,
+        "near_duplicate": 1,
+        "persistent_repo_cap": 17,
+        "quality_v4:lexical_repetition,url_spam": 13,
+        "quality_v4:url_spam": 23,
+        "secret_like_content": 4
+      },
       "repositories_used": 0,
       "top_repositories": [
         {
@@ -298,6 +318,17 @@
           "repo": "hendrycks/math"
         },
         {
+          "bytes": 1193699,
+          "domains": {
+            "code": 29,
+            "data": 5,
+            "general": 13,
+            "reasoning": 1
+          },
+          "files": 48,
+          "repo": "TheAlgorithms/Python"
+        },
+        {
           "bytes": 1168692,
           "domains": {
             "code": 19,
@@ -327,26 +358,17 @@
           },
           "files": 11,
           "repo": "nuhil/bangladesh-geocode"
-        },
-        {
-          "bytes": 610981,
-          "domains": {
-            "data": 5,
-            "general": 8
-          },
-          "files": 13,
-          "repo": "yohasebe/wp2txt"
         }
       ],
-      "total_bytes": 0,
-      "total_files": 0,
-      "version": null
+      "total_bytes": 30096443,
+      "total_files": 1594,
+      "version": "generalist-data-growth-v4"
     },
     "domain_weights": {
-      "coding": 2.473684210526316,
-      "data": 3.009535530558707,
-      "language": 4.0,
-      "reasoning": 2.797637575742094,
+      "coding": 2.4716981132075473,
+      "data": 4.0,
+      "language": 2.666666666666667,
+      "reasoning": 3.5949080023058655,
       "structured": 3.0,
       "tools": 4.0
     },
@@ -357,8 +379,8 @@
       "plateau": true,
       "same_champion_cycles": 8,
       "scale_probe": true,
-      "score_span": 65.44056804716394,
-      "under_initial_tier": true
+      "score_span": 0.3737015963602701,
+      "under_initial_tier": false
     },
     "policy": {
       "adaptive_curriculum": true,
@@ -380,8 +402,9 @@
         "layout_aware_net2grow": true
       },
       "automatic_best_of_both_fusion": {
-        "enabled": true,
-        "language_checkpoint_competes_in_swarm": true,
+        "enabled": false,
+        "language_checkpoint_competes_in_swarm": false,
+        "live_lineage_is_training_parent": true,
         "protected_reducer_slot_requires_safety_filter": true,
         "self_promotion": false
       },
@@ -396,6 +419,7 @@
         "gradient_accumulation_steps": 1,
         "precision": "fp32"
       },
+      "direct_research_checkpoint_promotion": false,
       "domain_balanced_pretraining": true,
       "external_pretrained": false,
       "external_reducer": true,
@@ -403,6 +427,7 @@
       "language_gap_routing": true,
       "latest_research_checkpoint_isolated": true,
       "parallel_swarm": "8->4->2",
+      "persistent_research_checkpoints": false,
       "production_qualification_separate": true,
       "progressive_scaling_max_parameters": 20000000,
       "research_only": true,
@@ -413,6 +438,7 @@
       },
       "scale_budget_adaptive": true,
       "scale_probe_retention": "reserve one safe scale survivor through reductions",
+      "single_lineage_migration_required": true,
       "tokenizer_research": {
         "allowed": [
           "byte-v1",
@@ -430,14 +456,14 @@
     "progressive_scaling": {
       "candidate_count": 2,
       "candidate_generated": true,
-      "current_parameters": 115328,
+      "current_parameters": 7021248,
       "maximum_scale_budget_multiplier": 1.75,
       "minimum_scale_budget_multiplier": 1.25,
       "strategies": [
         "progressive_scale",
         "progressive_scale_balanced"
       ],
-      "target_parameters": 250000,
+      "target_parameters": 12000000,
       "tiers": [
         250000,
         500000,
@@ -445,20 +471,25 @@
         3000000,
         7000000,
         12000000,
-        20000000
+        20000000,
+        32000000,
+        50000000,
+        64000000,
+        80000000,
+        96000000
       ]
     },
     "progressive_tokenizer": {
       "current_vocab_size": 384,
       "growth_per_probe": 128,
       "maximum_vocab_size": 1024,
-      "probe_generated": true,
-      "target_vocab_size": 512
+      "probe_generated": false,
+      "target_vocab_size": 384
     },
     "signals": [
-      "language_gap",
       "data_gap",
       "reasoning_gap",
+      "structured_gap",
       "language_collapse",
       "autoregressive_collapse",
       "symbolic_reasoning_signal",
@@ -467,7 +498,7 @@
     ]
   },
   "generalist_version": "airi-generalist-free-speed-v5",
-  "generated_at": 1790117526,
+  "generated_at": 1790142086,
   "lineage": {
     "active_architecture": {
       "architecture": {
@@ -566,12 +597,12 @@
       "vocab_size": 384
     },
     "dominant_token_fraction": 0.7053140096618358,
-    "eos_probability": 0.03312500395812733,
+    "eos_probability": 0.03312499023401557,
     "exact_accuracy": 0.0,
     "generation_length": 29.571428571428573,
     "generation_similarity": 0.03296703296703297,
-    "language_bits_per_byte": 5.957864969593048,
-    "language_nll": 4.129677305830286,
+    "language_bits_per_byte": 5.957865906349616,
+    "language_nll": 4.129677955140459,
     "longest_repeated_token_run": 46,
     "multiword_output_rate": 0.0,
     "non_empty_rate": 1.0,
@@ -581,7 +612,7 @@
     "schema": 1,
     "suite": "phase5-language-holdout-v1",
     "suite_training_excluded": true,
-    "token_entropy": 4.351844895832122,
+    "token_entropy": 4.351844911253641,
     "token_frequency_distribution": [
       {
         "count": 146,
@@ -644,8 +675,8 @@
         "token_id": 54
       }
     ],
-    "top1_probability": 0.11235935135729729,
-    "top5_probability_mass": 0.28946481807571317,
+    "top1_probability": 0.11235935414350398,
+    "top5_probability_mass": 0.2894648090004921,
     "traces": [
       {
         "bpe_token_distribution": {
@@ -653,7 +684,7 @@
           "merged_fraction": 0.0,
           "merged_tokens": 0
         },
-        "eos_probability": 0.0011239921873789805,
+        "eos_probability": 0.0011239924005038463,
         "exact": false,
         "generated_token_ids": [
           37,
@@ -714,7 +745,7 @@
         "raw_output": "\u001d��������������������������������������������",
         "repetition_rate": 0.8958333333333334,
         "target": "Ciao!",
-        "token_entropy": 4.519790202379227,
+        "token_entropy": 4.519790192445119,
         "token_frequency_distribution": [
           {
             "count": 30,
@@ -742,8 +773,8 @@
             "token_id": 182
           }
         ],
-        "top1_probability": 0.09955009468831122,
-        "top5_probability_mass": 0.2316467158185939,
+        "top1_probability": 0.09955009802555044,
+        "top5_probability_mass": 0.23164671116198102,
         "unique_token_ratio": 0.10416666666666667
       },
       {
@@ -752,7 +783,7 @@
           "merged_fraction": 0.0,
           "merged_tokens": 0
         },
-        "eos_probability": 0.05963956734385136,
+        "eos_probability": 0.05963957330286074,
         "exact": false,
         "generated_token_ids": [
           247,
@@ -769,7 +800,7 @@
         "raw_output": "?",
         "repetition_rate": 0.0,
         "target": "Mi chiamo AIRI.",
-        "token_entropy": 4.013790941238403,
+        "token_entropy": 4.013791131973266,
         "token_frequency_distribution": [
           {
             "count": 1,
@@ -792,8 +823,8 @@
             "token_id": 71
           }
         ],
-        "top1_probability": 0.13137908205389975,
-        "top5_probability_mass": 0.3638374447822571,
+        "top1_probability": 0.13137908801436424,
+        "top5_probability_mass": 0.36383746564388275,
         "unique_token_ratio": 1.0
       },
       {
@@ -802,7 +833,7 @@
           "merged_fraction": 0.0,
           "merged_tokens": 0
         },
-        "eos_probability": 0.0034185725258761104,
+        "eos_probability": 0.0034185727854267136,
         "exact": false,
         "generated_token_ids": [
           5,
@@ -863,7 +894,7 @@
         "raw_output": "��������������������������������",
         "repetition_rate": 0.9375,
         "target": "Il gatto dorme sul divano.",
-        "token_entropy": 4.780129581689835,
+        "token_entropy": 4.780129551887512,
         "token_frequency_distribution": [
           {
             "count": 31,
@@ -881,8 +912,8 @@
             "token_id": 152
           }
         ],
-        "top1_probability": 0.07573272346053272,
-        "top5_probability_mass": 0.1937495321035385,
+        "top1_probability": 0.07573272963054478,
+        "top5_probability_mass": 0.19374953800191483,
         "unique_token_ratio": 0.0625
       },
       {
@@ -891,7 +922,7 @@
           "merged_fraction": 0.0,
           "merged_tokens": 0
         },
-        "eos_probability": 0.0927443666422445,
+        "eos_probability": 0.09274433497727741,
         "exact": false,
         "generated_token_ids": [
           247,
@@ -907,7 +938,7 @@
         "raw_output": "�?",
         "repetition_rate": 0.0,
         "target": "azzurro.",
-        "token_entropy": 3.829267919063568,
+        "token_entropy": 3.8292678594589233,
         "token_frequency_distribution": [
           {
             "count": 1,
@@ -925,8 +956,8 @@
             "token_id": 71
           }
         ],
-        "top1_probability": 0.13821415277197957,
-        "top5_probability_mass": 0.4199178759008646,
+        "top1_probability": 0.13821411971002817,
+        "top5_probability_mass": 0.419917818158865,
         "unique_token_ratio": 1.0
       },
       {
@@ -935,7 +966,7 @@
           "merged_fraction": 0.0,
           "merged_tokens": 0
         },
-        "eos_probability": 0.006756869326376647,
+        "eos_probability": 0.006756869486440165,
         "exact": false,
         "generated_token_ids": [
           5,
@@ -996,7 +1027,7 @@
         "raw_output": "ﮁ��������������������������������������",
         "repetition_rate": 0.9166666666666666,
         "target": "casa sole mare",
-        "token_entropy": 4.694093455870946,
+        "token_entropy": 4.6940935750802355,
         "token_frequency_distribution": [
           {
             "count": 39,
@@ -1019,8 +1050,8 @@
             "token_id": 182
           }
         ],
-        "top1_probability": 0.09768724100043376,
-        "top5_probability_mass": 0.22148889303207397,
+        "top1_probability": 0.09768722105460863,
+        "top5_probability_mass": 0.22148887673392892,
         "unique_token_ratio": 0.08333333333333333
       },
       {
@@ -1029,7 +1060,7 @@
           "merged_fraction": 0.0,
           "merged_tokens": 0
         },
-        "eos_probability": 0.009053381227292184,
+        "eos_probability": 0.009053381130282784,
         "exact": false,
         "generated_token_ids": [
           232,
@@ -1090,7 +1121,7 @@
         "raw_output": "஁���������������������������������������������",
         "repetition_rate": 0.9375,
         "target": "Hello!",
-        "token_entropy": 4.679513980944951,
+        "token_entropy": 4.6795140107472735,
         "token_frequency_distribution": [
           {
             "count": 46,
@@ -1108,8 +1139,8 @@
             "token_id": 182
           }
         ],
-        "top1_probability": 0.10837155359331518,
-        "top5_probability_mass": 0.23069395714749893,
+        "top1_probability": 0.10837155041129638,
+        "top5_probability_mass": 0.23069394348810116,
         "unique_token_ratio": 0.0625
       },
       {
@@ -1118,7 +1149,7 @@
           "merged_fraction": 0.125,
           "merged_tokens": 1
         },
-        "eos_probability": 0.059138278453871526,
+        "eos_probability": 0.05913820755531734,
         "exact": false,
         "generated_token_ids": [
           5,
@@ -1139,7 +1170,7 @@
         "raw_output": "�? me.",
         "repetition_rate": 0.125,
         "target": "The cat is sleeping.",
-        "token_entropy": 3.946328189637926,
+        "token_entropy": 3.94632805718316,
         "token_frequency_distribution": [
           {
             "count": 2,
@@ -1177,8 +1208,8 @@
             "token_id": 54
           }
         ],
-        "top1_probability": 0.1355806119326088,
-        "top5_probability_mass": 0.3649193077451653,
+        "top1_probability": 0.1355806721581353,
+        "top5_probability_mass": 0.364919309814771,
         "unique_token_ratio": 0.875
       }
     ],
@@ -1186,13 +1217,13 @@
     "word_output_rate": 1.0
   },
   "promoted_this_cycle": false,
-  "promotion_reason": "no finalist passed every independent research gate",
+  "promotion_reason": "no externally approved trained descendant",
   "schema": 1,
   "slots": {
     "champion": {
       "all_seed_eligible": true,
       "context_length": 128,
-      "cycle": 124,
+      "cycle": 165,
       "files": {
         "config.json": {
           "bytes": 494,
@@ -2179,7 +2210,7 @@
         "kind": "aggregated_checkpoint_weights",
         "note": "This is a truthful aggregate view of checkpoint weights and model topology, not a claim to display every biological-style neuron."
       },
-      "nll_per_byte": 4.129677305830286,
+      "nll_per_byte": 4.129677955140459,
       "onnx_max_abs_error": 8.58306884765625e-06,
       "parameters": 7021248,
       "path": "champion",
@@ -2191,7 +2222,7 @@
     "research": {
       "all_seed_eligible": false,
       "context_length": 128,
-      "cycle": 124,
+      "cycle": 165,
       "files": {
         "config.json": {
           "bytes": 494,
@@ -3189,5 +3220,5 @@
       "tokenizer_vocab_size": 384
     }
   },
-  "state_sha": "a2db4295951a30e94aa552af0a05532eb6f84eef"
+  "state_sha": "0c5e01c658fe48f121def1dc02902865773dabf3"
 }
