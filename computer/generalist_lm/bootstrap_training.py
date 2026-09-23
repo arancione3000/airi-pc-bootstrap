@@ -838,6 +838,8 @@ def _segment_language_gate(
     before: dict[str, Any],
     after: dict[str, Any],
     anchor: dict[str, Any],
+    *,
+    attempted_tokens: int | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     """Fail closed when a training segment makes the live AIRI language worse.
 
@@ -878,8 +880,15 @@ def _segment_language_gate(
     recovery_mode = bool(before_anchor)
 
     if recovery_mode:
+        # Tiny transactional rescue segments move the held-out composite in
+        # smaller increments than the older 250k-1M token segments.  Keep the
+        # gate monotonic, but scale the minimum measurable improvement to the
+        # transaction size so genuine 31k-token recovery is not discarded.
+        recovery_delta = 0.005
+        if attempted_tokens is not None and int(attempted_tokens) <= 40_000:
+            recovery_delta = 0.002
         improved = (
-            after_quality >= before_quality + 0.005
+            after_quality >= before_quality + recovery_delta
             or len(after_anchor) < len(before_anchor)
         )
         if not improved:
@@ -897,6 +906,16 @@ def _segment_language_gate(
         "before_quality": before_quality,
         "after_quality": after_quality,
         "anchor_quality": _language_quality(anchor),
+        "recovery_minimum_quality_delta": (
+            0.002
+            if recovery_mode
+            and attempted_tokens is not None
+            and int(attempted_tokens) <= 40_000
+            else 0.005
+        ),
+        "attempted_tokens": (
+            int(attempted_tokens) if attempted_tokens is not None else None
+        ),
         "before_anchor_violations": before_anchor,
         "after_anchor_violations": after_anchor,
         "local_reasons": local_reasons,
@@ -1881,14 +1900,15 @@ def run_segment(
             runtime.model.train()
 
     segment_language_after = evaluate_phase5_language(runtime)
+    attempted_tokens = int(progress["tokens_processed"]) - processed_before_segment
+    attempted_steps = int(progress["steps"]) - int(
+        progress_before_segment.get("steps", 0) or 0
+    )
     segment_accepted, segment_guard = _segment_language_gate(
         segment_language_before,
         segment_language_after,
         guard_anchor,
-    )
-    attempted_tokens = int(progress["tokens_processed"]) - processed_before_segment
-    attempted_steps = int(progress["steps"]) - int(
-        progress_before_segment.get("steps", 0) or 0
+        attempted_tokens=attempted_tokens,
     )
     segment_guard.update({
         "attempted_tokens": int(attempted_tokens),

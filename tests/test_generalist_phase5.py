@@ -978,6 +978,51 @@ def test_segment_language_guard_accepts_measurable_recovery_toward_anchor():
     assert report["after_quality"] > report["before_quality"]
 
 
+def test_segment_language_guard_accepts_small_monotonic_gain_for_31k_rescue():
+    anchor = _language_report(
+        nll=2.85,
+        repetition=0.44,
+        similarity=0.12,
+        multiword=0.43,
+        pathological=False,
+    )
+    before = _language_report(
+        nll=3.75,
+        repetition=0.53,
+        similarity=0.18,
+        multiword=0.57,
+        pathological=True,
+    )
+    after = _language_report(
+        nll=3.747,
+        repetition=0.53,
+        similarity=0.18,
+        multiword=0.57,
+        pathological=True,
+    )
+
+    gain = _language_quality(after) - _language_quality(before)
+    assert 0.002 < gain < 0.005
+
+    accepted_small, small_report = _segment_language_gate(
+        before,
+        after,
+        anchor,
+        attempted_tokens=32_512,
+    )
+    accepted_large, large_report = _segment_language_gate(
+        before,
+        after,
+        anchor,
+        attempted_tokens=65_024,
+    )
+
+    assert accepted_small is True
+    assert small_report["recovery_minimum_quality_delta"] == pytest.approx(0.002)
+    assert accepted_large is False
+    assert large_report["recovery_minimum_quality_delta"] == pytest.approx(0.005)
+
+
 def test_segment_language_guard_rejects_nonrecovering_retry_below_anchor():
     anchor = _language_report(
         nll=2.85,
