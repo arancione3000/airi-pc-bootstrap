@@ -376,7 +376,7 @@ jobs:
           if [[ -s "${STATE_DIR}/lineage.json" ]]; then
             active_rel="$(jq -r '.active_checkpoint // "champion"' "${STATE_DIR}/lineage.json")"
           fi
-          test -s "${STATE_DIR}/${active_rel}/model.pt"
+          test -s "${STATE_DIR}/${active_rel}/model.pt" -o -s "${STATE_DIR}/${active_rel}/model.index.json"
           echo "AIRI_GENERALIST_RESEARCH_CHECKPOINT=${STATE_DIR}/${active_rel}" >> "${GITHUB_ENV}"
 
       - name: Attempt normal production qualification
