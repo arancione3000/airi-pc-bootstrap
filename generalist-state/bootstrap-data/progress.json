@@ -2579,7 +2579,7 @@
       "tokens_processed": 31799853
     }
   ],
-  "segment_guard_consecutive_rejections": 2,
+  "segment_guard_consecutive_rejections": 3,
   "segment_guard_effective_budget_tokens": 250000,
   "segment_guard_last_accepted": false,
   "segment_guard_lr_scale": 0.125,
@@ -2642,6 +2642,22 @@
       "attempted_tokens": 65024,
       "before_quality": -4.590417520156869,
       "learning_rate_scale": 0.15,
+      "reasons": [
+        "lineage is below its durable language anchor and this segment did not measurably recover quality",
+        "language NLL exceeds durable anchor by more than 0.15",
+        "pathological repetition reappeared",
+        "generation similarity fell below durable anchor",
+        "multiword output rate fell below durable anchor"
+      ],
+      "recovery_mode": true,
+      "tokens_processed": 31799853
+    },
+    {
+      "after_quality": -4.598761123334867,
+      "attempted_steps": 16,
+      "attempted_tokens": 65024,
+      "before_quality": -4.590417520156869,
+      "learning_rate_scale": 0.125,
       "reasons": [
         "lineage is below its durable language anchor and this segment did not measurably recover quality",
         "language NLL exceeds durable anchor by more than 0.15",
@@ -14775,6 +14791,6 @@
     "parameters": 50041536
   },
   "unique_corpus_target_tokens": 20000000,
-  "updated_at_unix": 1790149855,
+  "updated_at_unix": 1790150884,
   "version": "phase5-language-bootstrap-v3"
 }
