@@ -185,7 +185,7 @@ def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
         1_000_000,
         parameters=50_041_536,
         context_length=128,
-        persisted_lr_scale=0.0625,
+        persisted_lr_scale=0.125,
         consecutive_rejections=1,
         recovery_hold=False,
         last_segment_accepted=False,
