@@ -125,7 +125,7 @@ def test_large_candidate_batch_plan_bounds_memory_and_preserves_effective_batch(
         d_model=128,
         n_heads=4,
         n_layers=16,
-        d_ff=18000,
+        d_ff=16000,
         dropout=0.0,
     ).validate()
     micro, accumulation, pressure = _memory_safe_batch_plan(
