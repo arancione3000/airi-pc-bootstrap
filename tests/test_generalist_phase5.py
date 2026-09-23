@@ -734,7 +734,7 @@ def test_historical_recovery_workflow_is_transactional_and_pinned():
     source = Path("computer/generalist_lm/bootstrap_training.py").read_text(
         encoding="utf-8"
     )
-    assert "a33056c2beef538ec68a7d3c88bd65c2fc69b079" in workflow
+    assert "d9bb8508cd3688711aa51aab76757803c388bae5" in workflow
     assert "--historical-recovery-source" in workflow
     assert ".historical_recovery_only // false" in workflow
     assert '"historical_recovery_only": True' in source
