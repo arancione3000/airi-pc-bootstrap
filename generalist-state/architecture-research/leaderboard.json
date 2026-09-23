@@ -1,5 +1,5 @@
 {
-  "cycle": 142,
+  "cycle": 167,
   "entries": [],
   "existing_generalist_gates_preserved": true,
   "incumbent": {
@@ -12,24 +12,9 @@
   },
   "mathesis_hypotheses": [
     {
-      "expected_advantage": "lower language NLL without repetition collapse",
-      "hypothesis": "RMSNorm + pre-norm + RoPE may stabilize optimization and autoregressive language relative to the current tiny baseline.",
-      "hypothesis_id": "mathesis-arch-15-0",
-      "mutation": {
-        "ff_variant": "swiglu",
-        "norm_placement": "pre",
-        "norm_type": "rmsnorm",
-        "position_encoding": "rope"
-      },
-      "promotion_authority": false,
-      "requires_empirical_falsification": true,
-      "risk": "optimization gain may not compensate for insufficient capacity",
-      "verified_math_items": 28
-    },
-    {
       "expected_advantage": "more depth per inference-memory budget",
       "hypothesis": "A deeper model with GQA may buy reasoning depth while keeping KV-cache cost below equivalent MHA scaling.",
-      "hypothesis_id": "mathesis-arch-15-1",
+      "hypothesis_id": "mathesis-arch-15-0",
       "mutation": {
         "attention_type": "gqa",
         "n_kv_heads_policy": "half_query_heads",
@@ -43,7 +28,7 @@
     {
       "expected_advantage": "lower attention cost and stronger local structure",
       "hypothesis": "Alternating local/global causal attention may allocate more capacity to local syntax while retaining periodic global mixing.",
-      "hypothesis_id": "mathesis-arch-15-2",
+      "hypothesis_id": "mathesis-arch-15-1",
       "mutation": {
         "local_attention_every": 2,
         "local_attention_window_policy": "half_context"
@@ -57,11 +42,11 @@
   "meta_controller": {
     "action": "architecture_search",
     "observations": {
-      "cycle": 141,
+      "cycle": 166,
       "language_nll": null,
       "minimum_language_success": false,
       "next_parameter_tier": 250000,
-      "parameter_cap": 9478685,
+      "parameter_cap": 67556074,
       "parameters": 115328,
       "pathological_repetition": false,
       "repetition_rate": 0.0
