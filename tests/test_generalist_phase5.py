@@ -30,6 +30,10 @@ from generalist_lm.bootstrap_training import (
     _filter_protected_replay,
     _grow_bootstrap_runtime,
     _phase5_success,
+    _load_optimizer_checkpoint,
+    _optimizer_manifest,
+    _optimizer_shard_paths,
+    _save_optimizer_checkpoint,
     _segment_language_gate,
     _language_quality,
 )
@@ -52,6 +56,90 @@ from generalist_lm.tokenizer import ByteTokenizer
 from generalist_lm.training import SFTExample, causal_training_objective
 
 
+
+
+
+def _tiny_phase5_model():
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=32,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        dropout=0.0,
+        tokenizer_version="byte-v1",
+    ).validate()
+    return CausalTransformerLM(cfg)
+
+
+def test_phase5_optimizer_state_shards_and_roundtrips_exactly(tmp_path: Path):
+    torch = pytest.importorskip("torch")
+    model = _tiny_phase5_model()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=0.01)
+
+    ids = torch.randint(0, 264, (2, 16), dtype=torch.long)
+    loss = model(ids, labels=ids)["loss"]
+    loss.backward()
+    optimizer.step()
+    optimizer.zero_grad(set_to_none=True)
+
+    path = tmp_path / "optimizer.pt"
+    storage = _save_optimizer_checkpoint(
+        optimizer,
+        path,
+        shard_raw_bytes=32_000,
+    )
+    assert storage["storage"] == "sharded"
+    assert _optimizer_manifest(path) is not None
+    shards = _optimizer_shard_paths(path)
+    assert len(shards) >= 2
+    assert all(shard.stat().st_size < 200_000 for shard in shards)
+
+    fresh_model = _tiny_phase5_model()
+    restored = torch.optim.AdamW(
+        fresh_model.parameters(),
+        lr=3e-4,
+        weight_decay=0.01,
+    )
+    loaded = _load_optimizer_checkpoint(restored, path)
+    assert loaded["storage"] == "sharded"
+
+    expected = optimizer.state_dict()
+    actual = restored.state_dict()
+    assert expected["param_groups"] == actual["param_groups"]
+    assert expected["state"].keys() == actual["state"].keys()
+    for param_id, expected_state in expected["state"].items():
+        actual_state = actual["state"][param_id]
+        assert expected_state.keys() == actual_state.keys()
+        for key, expected_value in expected_state.items():
+            actual_value = actual_state[key]
+            if torch.is_tensor(expected_value):
+                assert torch.equal(expected_value, actual_value)
+            else:
+                assert expected_value == actual_value
+
+
+def test_phase5_optimizer_shards_reject_tampering(tmp_path: Path):
+    torch = pytest.importorskip("torch")
+    model = _tiny_phase5_model()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
+
+    ids = torch.randint(0, 264, (2, 16), dtype=torch.long)
+    model(ids, labels=ids)["loss"].backward()
+    optimizer.step()
+
+    path = tmp_path / "optimizer.pt"
+    _save_optimizer_checkpoint(optimizer, path, shard_raw_bytes=32_000)
+    shard = _optimizer_shard_paths(path)[0]
+    with shard.open("ab") as handle:
+        handle.write(b"tamper")
+
+    with pytest.raises(ValueError, match="optimizer shard (size|digest) mismatch"):
+        _load_optimizer_checkpoint(
+            torch.optim.AdamW(_tiny_phase5_model().parameters(), lr=3e-4),
+            path,
+        )
 
 
 def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
