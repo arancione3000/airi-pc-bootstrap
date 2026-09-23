@@ -24,7 +24,7 @@ jobs:
       PYTHONPATH: computer
       STATE_REPO: /tmp/airi-phase5-audit-state
       STATE_DIR: /tmp/airi-phase5-audit-state/generalist-state
-      HISTORICAL_LANGUAGE_RECOVERY_REF: 'a33056c2beef538ec68a7d3c88bd65c2fc69b079'
+      HISTORICAL_LANGUAGE_RECOVERY_REF: 'd9bb8508cd3688711aa51aab76757803c388bae5'
     steps:
       - uses: actions/checkout@v4
 
@@ -61,8 +61,8 @@ jobs:
           recovery_root="/tmp/airi-historical-language-audit"
           rm -rf "${recovery_root}"
           mkdir -p "${recovery_root}"
-          git -C "${STATE_REPO}" archive "${HISTORICAL_LANGUAGE_RECOVERY_REF}" generalist-state/bootstrap-data/best             | tar -xf - -C "${recovery_root}"
-          export RECOVERY_SOURCE="${recovery_root}/generalist-state/bootstrap-data/best"
+          git -C "${STATE_REPO}" archive "${HISTORICAL_LANGUAGE_RECOVERY_REF}" generalist-state/bootstrap-data/candidate             | tar -xf - -C "${recovery_root}"
+          export RECOVERY_SOURCE="${recovery_root}/generalist-state/bootstrap-data/candidate"
           python - <<'PY'
           import json
           import os
@@ -82,8 +82,8 @@ jobs:
           progress = json.loads((state / "bootstrap-data" / "progress.json").read_text())
           metadata = json.loads((source_dir / "metadata.json").read_text())
 
-          assert metadata["parameters"] == 7_021_248
-          assert metadata["tokens_processed"] == 31_210_573
+          assert metadata["parameters"] == 1_251_264
+          assert metadata["tokens_processed"] == 20_002_313
           source = GeneralistRuntime.from_checkpoint(source_dir, device="cpu")
           source_report = evaluate_phase5_language(source)
           assert source_report["pathological_repetition"] is False
@@ -121,6 +121,7 @@ jobs:
 
           print(json.dumps({
               "source_parameters": parameter_count(source.model),
+              "source_report": {k: source_report[k] for k in ("language_nll", "pathological_repetition", "longest_repeated_token_run", "multiword_output_rate", "generation_similarity")},
               "grown_parameters": parameter_count(grown.model),
               "source_language_nll": source_report["language_nll"],
               "source_pathological_repetition": source_report["pathological_repetition"],
