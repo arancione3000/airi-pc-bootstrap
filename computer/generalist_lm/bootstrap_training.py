@@ -2032,6 +2032,28 @@ def _run_language_rehabilitation_stage(
         and residual_source_d_ff < int(runtime.config.d_ff)
     )
 
+    residual_supervised_rows = list(rows)
+    residual_anchor_rows: list[SFTExample] = []
+    if residual_mode:
+        stage_curriculum = _elementary_rehabilitation_rows().get(stage) or {}
+        elementary_fingerprints = {
+            _sft_row_fingerprint(row)
+            for language_rows in stage_curriculum.values()
+            for row in language_rows
+        }
+        residual_supervised_rows = [
+            row for row in rows
+            if _sft_row_fingerprint(row) in elementary_fingerprints
+        ]
+        residual_anchor_rows = [
+            row for row in rows
+            if _sft_row_fingerprint(row) not in elementary_fingerprints
+        ]
+        if not residual_supervised_rows:
+            raise RuntimeError("residual rehabilitation has no elementary supervision rows")
+        if not residual_anchor_rows:
+            raise RuntimeError("residual rehabilitation has no protected replay anchors")
+
     if residual_mode:
         stage_attempts = [
             {
@@ -2084,7 +2106,8 @@ def _run_language_rehabilitation_stage(
                 trial.model,
                 reference.model,
                 trial.tokenizer,
-                rows,
+                residual_supervised_rows,
+                anchor_examples=residual_anchor_rows,
                 source_d_ff=residual_source_d_ff,
                 steps=int(plan["steps"]),
                 batch_size=2,
@@ -2145,6 +2168,12 @@ def _run_language_rehabilitation_stage(
             "training_mode": str(plan["mode"]),
             "residual_source_d_ff": (
                 int(residual_source_d_ff) if residual_mode else None
+            ),
+            "residual_supervision_rows": (
+                len(residual_supervised_rows) if residual_mode else None
+            ),
+            "residual_anchor_rows": (
+                len(residual_anchor_rows) if residual_mode else None
             ),
             "training": training,
             "validation_before": before,
