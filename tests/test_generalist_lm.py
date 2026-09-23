@@ -17,7 +17,7 @@ from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig, paramet
 from generalist_lm.runtime import GeneralistRuntime
 from generalist_lm.tokenizer import ASSISTANT, BOS, ByteTokenizer
 from generalist_lm.tool_protocol import parse_tool_call
-from generalist_lm.training import SFTExample, train_sft
+from generalist_lm.training import SFTExample, loss_on_examples, train_sft
 
 
 def tiny_config():
@@ -58,6 +58,85 @@ def test_causal_lm_forward_loss_and_generation_shape():
     generated = model.generate(ids[:, :4], max_new_tokens=3, eos_token_id=None)
     assert tuple(generated.shape) == (2, 7)
     assert parameter_count(model) > 10_000
+
+
+def test_loss_on_examples_microbatches_without_changing_global_mean(monkeypatch):
+    pytest.importorskip("torch")
+    cfg = tiny_config()
+    model = CausalTransformerLM(cfg)
+    tok = ByteTokenizer()
+    examples = [
+        SFTExample([
+            {"role": "user", "content": f"Prompt {index}"},
+            {"role": "assistant", "content": "OK" if index % 2 == 0 else "HELLO"},
+        ])
+        for index in range(17)
+    ]
+
+    full = loss_on_examples(
+        model,
+        tok,
+        examples,
+        batch_size=len(examples),
+    )
+
+    seen_batches = []
+    original_forward = model.forward
+
+    def tracked_forward(ids, *args, **kwargs):
+        seen_batches.append(int(ids.shape[0]))
+        return original_forward(ids, *args, **kwargs)
+
+    monkeypatch.setattr(model, "forward", tracked_forward)
+    micro = loss_on_examples(
+        model,
+        tok,
+        examples,
+        batch_size=3,
+    )
+
+    assert max(seen_batches) <= 3
+    assert micro == pytest.approx(full, rel=1e-6, abs=1e-6)
+
+
+def test_large_candidate_batch_plan_bounds_memory_and_preserves_effective_batch():
+    from generalist_lm.research_cycle import _memory_safe_batch_plan
+
+    candidate_50m = GeneralistGenome(
+        context_length=128,
+        d_model=96,
+        n_heads=4,
+        n_layers=12,
+        d_ff=14336,
+        dropout=0.0,
+    ).validate()
+    micro, accumulation, pressure = _memory_safe_batch_plan(
+        candidate_50m,
+        vocab_size=384,
+        requested_accumulation=1,
+    )
+    assert 32_000_000 < pressure <= 64_000_000
+    assert micro == 2
+    assert accumulation == 2
+    assert micro * accumulation >= 4
+
+    candidate_96m = GeneralistGenome(
+        context_length=256,
+        d_model=128,
+        n_heads=4,
+        n_layers=16,
+        d_ff=16000,
+        dropout=0.0,
+    ).validate()
+    micro, accumulation, pressure = _memory_safe_batch_plan(
+        candidate_96m,
+        vocab_size=384,
+        requested_accumulation=1,
+    )
+    assert pressure > 64_000_000
+    assert micro == 1
+    assert accumulation == 4
+    assert micro * accumulation >= 4
 
 
 def test_sft_actually_reduces_language_model_loss():
