@@ -203,6 +203,32 @@ def _grow_bootstrap_runtime(
     }
 
 
+def _phase5_memory_safe_batch_plan(
+    *,
+    parameters: int,
+    context_length: int,
+    requested_batch_size: int,
+) -> tuple[int, int]:
+    """Return (micro_batch, accumulation_steps) for CPU Phase-5 training.
+
+    Keep the caller's effective batch unchanged while bounding activation
+    memory as AIRI grows. The current ~50M assisted lineage uses micro-batch 2;
+    larger future descendants fall back to micro-batch 1.
+    """
+    requested = max(1, int(requested_batch_size))
+    pressure = int(parameters) * max(1.0, float(context_length) / 128.0)
+    if pressure <= 12_000_000:
+        micro = requested
+    elif pressure <= 32_000_000:
+        micro = min(requested, 8)
+    elif pressure <= 64_000_000:
+        micro = min(requested, 2)
+    else:
+        micro = 1
+    accumulation = int(math.ceil(requested / max(1, micro)))
+    return int(micro), max(1, accumulation)
+
+
 def _batch(blocks: list[list[int]], indices: list[int], *, device):
     import torch
     ids = torch.tensor([blocks[i] for i in indices], dtype=torch.long, device=device)
@@ -1333,6 +1359,20 @@ def run_segment(
     last_train_loss = None
     last_validation_loss = None
 
+    effective_batch_size = max(1, int(batch_size))
+    micro_batch_size, gradient_accumulation_steps = _phase5_memory_safe_batch_plan(
+        parameters=int(parameter_count(runtime.model)),
+        context_length=int(runtime.config.context_length),
+        requested_batch_size=effective_batch_size,
+    )
+    progress["training_resource_plan"] = {
+        "parameters": int(parameter_count(runtime.model)),
+        "context_length": int(runtime.config.context_length),
+        "effective_batch_size": int(effective_batch_size),
+        "micro_batch_size": int(micro_batch_size),
+        "gradient_accumulation_steps": int(gradient_accumulation_steps),
+    }
+
     runtime.model.train()
     while (
         int(progress["tokens_processed"]) < target_tokens
@@ -1346,8 +1386,10 @@ def run_segment(
         progress["curriculum_stage"] = stage
         train_blocks = stage_blocks[stage]
         rng = random.Random(5_000_000 + step + retry_seed_offset)
-        indices = [rng.randrange(len(train_blocks)) for _ in range(max(1, int(batch_size)))]
-        ids, labels = _batch(train_blocks, indices, device=runtime.device)
+        indices = [
+            rng.randrange(len(train_blocks))
+            for _ in range(effective_batch_size)
+        ]
         optimizer.zero_grad(set_to_none=True)
 
         lr = _learning_rate(
@@ -1359,28 +1401,43 @@ def run_segment(
         for group in optimizer.param_groups:
             group["lr"] = lr
 
-        result = runtime.model(ids)
         anti_weight, eos_weight = _anti_collapse_weights(stage, before)
-        loss, objective_stats = causal_training_objective(
-            result["logits"],
-            labels,
-            ids,
-            eos_loss_weight=eos_weight,
-            repetition_unlikelihood_weight=anti_weight,
-            repetition_window=16,
-        )
-        if not torch.isfinite(loss):
-            raise RuntimeError("non-finite Phase 5 bootstrap loss")
-        loss.backward()
+        supervised = 0
+        weighted_loss = 0.0
+        objective_stats = {}
+        micro_batches = [
+            indices[offset:offset + micro_batch_size]
+            for offset in range(0, len(indices), micro_batch_size)
+        ]
+        for micro_indices in micro_batches:
+            ids, labels = _batch(train_blocks, micro_indices, device=runtime.device)
+            result = runtime.model(ids)
+            loss, micro_objective = causal_training_objective(
+                result["logits"],
+                labels,
+                ids,
+                eos_loss_weight=eos_weight,
+                repetition_unlikelihood_weight=anti_weight,
+                repetition_window=16,
+            )
+            if not torch.isfinite(loss):
+                raise RuntimeError("non-finite Phase 5 bootstrap loss")
+            micro_supervised = int((labels[:, 1:] != -100).sum().item())
+            supervised += micro_supervised
+            weighted_loss += float(loss.detach().cpu()) * max(1, micro_supervised)
+            # Scale each micro-loss by its share of the requested effective
+            # batch so accumulated gradients match the original batch mean.
+            (loss * (len(micro_indices) / effective_batch_size)).backward()
+            objective_stats = micro_objective
+
         torch.nn.utils.clip_grad_norm_(runtime.model.parameters(), 1.0)
         optimizer.step()
 
-        supervised = int((labels[:, 1:] != -100).sum().item())
         progress["tokens_processed"] = int(progress["tokens_processed"]) + supervised
         progress["steps"] = step + 1
         progress["learning_rate"] = float(lr)
-        last_train_loss = float(loss.detach().cpu())
-        progress["last_train_loss"] = last_train_loss
+        last_train_loss = weighted_loss / max(1, supervised)
+        progress["last_train_loss"] = float(last_train_loss)
         progress["last_objective"] = objective_stats
         progress["anti_collapse_training_enabled"] = bool(anti_weight > 0.0)
 
@@ -1389,7 +1446,7 @@ def run_segment(
                 runtime.model,
                 validation_blocks,
                 device="cpu",
-                batch_size=max(2, int(batch_size) // 2),
+                batch_size=max(1, min(8, int(micro_batch_size))),
                 max_blocks=min(96, len(validation_blocks)),
                 seed=991,
             )
