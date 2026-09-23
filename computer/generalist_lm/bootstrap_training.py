@@ -97,6 +97,195 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+
+OPTIMIZER_MANIFEST_FORMAT = "airi-phase5-sharded-optimizer-v1"
+OPTIMIZER_SHARD_RAW_BYTES = 32 * 1024 * 1024
+OPTIMIZER_SHARD_PREFIX = "optimizer-shard-"
+
+
+def _optimizer_tensor_bytes(value: Any) -> int:
+    if hasattr(value, "numel") and hasattr(value, "element_size"):
+        return int(value.numel()) * int(value.element_size())
+    if isinstance(value, dict):
+        return sum(_optimizer_tensor_bytes(row) for row in value.values())
+    if isinstance(value, (list, tuple)):
+        return sum(_optimizer_tensor_bytes(row) for row in value)
+    return 0
+
+
+def _optimizer_manifest(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict) or raw.get("format") != OPTIMIZER_MANIFEST_FORMAT:
+        return None
+    shards = raw.get("shards")
+    if not isinstance(shards, list) or not shards:
+        raise ValueError("sharded optimizer manifest requires non-empty shards")
+    return raw
+
+
+def _optimizer_shard_paths(path: Path, *, verify: bool = True) -> list[Path]:
+    manifest = _optimizer_manifest(path)
+    if manifest is None:
+        return []
+    root = path.parent
+    rows = manifest.get("shards") or []
+    result: list[Path] = []
+    seen: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("invalid optimizer shard entry")
+        name = str(row.get("name") or "")
+        if (
+            not name.startswith(OPTIMIZER_SHARD_PREFIX)
+            or not name.endswith(".pt")
+            or "/" in name
+            or "\\" in name
+            or name in seen
+        ):
+            raise ValueError("invalid optimizer shard file name")
+        seen.add(name)
+        shard = root / name
+        if not shard.is_file():
+            raise FileNotFoundError(f"missing optimizer shard: {name}")
+        if verify:
+            expected_size = int(row.get("size", 0) or 0)
+            if expected_size and shard.stat().st_size != expected_size:
+                raise ValueError(f"optimizer shard size mismatch: {name}")
+            expected_sha = str(row.get("sha256") or "")
+            if expected_sha and _sha256_file(shard) != expected_sha:
+                raise ValueError(f"optimizer shard digest mismatch: {name}")
+        result.append(shard)
+    return result
+
+
+def _remove_optimizer_checkpoint(path: Path) -> None:
+    path.unlink(missing_ok=True)
+    for shard in path.parent.glob(f"{OPTIMIZER_SHARD_PREFIX}*.pt"):
+        shard.unlink(missing_ok=True)
+
+
+def _save_optimizer_checkpoint(optimizer, path: Path) -> dict[str, Any]:
+    """Persist AdamW resume state without exceeding GitHub's per-file limit."""
+    import torch
+
+    state_dict = optimizer.state_dict()
+    states = dict(state_dict.get("state") or {})
+    param_groups = list(state_dict.get("param_groups") or [])
+    total_raw_bytes = sum(_optimizer_tensor_bytes(value) for value in states.values())
+
+    if total_raw_bytes <= OPTIMIZER_SHARD_RAW_BYTES:
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        torch.save(state_dict, tmp)
+        tmp.replace(path)
+        for stale in path.parent.glob(f"{OPTIMIZER_SHARD_PREFIX}*.pt"):
+            stale.unlink(missing_ok=True)
+        return {
+            "storage": "monolithic",
+            "files": [path.name],
+            "raw_tensor_bytes": int(total_raw_bytes),
+        }
+
+    chunks: list[dict[Any, Any]] = []
+    current: dict[Any, Any] = {}
+    current_bytes = 0
+    for param_id, value in states.items():
+        size = _optimizer_tensor_bytes(value)
+        if current and current_bytes + size > OPTIMIZER_SHARD_RAW_BYTES:
+            chunks.append(current)
+            current = {}
+            current_bytes = 0
+        current[param_id] = value
+        current_bytes += size
+    if current:
+        chunks.append(current)
+
+    rows: list[dict[str, Any]] = []
+    live_names: set[str] = set()
+    total = len(chunks)
+    for index, chunk in enumerate(chunks, 1):
+        tmp = path.parent / f".optimizer-shard-{index:05d}.tmp"
+        torch.save({"state": chunk}, tmp)
+        sha = _sha256_file(tmp)
+        name = (
+            f"{OPTIMIZER_SHARD_PREFIX}{index:05d}-of-{total:05d}-"
+            f"{sha[:12]}.pt"
+        )
+        target = path.parent / name
+        tmp.replace(target)
+        live_names.add(name)
+        rows.append({
+            "name": name,
+            "sha256": sha,
+            "size": int(target.stat().st_size),
+            "state_entries": len(chunk),
+        })
+
+    manifest = {
+        "format": OPTIMIZER_MANIFEST_FORMAT,
+        "version": 1,
+        "raw_tensor_bytes": int(total_raw_bytes),
+        "param_groups": param_groups,
+        "state_entries": len(states),
+        "shards": rows,
+    }
+    tmp_manifest = path.with_suffix(path.suffix + ".tmp")
+    tmp_manifest.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    tmp_manifest.replace(path)
+    for stale in path.parent.glob(f"{OPTIMIZER_SHARD_PREFIX}*.pt"):
+        if stale.name not in live_names:
+            stale.unlink(missing_ok=True)
+    _optimizer_shard_paths(path, verify=True)
+    return {
+        "storage": "sharded",
+        "files": [path.name, *sorted(live_names)],
+        "raw_tensor_bytes": int(total_raw_bytes),
+        "shards": int(total),
+    }
+
+
+def _load_optimizer_checkpoint(optimizer, path: Path) -> dict[str, Any]:
+    import torch
+
+    manifest = _optimizer_manifest(path)
+    if manifest is None:
+        optimizer.load_state_dict(
+            torch.load(path, map_location="cpu", weights_only=True)
+        )
+        return {"storage": "monolithic", "files": [path.name]}
+
+    state: dict[Any, Any] = {}
+    for shard in _optimizer_shard_paths(path, verify=True):
+        payload = torch.load(shard, map_location="cpu", weights_only=True)
+        if not isinstance(payload, dict) or not isinstance(payload.get("state"), dict):
+            raise ValueError(f"invalid optimizer shard payload: {shard.name}")
+        overlap = set(state).intersection(payload["state"])
+        if overlap:
+            raise ValueError("optimizer shards contain duplicate state entries")
+        state.update(payload["state"])
+    expected = int(manifest.get("state_entries", 0) or 0)
+    if expected and len(state) != expected:
+        raise ValueError(
+            f"optimizer state count mismatch: expected={expected} actual={len(state)}"
+        )
+    optimizer.load_state_dict({
+        "state": state,
+        "param_groups": list(manifest.get("param_groups") or []),
+    })
+    return {
+        "storage": "sharded",
+        "files": [path.name, *[row.name for row in _optimizer_shard_paths(path, verify=False)]],
+        "shards": len(manifest.get("shards") or []),
+    }
+
+
 def _bootstrap_corpus_target(training_target_tokens: int) -> int:
     """Grow reviewed unique text together with cumulative optimization.
 
@@ -1015,7 +1204,7 @@ def run_segment(
 
     if rebase_to_champion:
         shutil.rmtree(candidate_dir, ignore_errors=True)
-        optimizer_path.unlink(missing_ok=True)
+        _remove_optimizer_checkpoint(optimizer_path)
         shutil.rmtree(bootstrap_root / "best", ignore_errors=True)
         shutil.rmtree(bootstrap_root / "pre-sft", ignore_errors=True)
         shutil.rmtree(bootstrap_root / "pre-anticollapse", ignore_errors=True)
@@ -1092,7 +1281,7 @@ def run_segment(
             }
         progress["best_validation_loss"] = None
         progress["bad_eval_count"] = 0
-        optimizer_path.unlink(missing_ok=True)
+        _remove_optimizer_checkpoint(optimizer_path)
         shutil.rmtree(bootstrap_root / "best", ignore_errors=True)
         shutil.rmtree(bootstrap_root / "pre-sft", ignore_errors=True)
         shutil.rmtree(bootstrap_root / "pre-anticollapse", ignore_errors=True)
@@ -1279,8 +1468,9 @@ def run_segment(
         lr=float(base_learning_rate),
         weight_decay=0.01,
     )
+    optimizer_storage = None
     if optimizer_path.is_file():
-        optimizer.load_state_dict(torch.load(optimizer_path, map_location="cpu", weights_only=True))
+        optimizer_storage = _load_optimizer_checkpoint(optimizer, optimizer_path)
 
     segment_language_before = evaluate_phase5_language(runtime)
     guard_payload = _load_json(language_guard_path) if language_guard_path.is_file() else {}
@@ -1548,7 +1738,8 @@ def run_segment(
             "segment_language_guard": True,
         },
     )
-    torch.save(optimizer.state_dict(), optimizer_path)
+    optimizer_storage = _save_optimizer_checkpoint(optimizer, optimizer_path)
+    progress["optimizer_storage"] = optimizer_storage
 
     rung_complete = int(progress["tokens_processed"]) >= target_tokens or early_stopped
     progress["early_stopped"] = bool(early_stopped)
@@ -1589,7 +1780,7 @@ def run_segment(
             progress.get("anti_collapse_rescue_tokens", 0) or 0
         ) + int(rescue_report.get("tokens_processed", 0) or 0)
         if rescue_accepted:
-            optimizer_path.unlink(missing_ok=True)
+            _remove_optimizer_checkpoint(optimizer_path)
             progress["optimizer_reset_after_anticollapse"] = True
         runtime.save_checkpoint(
             candidate_dir,
@@ -1676,7 +1867,7 @@ def run_segment(
         progress["sft_guard_version"] = PHASE5_SFT_GUARD_VERSION
         progress["sft_guard_migration_applied"] = bool(sft_guard_migration)
         if bool(sft_report.get("accepted")) or sft_guard_migration:
-            optimizer_path.unlink(missing_ok=True)
+            _remove_optimizer_checkpoint(optimizer_path)
             progress["optimizer_reset_after_sft"] = True
         else:
             progress["optimizer_reset_after_sft"] = False
