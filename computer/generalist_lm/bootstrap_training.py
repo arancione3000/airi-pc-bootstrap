@@ -512,6 +512,67 @@ def _phase5_recovery_segment_budget(
     return max(62_500, min(requested, int(math.ceil(requested / divisor))))
 
 
+def _phase5_recovery_plan(
+    requested_tokens: int,
+    *,
+    parameters: int,
+    context_length: int,
+    persisted_lr_scale: float,
+    consecutive_rejections: int,
+) -> dict[str, Any]:
+    """Return a bounded rescue plan that cannot livelock at the old LR floor.
+
+    After repeated language-gate rejections we keep the gate strict, but change
+    the training dynamics instead of retrying the same transaction forever:
+    use a smaller transaction, progressively lower learning rates down to
+    1/64x, reset stale AdamW momentum, and temporarily focus on short-sentence
+    completion until one segment is accepted.
+    """
+    rejected = max(0, int(consecutive_rejections))
+    requested = max(1, int(requested_tokens))
+    parameter_cap = _phase5_parameter_segment_cap(
+        parameters=int(parameters),
+        context_length=int(context_length),
+    )
+    segment_budget = _phase5_recovery_segment_budget(
+        requested,
+        consecutive_rejections=rejected,
+    )
+    if parameter_cap is not None:
+        segment_budget = min(int(segment_budget), int(parameter_cap))
+
+    stall_recovery = rejected >= 2
+    if stall_recovery:
+        # 50M CPU retries previously sat at ~62.5k forever.  Halving the
+        # transaction makes each quality decision faster without counting
+        # rejected tokens.
+        segment_budget = min(int(segment_budget), 31_250)
+
+    persisted_scale = max(
+        1.0 / 64.0,
+        min(1.0, float(persisted_lr_scale or 1.0)),
+    )
+    if rejected <= 0:
+        lr_scale = persisted_scale
+    else:
+        scheduled_scale = max(1.0 / 64.0, 0.5 ** (rejected + 1))
+        lr_scale = min(persisted_scale, scheduled_scale)
+
+    return {
+        "requested_budget_tokens": int(requested),
+        "effective_budget_tokens": int(segment_budget),
+        "parameter_cap_tokens": (
+            int(parameter_cap) if parameter_cap is not None else None
+        ),
+        "learning_rate_scale": float(lr_scale),
+        "stall_recovery": bool(stall_recovery),
+        "reset_optimizer": bool(stall_recovery),
+        "forced_stage": (
+            "B_short_sentence_completion" if stall_recovery else None
+        ),
+    }
+
+
 def _batch(blocks: list[list[int]], indices: list[int], *, device):
     import torch
     ids = torch.tensor([blocks[i] for i in indices], dtype=torch.long, device=device)
@@ -1626,33 +1687,47 @@ def run_segment(
     consecutive_rejections = int(
         progress.get("segment_guard_consecutive_rejections", 0) or 0
     )
-    segment_lr_scale = max(
-        0.125,
-        min(1.0, float(progress.get("segment_guard_lr_scale", 1.0) or 1.0)),
+    recovery_plan = _phase5_recovery_plan(
+        segment_tokens,
+        parameters=int(parameter_count(runtime.model)),
+        context_length=int(runtime.config.context_length),
+        persisted_lr_scale=float(
+            progress.get("segment_guard_lr_scale", 1.0) or 1.0
+        ),
+        consecutive_rejections=consecutive_rejections,
     )
+    segment_lr_scale = float(recovery_plan["learning_rate_scale"])
     retry_seed_offset = int(consecutive_rejections) * 1_000_003
     shutil.rmtree(segment_best_dir, ignore_errors=True)
 
     processed_before_segment = int(progress.get("tokens_processed", 0) or 0)
-    requested_segment_budget = max(1, int(segment_tokens))
-    segment_budget = _phase5_recovery_segment_budget(
-        requested_segment_budget,
-        consecutive_rejections=consecutive_rejections,
-    )
-    parameter_cap = _phase5_parameter_segment_cap(
-        parameters=int(parameter_count(runtime.model)),
-        context_length=int(runtime.config.context_length),
-    )
-    if parameter_cap is not None:
-        segment_budget = min(int(segment_budget), int(parameter_cap))
+    requested_segment_budget = int(recovery_plan["requested_budget_tokens"])
+    segment_budget = int(recovery_plan["effective_budget_tokens"])
+    parameter_cap = recovery_plan["parameter_cap_tokens"]
     progress["segment_guard_requested_budget_tokens"] = int(requested_segment_budget)
-    progress["parameter_segment_cap_tokens"] = (
-        int(parameter_cap) if parameter_cap is not None else None
-    )
+    progress["parameter_segment_cap_tokens"] = parameter_cap
     progress["segment_guard_effective_budget_tokens"] = int(segment_budget)
     progress["segment_guard_recovery_budget_active"] = bool(
         segment_budget < requested_segment_budget
     )
+    progress["segment_guard_stall_recovery_active"] = bool(
+        recovery_plan["stall_recovery"]
+    )
+    progress["segment_guard_rescue_stage"] = recovery_plan["forced_stage"]
+
+    if bool(recovery_plan["reset_optimizer"]):
+        # The model is already the exact pre-segment rollback checkpoint.  A
+        # fresh optimizer removes stale AdamW momentum that can repeatedly push
+        # the same 50M lineage back across the language guard.
+        optimizer = torch.optim.AdamW(
+            runtime.model.parameters(),
+            lr=float(base_learning_rate) * segment_lr_scale,
+            weight_decay=0.01,
+        )
+        optimizer_storage = None
+        progress["segment_guard_optimizer_reset_for_stall"] = True
+    else:
+        progress["segment_guard_optimizer_reset_for_stall"] = False
     eval_every_steps = max(8, int(eval_every_steps))
     best_loss = progress.get("best_validation_loss")
     best_loss = float(best_loss) if best_loss is not None else float("inf")
@@ -1681,9 +1756,14 @@ def run_segment(
         and int(progress["tokens_processed"]) - processed_before_segment < segment_budget
     ):
         step = int(progress["steps"])
-        stage = _causal_curriculum_stage(
-            int(progress["tokens_processed"]),
-            target_tokens,
+        forced_stage = recovery_plan["forced_stage"]
+        stage = (
+            str(forced_stage)
+            if forced_stage
+            else _causal_curriculum_stage(
+                int(progress["tokens_processed"]),
+                target_tokens,
+            )
         )
         progress["curriculum_stage"] = stage
         train_blocks = stage_blocks[stage]
@@ -1824,12 +1904,37 @@ def run_segment(
             "learning_rate_scale": float(segment_lr_scale),
         })
         progress["segment_guard_rejections"] = history[-32:]
-        progress["segment_guard_consecutive_rejections"] = int(
-            consecutive_rejections + 1
+        next_rejection_count = int(consecutive_rejections + 1)
+        progress["segment_guard_consecutive_rejections"] = next_rejection_count
+        next_plan = _phase5_recovery_plan(
+            requested_segment_budget,
+            parameters=int(parameter_count(runtime.model)),
+            context_length=int(runtime.config.context_length),
+            persisted_lr_scale=float(segment_lr_scale) * 0.5,
+            consecutive_rejections=next_rejection_count,
         )
-        progress["segment_guard_lr_scale"] = max(
-            0.125,
-            float(segment_lr_scale) * 0.5,
+        progress["segment_guard_lr_scale"] = float(
+            next_plan["learning_rate_scale"]
+        )
+        # Preserve attempt telemetry across rollback.  Previously restoring
+        # progress_before_segment also restored stale budget fields, making the
+        # app look frozen even while smaller rescue transactions were running.
+        progress["segment_guard_requested_budget_tokens"] = int(
+            requested_segment_budget
+        )
+        progress["parameter_segment_cap_tokens"] = parameter_cap
+        progress["segment_guard_effective_budget_tokens"] = int(segment_budget)
+        progress["segment_guard_recovery_budget_active"] = bool(
+            segment_budget < requested_segment_budget
+        )
+        progress["segment_guard_last_attempted_tokens"] = int(attempted_tokens)
+        progress["segment_guard_last_attempted_steps"] = int(attempted_steps)
+        progress["segment_guard_stall_recovery_active"] = bool(
+            next_plan["stall_recovery"]
+        )
+        progress["segment_guard_rescue_stage"] = next_plan["forced_stage"]
+        progress["segment_guard_optimizer_reset_for_stall"] = bool(
+            next_plan["reset_optimizer"]
         )
         progress["segment_guard_last_accepted"] = False
         progress["segment_guard_recovery_mode"] = bool(
@@ -1866,9 +1971,14 @@ def run_segment(
     progress["segment_guard_consecutive_rejections"] = 0
     progress["segment_guard_lr_scale"] = min(
         1.0,
-        max(0.125, float(segment_lr_scale) * 1.20),
+        max(1.0 / 64.0, float(segment_lr_scale) * 1.20),
     )
     progress["segment_guard_last_accepted"] = True
+    progress["segment_guard_stall_recovery_active"] = False
+    progress["segment_guard_rescue_stage"] = None
+    progress["segment_guard_optimizer_reset_for_stall"] = False
+    progress["segment_guard_last_attempted_tokens"] = int(attempted_tokens)
+    progress["segment_guard_last_attempted_steps"] = int(attempted_steps)
     progress["segment_guard_recovery_mode"] = bool(segment_guard.get("recovery_mode"))
     accepted_history = list(progress.get("segment_guard_acceptances") or [])
     accepted_history.append({

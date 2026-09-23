@@ -31,6 +31,7 @@ from generalist_lm.bootstrap_training import (
     _grow_bootstrap_runtime,
     _phase5_memory_safe_batch_plan,
     _phase5_parameter_segment_cap,
+    _phase5_recovery_plan,
     _phase5_recovery_segment_budget,
     _phase5_success,
     _load_optimizer_checkpoint,
@@ -105,6 +106,55 @@ def test_phase5_recovery_budget_shrinks_after_rejected_segments():
         250_000,
         consecutive_rejections=8,
     ) == 62_500
+
+
+def test_phase5_recovery_plan_escapes_old_lr_floor_and_resets_momentum():
+    plan = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=0.125,
+        consecutive_rejections=2,
+    )
+    assert plan["effective_budget_tokens"] == 31_250
+    assert plan["learning_rate_scale"] == pytest.approx(0.125)
+    assert plan["stall_recovery"] is True
+    assert plan["reset_optimizer"] is True
+    assert plan["forced_stage"] == "B_short_sentence_completion"
+
+    deeper = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=0.0625,
+        consecutive_rejections=3,
+    )
+    assert deeper["effective_budget_tokens"] == 31_250
+    assert deeper["learning_rate_scale"] == pytest.approx(0.0625)
+
+    floor = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=0.001,
+        consecutive_rejections=9,
+    )
+    assert floor["learning_rate_scale"] == pytest.approx(1.0 / 64.0)
+
+
+def test_phase5_recovery_plan_does_not_penalize_healthy_training():
+    plan = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=0.3,
+        consecutive_rejections=0,
+    )
+    assert plan["effective_budget_tokens"] == 62_500
+    assert plan["learning_rate_scale"] == pytest.approx(0.3)
+    assert plan["stall_recovery"] is False
+    assert plan["reset_optimizer"] is False
+    assert plan["forced_stage"] is None
 
 
 def test_phase5_memory_plan_keeps_7m_fast_and_50m_bounded():
