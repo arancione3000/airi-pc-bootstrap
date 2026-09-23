@@ -22,7 +22,12 @@ from .research_cycle import (
     _save_champion,
     _transfer_compatible_weights,
 )
-from .runtime import GeneralistRuntime, checkpoint_has_model, checkpoint_model_sha256
+from .runtime import (
+    GeneralistRuntime,
+    checkpoint_has_model,
+    checkpoint_model_sha256,
+    remove_optimizer_state,
+)
 
 
 LINEAGE_SCHEMA = 1
@@ -451,7 +456,7 @@ def adopt_verified_descendant(
         progress["steps"] = inherited_steps
         progress["optimizer_reset_after_lineage_adoption"] = True
         _atomic_json(progress_path, progress)
-        (root / "bootstrap-data" / "optimizer.pt").unlink(missing_ok=True)
+        remove_optimizer_state(root / "bootstrap-data")
         shutil.rmtree(root / "bootstrap-data" / "best", ignore_errors=True)
         shutil.rmtree(root / "bootstrap-data" / "pre-sft", ignore_errors=True)
         shutil.rmtree(
@@ -766,7 +771,7 @@ def migrate_live_lineage(
         progress["tokens_processed"] = inherited_tokens
         progress["steps"] = inherited_steps
         _atomic_json(progress_path, progress)
-        (root / "bootstrap-data" / "optimizer.pt").unlink(missing_ok=True)
+        remove_optimizer_state(root / "bootstrap-data")
         shutil.rmtree(root / "bootstrap-data" / "best", ignore_errors=True)
         shutil.rmtree(root / "bootstrap-data" / "pre-sft", ignore_errors=True)
         shutil.rmtree(root / "bootstrap-data" / "pre-anticollapse", ignore_errors=True)
