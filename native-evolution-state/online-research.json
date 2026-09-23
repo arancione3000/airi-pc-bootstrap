@@ -1,180 +1,20 @@
 {
-  "academic_fallback": "openalex",
+  "academic_fallback": null,
   "errors": [
     {
       "error": "HTTPError:HTTP Error 406: Not Acceptable",
       "provider": "arxiv"
+    },
+    {
+      "error": "HTTPError:HTTP Error 429: Too Many Requests",
+      "provider": "openalex"
     }
   ],
   "evidence": [
     {
-      "digest": "54503246a54bfa5b3173653f73769b66eb06a38be8f2720bcb5cd8ef450c644e",
-      "provider": "openalex",
-      "published": "2026-12-31",
-      "source_id": "https://openalex.org/W7162095276",
-      "summary": "Online neural learning requires models that update after each incoming example, remain calibrated under distributional change, and avoid brittle gradient transmission. The original version of this work used a small static benchmark, a shallow model, few random seeds, and no significance tests. This revision reformulates the problem as genuine prequential online learning and introduces Smooth Online Activation Routing (SOAR), a Hedge-style routing algorithm over smooth activation experts trained by singleinstance adaptive updates. SOAR links activation smoothness with online regret through a prediction-with-expert-advice bound: the mixture incurs only logarithmic-exponential-weight overhead relative to the best activation expert in hindsight, while each expert uses diagonal adaptive online gradients. We evaluate two-hidden-layer online neural networks on eight streams, fourteen methods, thirteen comparators, and eight random seeds, yielding 896 fully reproducible runs. The benchmark includes four real scikit-learn data sets and four synthetic streaming tasks with stationary, nonlinear, gradual-drift, and sudden-drift regimes. Across all dataset-seed blocks, SOAR obtains the best mean final accuracy ( $92.56 \\%$ ), best mean negative log-likelihood ( 0.199 ), and best prequential accuracy ( $86.83 \\%$ ). Paired Wilcoxon and Holm-corrected tests show significant improvements over ReLU, LeakyReLU, ELU, Softplus, Adam, SGD, and the compact ablation; improvements over the strongest fixed TeLU activation are positive but not statistically significant. The results support a nuanced conclusion: adaptive smooth activation routing is a robust online-learning mechanism and the best overall method in this controlled benchmark suite, but fixed smooth activations remain highly competitive on small static data. topics=Data Stream Mining Techniques Domain Adaptation and Few-Shot Learning Stochastic Gradient Optimization Techniques oa=True oa_status=gold",
-      "tags": [
-        "dataset"
-      ],
-      "title": "SOAR: Smooth Online Activation Routing for Stable Neural Learning from Evolving Streams",
-      "url": "https://pub.respai.de/articles/1-2/3sniu.html"
-    },
-    {
-      "digest": "784184d3e830a08fb87e432cb71a909a2b29f9a03a4abc5dde126cda4cc6a379",
-      "provider": "openalex",
-      "published": "2026-12-31",
-      "source_id": "https://openalex.org/W7164183113",
-      "summary": "Do large language models (LLMs) possess a measurable \"personality,\" and how do the linguistic properties of training corpora shape their cognitive style and downstream reasoning? This paper approaches these questions from a sociolinguistic perspective on machine \"identity.\" This manuscript is positioned explicitly as a conceptual perspective paper: it does not present original experimental data, nor does it constitute a systematic review with defined search strategies or inclusion criteria. Instead, it synthesises key published findings into two original theoretical frameworks intended to guide future empirical and engineering work. We examine evidence that LLMs exhibit reliable, valid Big Five personality traits—particularly in large, instruction-tuned models—and that continued pre-training on domain-specific corpora may shape those traits through measurable linguistic features: imperative ratio, type-token ratio (TTR), and syntactic complexity. We then analyse how standard-language ideology embedded in training corpora is amplified in model outputs, disadvantaging dialect and minority-language communities. Building on these findings, we propose two conceptual contributions: (1) a Personality Engineering (PE) framework for targeted continued pre-training to cultivate task-appropriate cognitive profiles, and (2) a Language Ideology Propagation Model (LIPM) mapping the pipeline from corpus composition to societal impact. Both frameworks are explicitly conceptual and require empirical validation before they can function as operational guidelines. Their value lies in structuring future research and providing a shared vocabulary for cross-disciplinary collaboration, with direct implications for responsible AI deployment. topics=Artificial Intelligence in Healthcare and Education Language and cultural evolution Topic Modeling oa=True oa_status=gold",
-      "tags": [
-        "dataset",
-        "long-context",
-        "reasoning",
-        "tokenizer"
-      ],
-      "title": "The Sociolinguistics of Machine Identity: LLM Personality and Ideology Propagation",
-      "url": "https://pub.respai.de/articles/1-2/4gli.html"
-    },
-    {
-      "digest": "f9748eed553d4a6b48cc57f1b09523066d865c72fbf692be23339847900360b5",
-      "provider": "openalex",
-      "published": "2026-12-10",
-      "source_id": "https://openalex.org/W7197044566",
-      "summary": "Adeno-associated virus (AAV) vectors have demonstrated strong clinical efficacy across multiple monogenic disorders, yet neutralizing antibodies (NAbs) remain major barriers to vector redosing and durable transduction. To address this limitation, we developed a sequence-based artificial intelligence framework integrating Bidirectional Encoder Representations from Transformers (BERT) and Evolutionary Scale Modeling with Low-Rank Adaptation (ESM-LoRA) to identify human-tolerant, virus-specific motifs across human and viral proteins using sliding-window analyses and multi-layer fine-tuning. Using capsid-derived segments from AAV2 and AAV843, we prioritized surface-accessible, virus-polarized peptides as candidate decoys and evaluated their ability to block AAV-targeted antibodies. The models achieved high accuracy in distinguishing human versus viral fragments, and selected peptides bound AAV-specific antibodies with nanomolar affinity, competitively restored capsid binding, and recovered >60% of baseline transduction in the presence of NAbs. In mouse models with pre-existing or redosing-induced antibodies, coadministration of decoy peptides and an IgG-degrading enzyme reduced high-titer NAbs to approximately 1:4 and restored hepatic transgene expression without detectable inflammatory or peptide-specific immune responses. A contrastive variational autoencoder (VAE) further generated non-natural peptides with broader epitope coverage. These results support sequence-driven AI design of short, low-immunogenicity decoy peptides as a translational strategy to mitigate NAb interference and enhance the feasibility of AAV redosing. topics=Virus-based gene therapy research vaccines and immunoinformatics approaches Monoclonal and Polyclonal Antibodies Research oa=True oa_status=green",
-      "tags": [],
-      "title": "Sequence-based artificial intelligence-guided inhibitory peptides to counteract AAV neutralizing antibodies in gene therapy.",
-      "url": "https://pubmed.ncbi.nlm.nih.gov/42740894"
-    },
-    {
-      "digest": "d3daf3b177dc35152d21a33b74f27c8b15c267792f75736e4d24c51d4752017f",
-      "provider": "openalex",
-      "published": "2026-09-21",
-      "source_id": "https://openalex.org/W7213779195",
-      "summary": "Versioned open-source research archive by Muhammed Yasin Yılmaz. Contains nine individually identified research reports/preprints (CEV-2026-01 through CEV-2026-09), reproducible computational experiments, preserved negative results, the Cevahir implementation, and a twelve-chapter Turkish technical book with an English reading guide. The research asks how experience during operation can persistently, controllably and generalizably change a system's future computation and behavior. Studies examine experience-conditioned computation, representation search, persistence and transfer, credit assignment, learning-state transport, learned updates, recurrent-state acquisition, correction, and future-query state requirements. The general living-learning problem remains open. The newest finite audit enumerates 61,575 histories and checks 712,632 content-informed label writes and 358,020 appends. Full records and limitations are included. These reports have not undergone external peer review. AI assistance was used for code, computational experiments, literature review and drafting. DOI registration identifies this archived version; it does not certify scientific correctness or establish novelty. Start at docs/publications/README.md for the reports and docs/book/README.md for the book. This DOI covers the collection and code together, not separate DOI registrations for each report. This second archive edition expands book chapters 3-6 with neural-network and embedding foundations, attention and Transformer mathematics, training methods, original-paper citations, dated industry comparisons, and solved exercises. Seven reproducible CPU example groups use actual Cevahir components; 99 selected neural-core, attention, MoE and training tests passed. This is an evolving educational manuscript, not a claim that every chapter is complete. The nine research reports retain their original findings and source records. This third archive edition expands chapters 7-9 with checkpoint identity and resume, generation mathematics and cache, memory retrieval and tool orchestration: 15 new solved exercises and ten additional executed CPU example groups. It corrects calculator expression truncation found during code review, preserving the original negative observation. Seventy selected generation, agent, checkpoint and runtime tests passed. The book now contains 12 chapters, 115 second-level headings and 64 third-level headings; it remains an evolving manuscript. topics= oa=True oa_status=green",
-      "tags": [],
-      "title": "Cevahir AI: Living-Learning Research Reports and Technical Book",
-      "url": "https://doi.org/10.5281/zenodo.22864660"
-    },
-    {
-      "digest": "d7c9c957c0d4f27bf0e64c02326a9bd30120ffe3e339831a824a3aa97bda017e",
-      "provider": "openalex",
-      "published": "2026-09-20",
-      "source_id": "https://openalex.org/W7213760727",
-      "summary": "Hippocampal area CA3 is widely believed to serve a core memory function: retrieving distributed patterns of neural activity that were previously stored in the recurrent connections between neurons. However, it remains unknown how the physiological properties of individual neurons contribute to this function. Here, we present a mathematical analysis of a canonical recurrent neural network model of CA3. Our analysis provides three main, experimentally testable predictions for recurrent circuits performing stable memory recall. Two of these predictions, that pyramidal cells should be characterized by elevated intrinsic excitability and by inhibition-dominated recurrent connections, are consistent with previous experimental findings. We thus focused on testing the third prediction: that neuronal activation functions have an exponent slightly above $1$. For this, we performed \\textit{in vivo} intracellular recordings of 49 pyramidal neurons from the CA3 area of behaving mice. Fitting a range of parametric models to these voltage traces and performing statistical model comparison revealed an average neural activation exponent slightly above $1$, confirming our theoretical predictions, with substantial heterogeneity across cells, which remains to be accounted for by the theory. An analysis of 133 further cells from two other previous studies provided neural activation exponent estimates highly consistent with those we found in our data. Our results suggest that the properties of hippocampal CA3 area are tuned to support reliable memory recall even at the level of single neurons. topics=Memory and Neural Mechanisms Neural dynamics and brain function Neuroscience and Neuropharmacology Research oa=True oa_status=green",
-      "tags": [
-        "long-context"
-      ],
-      "title": "The activation function of CA3 pyramidal neurons is optimal for the stable recall of memory patterns",
-      "url": "https://doi.org/10.64898/2026.09.17.752025"
-    },
-    {
-      "digest": "3592b4b1fe00aba1c272378b248530a7e285a17a26e386444e204c0d9935fcbf",
-      "provider": "openalex",
-      "published": "2026-09-20",
-      "source_id": "https://openalex.org/W7213777769",
-      "summary": "Canada’s affordable housing sector is navigating unprecedented pressures, from an intensifying housing crisis to shifting client needs, aging infrastructure, and workforce transitions. This article draws on interviews with 24 sector leaders to examine professional development (PD) as both a support mechanism and a lens for understanding the sector. Leaders identified critical competencies spanning technical, relational, political, and equity-oriented skills, reflecting the complexity of contemporary housing work. Findings highlight how PD can strengthen workforce capacity, sustain sector resilience, and support values-driven practice, while simultaneously revealing systemic challenges, jurisdictional complexities, and emerging sectoral priorities. By situating PD needs within the broader context of sector transformation, this research emphasizes that investment in people is central to achieving effective, rights-based, and responsive affordable housing in Canada. topics=Housing, Finance, and Neoliberalism Facilities and Workplace Management Urban Planning and Governance oa=True oa_status=diamond",
-      "tags": [],
-      "title": "Professional Development as a Lens on the Canadian Affordable Housing Sector: Insights from Sector Leaders",
-      "url": "https://doi.org/10.29173/cjnser885"
-    },
-    {
-      "digest": "8102f9abd24b61fea603c0731dd8ce75a0b119673c86ffece6b649359bf82db1",
-      "provider": "openalex",
-      "published": "2026-09-22",
-      "source_id": "https://openalex.org/W4402954341",
-      "summary": "We present a framework for assistive robot manipulation that addresses two fundamental challenges: efficient adaptation of large-scale models for scene affordance understanding and effective learning of robot actions by grounding the visual affordance. To tackle the first challenge, we adopt a parameter-efficient prompt tuning method, prepending learnable text prompts to a frozen vision model to predict affordances, while considering spatial and semantic relationships in multi-task scenarios. For the second challenge, we propose a flow matching method, representing a robot visuomotor policy as a conditional process of flowing random waypoints to desired robot actions. We introduce a real-world dataset with 10 tasks to evaluate our approach. Experiments show our prompt tuning method achieves competitive or superior performance to other finetuning protocols across data scales, while satisfying parameter efficiency. Furthermore, flow matching yields more stable training and faster inference compared to diffusion policy; specifically, 1-step flow matching achieves comparable accuracy to 16-step DDIM while reducing inference time by roughly 85%. Our framework seamlessly unifies high-level parameter-efficient affordance representation learning with low-level flow matching policies, illustrating how explicit affordances serve as effective spatial grounding for flow-based policies. https://github.com/HRI-EU/flow_matching . topics=Reinforcement Learning in Robotics Robot Manipulation and Learning oa=True oa_status=gold",
-      "tags": [
-        "dataset",
-        "efficiency"
-      ],
-      "title": "Affordance-based robot manipulation with flow matching",
-      "url": "https://doi.org/10.3389/frobt.2026.1906861"
-    },
-    {
-      "digest": "9d766219189e04f08073511c60b68c8baae406bf41bab91d456835d9e2153e21",
-      "provider": "openalex",
-      "published": "2026-09-21",
-      "source_id": "https://openalex.org/W7213740059",
-      "summary": "This narrative inquiry explored the perspectives of three professional art therapists of color. This study explored the past experience of being a graduate art therapy student of color on several levels. It also explored the impact of cultural competency course in relation to the experience of being a student of color. This experience is important in terms of how being an ethnic minority can affect the learning environment in relation to graduate experience of students of color and how cultural competency is taught to all students. This study explored the art recommendations of therapy professionals of color for cultural competency in art therapy education. The narrative inquiry was conducted at the annual 2006 American Art Therapy Association Conference. Three interviews were recorded and transcribed and analyzed using the Zoom Model. Narrative themes that surfaced suggest there is no consistency in the perception of the graduate art therapy student of color experience. Each of the participants had different individual experiences which were unique. This study is important because it attempts to cover the depth and breadth of the student of color experience in graduate school. topics=Art Therapy and Mental Health Counseling Practices and Supervision Occupational Therapy Practice and Research oa=True oa_status=green",
-      "tags": [],
-      "title": "Graduate Art Therapy Experience of Students of Color",
-      "url": "https://digitalcommons.odu.edu/evmshealthprofessions_etds/41"
-    },
-    {
-      "digest": "f3051bf935d8bcc6ac50e40af57274d36b1ea77b6404333cc8dd1b19a5ea634a",
-      "provider": "openalex",
-      "published": "2026-09-19",
-      "source_id": "https://openalex.org/W7213591856",
-      "summary": "topics=Islamic Studies and History Gender and Women's Rights Marriage and Sexual Relationships oa=True oa_status=green",
-      "tags": [],
-      "title": "Islam and Feminism: A Qualitative Documentary Analysis of Gender, Marital Rights, and Public Authority in Selected Islamic Texts and Juristic Traditions",
-      "url": "https://doi.org/10.21203/rs.3.rs-11069744/v1"
-    },
-    {
-      "digest": "2e1ae82b21263959c7e909791070fa9da677f73c1a697c10ea822c0f7686744a",
-      "provider": "openalex",
-      "published": "2026-09-19",
-      "source_id": "https://openalex.org/W7213617200",
-      "summary": "Abstract Large language models write code fluently, yet the programs they produce carry defect rates that ordinary functional evaluation seldom exposes, and detection systems that could catch these faults act too late to shape the generation that created them. This paper argues that generation and detection should be optimized together rather than in sequence, and it makes that argument concrete through one specific coupling: the detector’s node-level risk estimates are mapped back onto decoder positions and used to reweight the generation loss token by token, while a composite reward built from test outcomes and defect probability supplies a second, sampled gradient. Generator and detector are updated in alternation under a bounded schedule; failed candidates re-enter the detector’s training stream, and twelve mutation operators widen its exposure to underrepresented fault families. Using Qwen2.5-Coder-7B-Instruct as the generator and a gated graph neural network as the detector, and averaging five independent seeds, the coupled method lowered the defect rate of test-passing code from 0.216 ± 0.008 to 0.128 ± 0.008 while raising pass@10 from 0.724 ± 0.008 to 0.761 ± 0.008. Every defect rate reported here is scored by a reference detector frozen outside the loop, so the improvement cannot be an artefact of a critic grading its own pupil. Detection F1 rose from 0.627 ± 0.011 to 0.681 ± 0.011, although that gain confounds the coupling with the larger training stream the coupled detector receives. Ablation isolates token-level blame assignment as the component doing most of the work, and a controlled error-injection study quantifies how far detector mistakes propagate into generation. The evidence is confined to function-level Python and C, and concurrency faults remain resistant, so the claims made here are deliberately bounded to that setting; code, configurations and per-seed records accompany the submission so the boundary can be tested directly. topics=Software Testing and Debugging Techniques Software Engineering Research Software Reliability and Analysis Research oa=True oa_status=gold",
-      "tags": [
-        "code",
-        "optimizer"
-      ],
-      "title": "Token-level defect feedback and alternating optimization for coupled code generation and defect detection with large language models",
-      "url": "https://doi.org/10.1038/s41598-026-71524-z"
-    },
-    {
-      "digest": "94bf75b3e1b3bc2cdb730da44a5634fa27b1deb48b9797d329a57683f94319a6",
-      "provider": "openalex",
-      "published": "2026-10-01",
-      "source_id": "https://openalex.org/W7202008909",
-      "summary": "Modern software systems evolve rapidly under CI/CD practices, where tests are critical for quality. However, substantial code changes often render existing test cases obsolete, causing pipeline disruptions, reduced productivity, and compromised quality. Recent automatic test update approaches leverage LLMs to refine test cases via execution feedback and exact-matching context retrieval, prioritizing executability and line coverage but suffering three limitations: (1) neglecting test assertion adequacy, weakening fault detection; (2) relying on coarse line coverage instead of specific uncovered lines/branches; (3) using exact-matching retrieval, which fails for LLM hallucinated queries. To address these, we propose MuMuTestUp, a mutation-guided multi-agent framework with three specialized agents: Mutation Analysis (strengthens assertions via surviving mutants), Coverage Analysis (generates targeted repair instructions for uncovered lines/branches), and Semantic Retrieval (handles hallucinations via semantic-similarity search). We also construct PRBENCH, a 571-sample pull-request-level dataset from 10 open-source Java projects (validated for cross-commit update scenarios). Evaluations against state-of-the-art baselines use both open-source (Deepseek-V3.2) and closed-source (GPT-4.1) LLMs. topics=Software Testing and Debugging Techniques Software Engineering Research Software System Performance and Reliability oa=True oa_status=green",
-      "tags": [
-        "dataset"
-      ],
-      "title": "Mutation-based multi-agent test case update",
-      "url": "https://ink.library.smu.edu.sg/sis_research/11196"
-    },
-    {
-      "digest": "429446bf19ff9cb40d873a77a3675cd3ad7e2eaf5dbb9e93c9b30357b72ced50",
-      "provider": "openalex",
-      "published": "2026-09-20",
-      "source_id": "https://openalex.org/W7204828264",
-      "summary": "Portuguese Information Retrieval (IR) lacks public datasets, and relevance assessment for specialized collections remains costly. While Large Language Models (LLMs) increasingly support relevance assessment, their reliability in non-English specialized domains remains unclear. We introduce NormasTCU (https://huggingface.co/datasets/LeandroRibeiro/NormasTCU), a Brazilian Portuguese IR dataset with 14,469 legal documents, 46 queries, and 3,048 human judgments over 812 query-document pairs. Using NormasTCU, we evaluated LLM-as-a-judge for relevance assessment by prompting three models with two prompt techniques to grade these pairs. We then compared the rankings of 15 IR systems derived from LLM-generated and human reference qrels. LLMs consistently showed a positive scoring bias (mean absolute error: 0.46--0.66 on a 0-2 scale). Furthermore, pair-level agreement with human judgments achieved only fair to moderate levels, with Cohen's kappa ranging from 0.32 to 0.53. Despite this bias, LLM-generated judgments often yielded highly similar system rankings for nDCG@10 and MRR (observed Kendall's tau greater than or equal 0.90, although the bootstrap confidence intervals did not always remain above this threshold), but were less reliable for P@10 and R@10. Notably, LLM-based rankings were sometimes more strongly correlated with the reference ranking than individual human annotations were. As a practical implication, our results suggest that LLMs could effectively support scalable relevance assessment in specialized Portuguese corpora when evaluated using nDCG or MRR (rank-aware metrics), but they should be avoided when relying on precision or recall. topics=Topic Modeling Information Retrieval and Search Behavior Natural Language Processing Techniques oa=True oa_status=hybrid",
-      "tags": [
-        "dataset"
-      ],
-      "title": "NormasTCU — A Brazilian Portuguese IR dataset and an evaluation of LLM-as-a-judge for relevance assessment",
-      "url": "https://doi.org/10.1016/j.ipm.2026.105151"
-    },
-    {
-      "digest": "679ef6b017141a68fe0bd17ae328fd66614ba102d4578791ea3bade481623e50",
-      "provider": "openalex",
-      "published": "2026-09-21",
-      "source_id": "https://openalex.org/W7134093810",
-      "summary": "Intelligent systems increasingly have more decision-relevant capabilities and resources than they can use everywhere at once. This paper develops intelligence by appointment as a research program for making the right capability present at the right place and moment without surrendering continuing coverage, resource limits, deadlines, or bounded authority. An appointment is a temporary, governed, and revocable grant over capability, placement, time, resources, protected reserve, state, authority, and exit. The paper develops an eight-commitment reference kernel, an appointment control plane, an intermediate representation, runtime enforcement and evidence mechanisms, and a matched experimental program for determining when appointment machinery earns its complexity. Embodied intelligent systems provide the primary proving ground, while device–edge–cloud systems, tool-using AI, scientific workflows, and other heterogeneous systems test whether the abstraction transfers. The broader research question is whether intelligence should be treated less as a permanently installed property of components and more as a capability that systems can deliberately place, constrain, observe, revoke, and recover. The paper also develops a forward-looking engineering agenda spanning compilers, runtimes, hardware substrates, assurance, adversarial appointment capture, state lifecycle, and trace-driven co-design. Brad Pierce developed the central formulation and retains final editorial responsibility. An AI language model assisted in preparing the paper. topics=Big Data and Digital Economy Advanced Neural Network Applications IoT and Edge/Fog Computing oa=True oa_status=green",
-      "tags": [
-        "long-context"
-      ],
-      "title": "Intelligence by Appointment",
-      "url": "http://arxiv.org/abs/2603.05225"
-    },
-    {
-      "digest": "dc835c090ad9f367a77e78ba729503b896f6401c1b26b83bc0f4f1fdeba24aeb",
-      "provider": "openalex",
-      "published": "2026-09-20",
-      "source_id": "https://openalex.org/W7213752573",
-      "summary": "Neurons rely on localized protein synthesis to rapidly adapt synaptic function to activity, yet how dendritic translation regulates mitochondrial remodeling during synaptic plasticity remains poorly understood. Here, we show that neuronal activity engages a spatially restricted translational program that couples local protein synthesis to mitochondrial function through the non-canonical translation initiation factor eIF4G2. Using proximity labeling to profile the dendritic RNA interactome, translatome, and proteome, we identify a cohort of nuclear-encoded mitochondrial mRNAs that are selectively recruited for translation following depolarization and mGluR activation. This program drives activity-dependent increases in mitochondrial membrane potential, mitochondrial abundance, and oxygen consumption. Loss of eIF4G2 abolishes these responses, whereas dendrite-specific, but not soma-restricted, rescue restores mitochondrial remodeling, demonstrating that eIF4G2 functions locally at postsynaptic sites. Mechanistically, eIF4G2 binds the 5 prime or minute untranslated regions of activity-responsive mitochondrial transcripts and promotes translation of both upstream open reading frames (uORFs) and downstream coding sequences. Using a dendritically targeted split-GFP reporter, we further show that neuronal activity induces local uORF translation to generate previously unannotated micropeptides. Together, our findings identify eIF4G2-dependent local translation as a mechanism that establishes mitochondrial competence during synaptic activity by coordinating the production of mitochondrial proteins and uORF-encoded micropeptides. topics=Mitochondrial Function and Pathology RNA and protein synthesis mechanisms Biotin and Related Studies oa=True oa_status=green",
-      "tags": [
-        "code",
-        "long-context"
-      ],
-      "title": "Local translation couples synaptic activity to mitochondrial adaptation in dendrites",
-      "url": "https://doi.org/10.64898/2026.09.17.752159"
-    },
-    {
-      "digest": "5cb4a61ba4789606e0f822c90d7b5a228da66d4855359a9c841e0e5717709956",
+      "digest": "e2892bc638dede8752d8e8dc927703db5954f4decf7ea2c1cf658769e305289f",
       "provider": "github",
-      "published": "2026-09-22T18:49:35Z",
+      "published": "2026-09-22T22:09:05Z",
       "source_id": "bryavhn/nanosarvam",
       "summary": "Implement a readable Mixture-of-Experts language model optimized for training on consumer GPUs with advanced attention and routing features. license=unknown topics=api-gateway cloud-native distributed-systems docker fault-tolerance grpc kubernetes lightweight microservices nanosarvam observability open-source rest-api scalability service-mesh stars=0",
       "tags": [],
@@ -182,9 +22,9 @@
       "url": "https://github.com/bryavhn/nanosarvam"
     },
     {
-      "digest": "91c13edfeb4029a15be1049ca9cd530f977369d49453c171d5939139dc2094c7",
+      "digest": "c252e3418cb0883f3ac6edbf1ef03a4e8e7f335f9fbb2846b6906bf2078e765d",
       "provider": "github",
-      "published": "2026-09-22T18:13:03Z",
+      "published": "2026-09-22T21:42:10Z",
       "source_id": "Tnhn07/modded-nanogpt",
       "summary": "🚀 Accelerate language model training with modded-nanogpt, achieving 3.28 loss in under 3 minutes on 8 NVIDIA H100 GPUs for faster AI development. license=MIT topics=adam-optimizer deep-learning deep-neural-networks github-config muon nanogpt optimizer pytorch rwkv stars=2",
       "tags": [
@@ -291,25 +131,36 @@
       ],
       "title": "bcode0127-debug/Compositional-Reasoning-Arithmetic",
       "url": "https://github.com/bcode0127-debug/Compositional-Reasoning-Arithmetic"
+    },
+    {
+      "digest": "18455c5013ecc83bdfeb6c702bf24c0c157221a3dcf0686740ac54b2e1c1d6fd",
+      "provider": "github",
+      "published": "2026-06-16T16:08:29Z",
+      "source_id": "deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System",
+      "summary": "Developed an AI-powered Physics Reasoning (RLHF). The system generates step-by-step solutions for physics problems and automatically converts mathematical expressions into LaTeX format. Built using Python, PyTorch, Hugging Face Transformers, and TRL, with a modular architecture for training, evaluation, and scientific document generation.. license=unknown topics= stars=0",
+      "tags": [
+        "reasoning"
+      ],
+      "title": "deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System",
+      "url": "https://github.com/deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System"
     }
   ],
-  "evidence_digest": "de3f12363a1d83b67e448c9858c45d2e09f77b874bbf483134450b8b4224f453",
+  "evidence_digest": "befc3adc3b94dc274af1548c3b8dce35d85d303d8d05eb89ad8d05d73053a1a1",
   "ok": true,
   "policy": "online material is untrusted evidence; only bounded local mutation families may consume derived tags; OpenAlex is used when arXiv research metadata is unavailable",
-  "queried_at": "2026-09-22T21:19:41.170270+00:00",
+  "queried_at": "2026-09-23T00:34:26.992858+00:00",
   "remote_code_execution": false,
   "remote_content_trusted": false,
   "source_candidates": [],
   "tag_counts": {
-    "code": 3,
+    "code": 1,
     "curriculum": 1,
-    "dataset": 5,
-    "efficiency": 3,
+    "efficiency": 2,
     "gqa": 2,
-    "long-context": 7,
-    "optimizer": 2,
+    "long-context": 3,
+    "optimizer": 1,
     "reasoning": 2,
-    "tokenizer": 2
+    "tokenizer": 1
   },
   "topics": [
     "language model optimizer training",
