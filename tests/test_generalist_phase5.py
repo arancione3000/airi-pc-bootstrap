@@ -748,6 +748,12 @@ def test_residual_kl_recovery_keeps_legacy_weights_bit_stable():
         reference,
         ByteTokenizer(),
         examples,
+        anchor_examples=[
+            SFTExample([
+                {"role": "user", "content": "What is two plus two?"},
+                {"role": "assistant", "content": "Two plus two is four."},
+            ])
+        ],
         source_d_ff=source_ff,
         steps=3,
         batch_size=1,
@@ -781,6 +787,7 @@ def test_residual_kl_recovery_keeps_legacy_weights_bit_stable():
     assert report["mode"] == "residual_kl_recovery"
     assert report["train_upstream"] is False
     assert report["teacher_kl_weight"] == pytest.approx(1.0)
+    assert report["anchor_example_count"] == 1
     assert report["mean_teacher_kl_loss"] >= 0.0
     assert report["trainable_coordinate_count"] > 0
 
