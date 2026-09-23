@@ -30,6 +30,7 @@ from generalist_lm.bootstrap_training import (
     _filter_protected_replay,
     _grow_bootstrap_runtime,
     _phase5_memory_safe_batch_plan,
+    _phase5_parameter_segment_cap,
     _phase5_recovery_segment_budget,
     _phase5_success,
     _load_optimizer_checkpoint,
@@ -58,6 +59,29 @@ from generalist_lm.tokenizer import ByteTokenizer
 from generalist_lm.training import SFTExample, causal_training_objective
 
 
+
+
+def test_phase5_large_models_use_short_transactional_segments():
+    assert _phase5_parameter_segment_cap(
+        parameters=7_021_248,
+        context_length=128,
+    ) is None
+    assert _phase5_parameter_segment_cap(
+        parameters=20_000_000,
+        context_length=128,
+    ) == 250_000
+    assert _phase5_parameter_segment_cap(
+        parameters=50_041_536,
+        context_length=128,
+    ) == 62_500
+    assert _phase5_parameter_segment_cap(
+        parameters=80_000_000,
+        context_length=128,
+    ) == 31_250
+    assert _phase5_parameter_segment_cap(
+        parameters=50_041_536,
+        context_length=256,
+    ) == 31_250
 
 
 def test_phase5_recovery_budget_shrinks_after_rejected_segments():
