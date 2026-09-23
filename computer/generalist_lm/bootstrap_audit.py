@@ -8,7 +8,7 @@ from typing import Any
 from .curriculum import validation_rows
 from .phase5_diagnostics import evaluate_phase5_language
 from .research_cycle import _grouped_validation, _research_score
-from .runtime import GeneralistRuntime
+from .runtime import GeneralistRuntime, checkpoint_has_model
 
 
 def _summary(checkpoint: Path) -> dict[str, Any]:
@@ -51,7 +51,7 @@ def audit_bootstrap_checkpoints(
     missing = [
         name
         for name, path in checkpoints.items()
-        if not (path / "model.pt").is_file()
+        if not checkpoint_has_model(path)
     ]
     if missing:
         raise RuntimeError(f"missing Phase 5 checkpoints: {missing}")
