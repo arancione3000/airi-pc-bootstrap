@@ -1003,6 +1003,7 @@ def _phase5_recovery_plan(
     persisted_lr_scale: float,
     consecutive_rejections: int,
     recovery_hold: bool = False,
+    last_segment_accepted: bool = False,
 ) -> dict[str, Any]:
     """Return a bounded rescue plan that cannot livelock at the old LR floor.
 
@@ -1018,6 +1019,19 @@ def _phase5_recovery_plan(
         parameters=int(parameters),
         context_length=int(context_length),
     )
+    stable_fast_lane = bool(
+        int(consecutive_rejections) == 0
+        and bool(last_segment_accepted)
+        and not bool(recovery_hold)
+        and int(parameters) < 64_000_000
+        and int(context_length) <= 128
+    )
+    if stable_fast_lane and parameter_cap is not None:
+        # A 50M checkpoint that just passed the protected language gate can
+        # safely amortize evaluation/checkpoint overhead over a larger unit.
+        # Any rejection immediately clears last_segment_accepted and returns
+        # the next transaction to the conservative recovery budget.
+        parameter_cap = max(int(parameter_cap), 250_000)
     segment_budget = _phase5_recovery_segment_budget(
         requested,
         consecutive_rejections=rejected,
@@ -1057,6 +1071,7 @@ def _phase5_recovery_plan(
         ),
         "learning_rate_scale": float(lr_scale),
         "stall_recovery": bool(stall_recovery),
+        "stable_fast_lane": bool(stable_fast_lane),
         # Reset stale AdamW momentum only when entering rescue because of a
         # rejection.  After an accepted rescue segment, keep its valid
         # optimizer state while the sticky hold continues.
@@ -3218,6 +3233,7 @@ def run_segment(
         ),
         consecutive_rejections=consecutive_rejections,
         recovery_hold=bool(progress.get("segment_guard_recovery_hold", False)),
+        last_segment_accepted=bool(progress.get("segment_guard_last_accepted", False)),
     )
     segment_lr_scale = float(recovery_plan["learning_rate_scale"])
     retry_seed_offset = int(consecutive_rejections) * 1_000_003
@@ -3235,6 +3251,9 @@ def run_segment(
     )
     progress["segment_guard_stall_recovery_active"] = bool(
         recovery_plan["stall_recovery"]
+    )
+    progress["segment_guard_stable_fast_lane"] = bool(
+        recovery_plan.get("stable_fast_lane", False)
     )
     progress["segment_guard_rescue_stage"] = recovery_plan["forced_stage"]
 
@@ -3439,6 +3458,7 @@ def run_segment(
             recovery_hold=bool(
                 progress_before_segment.get("segment_guard_recovery_hold", False)
             ),
+            last_segment_accepted=False,
         )
         progress["segment_guard_lr_scale"] = float(
             next_plan["learning_rate_scale"]
