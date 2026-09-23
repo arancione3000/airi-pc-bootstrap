@@ -46,7 +46,15 @@ from .research_cycle import (
     _save_champion,
     _transfer_compatible_weights,
 )
-from .runtime import GeneralistRuntime, checkpoint_has_model, checkpoint_model_sha256
+from .runtime import (
+    GeneralistRuntime,
+    checkpoint_has_model,
+    checkpoint_model_sha256,
+    load_optimizer_state,
+    optimizer_has_state,
+    remove_optimizer_state,
+    save_optimizer_state,
+)
 from .lineage_migration import refresh_live_lineage_manifest
 from .tokenizer import PAD
 from .training import causal_training_objective, train_sft
@@ -1040,7 +1048,7 @@ def run_segment(
 
     if rebase_to_champion:
         shutil.rmtree(candidate_dir, ignore_errors=True)
-        optimizer_path.unlink(missing_ok=True)
+        remove_optimizer_state(bootstrap_root)
         shutil.rmtree(bootstrap_root / "best", ignore_errors=True)
         shutil.rmtree(bootstrap_root / "pre-sft", ignore_errors=True)
         shutil.rmtree(bootstrap_root / "pre-anticollapse", ignore_errors=True)
@@ -1117,7 +1125,7 @@ def run_segment(
             }
         progress["best_validation_loss"] = None
         progress["bad_eval_count"] = 0
-        optimizer_path.unlink(missing_ok=True)
+        remove_optimizer_state(bootstrap_root)
         shutil.rmtree(bootstrap_root / "best", ignore_errors=True)
         shutil.rmtree(bootstrap_root / "pre-sft", ignore_errors=True)
         shutil.rmtree(bootstrap_root / "pre-anticollapse", ignore_errors=True)
@@ -1304,8 +1312,8 @@ def run_segment(
         lr=float(base_learning_rate),
         weight_decay=0.01,
     )
-    if optimizer_path.is_file():
-        optimizer.load_state_dict(torch.load(optimizer_path, map_location="cpu", weights_only=True))
+    if optimizer_has_state(bootstrap_root):
+        optimizer.load_state_dict(load_optimizer_state(bootstrap_root, torch))
 
     segment_language_before = evaluate_phase5_language(runtime)
     guard_payload = _load_json(language_guard_path) if language_guard_path.is_file() else {}
@@ -1610,7 +1618,12 @@ def run_segment(
             "segment_language_guard": True,
         },
     )
-    torch.save(optimizer.state_dict(), optimizer_path)
+    optimizer_storage = save_optimizer_state(
+        bootstrap_root,
+        optimizer.state_dict(),
+        torch,
+    )
+    progress["optimizer_storage"] = optimizer_storage
 
     rung_complete = int(progress["tokens_processed"]) >= target_tokens or early_stopped
     progress["early_stopped"] = bool(early_stopped)
@@ -1651,7 +1664,7 @@ def run_segment(
             progress.get("anti_collapse_rescue_tokens", 0) or 0
         ) + int(rescue_report.get("tokens_processed", 0) or 0)
         if rescue_accepted:
-            optimizer_path.unlink(missing_ok=True)
+            remove_optimizer_state(bootstrap_root)
             progress["optimizer_reset_after_anticollapse"] = True
         runtime.save_checkpoint(
             candidate_dir,
@@ -1738,7 +1751,7 @@ def run_segment(
         progress["sft_guard_version"] = PHASE5_SFT_GUARD_VERSION
         progress["sft_guard_migration_applied"] = bool(sft_guard_migration)
         if bool(sft_report.get("accepted")) or sft_guard_migration:
-            optimizer_path.unlink(missing_ok=True)
+            remove_optimizer_state(bootstrap_root)
             progress["optimizer_reset_after_sft"] = True
         else:
             progress["optimizer_reset_after_sft"] = False
