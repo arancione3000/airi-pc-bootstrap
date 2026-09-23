@@ -1409,8 +1409,16 @@ def run_segment(
             indices[offset:offset + micro_batch_size]
             for offset in range(0, len(indices), micro_batch_size)
         ]
+        prepared_micro_batches = []
         for micro_indices in micro_batches:
             ids, labels = _batch(train_blocks, micro_indices, device=runtime.device)
+            micro_supervised = int((labels[:, 1:] != -100).sum().item())
+            prepared_micro_batches.append((ids, labels, micro_supervised))
+            supervised += micro_supervised
+        if supervised <= 0:
+            raise RuntimeError("Phase 5 batch contains no supervised tokens")
+
+        for ids, labels, micro_supervised in prepared_micro_batches:
             result = runtime.model(ids)
             loss, micro_objective = causal_training_objective(
                 result["logits"],
@@ -1422,12 +1430,10 @@ def run_segment(
             )
             if not torch.isfinite(loss):
                 raise RuntimeError("non-finite Phase 5 bootstrap loss")
-            micro_supervised = int((labels[:, 1:] != -100).sum().item())
-            supervised += micro_supervised
-            weighted_loss += float(loss.detach().cpu()) * max(1, micro_supervised)
-            # Scale each micro-loss by its share of the requested effective
-            # batch so accumulated gradients match the original batch mean.
-            (loss * (len(micro_indices) / effective_batch_size)).backward()
+            weighted_loss += float(loss.detach().cpu()) * micro_supervised
+            # Weight gradients by supervised-token share so accumulation
+            # reproduces the full effective batch even with padded examples.
+            (loss * (micro_supervised / supervised)).backward()
             objective_stats = micro_objective
 
         torch.nn.utils.clip_grad_norm_(runtime.model.parameters(), 1.0)
