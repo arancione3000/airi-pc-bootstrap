@@ -1357,6 +1357,76 @@ def _language_rehabilitation_gate(
     }
 
 
+def _rehabilitation_replay_limit(stage: str, consecutive_rejections: int) -> int:
+    """Increase protected replay diversity after a failed rehabilitation attempt."""
+    if stage not in PHASE5_LANGUAGE_REHABILITATION_STAGES:
+        raise ValueError(f"unknown language rehabilitation stage: {stage}")
+    base = {
+        "R1_bilingual_foundations": 48,
+        "R2_simple_responses": 64,
+        "R3_short_dialogue": 96,
+    }[stage]
+    multiplier = 1 + min(2, max(0, int(consecutive_rejections)))
+    return min(192, int(base * multiplier))
+
+
+def _language_rehabilitation_attempts(
+    *,
+    parameters: int,
+    stage: str,
+    consecutive_rejections: int,
+) -> tuple[tuple[int, float, float, float], ...]:
+    """Return an adaptive, fail-closed SFT retry schedule.
+
+    A rejected stage is always rolled back. Repeating the same deterministic
+    seed/checkpoint with the same hyperparameters would simply reproduce the
+    same failure, so later retries become shorter, lower-LR, more strongly
+    anti-repetition updates while protected replay diversity increases.
+    """
+    if stage not in PHASE5_LANGUAGE_REHABILITATION_STAGES:
+        raise ValueError(f"unknown language rehabilitation stage: {stage}")
+    rejected = max(0, int(consecutive_rejections))
+    large = int(parameters) >= 20_000_000
+
+    if large and rejected <= 0:
+        plans = {
+            "R1_bilingual_foundations": ((256, 2.0e-5, 0.12, 2.00), (128, 1.0e-5, 0.10, 2.00)),
+            "R2_simple_responses": ((320, 2.0e-5, 0.08, 1.75), (160, 1.0e-5, 0.06, 1.75)),
+            "R3_short_dialogue": ((384, 1.5e-5, 0.06, 1.50), (192, 7.5e-6, 0.04, 1.50)),
+        }
+    elif large and rejected == 1:
+        plans = {
+            "R1_bilingual_foundations": ((96, 5.0e-6, 0.18, 1.50), (64, 2.5e-6, 0.16, 1.50)),
+            "R2_simple_responses": ((128, 5.0e-6, 0.12, 1.50), (80, 2.5e-6, 0.10, 1.50)),
+            "R3_short_dialogue": ((160, 3.75e-6, 0.10, 1.35), (96, 1.875e-6, 0.08, 1.35)),
+        }
+    elif large:
+        plans = {
+            "R1_bilingual_foundations": ((48, 2.5e-6, 0.24, 1.35), (32, 1.25e-6, 0.20, 1.35)),
+            "R2_simple_responses": ((64, 2.5e-6, 0.16, 1.35), (40, 1.25e-6, 0.14, 1.35)),
+            "R3_short_dialogue": ((80, 1.875e-6, 0.12, 1.25), (48, 0.9375e-6, 0.10, 1.25)),
+        }
+    elif rejected <= 0:
+        plans = {
+            "R1_bilingual_foundations": ((128, 3.0e-5, 0.12, 2.00), (64, 1.5e-5, 0.10, 2.00)),
+            "R2_simple_responses": ((160, 3.0e-5, 0.08, 1.75), (80, 1.5e-5, 0.06, 1.75)),
+            "R3_short_dialogue": ((192, 2.0e-5, 0.06, 1.50), (96, 1.0e-5, 0.04, 1.50)),
+        }
+    elif rejected == 1:
+        plans = {
+            "R1_bilingual_foundations": ((64, 7.5e-6, 0.18, 1.50), (32, 3.75e-6, 0.16, 1.50)),
+            "R2_simple_responses": ((80, 7.5e-6, 0.12, 1.50), (40, 3.75e-6, 0.10, 1.50)),
+            "R3_short_dialogue": ((96, 5.0e-6, 0.10, 1.35), (48, 2.5e-6, 0.08, 1.35)),
+        }
+    else:
+        plans = {
+            "R1_bilingual_foundations": ((32, 3.75e-6, 0.24, 1.35), (16, 1.875e-6, 0.20, 1.35)),
+            "R2_simple_responses": ((40, 3.75e-6, 0.16, 1.35), (20, 1.875e-6, 0.14, 1.35)),
+            "R3_short_dialogue": ((48, 2.5e-6, 0.12, 1.25), (24, 1.25e-6, 0.10, 1.25)),
+        }
+    return plans[stage]
+
+
 def _run_language_rehabilitation_stage(
     runtime: GeneralistRuntime,
     stage: str,
@@ -1367,6 +1437,7 @@ def _run_language_rehabilitation_stage(
     bootstrap_root: Path,
     base_model_sha: str,
     seed: int,
+    consecutive_rejections: int = 0,
 ) -> tuple[GeneralistRuntime, dict[str, Any]]:
     """Train one transactional rehabilitation stage and roll back on any gate."""
     if not rows:
@@ -1397,23 +1468,16 @@ def _run_language_rehabilitation_stage(
         max_new_tokens=32,
     )
     parameters = parameter_count(runtime.model)
-    if parameters >= 20_000_000:
-        stage_attempts = {
-            "R1_bilingual_foundations": ((256, 2.0e-5, 0.12, 2.00), (128, 1.0e-5, 0.10, 2.00)),
-            "R2_simple_responses": ((320, 2.0e-5, 0.08, 1.75), (160, 1.0e-5, 0.06, 1.75)),
-            "R3_short_dialogue": ((384, 1.5e-5, 0.06, 1.50), (192, 7.5e-6, 0.04, 1.50)),
-        }
-    else:
-        stage_attempts = {
-            "R1_bilingual_foundations": ((128, 3.0e-5, 0.12, 2.00), (64, 1.5e-5, 0.10, 2.00)),
-            "R2_simple_responses": ((160, 3.0e-5, 0.08, 1.75), (80, 1.5e-5, 0.06, 1.75)),
-            "R3_short_dialogue": ((192, 2.0e-5, 0.06, 1.50), (96, 1.0e-5, 0.04, 1.50)),
-        }
+    stage_attempts = _language_rehabilitation_attempts(
+        parameters=int(parameters),
+        stage=stage,
+        consecutive_rejections=int(consecutive_rejections),
+    )
     attempts: list[dict[str, Any]] = []
     selected_index: int | None = None
 
     for index, (steps, learning_rate, anti_weight, eos_weight) in enumerate(
-        stage_attempts[stage]
+        stage_attempts
     ):
         trial = GeneralistRuntime.from_checkpoint(pre_dir, device="cpu")
         training = train_sft(
@@ -1494,6 +1558,16 @@ def _run_language_rehabilitation_stage(
             "rollback_verified": bool(rollback_verified),
             "rollback_model_manifest_sha256": rollback_manifest_sha,
             "accepted_supervised_tokens": 0,
+            "consecutive_rejections_before": int(consecutive_rejections),
+            "attempt_plan": [
+                {
+                    "steps": int(steps),
+                    "learning_rate": float(learning_rate),
+                    "repetition_unlikelihood_weight": float(anti_weight),
+                    "eos_loss_weight": float(eos_weight),
+                }
+                for steps, learning_rate, anti_weight, eos_weight in stage_attempts
+            ],
             "attempts": attempts,
             "reason": "all rehabilitation attempts failed progressive or protected replay gates",
         }
@@ -1514,6 +1588,16 @@ def _run_language_rehabilitation_stage(
         "rollback_verified": True,
         "rollback_model_manifest_sha256": rollback_manifest_sha,
         "accepted_supervised_tokens": accepted_tokens,
+        "consecutive_rejections_before": int(consecutive_rejections),
+        "attempt_plan": [
+            {
+                "steps": int(steps),
+                "learning_rate": float(learning_rate),
+                "repetition_unlikelihood_weight": float(anti_weight),
+                "eos_loss_weight": float(eos_weight),
+            }
+            for steps, learning_rate, anti_weight, eos_weight in stage_attempts
+        ],
         "selected_attempt": int(selected_index),
         "attempts": attempts,
         "reason": "progressive language and protected replay gates passed",
@@ -2185,16 +2269,18 @@ def run_segment(
             ) + 1
         stage = PHASE5_LANGUAGE_REHABILITATION_STAGES[next_stage_index]
         curriculum = _elementary_rehabilitation_rows()
+        rejection_count = int(
+            rehabilitation_state.get("consecutive_rejections", 0) or 0
+        )
         rehabilitation_rows, rehabilitation_counts = _rehabilitation_replay_rows(
             stage,
             curriculum,
             protected_replay.sft_train,
             heldout_sft=bundle.sft_validation,
-            max_replay_rows={
-                "R1_bilingual_foundations": 48,
-                "R2_simple_responses": 64,
-                "R3_short_dialogue": 96,
-            }[stage],
+            max_replay_rows=_rehabilitation_replay_limit(
+                stage,
+                rejection_count,
+            ),
         )
         lineage_before = str(
             _load_json(root / "lineage.json").get("lineage_id") or ""
@@ -2209,6 +2295,7 @@ def run_segment(
             bootstrap_root=bootstrap_root,
             base_model_sha=base_model_sha,
             seed=91 + next_stage_index * 1009,
+            consecutive_rejections=rejection_count,
         )
         rehabilitation_report.update({
             "curriculum": rehabilitation_counts,
