@@ -590,7 +590,7 @@ def train_sft_residual_recovery(
             ).sum(dim=-1)
             anchor_token_count = int(valid_anchor.sum().item())
             if anchor_token_count:
-                kl_loss = token_kl.masked_select(valid_anchor).mean()
+                kl_loss = token_kl.masked_select(valid_anchor).mean().clamp_min(0.0)
             else:
                 kl_loss = token_kl.mean() * 0.0
 
