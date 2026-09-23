@@ -19,7 +19,11 @@ from .airi_pc_lab import (
     snapshot_airi_pc_lab,
     run_airi_pc_lab_probe,
 )
-from .bootstrap_data import build_bootstrap_bundle, write_bootstrap_replay
+from .bootstrap_data import (
+    build_bootstrap_bundle,
+    load_bootstrap_replay,
+    write_bootstrap_replay,
+)
 from .curriculum import train_rows, validation_rows
 from .curriculum_memory import CurriculumMemory, canary_rows
 from .evolution import GeneralistGenome, progressive_scale_candidate
@@ -49,12 +53,18 @@ from .research_cycle import (
 from .runtime import GeneralistRuntime
 from .lineage_migration import refresh_live_lineage_manifest
 from .tokenizer import PAD
-from .training import causal_training_objective, train_sft
+from .training import SFTExample, causal_training_objective, train_sft
 
 
 PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v3"
 PHASE5_SFT_GUARD_VERSION = "phase5-sft-guard-v2"
 PHASE5_ANTICOLLAPSE_VERSION = "phase5-anticollapse-v2"
+PHASE5_LANGUAGE_REHABILITATION_VERSION = "phase5-language-rehabilitation-v1"
+PHASE5_LANGUAGE_REHABILITATION_STAGES = (
+    "R1_bilingual_foundations",
+    "R2_simple_responses",
+    "R3_short_dialogue",
+)
 PHASE5_CAPACITY_GROWTH_VERSION = "phase5-capacity-growth-v2"
 PHASE5_BASE_UNIQUE_CORPUS_TOKENS = 5_000_000
 PHASE5_100M_UNIQUE_CORPUS_TOKENS = 20_000_000
@@ -1077,6 +1087,439 @@ def _filter_protected_replay(rows, *, heldout_sft=()):
     return list(unique.values()), int(filtered)
 
 
+def _elementary_rehabilitation_rows() -> dict[str, dict[str, list[SFTExample]]]:
+    """Return a small bilingual curriculum that is disjoint from Phase-5 probes.
+
+    These rows teach the same elementary skills without copying protected
+    prompts or targets.  They are intentionally reviewed, bounded and local;
+    the larger persisted replay remains the anti-forgetting source.
+    """
+
+    def pair(user: str, assistant: str) -> SFTExample:
+        return SFTExample([
+            {"role": "user", "content": user},
+            {"role": "assistant", "content": assistant},
+        ])
+
+    def dialogue(*messages: tuple[str, str]) -> SFTExample:
+        return SFTExample([
+            {"role": role, "content": content}
+            for role, content in messages
+        ])
+
+    return {
+        "R1_bilingual_foundations": {
+            "it": [
+                pair("Saluta una persona al mattino.", "Buongiorno! Come posso aiutarti?"),
+                pair("Qual è il tuo nome?", "Sono AIRI, la tua assistente."),
+                pair("Rispondi in italiano: come stai?", "Sto bene, grazie."),
+                pair("Nomina due colori.", "Rosso e blu."),
+                pair("Che animale abbaia?", "Il cane abbaia."),
+                pair("Conta da uno a tre.", "Uno, due, tre."),
+            ],
+            "en": [
+                pair("Greet someone in the morning.", "Good morning! How can I help?"),
+                pair("What is your name?", "I am AIRI, your assistant."),
+                pair("Answer in English: how are you?", "I am well, thank you."),
+                pair("Name two colors.", "Red and blue."),
+                pair("Which animal barks?", "A dog barks."),
+                pair("Count from one to three.", "One, two, three."),
+            ],
+        },
+        "R2_simple_responses": {
+            "it": [
+                pair("Scrivi una frase breve sul sole.", "Il sole illumina la strada."),
+                pair("Descrivi un cane in poche parole.", "Il cane è allegro e corre nel parco."),
+                pair("Completa: L'acqua è", "trasparente e fresca."),
+                pair("Rispondi con una frase gentile.", "Certo, sarò felice di aiutarti."),
+                pair("Dove si legge un libro?", "Si può leggere un libro in un luogo tranquillo."),
+                pair("Spiega che cosa fa una lampada.", "Una lampada produce luce quando è accesa."),
+            ],
+            "en": [
+                pair("Write a short sentence about the sun.", "The sun lights the road."),
+                pair("Describe a dog in a few words.", "The dog is happy and runs in the park."),
+                pair("Complete: Water is", "clear and fresh."),
+                pair("Reply with one kind sentence.", "Of course, I will be happy to help."),
+                pair("Where can someone read a book?", "Someone can read a book in a quiet place."),
+                pair("Explain what a lamp does.", "A lamp produces light when it is on."),
+            ],
+        },
+        "R3_short_dialogue": {
+            "it": [
+                dialogue(
+                    ("user", "Buongiorno, puoi aiutarmi?"),
+                    ("assistant", "Sì, dimmi pure di cosa hai bisogno."),
+                    ("user", "Vorrei una risposta breve."),
+                    ("assistant", "Va bene, userò una frase semplice."),
+                ),
+                dialogue(
+                    ("user", "Parli italiano?"),
+                    ("assistant", "Sì, posso rispondere in italiano."),
+                    ("user", "Dimmi qualcosa sul mare."),
+                    ("assistant", "Il mare è ampio e le onde arrivano sulla riva."),
+                ),
+                dialogue(
+                    ("user", "Ho una domanda facile."),
+                    ("assistant", "Sono pronta ad ascoltarla."),
+                    ("user", "Di che colore sono le foglie in estate?"),
+                    ("assistant", "Di solito le foglie sono verdi."),
+                ),
+                dialogue(
+                    ("user", "Possiamo fare due domande?"),
+                    ("assistant", "Sì, facciamole una alla volta."),
+                    ("user", "Quanto fa due più due?"),
+                    ("assistant", "Due più due fa quattro."),
+                ),
+            ],
+            "en": [
+                dialogue(
+                    ("user", "Good morning, can you help me?"),
+                    ("assistant", "Yes, tell me what you need."),
+                    ("user", "I would like a short answer."),
+                    ("assistant", "All right, I will use a simple sentence."),
+                ),
+                dialogue(
+                    ("user", "Do you speak English?"),
+                    ("assistant", "Yes, I can answer in English."),
+                    ("user", "Tell me something about the sea."),
+                    ("assistant", "The sea is wide and waves reach the shore."),
+                ),
+                dialogue(
+                    ("user", "I have an easy question."),
+                    ("assistant", "I am ready to hear it."),
+                    ("user", "What color are leaves in summer?"),
+                    ("assistant", "Leaves are usually green."),
+                ),
+                dialogue(
+                    ("user", "May I ask two questions?"),
+                    ("assistant", "Yes, let us take them one at a time."),
+                    ("user", "What is two plus two?"),
+                    ("assistant", "Two plus two is four."),
+                ),
+            ],
+        },
+    }
+
+
+def _rehabilitation_replay_rows(
+    stage: str,
+    curriculum: dict[str, dict[str, list[SFTExample]]],
+    protected_replay,
+    *,
+    heldout_sft=(),
+    max_replay_rows: int = 192,
+) -> tuple[list[SFTExample], dict[str, int]]:
+    if stage not in PHASE5_LANGUAGE_REHABILITATION_STAGES:
+        raise ValueError(f"unknown language rehabilitation stage: {stage}")
+    stage_rows = curriculum.get(stage) or {}
+    italian = list(stage_rows.get("it") or [])
+    english = list(stage_rows.get("en") or [])
+    if not italian or len(italian) != len(english):
+        raise RuntimeError("language rehabilitation curriculum must be bilingual and balanced")
+
+    safe_replay, filtered = _filter_protected_replay(
+        list(protected_replay),
+        heldout_sft=heldout_sft,
+    )
+    safe_replay = sorted(safe_replay, key=_sft_row_fingerprint)
+    selected_replay = safe_replay[: max(0, int(max_replay_rows))]
+    elementary: list[SFTExample] = []
+    for it_row, en_row in zip(italian, english):
+        elementary.extend((it_row, en_row))
+    combined, second_filtered = _filter_protected_replay(
+        elementary + selected_replay,
+        heldout_sft=heldout_sft,
+    )
+    if len(combined) < len(elementary):
+        raise RuntimeError("elementary rehabilitation rows overlap a protected holdout")
+    return combined, {
+        "elementary_it_rows": len(italian),
+        "elementary_en_rows": len(english),
+        "protected_replay_rows": len(selected_replay),
+        "protected_rows_filtered": int(filtered + second_filtered),
+        "total_rows": len(combined),
+    }
+
+
+def _rehabilitation_needed(
+    current: dict[str, Any],
+    anchor: dict[str, Any],
+) -> bool:
+    return bool(
+        current.get("pathological_repetition")
+        or _language_guard_violations(anchor, current)
+    )
+
+
+def _rehabilitation_cycle_due(
+    current: dict[str, Any],
+    anchor: dict[str, Any],
+    next_stage_index: int,
+) -> bool:
+    """Finish an active progressive cycle even if an early gate clears collapse."""
+    stage_count = len(PHASE5_LANGUAGE_REHABILITATION_STAGES)
+    stage_index = max(0, int(next_stage_index))
+    cycle_active = 0 < stage_index < stage_count
+    return bool(
+        cycle_active
+        or (
+            _rehabilitation_needed(current, anchor)
+            and (stage_index < stage_count or current.get("pathological_repetition"))
+        )
+    )
+
+
+def _language_rehabilitation_gate(
+    stage: str,
+    before: dict[str, Any],
+    after: dict[str, Any],
+    anchor: dict[str, Any],
+) -> tuple[bool, dict[str, Any]]:
+    """Apply increasingly strict held-out gates without training on the probes."""
+    if stage not in PHASE5_LANGUAGE_REHABILITATION_STAGES:
+        raise ValueError(f"unknown language rehabilitation stage: {stage}")
+    reasons: list[str] = []
+    before_nll = float(before.get("language_nll", float("inf")))
+    after_nll = float(after.get("language_nll", float("inf")))
+    before_rep = float(before.get("repetition_rate", 1.0) or 1.0)
+    after_rep = float(after.get("repetition_rate", 1.0) or 1.0)
+    before_similarity = float(before.get("generation_similarity", 0.0) or 0.0)
+    after_similarity = float(after.get("generation_similarity", 0.0) or 0.0)
+    before_multi = float(before.get("multiword_output_rate", 0.0) or 0.0)
+    after_multi = float(after.get("multiword_output_rate", 0.0) or 0.0)
+
+    if after_nll > before_nll + 0.10:
+        reasons.append("protected language NLL regressed by more than 0.10")
+    if float(after.get("non_empty_rate", 0.0) or 0.0) < max(
+        0.60,
+        float(before.get("non_empty_rate", 0.0) or 0.0) - 0.10,
+    ):
+        reasons.append("protected non-empty output rate regressed")
+    if float(after.get("token_entropy", 0.0) or 0.0) < max(
+        1.25,
+        float(before.get("token_entropy", 0.0) or 0.0) - 0.75,
+    ):
+        reasons.append("protected token entropy collapsed")
+
+    if stage == "R1_bilingual_foundations":
+        gate = "repetition_recovery"
+        run_gain = int(before.get("longest_repeated_token_run", 0) or 0) - int(
+            after.get("longest_repeated_token_run", 0) or 0
+        )
+        if (
+            bool(after.get("pathological_repetition"))
+            and before_rep - after_rep < 0.04
+            and run_gain < 2
+        ):
+            reasons.append("pathological repetition did not measurably recover")
+        if (
+            not bool(after.get("pathological_repetition"))
+            and after_rep > min(0.66, before_rep + 0.02)
+        ):
+            reasons.append("repetition rate did not clear the foundation gate")
+    elif stage == "R2_simple_responses":
+        gate = "elementary_language"
+        if bool(after.get("pathological_repetition")):
+            reasons.append("pathological repetition remains after elementary recovery")
+        if (
+            after_nll > before_nll - 0.03
+            and _language_quality(after) < _language_quality(before) + 0.02
+        ):
+            reasons.append("elementary language quality did not improve")
+        if after_rep > before_rep + 0.02:
+            reasons.append("repetition regressed during elementary recovery")
+        if after_multi < max(0.35, before_multi - 0.02):
+            reasons.append("multi-word output did not clear the elementary gate")
+    else:
+        gate = "short_dialogue"
+        if bool(after.get("pathological_repetition")):
+            reasons.append("pathological repetition remains after dialogue recovery")
+        if after_rep > 0.60:
+            reasons.append("dialogue repetition exceeds the fail-closed limit")
+        if after_similarity < before_similarity - 0.01:
+            reasons.append("dialogue similarity regressed")
+        if after_multi < max(0.40, before_multi - 0.02):
+            reasons.append("multi-word dialogue rate regressed")
+        if _language_quality(after) < _language_quality(before) - 0.01:
+            reasons.append("overall protected language quality regressed")
+
+    accepted = not reasons
+    return accepted, {
+        "accepted": bool(accepted),
+        "stage": stage,
+        "gate": gate,
+        "reasons": reasons,
+        "before_quality": _language_quality(before),
+        "after_quality": _language_quality(after),
+        "anchor_quality": _language_quality(anchor),
+        "anchor_violations_before": _language_guard_violations(anchor, before),
+        "anchor_violations_after": _language_guard_violations(anchor, after),
+    }
+
+
+def _run_language_rehabilitation_stage(
+    runtime: GeneralistRuntime,
+    stage: str,
+    rows: list[SFTExample],
+    heldout_sft,
+    anchor: dict[str, Any],
+    *,
+    bootstrap_root: Path,
+    base_model_sha: str,
+    seed: int,
+) -> tuple[GeneralistRuntime, dict[str, Any]]:
+    """Train one transactional rehabilitation stage and roll back on any gate."""
+    if not rows:
+        raise RuntimeError("language rehabilitation stage has no training rows")
+    heldout = list(heldout_sft)
+    if not heldout:
+        raise RuntimeError("language rehabilitation requires held-out SFT rows")
+
+    pre_dir = bootstrap_root / ".language-rehabilitation-pre"
+    selected_dir = bootstrap_root / ".language-rehabilitation-selected"
+    shutil.rmtree(pre_dir, ignore_errors=True)
+    shutil.rmtree(selected_dir, ignore_errors=True)
+    runtime.save_checkpoint(
+        pre_dir,
+        metadata={
+            "role": "phase5_language_rehabilitation_rollback",
+            "production_qualified": False,
+            "stage": stage,
+            "base_champion_model_sha256": base_model_sha,
+        },
+    )
+    rollback_manifest_sha = _sha256_file(pre_dir / "model.pt")
+    before = evaluate_phase5_language(runtime)
+    sft_before = evaluate_sft_validation(
+        runtime,
+        heldout,
+        max_examples=16,
+        max_new_tokens=32,
+    )
+    parameters = parameter_count(runtime.model)
+    if parameters >= 20_000_000:
+        stage_attempts = {
+            "R1_bilingual_foundations": ((256, 2.0e-5, 0.12, 2.00), (128, 1.0e-5, 0.10, 2.00)),
+            "R2_simple_responses": ((320, 2.0e-5, 0.08, 1.75), (160, 1.0e-5, 0.06, 1.75)),
+            "R3_short_dialogue": ((384, 1.5e-5, 0.06, 1.50), (192, 7.5e-6, 0.04, 1.50)),
+        }
+    else:
+        stage_attempts = {
+            "R1_bilingual_foundations": ((128, 3.0e-5, 0.12, 2.00), (64, 1.5e-5, 0.10, 2.00)),
+            "R2_simple_responses": ((160, 3.0e-5, 0.08, 1.75), (80, 1.5e-5, 0.06, 1.75)),
+            "R3_short_dialogue": ((192, 2.0e-5, 0.06, 1.50), (96, 1.0e-5, 0.04, 1.50)),
+        }
+    attempts: list[dict[str, Any]] = []
+    selected_index: int | None = None
+
+    for index, (steps, learning_rate, anti_weight, eos_weight) in enumerate(
+        stage_attempts[stage]
+    ):
+        trial = GeneralistRuntime.from_checkpoint(pre_dir, device="cpu")
+        training = train_sft(
+            trial.model,
+            trial.tokenizer,
+            rows,
+            steps=int(steps),
+            batch_size=2,
+            learning_rate=float(learning_rate),
+            weight_decay=0.01,
+            seed=int(seed + index * 101),
+            device="cpu",
+            gradient_accumulation_steps=1,
+            precision="fp32",
+            repetition_unlikelihood_weight=float(anti_weight),
+            eos_loss_weight=float(eos_weight),
+            repetition_window=16,
+        )
+        after = evaluate_phase5_language(trial)
+        sft_after = evaluate_sft_validation(
+            trial,
+            heldout,
+            max_examples=16,
+            max_new_tokens=32,
+        )
+        stage_ok, stage_gate = _language_rehabilitation_gate(
+            stage,
+            before,
+            after,
+            anchor,
+        )
+        replay_ok, replay_reasons = sft_validation_gate(
+            sft_before,
+            sft_after,
+            max_repetition_regression=0.03,
+            max_nll_regression=0.04,
+            min_entropy_fraction=0.80,
+            max_unique_ratio_drop=0.05,
+        )
+        attempt = {
+            "index": int(index),
+            "training": training,
+            "validation_before": before,
+            "validation_after": after,
+            "stage_gate": stage_gate,
+            "protected_replay_gate_passed": bool(replay_ok),
+            "protected_replay_gate_reasons": list(replay_reasons),
+            "protected_replay_validation_before": sft_before,
+            "protected_replay_validation_after": sft_after,
+            "accepted": bool(stage_ok and replay_ok),
+        }
+        attempts.append(attempt)
+        if stage_ok and replay_ok:
+            trial.save_checkpoint(
+                selected_dir,
+                metadata={
+                    "role": "phase5_language_rehabilitation_selected",
+                    "production_qualified": False,
+                    "stage": stage,
+                    "attempt_index": int(index),
+                    "base_champion_model_sha256": base_model_sha,
+                },
+            )
+            selected_index = index
+            break
+
+    if selected_index is None:
+        restored = GeneralistRuntime.from_checkpoint(pre_dir, device="cpu")
+        rollback_verified = _sha256_file(pre_dir / "model.pt") == rollback_manifest_sha
+        shutil.rmtree(pre_dir, ignore_errors=True)
+        shutil.rmtree(selected_dir, ignore_errors=True)
+        return restored, {
+            "schema": 1,
+            "version": PHASE5_LANGUAGE_REHABILITATION_VERSION,
+            "stage": stage,
+            "accepted": False,
+            "rolled_back": True,
+            "rollback_verified": bool(rollback_verified),
+            "rollback_model_manifest_sha256": rollback_manifest_sha,
+            "accepted_supervised_tokens": 0,
+            "attempts": attempts,
+            "reason": "all rehabilitation attempts failed progressive or protected replay gates",
+        }
+
+    selected = GeneralistRuntime.from_checkpoint(selected_dir, device="cpu")
+    chosen = attempts[selected_index]
+    accepted_tokens = int(
+        (chosen.get("training") or {}).get("supervised_tokens", 0) or 0
+    )
+    shutil.rmtree(pre_dir, ignore_errors=True)
+    shutil.rmtree(selected_dir, ignore_errors=True)
+    return selected, {
+        "schema": 1,
+        "version": PHASE5_LANGUAGE_REHABILITATION_VERSION,
+        "stage": stage,
+        "accepted": True,
+        "rolled_back": False,
+        "rollback_verified": True,
+        "rollback_model_manifest_sha256": rollback_manifest_sha,
+        "accepted_supervised_tokens": accepted_tokens,
+        "selected_attempt": int(selected_index),
+        "attempts": attempts,
+        "reason": "progressive language and protected replay gates passed",
+    }
+
+
 def _mixed_replay_rows(
     root: Path,
     bootstrap_sft,
@@ -1321,6 +1764,7 @@ def run_segment(
     after_path = bootstrap_root / "after.json"
     language_guard_path = bootstrap_root / "language-guard.json"
     segment_guard_path = bootstrap_root / "segment-guard-last.json"
+    rehabilitation_report_path = bootstrap_root / "language-rehabilitation.json"
     segment_best_dir = bootstrap_root / ".segment-best"
     bootstrap_root.mkdir(parents=True, exist_ok=True)
 
@@ -1358,6 +1802,7 @@ def run_segment(
         max_tokens=min(1_000_000, max(250_000, int(target_tokens // 4))),
         max_sft_conversations=512,
     )
+    protected_replay = load_bootstrap_replay(bootstrap_root)
 
     if not before_path.is_file():
         _atomic_json(before_path, evaluate_phase5_language(champion_runtime))
@@ -1377,6 +1822,12 @@ def run_segment(
     })
     progress["schema"] = 1
     progress["version"] = PHASE5_BOOTSTRAP_VERSION
+    progress["accepted_rehabilitation_tokens"] = int(
+        progress.get("accepted_rehabilitation_tokens", 0) or 0
+    )
+    progress["valid_tokens_processed"] = int(
+        progress.get("tokens_processed", 0) or 0
+    ) + int(progress["accepted_rehabilitation_tokens"])
     rebase_to_champion = False
     if str(progress.get("base_champion_model_sha256")) != base_model_sha:
         # A completed previous rung may have gone through the converged swarm
@@ -1530,6 +1981,9 @@ def run_segment(
                 ),
                 "target_tokens": int(target_tokens),
                 "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
+                "valid_tokens_processed": int(
+                    progress.get("valid_tokens_processed", 0) or 0
+                ),
                 "segment_tokens_processed": 0,
                 "steps": int(progress.get("steps", 0) or 0),
                 "parameters": int(parameter_count(runtime.model)),
@@ -1674,15 +2128,6 @@ def run_segment(
         "F_airi_pc_lab_tool_use",
     ]
 
-    optimizer = torch.optim.AdamW(
-        runtime.model.parameters(),
-        lr=float(base_learning_rate),
-        weight_decay=0.01,
-    )
-    optimizer_storage = None
-    if optimizer_path.is_file():
-        optimizer_storage = _load_optimizer_checkpoint(optimizer, optimizer_path)
-
     segment_language_before = evaluate_phase5_language(runtime)
     guard_payload = _load_json(language_guard_path) if language_guard_path.is_file() else {}
     guard_anchor = (
@@ -1712,6 +2157,174 @@ def run_segment(
                 "created_at_unix": int(time.time()),
             },
         )
+
+    rehabilitation_state = dict(progress.get("language_rehabilitation") or {})
+    if (
+        str(rehabilitation_state.get("version") or "")
+        != PHASE5_LANGUAGE_REHABILITATION_VERSION
+    ):
+        rehabilitation_state = {
+            "version": PHASE5_LANGUAGE_REHABILITATION_VERSION,
+            "next_stage_index": 0,
+            "completed_cycles": 0,
+        }
+    next_stage_index = max(
+        0,
+        int(rehabilitation_state.get("next_stage_index", 0) or 0),
+    )
+    rehabilitation_due = _rehabilitation_cycle_due(
+        segment_language_before,
+        guard_anchor,
+        next_stage_index,
+    )
+    if rehabilitation_due:
+        if next_stage_index >= len(PHASE5_LANGUAGE_REHABILITATION_STAGES):
+            next_stage_index = 0
+            rehabilitation_state["completed_cycles"] = int(
+                rehabilitation_state.get("completed_cycles", 0) or 0
+            ) + 1
+        stage = PHASE5_LANGUAGE_REHABILITATION_STAGES[next_stage_index]
+        curriculum = _elementary_rehabilitation_rows()
+        rehabilitation_rows, rehabilitation_counts = _rehabilitation_replay_rows(
+            stage,
+            curriculum,
+            protected_replay.sft_train,
+            heldout_sft=bundle.sft_validation,
+            max_replay_rows={
+                "R1_bilingual_foundations": 48,
+                "R2_simple_responses": 64,
+                "R3_short_dialogue": 96,
+            }[stage],
+        )
+        lineage_before = str(
+            _load_json(root / "lineage.json").get("lineage_id") or ""
+        )
+        valid_before = int(progress.get("valid_tokens_processed", 0) or 0)
+        runtime, rehabilitation_report = _run_language_rehabilitation_stage(
+            runtime,
+            stage,
+            rehabilitation_rows,
+            bundle.sft_validation,
+            guard_anchor,
+            bootstrap_root=bootstrap_root,
+            base_model_sha=base_model_sha,
+            seed=91 + next_stage_index * 1009,
+        )
+        rehabilitation_report.update({
+            "curriculum": rehabilitation_counts,
+            "protected_replay_manifest_sha256": str(
+                replay_manifest.get("corpus_sha256") or ""
+            ),
+            "lineage_id_before": lineage_before,
+            "parameters_before": int(current_capacity),
+            "parameters_after": int(parameter_count(runtime.model)),
+            "valid_tokens_before": valid_before,
+            "causal_tokens_before": int(progress.get("tokens_processed", 0) or 0),
+        })
+        accepted_rehabilitation = bool(rehabilitation_report.get("accepted"))
+        if accepted_rehabilitation:
+            accepted_tokens = int(
+                rehabilitation_report.get("accepted_supervised_tokens", 0) or 0
+            )
+            if accepted_tokens <= 0:
+                raise RuntimeError(
+                    "accepted language rehabilitation reported no supervised tokens"
+                )
+            progress["accepted_rehabilitation_tokens"] = int(
+                progress.get("accepted_rehabilitation_tokens", 0) or 0
+            ) + accepted_tokens
+            progress["valid_tokens_processed"] = int(
+                progress.get("tokens_processed", 0) or 0
+            ) + int(progress["accepted_rehabilitation_tokens"])
+            rehabilitation_state["next_stage_index"] = next_stage_index + 1
+            rehabilitation_state["last_accepted_stage"] = stage
+            rehabilitation_state["last_accepted_tokens"] = accepted_tokens
+            rehabilitation_state["consecutive_rejections"] = 0
+            runtime.save_checkpoint(
+                candidate_dir,
+                metadata={
+                    "role": "phase5_language_bootstrap_candidate",
+                    "production_qualified": False,
+                    "base_champion_model_sha256": base_model_sha,
+                    "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
+                    "valid_tokens_processed": int(progress["valid_tokens_processed"]),
+                    "language_rehabilitation_stage": stage,
+                    "language_rehabilitation_version": (
+                        PHASE5_LANGUAGE_REHABILITATION_VERSION
+                    ),
+                },
+            )
+            _remove_optimizer_checkpoint(optimizer_path)
+            progress["optimizer_reset_after_language_rehabilitation"] = True
+        else:
+            rehabilitation_state["next_stage_index"] = next_stage_index
+            rehabilitation_state["consecutive_rejections"] = int(
+                rehabilitation_state.get("consecutive_rejections", 0) or 0
+            ) + 1
+            progress["valid_tokens_processed"] = valid_before
+        rehabilitation_state["version"] = PHASE5_LANGUAGE_REHABILITATION_VERSION
+        rehabilitation_state["last_stage"] = stage
+        rehabilitation_state["last_accepted"] = accepted_rehabilitation
+        rehabilitation_state["updated_at_unix"] = int(time.time())
+        progress["language_rehabilitation"] = rehabilitation_state
+        progress["rung_complete"] = False
+        progress["early_stopped"] = False
+        progress["updated_at_unix"] = int(time.time())
+        _atomic_json(progress_path, progress)
+        lineage_manifest = refresh_live_lineage_manifest(
+            root,
+            reason=(
+                "phase5_language_rehabilitation_checkpoint"
+                if accepted_rehabilitation
+                else "phase5_language_rehabilitation_rollback"
+            ),
+        )
+        lineage_after = str(lineage_manifest.get("lineage_id") or "")
+        if lineage_before and lineage_after != lineage_before:
+            raise RuntimeError("language rehabilitation changed the live lineage id")
+        rehabilitation_report.update({
+            "lineage_id_after": lineage_after,
+            "lineage_preserved": bool(
+                not lineage_before or lineage_after == lineage_before
+            ),
+            "valid_tokens_after": int(progress["valid_tokens_processed"]),
+            "valid_tokens_increased": bool(
+                int(progress["valid_tokens_processed"]) > valid_before
+            ),
+            "causal_tokens_after": int(progress.get("tokens_processed", 0) or 0),
+        })
+        _atomic_json(rehabilitation_report_path, rehabilitation_report)
+        return {
+            "ok": True,
+            "lineage_id": lineage_after,
+            "active_lineage_checkpoint": lineage_manifest.get("active_checkpoint"),
+            "version": PHASE5_BOOTSTRAP_VERSION,
+            "target_tokens": target_tokens,
+            "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
+            "valid_tokens_processed": int(
+                progress.get("valid_tokens_processed", 0) or 0
+            ),
+            "accepted_rehabilitation_tokens": int(
+                progress["accepted_rehabilitation_tokens"]
+            ),
+            "segment_tokens_processed": 0,
+            "rehabilitation_stage": stage,
+            "rehabilitation_accepted": accepted_rehabilitation,
+            "rehabilitation_rejected": not accepted_rehabilitation,
+            "rehabilitation_report_path": str(rehabilitation_report_path),
+            "steps": int(progress.get("steps", 0) or 0),
+            "rung_complete": False,
+            "early_stopped": False,
+        }
+
+    optimizer = torch.optim.AdamW(
+        runtime.model.parameters(),
+        lr=float(base_learning_rate),
+        weight_decay=0.01,
+    )
+    optimizer_storage = None
+    if optimizer_path.is_file():
+        optimizer_storage = _load_optimizer_checkpoint(optimizer, optimizer_path)
 
     progress_before_segment = copy.deepcopy(progress)
     consecutive_rejections = int(
@@ -1990,6 +2603,9 @@ def run_segment(
             "version": PHASE5_BOOTSTRAP_VERSION,
             "target_tokens": target_tokens,
             "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
+            "valid_tokens_processed": int(
+                progress.get("valid_tokens_processed", 0) or 0
+            ),
             "segment_tokens_processed": 0,
             "steps": int(progress.get("steps", 0) or 0),
             "rung_complete": False,
@@ -2004,6 +2620,9 @@ def run_segment(
         segment_best_dir.rename(bootstrap_root / "best")
 
     progress["segment_guard_consecutive_rejections"] = 0
+    progress["valid_tokens_processed"] = int(progress["tokens_processed"]) + int(
+        progress.get("accepted_rehabilitation_tokens", 0) or 0
+    )
     recovery_mode = bool(segment_guard.get("recovery_mode"))
     remaining_anchor_violations = list(
         segment_guard.get("after_anchor_violations") or []
@@ -2418,6 +3037,10 @@ def run_segment(
         "version": PHASE5_BOOTSTRAP_VERSION,
         "target_tokens": target_tokens,
         "tokens_processed": int(progress["tokens_processed"]),
+        "valid_tokens_processed": int(progress["valid_tokens_processed"]),
+        "accepted_rehabilitation_tokens": int(
+            progress.get("accepted_rehabilitation_tokens", 0) or 0
+        ),
         "segment_tokens_processed": int(progress["tokens_processed"]) - processed_before_segment,
         "steps": int(progress["steps"]),
         "rung_complete": bool(rung_complete),

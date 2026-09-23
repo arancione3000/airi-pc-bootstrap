@@ -346,3 +346,26 @@ Capability honesty:
   different segmentations;
 - held-out generation, per-domain byte-normalized quality, rotating canaries
   and solved-item anti-forgetting remain mandatory.
+
+
+## 2026-09-23 — 50M language rehabilitation before causal continuation
+
+- the live single lineage `airi-5d3d25177d2e83f7` had reached 50,041,536
+  parameters and 31,864,877 accepted causal tokens, but seven consecutive
+  language-guard rollbacks showed that generic short-sentence causal recovery
+  could no longer make valid progress;
+- Phase 5 now runs a transactional three-stage Italian/English elementary
+  rehabilitation before further causal training whenever the live checkpoint
+  is pathologically repetitive or below its durable language anchor;
+- every stage mixes balanced reviewed elementary rows with the digest-verified,
+  training-only replay, structurally excludes Phase-5 probes and held-out SFT,
+  and uses target-safe repetition unlikelihood plus EOS pressure;
+- progressive repetition, elementary-language, short-dialogue and protected-
+  replay gates select a stage checkpoint; failed attempts restore the exact
+  pre-stage checkpoint and do not add valid tokens;
+- accepted supervised tokens are counted exactly and separately from causal
+  tokens; `valid_tokens_processed` is their sum and the checkpoint audit fails
+  its invariant if accounting, lineage preservation or rollback evidence is
+  inconsistent;
+- `Ciao`, `Come ti chiami?`, simple Italian/English prompts and dialogue remain
+  held out for diagnosis and are never copied into rehabilitation training.

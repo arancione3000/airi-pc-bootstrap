@@ -64,6 +64,14 @@ jobs:
             .training_data_used == false
             and .held_out_suite_used_for_diagnosis_only == true
             and .active_candidate_audited == true
+            and .valid_tokens.invariant_holds == true
+            and (
+              .language_rehabilitation.available == false
+              or (
+                .language_rehabilitation.rollback_verified == true
+                and .language_rehabilitation.lineage_preserved == true
+              )
+            )
           ' \
             /tmp/phase5-checkpoint-audit.json
 
