@@ -16,7 +16,7 @@ from .airi_pc_lab import (
 )
 from .model import parameter_count
 from .phase5_diagnostics import evaluate_phase5_language
-from .runtime import GeneralistRuntime
+from .runtime import GeneralistRuntime, checkpoint_has_model
 from .tokenizer import BOS, USER, ASSISTANT
 
 
@@ -331,7 +331,7 @@ def _active_lineage_checkpoint(state: Path) -> tuple[Path, dict[str, Any]]:
             except ValueError:
                 checkpoint = state / "champion"
             if (
-                (checkpoint / "model.pt").is_file()
+                checkpoint_has_model(checkpoint)
                 and (checkpoint / "config.json").is_file()
             ):
                 return checkpoint, lineage
