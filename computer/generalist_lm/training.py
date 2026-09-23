@@ -76,16 +76,48 @@ def _batch(examples: list[SFTExample], tokenizer: ByteTokenizer, context_length:
     return torch.stack([x[0] for x in rows]), torch.stack([x[1] for x in rows])
 
 
-def loss_on_examples(model, tokenizer: ByteTokenizer, examples: list[SFTExample], *, device: str = "cpu") -> float:
+def loss_on_examples(
+    model,
+    tokenizer: ByteTokenizer,
+    examples: list[SFTExample],
+    *,
+    device: str = "cpu",
+    batch_size: int = 8,
+) -> float:
+    """Token-weighted held-out loss without materializing the full corpus batch.
+
+    The previous implementation stacked every validation/training example at
+    once. With a long autonomous replay corpus that could request tens of GB of
+    activation memory even for a relatively small model. Micro-batching keeps
+    peak memory bounded while preserving the same global mean over supervised
+    target tokens.
+    """
     import torch
     if not examples:
         raise ValueError("no SFT examples")
     model.eval()
-    ids, labels = _batch(examples, tokenizer, model.config.context_length, range(len(examples)))
-    ids, labels = ids.to(device), labels.to(device)
+    chunk = max(1, int(batch_size))
+    total_weighted_loss = 0.0
+    total_supervised_tokens = 0
     with torch.no_grad():
-        loss = model(ids, labels=labels)["loss"]
-    return float(loss.detach().cpu())
+        for start in range(0, len(examples), chunk):
+            stop = min(len(examples), start + chunk)
+            ids, labels = _batch(
+                examples,
+                tokenizer,
+                model.config.context_length,
+                range(start, stop),
+            )
+            ids, labels = ids.to(device), labels.to(device)
+            supervised_tokens = int((labels != -100).sum().item())
+            if supervised_tokens <= 0:
+                continue
+            loss = model(ids, labels=labels)["loss"]
+            total_weighted_loss += float(loss.detach().cpu()) * supervised_tokens
+            total_supervised_tokens += supervised_tokens
+    if total_supervised_tokens <= 0:
+        raise ValueError("SFT examples contain no supervised target tokens")
+    return total_weighted_loss / total_supervised_tokens
 
 
 def _utf8_prefix(text: str, max_bytes: int) -> str:
