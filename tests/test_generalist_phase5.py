@@ -32,6 +32,9 @@ from generalist_lm.bootstrap_training import (
     _elementary_rehabilitation_rows,
     _filter_protected_replay,
     _grow_bootstrap_runtime,
+    _dead_capacity_revival_due,
+    _dead_capacity_source_ff_width,
+    _revive_dead_ffn_model_capacity,
     _historical_language_recovery_due,
     _historical_language_source_genome,
     _language_rehabilitation_attempts,
@@ -62,6 +65,7 @@ from generalist_lm.pretraining import (
 )
 from generalist_lm.phase5_diagnostics import (
     PHASE5_PROBES,
+    _single_greedy_trace,
     degeneration_gate,
     evaluate_phase5_language,
     evaluate_sft_validation,
@@ -662,30 +666,116 @@ def test_function_preserving_ff_growth_keeps_new_units_trainable():
     assert target.blocks[0].ff.down.weight.grad[:, old_ff:].abs().sum().item() > 0
 
 
-def test_historical_language_recovery_requires_four_rollbacks_on_current_lineage():
-    base = {
+def test_dead_capacity_revival_precedes_historical_replacement():
+    progress = {
         "lineage_id": "airi-5d3d25177d2e83f7",
-        "language_rehabilitation": {"consecutive_rejections": 3},
-    }
-    assert _historical_language_recovery_due(base) is False
-
-    due = {
-        **base,
+        "assisted_capacity_growth_completed": True,
         "language_rehabilitation": {"consecutive_rejections": 4},
     }
-    assert _historical_language_recovery_due(due) is True
+    assert _dead_capacity_revival_due(progress) is True
+    assert _historical_language_recovery_due(progress) is False
+
+    revived = {
+        **progress,
+        "dead_capacity_revival": {"completed": True},
+        "language_rehabilitation": {"consecutive_rejections": 0},
+    }
+    assert _dead_capacity_revival_due(revived) is False
+    assert _historical_language_recovery_due(revived) is False
+
+    historical_due = {
+        **revived,
+        "historical_language_recovery_source_verified": True,
+        "language_rehabilitation": {"consecutive_rejections": 8},
+    }
+    assert _historical_language_recovery_due(historical_due) is True
 
     completed = {
-        **due,
+        **historical_due,
         "historical_language_recovery": {"completed": True},
     }
     assert _historical_language_recovery_due(completed) is False
 
-    wrong_lineage = {
-        **due,
-        "lineage_id": "other-lineage",
+
+def test_dead_capacity_revival_preserves_logits_and_enables_new_gradients():
+    torch = pytest.importorskip("torch")
+    source_ff = 64
+    target_ff = 96
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=2,
+        d_ff=target_ff,
+        dropout=0.0,
+        tokenizer_version="byte-v1",
+        ff_variant="swiglu",
+    ).validate()
+    runtime = GeneralistRuntime(
+        CausalTransformerLM(cfg),
+        cfg,
+        tokenizer=ByteTokenizer(),
+        device="cpu",
+    )
+
+    # Reproduce the legacy 7M->50M transfer bug: both sides of the newly added
+    # SwiGLU branch were zero, so it was function preserving but gradient dead.
+    with torch.no_grad():
+        for block in runtime.model.blocks:
+            block.ff.up.weight[source_ff:target_ff].zero_()
+            block.ff.up.weight[target_ff + source_ff : 2 * target_ff].zero_()
+            block.ff.down.weight[:, source_ff:target_ff].zero_()
+
+    ids = torch.tensor([[1, 40, 41, 42, 43, 44, 45, 46]], dtype=torch.long)
+    runtime.model.eval()
+    with torch.no_grad():
+        before = runtime.model(ids)["logits"].clone()
+
+    report = _revive_dead_ffn_model_capacity(
+        runtime,
+        source_d_ff=source_ff,
+        seed=123,
+    )
+
+    runtime.model.eval()
+    with torch.no_grad():
+        after = runtime.model(ids)["logits"]
+    assert torch.equal(before, after)
+    assert report["max_logit_delta"] == 0.0
+    assert report["new_down_gradient_sum"] > 0.0
+
+    for block in runtime.model.blocks:
+        assert torch.count_nonzero(
+            block.ff.up.weight[source_ff:target_ff]
+        ).item() > 0
+        assert torch.count_nonzero(
+            block.ff.up.weight[target_ff + source_ff : 2 * target_ff]
+        ).item() > 0
+        assert torch.count_nonzero(
+            block.ff.down.weight[:, source_ff:target_ff]
+        ).item() == 0
+
+
+def test_dead_capacity_source_width_resolves_pre_50m_ffn():
+    progress = {
+        "capacity_growth_history": [
+            {
+                "parameters": 7_021_248,
+                "source_parameters": 1_251_264,
+                "genome": {"d_ff": 1888},
+            },
+            {
+                "parameters": 50_041_536,
+                "source_parameters": 7_021_248,
+                "genome": {"d_ff": 14336},
+            },
+        ]
     }
-    assert _historical_language_recovery_due(wrong_lineage) is False
+    assert _dead_capacity_source_ff_width(
+        progress,
+        current_d_ff=14336,
+    ) == 1888
 
 
 def test_historical_language_recovery_resolves_exact_source_genome():
@@ -739,6 +829,9 @@ def test_historical_recovery_workflow_is_transactional_and_pinned():
     assert ".parameters == 7021248" in workflow
     assert ".tokens_processed == 31210573" in workflow
     assert "--historical-recovery-source" in workflow
+    assert "historical_language_recovery_source_verified" in workflow
+    assert ".dead_capacity_revival_only // false" in workflow
+    assert '"dead_capacity_revival_only": True' in source
     assert ".historical_recovery_only // false" in workflow
     assert '"historical_recovery_only": True' in source
     assert '"discarded_effective_tokens"' in source
@@ -1737,6 +1830,51 @@ def test_sft_validation_metrics_use_separate_heldout_examples():
     assert report["prompt_count"] == 2
     assert "repetition_rate" in report
     assert "language_nll" in report
+
+
+def test_phase5_cached_greedy_trace_matches_uncached_reference():
+    torch = pytest.importorskip("torch")
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        dropout=0.0,
+        tokenizer_version="byte-v1",
+    ).validate()
+    runtime = GeneralistRuntime(
+        CausalTransformerLM(cfg),
+        cfg,
+        tokenizer=ByteTokenizer(),
+        device="cpu",
+    )
+
+    uncached = _single_greedy_trace(
+        runtime,
+        "Hello",
+        max_new_tokens=10,
+        use_cache=False,
+    )
+    cached = _single_greedy_trace(
+        runtime,
+        "Hello",
+        max_new_tokens=10,
+        use_cache=True,
+    )
+
+    assert cached["generated_token_ids"] == uncached["generated_token_ids"]
+    assert cached["raw_output"] == uncached["raw_output"]
+    assert cached["longest_repeated_token_run"] == uncached["longest_repeated_token_run"]
+    assert cached["repetition_rate"] == pytest.approx(uncached["repetition_rate"])
+    assert cached["token_entropy"] == pytest.approx(uncached["token_entropy"], abs=1e-7)
+    assert cached["top1_probability"] == pytest.approx(
+        uncached["top1_probability"], abs=1e-7
+    )
+    assert cached["top5_probability_mass"] == pytest.approx(
+        uncached["top5_probability_mass"], abs=1e-7
+    )
 
 
 def test_phase5_diagnostics_run_on_real_local_generalist_model():
