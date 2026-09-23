@@ -1806,10 +1806,23 @@ def _language_rehabilitation_gate(
         float(before.get("non_empty_rate", 0.0) or 0.0) - 0.10,
     ):
         reasons.append("protected non-empty output rate regressed")
-    if float(after.get("token_entropy", 0.0) or 0.0) < max(
-        1.25,
-        float(before.get("token_entropy", 0.0) or 0.0) - 0.75,
-    ):
+    before_anchor_violations = _language_guard_violations(anchor, before)
+    recovery_mode = bool(before_anchor_violations)
+    if recovery_mode:
+        # A collapsed checkpoint can have *higher* entropy because it is
+        # uncertain while emitting garbage/repeated bytes. During recovery,
+        # using that entropy as the floor rejects genuine improvements. The
+        # durable non-pathological anchor is the correct stability reference.
+        entropy_floor = max(
+            1.25,
+            float(anchor.get("token_entropy", 0.0) or 0.0) - 0.60,
+        )
+    else:
+        entropy_floor = max(
+            1.25,
+            float(before.get("token_entropy", 0.0) or 0.0) - 0.75,
+        )
+    if float(after.get("token_entropy", 0.0) or 0.0) < entropy_floor:
         reasons.append("protected token entropy collapsed")
 
     if stage == "R1_bilingual_foundations":
@@ -1863,7 +1876,9 @@ def _language_rehabilitation_gate(
         "before_quality": _language_quality(before),
         "after_quality": _language_quality(after),
         "anchor_quality": _language_quality(anchor),
-        "anchor_violations_before": _language_guard_violations(anchor, before),
+        "recovery_mode": bool(recovery_mode),
+        "protected_entropy_floor": float(entropy_floor),
+        "anchor_violations_before": before_anchor_violations,
         "anchor_violations_after": _language_guard_violations(anchor, after),
     }
 
