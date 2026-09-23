@@ -43,20 +43,28 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf "${STATE_REPO}"
-          git clone --quiet --branch generalist-state --single-branch \
+          git clone --quiet --depth 1 --branch generalist-state --single-branch \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             "${STATE_REPO}"
-          test -f "${STATE_DIR}/bootstrap-data/best/model.pt"
           test -f "${STATE_DIR}/bootstrap-data/candidate/model.pt"
+          if [[ -f "${STATE_DIR}/bootstrap-data/best/model.pt" ]]; then
+            echo "Historical causal-best checkpoint available for direct comparison."
+          else
+            echo "No causal-best checkpoint after structural growth; auditing active AIRI independently."
+          fi
 
-      - name: Compare causal-best and post-SFT generation
+      - name: Audit active Phase 5 generation and compare compatible best when available
         run: |
           set -euo pipefail
           python -m generalist_lm.bootstrap_audit \
             --state-dir "${STATE_DIR}" \
             --output /tmp/phase5-checkpoint-audit.json \
             | tee /tmp/phase5-checkpoint-audit.stdout.json
-          jq -e '.training_data_used == false and .held_out_suite_used_for_diagnosis_only == true' \
+          jq -e '
+            .training_data_used == false
+            and .held_out_suite_used_for_diagnosis_only == true
+            and .active_candidate_audited == true
+          ' \
             /tmp/phase5-checkpoint-audit.json
 
       - name: Upload checkpoint audit

@@ -472,6 +472,27 @@ def _phase5_memory_safe_batch_plan(
     return int(micro), max(1, accumulation)
 
 
+def _phase5_parameter_segment_cap(
+    *,
+    parameters: int,
+    context_length: int,
+) -> int | None:
+    """Bound transaction size as live AIRI grows on CPU runners.
+
+    Smaller transactions do not change optimizer semantics or effective batch;
+    they only persist/quality-gate progress more frequently so a 50M+ model
+    cannot spend hours inside one uncommitted Phase-5 segment.
+    """
+    pressure = int(parameters) * max(1.0, float(context_length) / 128.0)
+    if pressure < 20_000_000:
+        return None
+    if pressure < 40_000_000:
+        return 250_000
+    if pressure < 64_000_000:
+        return 62_500
+    return 31_250
+
+
 def _phase5_recovery_segment_budget(
     requested_tokens: int,
     *,
@@ -1618,7 +1639,16 @@ def run_segment(
         requested_segment_budget,
         consecutive_rejections=consecutive_rejections,
     )
+    parameter_cap = _phase5_parameter_segment_cap(
+        parameters=int(parameter_count(runtime.model)),
+        context_length=int(runtime.config.context_length),
+    )
+    if parameter_cap is not None:
+        segment_budget = min(int(segment_budget), int(parameter_cap))
     progress["segment_guard_requested_budget_tokens"] = int(requested_segment_budget)
+    progress["parameter_segment_cap_tokens"] = (
+        int(parameter_cap) if parameter_cap is not None else None
+    )
     progress["segment_guard_effective_budget_tokens"] = int(segment_budget)
     progress["segment_guard_recovery_budget_active"] = bool(
         segment_budget < requested_segment_budget
