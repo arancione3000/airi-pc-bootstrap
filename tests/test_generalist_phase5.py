@@ -399,10 +399,13 @@ def test_bootstrap_janitor_preserves_old_worker_without_replacement():
     assert "AIRI_BOOTSTRAP_JANITOR_RESTART=PASS" in workflow
 
 
-def test_phase5_refreshes_mobile_bundle_after_each_persisted_segment():
+def test_phase5_refreshes_mobile_bundle_only_after_model_advancement():
     workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
     assert "generalist-mobile-export.yml/dispatches" in workflow
-    assert "Queued mobile export for the freshly persisted AIRI Live checkpoint." in workflow
+    assert "Queued mobile export for the freshly advanced AIRI Live checkpoint." in workflow
+    assert "Skipped mobile export: rehabilitation was rolled back and model weights did not advance." in workflow
+    assert "segment_tokens_processed > 0" in workflow
+    assert 'rehabilitation_accepted}" == "true"' in workflow
 
 
 def test_mobile_export_uses_actual_live_checkpoint_parameters_and_probe():
