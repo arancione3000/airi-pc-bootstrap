@@ -21,6 +21,8 @@ from .tokenizer import BOS, USER, ASSISTANT
 
 
 MOBILE_SCHEMA = 1
+MOBILE_ONNX_DIRECT_LIMIT_BYTES = 90 * 1024 * 1024
+MOBILE_ONNX_PART_BYTES = 48 * 1024 * 1024
 
 
 def _sha256(path: Path) -> str:
@@ -29,6 +31,46 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _prepare_mobile_onnx_transport(
+    model_path: Path,
+    *,
+    direct_limit_bytes: int = MOBILE_ONNX_DIRECT_LIMIT_BYTES,
+    part_bytes: int = MOBILE_ONNX_PART_BYTES,
+) -> dict[str, Any]:
+    """Keep the logical ONNX exact while making GitHub transport files bounded."""
+    model_sha = _sha256(model_path)
+    model_bytes = int(model_path.stat().st_size)
+    if model_bytes <= int(direct_limit_bytes):
+        return {
+            "model_sha256": model_sha,
+            "model_bytes": model_bytes,
+            "model_parts": [],
+            "transport_files": [model_path.name],
+        }
+
+    chunk_size = max(1, int(part_bytes))
+    total = (model_bytes + chunk_size - 1) // chunk_size
+    part_names: list[str] = []
+    with model_path.open("rb") as source:
+        for index in range(1, total + 1):
+            payload = source.read(chunk_size)
+            if not payload:
+                raise RuntimeError("unexpected EOF while sharding mobile ONNX")
+            name = f"model.onnx.part-{index:05d}-of-{total:05d}"
+            target = model_path.parent / name
+            target.write_bytes(payload)
+            part_names.append(name)
+    if sum((model_path.parent / name).stat().st_size for name in part_names) != model_bytes:
+        raise RuntimeError("mobile ONNX shard byte count mismatch")
+    model_path.unlink()
+    return {
+        "model_sha256": model_sha,
+        "model_bytes": model_bytes,
+        "model_parts": part_names,
+        "transport_files": part_names,
+    }
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -566,8 +608,14 @@ def _export_checkpoint(
     else:
         _write_json(metadata_path, {})
 
+    transport = _prepare_mobile_onnx_transport(model_path)
     files = {}
-    for name in ("model.onnx", "config.json", "tokenizer.json", "metadata.json"):
+    for name in [
+        *transport["transport_files"],
+        "config.json",
+        "tokenizer.json",
+        "metadata.json",
+    ]:
         file_path = output_dir / name
         files[name] = {
             "sha256": _sha256(file_path),
@@ -613,6 +661,9 @@ def _export_checkpoint(
         "all_seed_eligible": bool(summary.get("all_seed_eligible", slot_name == "champion")),
         "onnx_max_abs_error": max_abs_error,
         "neural": _neural_diagnostics(runtime),
+        "model_sha256": str(transport["model_sha256"]),
+        "model_bytes": int(transport["model_bytes"]),
+        "model_parts": list(transport["model_parts"]),
         "files": files,
     }
 
@@ -679,6 +730,13 @@ def export_mobile_bundle(
         slots["research"]["research_source"] = str(
             research_summary.get("research_source") or "unknown"
         )
+        if (
+            slots["research"].get("model_sha256")
+            and slots["research"].get("model_sha256")
+            == slots["champion"].get("model_sha256")
+        ):
+            shutil.rmtree(output / "research", ignore_errors=True)
+            slots.pop("research", None)
 
     manifest = {
         "schema": MOBILE_SCHEMA,
