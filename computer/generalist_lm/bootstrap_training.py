@@ -509,36 +509,21 @@ def _dead_capacity_source_ff_width(
     return max(candidates)
 
 
-def _revive_dead_ffn_capacity(
-    root: Path,
-    progress: dict[str, Any],
+def _revive_dead_ffn_model_capacity(
     runtime: GeneralistRuntime,
     *,
-    candidate_dir: Path,
-    optimizer_path: Path,
-    base_model_sha: str,
+    source_d_ff: int,
     seed: int = 50_041_536,
 ) -> dict[str, Any]:
-    """Make legacy zeroed FFN expansion trainable without changing its function.
-
-    The original same-width 7M->50M migration zeroed both the newly added
-    SwiGLU input rows and the matching output columns.  That preserved logits,
-    but also made those units a zero-gradient dead branch.  Reinitialize only
-    the *input* side while the output columns remain exactly zero: logits stay
-    identical at the revival boundary, yet the output columns immediately get
-    gradients and can learn a corrective residual on the next training step.
-    """
+    """Revive legacy zeroed FFN coordinates without changing model logits."""
     import torch
 
     if str(runtime.config.ff_variant) != "swiglu":
         raise RuntimeError("dead-capacity revival currently requires SwiGLU")
     current_d_ff = int(runtime.config.d_ff)
-    source_d_ff = _dead_capacity_source_ff_width(
-        progress,
-        current_d_ff=current_d_ff,
-    )
-    if source_d_ff >= current_d_ff:
-        raise RuntimeError("dead-capacity revival requires expanded FF width")
+    source_d_ff = int(source_d_ff)
+    if source_d_ff <= 0 or source_d_ff >= current_d_ff:
+        raise RuntimeError("dead-capacity revival requires a valid smaller source FF width")
 
     probe_ids = torch.tensor(
         [[1, 40, 41, 42, 43, 44, 45, 46]],
@@ -585,8 +570,6 @@ def _revive_dead_ffn_capacity(
             before_max_new_up = max(before_max_new_up, layer_up_max)
             before_max_new_down = max(before_max_new_down, layer_down_max)
 
-            # Fail closed if this capacity is no longer the legacy dead branch.
-            # We must never overwrite already-learned large-model coordinates.
             if layer_up_max > 1.0e-12 or layer_down_max > 1.0e-12:
                 raise RuntimeError(
                     "expanded FFN capacity is not an untouched zero-gradient branch; "
@@ -607,7 +590,6 @@ def _revive_dead_ffn_capacity(
             ).to(device=new_value.device)
             new_gate.copy_(gate_noise * 0.02)
             new_value.copy_(value_noise * 0.02)
-            # new_down intentionally stays exactly zero.
             revived_rows += int(new_gate.shape[0] + new_value.shape[0])
             revived_columns += int(new_down.shape[1])
             layers += 1
@@ -621,11 +603,9 @@ def _revive_dead_ffn_capacity(
             f"dead-capacity revival changed live logits: {max_logit_delta}"
         )
 
-    # Prove the revived branch can receive a gradient before persisting it.
     runtime.model.train()
     runtime.model.zero_grad(set_to_none=True)
-    grad_ids = probe_ids
-    loss = runtime.model(grad_ids, labels=grad_ids)["loss"]
+    loss = runtime.model(probe_ids, labels=probe_ids)["loss"]
     loss.backward()
     gradient_sum = 0.0
     for block in runtime.model.blocks:
@@ -638,6 +618,41 @@ def _revive_dead_ffn_capacity(
     runtime.model.eval()
     if not math.isfinite(gradient_sum) or gradient_sum <= 0.0:
         raise RuntimeError("revived FFN output columns still receive zero gradient")
+
+    return {
+        "source_d_ff": source_d_ff,
+        "target_d_ff": current_d_ff,
+        "layers": layers,
+        "revived_up_rows": revived_rows,
+        "revived_down_columns": revived_columns,
+        "before_max_new_up": before_max_new_up,
+        "before_max_new_down": before_max_new_down,
+        "max_logit_delta": max_logit_delta,
+        "new_down_gradient_sum": gradient_sum,
+    }
+
+
+def _revive_dead_ffn_capacity(
+    root: Path,
+    progress: dict[str, Any],
+    runtime: GeneralistRuntime,
+    *,
+    candidate_dir: Path,
+    optimizer_path: Path,
+    base_model_sha: str,
+    seed: int = 50_041_536,
+) -> dict[str, Any]:
+    """Persist a function-preserving revival of the legacy zero-gradient 50M FFN."""
+    current_d_ff = int(runtime.config.d_ff)
+    source_d_ff = _dead_capacity_source_ff_width(
+        progress,
+        current_d_ff=current_d_ff,
+    )
+    revival = _revive_dead_ffn_model_capacity(
+        runtime,
+        source_d_ff=source_d_ff,
+        seed=seed,
+    )
 
     _remove_optimizer_checkpoint(optimizer_path)
     bootstrap_root = root / "bootstrap-data"
@@ -663,15 +678,7 @@ def _revive_dead_ffn_capacity(
     report = {
         "completed": True,
         "version": "phase5-dead-capacity-revival-v1",
-        "source_d_ff": source_d_ff,
-        "target_d_ff": current_d_ff,
-        "layers": layers,
-        "revived_up_rows": revived_rows,
-        "revived_down_columns": revived_columns,
-        "before_max_new_up": before_max_new_up,
-        "before_max_new_down": before_max_new_down,
-        "max_logit_delta": max_logit_delta,
-        "new_down_gradient_sum": gradient_sum,
+        **revival,
         "tokens_preserved": int(progress.get("tokens_processed", 0) or 0),
         "valid_tokens_preserved": int(
             progress.get("valid_tokens_processed", 0) or 0
