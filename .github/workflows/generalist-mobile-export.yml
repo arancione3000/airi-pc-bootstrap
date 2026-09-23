@@ -352,6 +352,83 @@ jobs:
             exit 1
           fi
 
+      - name: Publish oversized ONNX files as immutable release assets
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="airi-generalist-mobile-assets"
+          if ! gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release create "${TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${GITHUB_SHA}" \
+              --title "AIRI Generalist Mobile Assets" \
+              --notes "Immutable large ONNX assets referenced by the generalist-mobile manifest."
+          fi
+
+          python - <<'PY'
+          import json
+          import os
+          import shutil
+          import subprocess
+          from pathlib import Path
+
+          root = Path("/tmp/airi-generalist-mobile-bundle")
+          manifest_path = root / "manifest.json"
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          repo = os.environ["GITHUB_REPOSITORY"]
+          tag = "airi-generalist-mobile-assets"
+          uploaded = {}
+
+          for slot_name, slot in manifest["slots"].items():
+              model_meta = slot["files"]["model.onnx"]
+              digest = str(model_meta["sha256"])
+              asset_name = f"model-{digest[:24]}.onnx"
+              if digest not in uploaded:
+                  source = root / slot_name / "model.onnx"
+                  staged = Path("/tmp") / asset_name
+                  shutil.copy2(source, staged)
+
+                  # Avoid re-uploading an immutable content-addressed asset that
+                  # already exists from a repeated export of the same checkpoint.
+                  existing = subprocess.run(
+                      [
+                          "gh", "release", "view", tag,
+                          "--repo", repo,
+                          "--json", "assets",
+                          "--jq", f'.assets[] | select(.name=="{asset_name}") | .name',
+                      ],
+                      check=True,
+                      capture_output=True,
+                      text=True,
+                  ).stdout.strip()
+                  if not existing:
+                      subprocess.run(
+                          [
+                              "gh", "release", "upload", tag, str(staged),
+                              "--repo", repo,
+                          ],
+                          check=True,
+                      )
+                  uploaded[digest] = asset_name
+
+              model_meta["download_url"] = (
+                  f"https://github.com/{repo}/releases/download/{tag}/"
+                  f"{uploaded[digest]}"
+              )
+
+          manifest_path.write_text(
+              json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps({
+              "ok": True,
+              "release_tag": tag,
+              "unique_model_assets": len(uploaded),
+          }, sort_keys=True))
+          PY
+
       - uses: actions/upload-artifact@v4
         with:
           name: AIRI-Generalist-Mobile-Bundle
@@ -381,6 +458,10 @@ jobs:
 
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           cp -a "${MOBILE_OUT}/." .
+          # model.onnx is intentionally distributed as a release asset because
+          # the 50M FP32 export is ~192 MiB and regular Git rejects objects over
+          # 100 MiB.  The manifest contains the immutable release URL and hash.
+          rm -f champion/model.onnx research/model.onnx
           git add -A
           git commit --allow-empty -m "generalist-mobile: state ${STATE_SHA}"
           git push --quiet origin HEAD:generalist-mobile
