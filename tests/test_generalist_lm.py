@@ -14,7 +14,13 @@ from generalist_lm.evolution import GeneralistGenome, generate_challengers, prom
 from generalist_lm.hf_backend import LocalTransformersBackend
 from generalist_lm.mathesis_bridge import mathesis_signals
 from generalist_lm.model import CausalTransformerLM, GeneralistLMConfig, parameter_count
-from generalist_lm.runtime import GeneralistRuntime
+from generalist_lm.runtime import (
+    GeneralistRuntime,
+    checkpoint_model_files,
+    checkpoint_model_manifest,
+    load_checkpoint_state_dict,
+    save_checkpoint_state_dict,
+)
 from generalist_lm.tokenizer import ASSISTANT, BOS, ByteTokenizer
 from generalist_lm.tool_protocol import parse_tool_call
 from generalist_lm.training import SFTExample, loss_on_examples, train_sft
@@ -180,6 +186,78 @@ def test_checkpoint_roundtrip(tmp_path: Path):
     first = next(runtime.model.parameters()).detach().cpu()
     second = next(restored.model.parameters()).detach().cpu()
     assert torch.equal(first, second)
+
+
+
+def test_large_checkpoint_shards_roundtrip_and_preserve_exact_weights(tmp_path: Path):
+    torch = pytest.importorskip("torch")
+    runtime = GeneralistRuntime.fresh(tiny_config())
+    runtime.save_checkpoint(tmp_path, metadata={"purpose": "shard-test"})
+
+    save_checkpoint_state_dict(
+        torch,
+        tmp_path,
+        runtime.model.state_dict(),
+        shard_raw_bytes=8_192,
+    )
+
+    manifest = checkpoint_model_manifest(tmp_path)
+    assert manifest is not None
+    files = checkpoint_model_files(tmp_path)
+    assert files[0].name == "model.pt"
+    assert len(files) >= 3
+    assert all(path.is_file() for path in files)
+
+    restored = GeneralistRuntime.from_checkpoint(tmp_path)
+    original_state = runtime.model.state_dict()
+    restored_state = restored.model.state_dict()
+    assert original_state.keys() == restored_state.keys()
+    for key in original_state:
+        assert torch.equal(original_state[key], restored_state[key])
+
+
+def test_sharded_checkpoint_rejects_tampered_weight_file(tmp_path: Path):
+    torch = pytest.importorskip("torch")
+    runtime = GeneralistRuntime.fresh(tiny_config())
+    runtime.save_checkpoint(tmp_path)
+    save_checkpoint_state_dict(
+        torch,
+        tmp_path,
+        runtime.model.state_dict(),
+        shard_raw_bytes=8_192,
+    )
+
+    shards = checkpoint_model_files(tmp_path)[1:]
+    assert shards
+    with shards[0].open("ab") as handle:
+        handle.write(b"tamper")
+
+    with pytest.raises(ValueError, match="shard (size|digest) mismatch"):
+        GeneralistRuntime.from_checkpoint(tmp_path)
+
+
+def test_sharded_checkpoint_qualification_digest_covers_all_shards(tmp_path: Path):
+    torch = pytest.importorskip("torch")
+    from generalist_lm.qualification import checkpoint_digest
+
+    runtime = GeneralistRuntime.fresh(tiny_config())
+    runtime.save_checkpoint(tmp_path)
+    save_checkpoint_state_dict(
+        torch,
+        tmp_path,
+        runtime.model.state_dict(),
+        shard_raw_bytes=8_192,
+    )
+    before = checkpoint_digest(tmp_path)
+
+    shard = checkpoint_model_files(tmp_path)[1]
+    raw = bytearray(shard.read_bytes())
+    raw[-1] ^= 1
+    shard.write_bytes(bytes(raw))
+
+    with pytest.raises(ValueError, match="shard digest mismatch"):
+        checkpoint_digest(tmp_path)
+    assert before
 
 
 def test_tool_protocol_is_strictly_allowlisted():
