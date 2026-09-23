@@ -46,7 +46,7 @@ from .research_cycle import (
     _save_champion,
     _transfer_compatible_weights,
 )
-from .runtime import GeneralistRuntime
+from .runtime import GeneralistRuntime, checkpoint_has_model, checkpoint_model_sha256
 from .lineage_migration import refresh_live_lineage_manifest
 from .tokenizer import PAD
 from .training import causal_training_objective, train_sft
@@ -956,8 +956,7 @@ def run_segment(
     if loaded is None:
         raise RuntimeError("Phase 5 requires an existing champion checkpoint")
     champion_genome, champion_runtime = loaded
-    champion_model_path = root / "champion" / "model.pt"
-    base_model_sha = _sha256_file(champion_model_path)
+    base_model_sha = checkpoint_model_sha256(root / "champion")
 
     persisted_progress = _load_json(progress_path, {}) if progress_path.is_file() else {}
     target_tokens = _effective_bootstrap_target(target_tokens, persisted_progress)
@@ -1687,7 +1686,7 @@ def run_segment(
         progress["curriculum_stage"] = "D_to_F_supervised_replay"
         if sft_guard_migration:
             causal_best_dir = bootstrap_root / "best"
-            if not (causal_best_dir / "model.pt").is_file():
+            if not checkpoint_has_model(causal_best_dir):
                 raise RuntimeError(
                     "cannot migrate legacy SFT state without causal-best checkpoint"
                 )
