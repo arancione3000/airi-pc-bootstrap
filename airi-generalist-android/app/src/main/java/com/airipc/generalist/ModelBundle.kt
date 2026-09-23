@@ -35,6 +35,9 @@ data class ModelSlot(
     val allSeedEligible: Boolean,
     val neural: NeuralDiagnostics?,
     val files: Map<String, BundleFileInfo>,
+    val modelSha256: String = "",
+    val modelBytes: Long = 0L,
+    val modelParts: List<String> = emptyList(),
 )
 
 internal fun resolveDownloadRevision(
@@ -43,8 +46,12 @@ internal fun resolveDownloadRevision(
 ): String = revision.ifBlank(fallback)
 
 internal fun sameModelArtifact(first: ModelSlot?, second: ModelSlot?): Boolean {
-    val a = first?.files?.get("model.onnx")?.sha256.orEmpty()
-    val b = second?.files?.get("model.onnx")?.sha256.orEmpty()
+    val a = first?.modelSha256.orEmpty().ifBlank {
+        first?.files?.get("model.onnx")?.sha256.orEmpty()
+    }
+    val b = second?.modelSha256.orEmpty().ifBlank {
+        second?.files?.get("model.onnx")?.sha256.orEmpty()
+    }
     return a.isNotBlank() && a == b
 }
 
@@ -116,12 +123,28 @@ class BundleRepository(context: Context) {
         slot: ModelSlot,
         mobileRevision: String,
     ): InstalledBundle = withContext(Dispatchers.IO) {
-        val modelHash = slot.files["model.onnx"]?.sha256
-            ?: error("Manifest mobile privo di model.onnx")
+        val directModel = slot.files["model.onnx"]
+        val modelHash = slot.modelSha256.ifBlank {
+            directModel?.sha256.orEmpty()
+        }
+        check(modelHash.isNotBlank()) { "Manifest mobile privo di hash modello" }
+        val expectedModelBytes = if (slot.modelBytes > 0L) {
+            slot.modelBytes
+        } else {
+            directModel?.bytes ?: 0L
+        }
         val directory = File(root, "${slot.name}-${modelHash.take(16)}").apply { mkdirs() }
+        val model = File(directory, "model.onnx")
+        val modelAlreadyReady = (
+            model.isFile &&
+            sha256(model) == modelHash &&
+            (expectedModelBytes <= 0L || model.length() == expectedModelBytes)
+        )
+        val partNames = slot.modelParts.toSet()
 
         var downloadRevision = mobileRevision
         for ((name, info) in slot.files) {
+            if (modelAlreadyReady && name in partNames) continue
             val target = File(directory, name)
             if (!target.isFile || sha256(target) != info.sha256) {
                 downloadRevision = resolveDownloadRevision(downloadRevision) {
@@ -142,10 +165,40 @@ class BundleRepository(context: Context) {
             }
         }
 
-        val model = File(directory, "model.onnx")
+        if (!modelAlreadyReady && slot.modelParts.isNotEmpty()) {
+            val tmpModel = File(directory, "model.onnx.tmp")
+            tmpModel.outputStream().buffered().use { output ->
+                slot.modelParts.forEach { name ->
+                    val part = File(directory, name)
+                    check(part.isFile) { "Parte ONNX mancante: $name" }
+                    part.inputStream().buffered().use { input ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+            check(expectedModelBytes <= 0L || tmpModel.length() == expectedModelBytes) {
+                "Dimensione ONNX ricomposto non valida"
+            }
+            check(sha256(tmpModel) == modelHash) {
+                "SHA-256 ONNX ricomposto non valido"
+            }
+            if (model.exists()) model.delete()
+            check(tmpModel.renameTo(model)) {
+                "Impossibile installare ONNX ricomposto"
+            }
+            slot.modelParts.forEach { name ->
+                File(directory, name).delete()
+            }
+        }
+
         val config = File(directory, "config.json")
         val tokenizer = File(directory, "tokenizer.json")
-        check(model.isFile && config.isFile && tokenizer.isFile) {
+        check(
+            model.isFile &&
+            sha256(model) == modelHash &&
+            config.isFile &&
+            tokenizer.isFile
+        ) {
             "Bundle mobile incompleto"
         }
 
@@ -192,6 +245,12 @@ class BundleRepository(context: Context) {
                     bytes = f.getLong("bytes"),
                 )
             }
+            val modelParts = mutableListOf<String>()
+            raw.optJSONArray("model_parts")?.let { parts ->
+                for (index in 0 until parts.length()) {
+                    modelParts += parts.getString(index)
+                }
+            }
             slots[name] = ModelSlot(
                 name = name,
                 id = raw.getString("id"),
@@ -210,6 +269,15 @@ class BundleRepository(context: Context) {
                 allSeedEligible = raw.optBoolean("all_seed_eligible", name == "champion"),
                 neural = parseNeuralDiagnostics(raw.optJSONObject("neural")),
                 files = files,
+                modelSha256 = raw.optString(
+                    "model_sha256",
+                    files["model.onnx"]?.sha256.orEmpty(),
+                ),
+                modelBytes = raw.optLong(
+                    "model_bytes",
+                    files["model.onnx"]?.bytes ?: 0L,
+                ),
+                modelParts = modelParts,
             )
         }
         return MobileManifest(
