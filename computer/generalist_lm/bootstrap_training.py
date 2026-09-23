@@ -237,7 +237,7 @@ def _phase5_optimizer_shard_paths(optimizer_path: Path) -> list[Path]:
 
 
 def _remove_phase5_optimizer_state(optimizer_path: Path) -> None:
-    _remove_phase5_optimizer_state(optimizer_path)
+    optimizer_path.unlink(missing_ok=True)
     for shard in _phase5_optimizer_shard_paths(optimizer_path):
         shard.unlink(missing_ok=True)
 
