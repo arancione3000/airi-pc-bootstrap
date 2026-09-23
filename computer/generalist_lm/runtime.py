@@ -85,6 +85,26 @@ def checkpoint_has_model(state_dir: str | Path) -> bool:
         return False
 
 
+def _state_dict_sha256(state_dict, torch) -> str:
+    """Canonical digest of tensor names, dtypes, shapes and raw bytes."""
+    digest = hashlib.sha256()
+    for name in sorted(state_dict):
+        tensor = state_dict[name]
+        if not hasattr(tensor, "detach"):
+            raise TypeError(f"unsupported non-tensor state entry: {name}")
+        value = tensor.detach().cpu().contiguous()
+        digest.update(str(name).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(value.dtype).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(",".join(str(int(x)) for x in value.shape).encode("ascii"))
+        digest.update(b"\0")
+        raw = value.view(torch.uint8).numpy().tobytes()
+        digest.update(raw)
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def checkpoint_model_sha256(state_dir: str | Path) -> str:
     """Stable checkpoint-model digest.
 
@@ -98,13 +118,11 @@ def checkpoint_model_sha256(state_dir: str | Path) -> str:
     if len(files) == 1 and files[0].name == "model.pt":
         return _sha256_file(files[0])
 
-    digest = hashlib.sha256()
-    for path in files:
-        digest.update(path.name.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(_sha256_file(path).encode("ascii"))
-        digest.update(b"\0")
-    return digest.hexdigest()
+    manifest = json.loads((root / MODEL_INDEX_FILENAME).read_text(encoding="utf-8"))
+    model_sha = str(manifest.get("model_sha256") or "")
+    if len(model_sha) != 64:
+        raise ValueError("sharded checkpoint is missing canonical model_sha256")
+    return model_sha
 
 
 def _load_model_state(root: Path, torch):
@@ -140,6 +158,7 @@ def _load_model_state(root: Path, torch):
 
 def _save_model_state(root: Path, state_dict, torch) -> dict[str, Any]:
     """Persist a state dict without ever creating a Git-hostile giant file."""
+    canonical_model_sha256 = _state_dict_sha256(state_dict, torch)
     total_tensor_bytes = 0
     for name, tensor in state_dict.items():
         if not hasattr(tensor, "numel") or not hasattr(tensor, "element_size"):
@@ -167,6 +186,7 @@ def _save_model_state(root: Path, state_dict, torch) -> dict[str, Any]:
                     "sha256": _sha256_file(legacy),
                 }],
                 "tensor_bytes": int(total_tensor_bytes),
+                "model_sha256": canonical_model_sha256,
             }
 
     nonce = uuid.uuid4().hex[:12]
@@ -219,6 +239,7 @@ def _save_model_state(root: Path, state_dict, torch) -> dict[str, Any]:
             "format": MODEL_SHARD_FORMAT,
             "tensor_bytes": int(total_tensor_bytes),
             "total_serialized_bytes": int(sum(row["bytes"] for row in rows)),
+            "model_sha256": canonical_model_sha256,
             "shards": rows,
         }
         tmp_index = root / f"{MODEL_INDEX_FILENAME}.tmp"
@@ -243,6 +264,7 @@ def _save_model_state(root: Path, state_dict, torch) -> dict[str, Any]:
                 for row in rows
             ],
             "tensor_bytes": int(total_tensor_bytes),
+            "model_sha256": canonical_model_sha256,
         }
     except Exception:
         # New shard names are unique and cannot be referenced by the previous
