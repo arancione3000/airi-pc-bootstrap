@@ -252,6 +252,228 @@ def _save_model_state(root: Path, state_dict, torch) -> dict[str, Any]:
         raise
 
 
+OPTIMIZER_INDEX_FILENAME = "optimizer.index.json"
+OPTIMIZER_SHARD_FORMAT = "airi-generalist-sharded-optimizer-v1"
+
+
+def _nested_tensor_bytes(value: Any) -> int:
+    if hasattr(value, "numel") and hasattr(value, "element_size"):
+        return int(value.numel()) * int(value.element_size())
+    if isinstance(value, dict):
+        return sum(_nested_tensor_bytes(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return sum(_nested_tensor_bytes(item) for item in value)
+    return 0
+
+
+def optimizer_state_files(state_dir: str | Path) -> list[Path]:
+    root = Path(state_dir)
+    legacy = root / "optimizer.pt"
+    if legacy.is_file():
+        return [legacy]
+    index_path = root / OPTIMIZER_INDEX_FILENAME
+    if not index_path.is_file():
+        return []
+    manifest = json.loads(index_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise ValueError("optimizer shard index must be a JSON object")
+    if (
+        int(manifest.get("schema", 0) or 0) != 1
+        or str(manifest.get("format") or "") != OPTIMIZER_SHARD_FORMAT
+    ):
+        raise ValueError("unsupported optimizer shard index")
+    rows = manifest.get("shards")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("optimizer shard index has no shards")
+    files = []
+    seen = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("invalid optimizer shard entry")
+        name = str(row.get("file") or "")
+        if not name or name in seen:
+            raise ValueError("invalid or duplicate optimizer shard filename")
+        seen.add(name)
+        path = _safe_checkpoint_member(root, name)
+        if not path.is_file():
+            raise FileNotFoundError(f"missing optimizer shard: {name}")
+        declared_bytes = int(row.get("bytes", 0) or 0)
+        if declared_bytes and path.stat().st_size != declared_bytes:
+            raise ValueError(f"optimizer shard size mismatch: {name}")
+        declared_sha = str(row.get("sha256") or "")
+        if declared_sha and _sha256_file(path) != declared_sha:
+            raise ValueError(f"optimizer shard digest mismatch: {name}")
+        files.append(path)
+    return files
+
+
+def optimizer_has_state(state_dir: str | Path) -> bool:
+    try:
+        return bool(optimizer_state_files(state_dir))
+    except Exception:
+        return False
+
+
+def remove_optimizer_state(state_dir: str | Path) -> None:
+    root = Path(state_dir)
+    (root / "optimizer.pt").unlink(missing_ok=True)
+    (root / OPTIMIZER_INDEX_FILENAME).unlink(missing_ok=True)
+    for path in root.glob("optimizer-shard-*.pt"):
+        path.unlink(missing_ok=True)
+
+
+def load_optimizer_state(state_dir: str | Path, torch):
+    root = Path(state_dir)
+    legacy = root / "optimizer.pt"
+    if legacy.is_file():
+        return torch.load(legacy, map_location="cpu", weights_only=True)
+    files = optimizer_state_files(root)
+    if not files:
+        raise FileNotFoundError("optimizer state is missing")
+    merged_state = {}
+    param_groups = None
+    for path in files:
+        shard = torch.load(path, map_location="cpu", weights_only=True)
+        if not isinstance(shard, dict):
+            raise ValueError(f"optimizer shard is not a mapping: {path.name}")
+        state = shard.get("state")
+        groups = shard.get("param_groups")
+        if not isinstance(state, dict) or not isinstance(groups, list):
+            raise ValueError(f"invalid optimizer shard payload: {path.name}")
+        overlap = set(merged_state).intersection(state)
+        if overlap:
+            raise ValueError(f"duplicate optimizer state ids across shards: {sorted(overlap)[:8]}")
+        merged_state.update(state)
+        if param_groups is None:
+            param_groups = groups
+        elif groups != param_groups:
+            raise ValueError("optimizer param_groups differ across shards")
+    return {"state": merged_state, "param_groups": param_groups or []}
+
+
+def save_optimizer_state(
+    state_dir: str | Path,
+    optimizer_state: dict[str, Any],
+    torch,
+) -> dict[str, Any]:
+    root = Path(state_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    if not isinstance(optimizer_state, dict):
+        raise TypeError("optimizer state must be a mapping")
+    state = optimizer_state.get("state")
+    param_groups = optimizer_state.get("param_groups")
+    if not isinstance(state, dict) or not isinstance(param_groups, list):
+        raise ValueError("optimizer state must contain state and param_groups")
+
+    total_tensor_bytes = _nested_tensor_bytes(optimizer_state)
+    legacy = root / "optimizer.pt"
+    index_path = root / OPTIMIZER_INDEX_FILENAME
+    if total_tensor_bytes <= MODEL_SHARD_TARGET_BYTES:
+        tmp = root / "optimizer.pt.tmp"
+        torch.save(optimizer_state, tmp)
+        if tmp.stat().st_size <= MODEL_SHARD_HARD_LIMIT_BYTES:
+            tmp.replace(legacy)
+            index_path.unlink(missing_ok=True)
+            for stale in root.glob("optimizer-shard-*.pt"):
+                stale.unlink(missing_ok=True)
+            return {
+                "kind": "single",
+                "files": [{
+                    "file": legacy.name,
+                    "bytes": int(legacy.stat().st_size),
+                    "sha256": _sha256_file(legacy),
+                }],
+                "tensor_bytes": int(total_tensor_bytes),
+            }
+        tmp.unlink(missing_ok=True)
+
+    nonce = uuid.uuid4().hex[:12]
+    entries = list(state.items())
+    shard_specs: list[tuple[str, dict[Any, Any]]] = []
+    current = {}
+    current_bytes = 0
+
+    def flush_optimizer() -> None:
+        nonlocal current, current_bytes
+        if not current:
+            return
+        shard_specs.append((
+            f"optimizer-shard-{nonce}-{len(shard_specs)+1:05d}.pt",
+            current,
+        ))
+        current = {}
+        current_bytes = 0
+
+    for key, value in entries:
+        entry_bytes = _nested_tensor_bytes(value)
+        if entry_bytes > MODEL_SHARD_HARD_LIMIT_BYTES:
+            raise ValueError(
+                f"single optimizer state entry is too large to shard safely: "
+                f"{key}={entry_bytes}"
+            )
+        if current and current_bytes + entry_bytes > MODEL_SHARD_TARGET_BYTES:
+            flush_optimizer()
+        current[key] = value
+        current_bytes += entry_bytes
+    flush_optimizer()
+    if not shard_specs:
+        # Empty optimizer state (e.g. before the first step) is tiny.
+        shard_specs.append((f"optimizer-shard-{nonce}-00001.pt", {}))
+
+    rows = []
+    created = []
+    try:
+        for filename, shard_state in shard_specs:
+            path = root / filename
+            torch.save(
+                {"state": shard_state, "param_groups": param_groups},
+                path,
+            )
+            created.append(path)
+            size = int(path.stat().st_size)
+            if size > MODEL_SHARD_HARD_LIMIT_BYTES:
+                raise ValueError(
+                    f"serialized optimizer shard exceeds hard limit: {filename}={size}"
+                )
+            rows.append({
+                "file": filename,
+                "bytes": size,
+                "sha256": _sha256_file(path),
+                "state_ids": [str(key) for key in shard_state.keys()],
+            })
+
+        manifest = {
+            "schema": 1,
+            "format": OPTIMIZER_SHARD_FORMAT,
+            "tensor_bytes": int(total_tensor_bytes),
+            "total_serialized_bytes": int(sum(row["bytes"] for row in rows)),
+            "shards": rows,
+        }
+        tmp_index = root / f"{OPTIMIZER_INDEX_FILENAME}.tmp"
+        tmp_index.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        tmp_index.replace(index_path)
+        legacy.unlink(missing_ok=True)
+        active_names = {row["file"] for row in rows}
+        for stale in root.glob("optimizer-shard-*.pt"):
+            if stale.name not in active_names:
+                stale.unlink(missing_ok=True)
+        return {
+            "kind": "sharded",
+            "files": [
+                {"file": row["file"], "bytes": row["bytes"], "sha256": row["sha256"]}
+                for row in rows
+            ],
+            "tensor_bytes": int(total_tensor_bytes),
+        }
+    except Exception:
+        for path in created:
+            path.unlink(missing_ok=True)
+        raise
+
+
 class GeneralistRuntime:
     def __init__(self, model, config: GeneralistLMConfig, tokenizer=None, *, device: str = "cpu"):
         import torch
