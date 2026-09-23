@@ -182,6 +182,109 @@ def test_checkpoint_roundtrip(tmp_path: Path):
     assert torch.equal(first, second)
 
 
+
+def test_sharded_checkpoint_roundtrip_and_canonical_digest(tmp_path: Path, monkeypatch):
+    torch = pytest.importorskip("torch")
+    import generalist_lm.runtime as runtime_module
+    from generalist_lm.runtime import (
+        GeneralistRuntime,
+        checkpoint_model_files,
+        checkpoint_model_sha256,
+    )
+
+    monkeypatch.setattr(runtime_module, "MODEL_SHARD_TARGET_BYTES", 8 * 1024)
+    monkeypatch.setattr(runtime_module, "MODEL_SHARD_HARD_LIMIT_BYTES", 2 * 1024 * 1024)
+
+    runtime = GeneralistRuntime.fresh(tiny_config())
+    expected = {
+        name: tensor.detach().cpu().clone()
+        for name, tensor in runtime.model.state_dict().items()
+    }
+    runtime.save_checkpoint(tmp_path, metadata={"purpose": "forced-sharded-test"})
+
+    assert not (tmp_path / "model.pt").exists()
+    assert (tmp_path / "model.index.json").is_file()
+    files = checkpoint_model_files(tmp_path)
+    assert len(files) >= 2
+    assert all(path.stat().st_size < 2 * 1024 * 1024 for path in files)
+
+    digest_before = checkpoint_model_sha256(tmp_path)
+    restored = GeneralistRuntime.from_checkpoint(tmp_path)
+    for name, tensor in restored.model.state_dict().items():
+        assert torch.equal(tensor.detach().cpu(), expected[name])
+
+    # Re-saving the same tensors generates new shard filenames but must not
+    # change the lineage model hash.
+    old_names = {path.name for path in files}
+    restored.save_checkpoint(tmp_path, metadata={"purpose": "resharded-same-model"})
+    new_names = {path.name for path in checkpoint_model_files(tmp_path)}
+    assert new_names != old_names
+    assert checkpoint_model_sha256(tmp_path) == digest_before
+
+
+def test_sharded_checkpoint_detects_corrupted_payload(tmp_path: Path, monkeypatch):
+    pytest.importorskip("torch")
+    import generalist_lm.runtime as runtime_module
+    from generalist_lm.runtime import GeneralistRuntime, checkpoint_model_files
+
+    monkeypatch.setattr(runtime_module, "MODEL_SHARD_TARGET_BYTES", 8 * 1024)
+    monkeypatch.setattr(runtime_module, "MODEL_SHARD_HARD_LIMIT_BYTES", 2 * 1024 * 1024)
+
+    runtime = GeneralistRuntime.fresh(tiny_config())
+    runtime.save_checkpoint(tmp_path)
+    shard = checkpoint_model_files(tmp_path)[0]
+    payload = bytearray(shard.read_bytes())
+    payload[-1] ^= 0x01
+    shard.write_bytes(bytes(payload))
+
+    with pytest.raises(ValueError, match="digest mismatch"):
+        GeneralistRuntime.from_checkpoint(tmp_path)
+
+
+def test_optimizer_state_shards_and_roundtrips(tmp_path: Path, monkeypatch):
+    torch = pytest.importorskip("torch")
+    import generalist_lm.runtime as runtime_module
+    from generalist_lm.runtime import (
+        GeneralistRuntime,
+        load_optimizer_state,
+        optimizer_state_files,
+        remove_optimizer_state,
+        save_optimizer_state,
+    )
+
+    monkeypatch.setattr(runtime_module, "MODEL_SHARD_TARGET_BYTES", 12 * 1024)
+    monkeypatch.setattr(runtime_module, "MODEL_SHARD_HARD_LIMIT_BYTES", 2 * 1024 * 1024)
+
+    runtime = GeneralistRuntime.fresh(tiny_config())
+    optimizer = torch.optim.AdamW(runtime.model.parameters(), lr=1e-3)
+    ids = torch.randint(8, runtime.config.vocab_size, (2, 12))
+    result = runtime.model(ids, labels=ids.clone())
+    result["loss"].backward()
+    optimizer.step()
+
+    source = optimizer.state_dict()
+    storage = save_optimizer_state(tmp_path, source, torch)
+    assert storage["kind"] == "sharded"
+    assert (tmp_path / "optimizer.index.json").is_file()
+    assert not (tmp_path / "optimizer.pt").exists()
+    assert len(optimizer_state_files(tmp_path)) >= 2
+
+    restored = load_optimizer_state(tmp_path, torch)
+    assert restored["param_groups"] == source["param_groups"]
+    assert set(restored["state"]) == set(source["state"])
+    for key in source["state"]:
+        for field, value in source["state"][key].items():
+            other = restored["state"][key][field]
+            if torch.is_tensor(value):
+                assert torch.equal(value, other)
+            else:
+                assert value == other
+
+    remove_optimizer_state(tmp_path)
+    assert optimizer_state_files(tmp_path) == []
+    assert not (tmp_path / "optimizer.index.json").exists()
+
+
 def test_tool_protocol_is_strictly_allowlisted():
     call = parse_tool_call(
         '<tool_call>{"name":"calculator","arguments":{"expression":"17*19"}}</tool_call>',
