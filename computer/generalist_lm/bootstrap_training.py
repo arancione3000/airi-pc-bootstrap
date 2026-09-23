@@ -169,7 +169,12 @@ def _remove_optimizer_checkpoint(path: Path) -> None:
         shard.unlink(missing_ok=True)
 
 
-def _save_optimizer_checkpoint(optimizer, path: Path) -> dict[str, Any]:
+def _save_optimizer_checkpoint(
+    optimizer,
+    path: Path,
+    *,
+    shard_raw_bytes: int = OPTIMIZER_SHARD_RAW_BYTES,
+) -> dict[str, Any]:
     """Persist AdamW resume state without exceeding GitHub's per-file limit."""
     import torch
 
@@ -178,7 +183,8 @@ def _save_optimizer_checkpoint(optimizer, path: Path) -> dict[str, Any]:
     param_groups = list(state_dict.get("param_groups") or [])
     total_raw_bytes = sum(_optimizer_tensor_bytes(value) for value in states.values())
 
-    if total_raw_bytes <= OPTIMIZER_SHARD_RAW_BYTES:
+    shard_raw_bytes = max(1, int(shard_raw_bytes))
+    if total_raw_bytes <= shard_raw_bytes:
         tmp = path.with_suffix(path.suffix + ".tmp")
         torch.save(state_dict, tmp)
         tmp.replace(path)
@@ -195,7 +201,7 @@ def _save_optimizer_checkpoint(optimizer, path: Path) -> dict[str, Any]:
     current_bytes = 0
     for param_id, value in states.items():
         size = _optimizer_tensor_bytes(value)
-        if current and current_bytes + size > OPTIMIZER_SHARD_RAW_BYTES:
+        if current and current_bytes + size > shard_raw_bytes:
             chunks.append(current)
             current = {}
             current_bytes = 0
