@@ -30,6 +30,7 @@ from generalist_lm.bootstrap_training import (
     _filter_protected_replay,
     _grow_bootstrap_runtime,
     _phase5_memory_safe_batch_plan,
+    _phase5_recovery_segment_budget,
     _phase5_success,
     _load_optimizer_checkpoint,
     _optimizer_manifest,
@@ -57,6 +58,29 @@ from generalist_lm.tokenizer import ByteTokenizer
 from generalist_lm.training import SFTExample, causal_training_objective
 
 
+
+
+def test_phase5_recovery_budget_shrinks_after_rejected_segments():
+    assert _phase5_recovery_segment_budget(
+        1_000_000,
+        consecutive_rejections=0,
+    ) == 1_000_000
+    assert _phase5_recovery_segment_budget(
+        1_000_000,
+        consecutive_rejections=1,
+    ) == 500_000
+    assert _phase5_recovery_segment_budget(
+        1_000_000,
+        consecutive_rejections=2,
+    ) == 250_000
+    assert _phase5_recovery_segment_budget(
+        1_000_000,
+        consecutive_rejections=3,
+    ) == 125_000
+    assert _phase5_recovery_segment_budget(
+        250_000,
+        consecutive_rejections=8,
+    ) == 62_500
 
 
 def test_phase5_memory_plan_keeps_7m_fast_and_50m_bounded():
