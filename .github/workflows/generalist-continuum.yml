@@ -70,9 +70,67 @@ jobs:
           if (( active > 0 )); then
             echo "Bootstrap/Architecture Search/Incumbent Recovery owns the Generalist state-write window."
             echo "active=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "active=false" >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
+
+          # A failed/cancelled language run previously left Phase 5 stranded:
+          # the normal resume dispatch lives after the training step and is
+          # never reached on failure. Continuum already runs every five
+          # minutes, so make this gate the durable recovery watchdog.
+          progress_api="https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/generalist-state/bootstrap-data/progress.json?ref=generalist-state"
+          if progress_payload="$(curl "${curl_common[@]}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${progress_api}")"; then
+            encoded="$(jq -r '.content // empty' <<<"${progress_payload}" | tr -d '\n')"
+            if [[ -n "${encoded}" ]]; then
+              progress="$(printf '%s' "${encoded}" | base64 --decode)"
+              processed="$(jq -r '.tokens_processed // 0' <<<"${progress}")"
+              target="$(jq -r '.target_tokens // 0' <<<"${progress}")"
+              recovery_target=""
+
+              if (( target > processed )); then
+                # Incomplete cumulative rung: always resume exactly the same
+                # target, even if the previous run died before its own
+                # post-job resume step.
+                recovery_target="${target}"
+              elif (( target > 0 )); then
+                # A completed rung can also strand if the workflow dies after
+                # persisting it but before dispatching the next ladder target.
+                if (( target < 5000000 )); then
+                  recovery_target=5000000
+                elif (( target < 20000000 )); then
+                  recovery_target=20000000
+                elif (( target < 100000000 )); then
+                  recovery_target=100000000
+                elif (( target < 250000000 )); then
+                  recovery_target=250000000
+                elif (( target < 500000000 )); then
+                  recovery_target=500000000
+                elif (( target < 1000000000 )); then
+                  recovery_target=1000000000
+                fi
+              fi
+
+              if [[ -n "${recovery_target}" ]]; then
+                echo "No active writer but AIRI language training needs target ${recovery_target}; recovering Phase 5."
+                curl "${curl_common[@]}" -X POST \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "Authorization: Bearer ${GH_TOKEN}" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/dispatches" \
+                  -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${recovery_target}\"}}"
+                echo "active=true" >> "${GITHUB_OUTPUT}"
+                echo "Recovered AIRI Phase-5 language training at cumulative target ${recovery_target}."
+                exit 0
+              fi
+            fi
+          else
+            echo "Could not inspect Phase-5 progress; leaving recovery to the next five-minute watchdog cycle." >&2
+          fi
+
+          echo "active=false" >> "${GITHUB_OUTPUT}"
 
   plan:
     needs: bootstrap-gate

@@ -173,6 +173,24 @@ def test_phase5_optimizer_shards_reject_tampering(tmp_path: Path):
         )
 
 
+def test_continuum_watchdog_recovers_stranded_language_training():
+    workflow = Path(".github/workflows/generalist-continuum.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "cron: '*/5 * * * *'" in workflow
+    assert "bootstrap-data/progress.json?ref=generalist-state" in workflow
+    assert "if (( target > processed )); then" in workflow
+    assert 'recovery_target="${target}"' in workflow
+    assert "recovery_target=100000000" in workflow
+    assert "recovery_target=250000000" in workflow
+    assert "recovery_target=500000000" in workflow
+    assert "recovery_target=1000000000" in workflow
+    assert "generalist-bootstrap.yml/dispatches" in workflow
+    assert "Recovered AIRI Phase-5 language training" in workflow
+    assert 'echo "active=true" >> "${GITHUB_OUTPUT}"' in workflow
+    assert "if: needs.bootstrap-gate.outputs.active != 'true'" in workflow
+
+
 def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
     workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
     assert "Dispatch next in-place language rung" in workflow
