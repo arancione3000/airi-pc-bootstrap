@@ -519,6 +519,7 @@ def _phase5_recovery_plan(
     context_length: int,
     persisted_lr_scale: float,
     consecutive_rejections: int,
+    recovery_hold: bool = False,
 ) -> dict[str, Any]:
     """Return a bounded rescue plan that cannot livelock at the old LR floor.
 
@@ -541,17 +542,24 @@ def _phase5_recovery_plan(
     if parameter_cap is not None:
         segment_budget = min(int(segment_budget), int(parameter_cap))
 
-    stall_recovery = rejected >= 2
+    persisted_scale = max(
+        1.0 / 64.0,
+        min(1.0, float(persisted_lr_scale or 1.0)),
+    )
+    # Once a 50M lineage proves that conservative rescue can make progress,
+    # keep that regime sticky until the durable language anchor is recovered.
+    # A single accepted segment must not immediately double the transaction
+    # and raise LR again; that was the source of the post-rescue relapse.
+    sticky_recovery = bool(recovery_hold) or (
+        rejected >= 1 and persisted_scale <= 0.0625
+    )
+    stall_recovery = rejected >= 2 or sticky_recovery
     if stall_recovery:
         # 50M CPU retries previously sat at ~62.5k forever.  Halving the
         # transaction makes each quality decision faster without counting
         # rejected tokens.
         segment_budget = min(int(segment_budget), 31_250)
 
-    persisted_scale = max(
-        1.0 / 64.0,
-        min(1.0, float(persisted_lr_scale or 1.0)),
-    )
     if rejected <= 0:
         lr_scale = persisted_scale
     else:
@@ -566,7 +574,10 @@ def _phase5_recovery_plan(
         ),
         "learning_rate_scale": float(lr_scale),
         "stall_recovery": bool(stall_recovery),
-        "reset_optimizer": bool(stall_recovery),
+        # Reset stale AdamW momentum only when entering rescue because of a
+        # rejection.  After an accepted rescue segment, keep its valid
+        # optimizer state while the sticky hold continues.
+        "reset_optimizer": bool(stall_recovery and rejected > 0),
         "forced_stage": (
             "B_short_sentence_completion" if stall_recovery else None
         ),
@@ -1695,6 +1706,7 @@ def run_segment(
             progress.get("segment_guard_lr_scale", 1.0) or 1.0
         ),
         consecutive_rejections=consecutive_rejections,
+        recovery_hold=bool(progress.get("segment_guard_recovery_hold", False)),
     )
     segment_lr_scale = float(recovery_plan["learning_rate_scale"])
     retry_seed_offset = int(consecutive_rejections) * 1_000_003
@@ -1912,6 +1924,9 @@ def run_segment(
             context_length=int(runtime.config.context_length),
             persisted_lr_scale=float(segment_lr_scale) * 0.5,
             consecutive_rejections=next_rejection_count,
+            recovery_hold=bool(
+                progress_before_segment.get("segment_guard_recovery_hold", False)
+            ),
         )
         progress["segment_guard_lr_scale"] = float(
             next_plan["learning_rate_scale"]
@@ -1969,17 +1984,40 @@ def run_segment(
         segment_best_dir.rename(bootstrap_root / "best")
 
     progress["segment_guard_consecutive_rejections"] = 0
-    progress["segment_guard_lr_scale"] = min(
-        1.0,
-        max(1.0 / 64.0, float(segment_lr_scale) * 1.20),
+    recovery_mode = bool(segment_guard.get("recovery_mode"))
+    remaining_anchor_violations = list(
+        segment_guard.get("after_anchor_violations") or []
     )
+    recovery_hold = bool(recovery_mode and remaining_anchor_violations)
+    previous_recovery_streak = int(
+        progress_before_segment.get("segment_guard_recovery_accept_streak", 0) or 0
+    )
+    progress["segment_guard_recovery_hold"] = recovery_hold
+    progress["segment_guard_recovery_accept_streak"] = (
+        previous_recovery_streak + 1 if recovery_hold else 0
+    )
+    if recovery_hold:
+        # Hold the exact conservative regime that just produced measurable
+        # recovery.  Do not raise LR after one good 31k-token segment while the
+        # lineage is still below the durable anchor.
+        progress["segment_guard_lr_scale"] = min(
+            0.0625,
+            max(1.0 / 64.0, float(segment_lr_scale)),
+        )
+    else:
+        progress["segment_guard_lr_scale"] = min(
+            1.0,
+            max(1.0 / 64.0, float(segment_lr_scale) * 1.20),
+        )
     progress["segment_guard_last_accepted"] = True
-    progress["segment_guard_stall_recovery_active"] = False
-    progress["segment_guard_rescue_stage"] = None
+    progress["segment_guard_stall_recovery_active"] = recovery_hold
+    progress["segment_guard_rescue_stage"] = (
+        "B_short_sentence_completion" if recovery_hold else None
+    )
     progress["segment_guard_optimizer_reset_for_stall"] = False
     progress["segment_guard_last_attempted_tokens"] = int(attempted_tokens)
     progress["segment_guard_last_attempted_steps"] = int(attempted_steps)
-    progress["segment_guard_recovery_mode"] = bool(segment_guard.get("recovery_mode"))
+    progress["segment_guard_recovery_mode"] = recovery_mode
     accepted_history = list(progress.get("segment_guard_acceptances") or [])
     accepted_history.append({
         "tokens_processed": int(progress["tokens_processed"]),
