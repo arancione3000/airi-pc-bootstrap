@@ -104,7 +104,7 @@ jobs:
           git -C "${STATE_REPO}" config user.name "AIRI Generalist Phase 5"
           git -C "${STATE_REPO}" config user.email "airi-generalist@users.noreply.github.com"
           mkdir -p "${CACHE_DIR}"
-          test -f "${STATE_DIR}/champion/model.pt"
+          test -f "${STATE_DIR}/champion/model.pt" -o -f "${STATE_DIR}/champion/model.index.json"
           test -f "${STATE_DIR}/status.json"
 
           persisted_target=0
