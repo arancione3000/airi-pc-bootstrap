@@ -154,7 +154,7 @@ jobs:
             .lineage_id == "airi-5d3d25177d2e83f7"
             and ((.dead_capacity_revival.completed // false) == true)
             and ((.historical_language_recovery_source_verified // false) == true)
-            and ((.language_rehabilitation.consecutive_rejections // 0) >= 8)
+            and ((.language_rehabilitation.consecutive_rejections // 0) >= 6)
             and ((.historical_language_recovery.completed // false) != true)
           ' "${progress}" >/dev/null; then
             echo "Repeated R1 rollback detected; restoring the verified historical healthy best."
@@ -294,18 +294,32 @@ jobs:
 
             persist_state "target ${TARGET_TOKENS} segment ${segment}"
 
-            curl --fail-with-body -sS --retry 3 --retry-all-errors -X POST \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-mobile-export.yml/dispatches" \
-              -d '{"ref":"main"}'
-            echo "Queued mobile export for the freshly persisted AIRI Live checkpoint."
-
             rung_complete="$(jq -r '.rung_complete' /tmp/phase5-segment.json)"
             capacity_growth_only="$(jq -r '.capacity_growth_only // false' /tmp/phase5-segment.json)"
             historical_recovery_only="$(jq -r '.historical_recovery_only // false' /tmp/phase5-segment.json)"
             dead_capacity_revival_only="$(jq -r '.dead_capacity_revival_only // false' /tmp/phase5-segment.json)"
+            segment_tokens_processed="$(jq -r '.segment_tokens_processed // 0' /tmp/phase5-segment.json)"
+            rehabilitation_accepted="$(jq -r '.rehabilitation_accepted // false' /tmp/phase5-segment.json)"
+
+            # Rejected rehabilitation attempts are rolled back. Persist their
+            # recovery counters, but do not burn another runner exporting an
+            # unchanged model. Export only when model weights actually advanced.
+            if (( segment_tokens_processed > 0 )) \
+              || [[ "${rehabilitation_accepted}" == "true" ]] \
+              || [[ "${capacity_growth_only}" == "true" ]] \
+              || [[ "${historical_recovery_only}" == "true" ]] \
+              || [[ "${dead_capacity_revival_only}" == "true" ]] \
+              || [[ "${rung_complete}" == "true" ]]; then
+              curl --fail-with-body -sS --retry 3 --retry-all-errors -X POST \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-mobile-export.yml/dispatches" \
+                -d '{"ref":"main"}'
+              echo "Queued mobile export for the freshly advanced AIRI Live checkpoint."
+            else
+              echo "Skipped mobile export: rehabilitation was rolled back and model weights did not advance."
+            fi
             if [[ "${rung_complete}" == "true" ]]; then
               break
             fi
