@@ -789,20 +789,49 @@ def _recover_historical_language_best(
         raise RuntimeError("historical recovery source config does not match its genome")
 
     source_language = evaluate_phase5_language(source_runtime)
-    if bool(source_language.get("pathological_repetition")):
-        raise RuntimeError("historical recovery source is itself pathologically repetitive")
-    if float(source_language.get("multiword_output_rate", 0.0) or 0.0) < 0.35:
+    current_live_language = _load_json(bootstrap_root / "before.json", {})
+    source_multi = float(source_language.get("multiword_output_rate", 0.0) or 0.0)
+    source_nll = float(source_language.get("language_nll", float("inf")))
+    current_multi = float(current_live_language.get("multiword_output_rate", 0.0) or 0.0)
+    current_nll = float(current_live_language.get("language_nll", float("inf")))
+    source_run = int(source_language.get("longest_repeated_token_run", 0) or 0)
+    current_run = int(current_live_language.get("longest_repeated_token_run", 0) or 0)
+    source_is_clear = not bool(source_language.get("pathological_repetition"))
+    source_is_materially_better = bool(
+        source_nll <= current_nll - 0.35
+        and source_multi >= current_multi + 0.10
+        and source_run < current_run
+        and float(source_language.get("non_empty_rate", 0.0) or 0.0) >= 0.70
+    )
+    if not (source_is_clear or source_is_materially_better):
+        raise RuntimeError(
+            "historical recovery source is not materially healthier than the live checkpoint"
+        )
+    if source_multi < 0.30:
         raise RuntimeError("historical recovery source lacks usable multi-word language")
 
     target_parameters = max(
         int(progress.get("capacity_target_parameters", 0) or 0),
         ASSISTED_CAPACITY_TARGET_PARAMETERS,
     )
-    grown_genome, grown, growth = _grow_bootstrap_runtime(
-        source_genome,
-        source_runtime,
-        target_parameters=target_parameters,
-    )
+    direct_capacity_restore = bool(source_parameters >= target_parameters)
+    if direct_capacity_restore:
+        grown_genome = source_genome
+        grown = source_runtime
+        growth = {
+            "version": "phase5-direct-capacity-recovery-v1",
+            "requested_parameters": int(target_parameters),
+            "source_parameters": int(source_parameters),
+            "parameters": int(source_parameters),
+            "direct_capacity_restore": True,
+            "weight_transfer": {"function_preserving_growth": True},
+        }
+    else:
+        grown_genome, grown, growth = _grow_bootstrap_runtime(
+            source_genome,
+            source_runtime,
+            target_parameters=target_parameters,
+        )
     if not bool((growth.get("weight_transfer") or {}).get("function_preserving_growth")):
         raise RuntimeError("historical recovery regrowth is not function preserving")
 
@@ -821,8 +850,30 @@ def _recover_historical_language_best(
         - float(grown_language.get("language_nll", float("inf")))
     ) > 1.0e-5:
         raise RuntimeError("historical recovery changed protected language NLL")
-    if bool(grown_language.get("pathological_repetition")):
+    if (
+        bool(grown_language.get("pathological_repetition"))
+        and not source_is_materially_better
+    ):
         raise RuntimeError("historical recovery regrowth reintroduced repetition collapse")
+
+    revival_report = None
+    if direct_capacity_restore:
+        source_d_ff = _dead_capacity_source_ff_width(
+            progress,
+            current_d_ff=int(grown.config.d_ff),
+        )
+        revival_report = _revive_dead_ffn_model_capacity(
+            grown,
+            source_d_ff=source_d_ff,
+            seed=50_041_536,
+        )
+        post_revival_language = evaluate_phase5_language(grown)
+        if (
+            [row.get("generated_token_ids") for row in source_language.get("traces") or []]
+            != [row.get("generated_token_ids") for row in post_revival_language.get("traces") or []]
+        ):
+            raise RuntimeError("direct 50M recovery revival changed protected language outputs")
+        grown_language = post_revival_language
 
     # A second direct-logit check catches transfer errors outside the protected
     # generation traces while remaining independent of decoding.
@@ -830,16 +881,19 @@ def _recover_historical_language_best(
         [[1, 40, 41, 42, 43, 44, 45, 46]],
         dtype=torch.long,
     )
-    source_runtime.model.eval()
-    grown.model.eval()
-    with torch.no_grad():
-        source_logits = source_runtime.model(probe_ids)["logits"]
-        grown_logits = grown.model(probe_ids)["logits"]
-    max_logit_delta = float((source_logits - grown_logits).abs().max().item())
-    if max_logit_delta > 1.0e-5:
-        raise RuntimeError(
-            f"historical recovery logit mismatch after regrowth: {max_logit_delta}"
-        )
+    if direct_capacity_restore:
+        max_logit_delta = float((revival_report or {}).get("max_logit_delta", 0.0))
+    else:
+        source_runtime.model.eval()
+        grown.model.eval()
+        with torch.no_grad():
+            source_logits = source_runtime.model(probe_ids)["logits"]
+            grown_logits = grown.model(probe_ids)["logits"]
+        max_logit_delta = float((source_logits - grown_logits).abs().max().item())
+        if max_logit_delta > 1.0e-5:
+            raise RuntimeError(
+                f"historical recovery logit mismatch after regrowth: {max_logit_delta}"
+            )
 
     lineage_before = str(_load_json(root / "lineage.json").get("lineage_id") or "")
     if lineage_before and lineage_before != ASSISTED_CAPACITY_LINEAGE_ID:
@@ -878,6 +932,18 @@ def _recover_historical_language_best(
         1.0 / 64.0,
     )
     progress["segment_guard_recovery_hold"] = True
+    progress["segment_guard_last_accepted"] = False
+    progress["segment_guard_stable_fast_lane"] = False
+    progress["causal_recovery_mode"] = True
+    if revival_report is not None:
+        progress["dead_capacity_revival"] = {
+            "completed": True,
+            "version": "phase5-dead-capacity-revival-v1",
+            **revival_report,
+            "tokens_preserved": int(source_tokens),
+            "valid_tokens_preserved": int(source_tokens),
+            "completed_at_unix": int(time.time()),
+        }
     progress["language_rehabilitation"] = {
         "version": PHASE5_LANGUAGE_REHABILITATION_VERSION,
         "next_stage_index": 0,
@@ -889,8 +955,11 @@ def _recover_historical_language_best(
     }
     progress["historical_language_recovery"] = {
         "completed": True,
-        "version": "phase5-historical-language-recovery-v1",
+        "version": "phase5-historical-language-recovery-v2",
         "source_parameters": source_parameters,
+        "direct_capacity_restore": bool(direct_capacity_restore),
+        "causal_recovery_mode": True,
+        "dead_capacity_revival": revival_report,
         "source_tokens": source_tokens,
         "target_parameters": int(parameter_count(grown.model)),
         "valid_tokens_before_recovery": valid_before,
@@ -3030,10 +3099,13 @@ def run_segment(
         0,
         int(rehabilitation_state.get("next_stage_index", 0) or 0),
     )
-    rehabilitation_due = _rehabilitation_cycle_due(
-        segment_language_before,
-        guard_anchor,
-        next_stage_index,
+    rehabilitation_due = bool(
+        not bool(progress.get("causal_recovery_mode", False))
+        and _rehabilitation_cycle_due(
+            segment_language_before,
+            guard_anchor,
+            next_stage_index,
+        )
     )
     if rehabilitation_due:
         if next_stage_index >= len(PHASE5_LANGUAGE_REHABILITATION_STAGES):
@@ -3531,6 +3603,8 @@ def run_segment(
         progress_before_segment.get("segment_guard_recovery_accept_streak", 0) or 0
     )
     progress["segment_guard_recovery_hold"] = recovery_hold
+    if bool(progress.get("causal_recovery_mode", False)) and not remaining_anchor_violations:
+        progress["causal_recovery_mode"] = False
     progress["segment_guard_recovery_accept_streak"] = (
         previous_recovery_streak + 1 if recovery_hold else 0
     )
