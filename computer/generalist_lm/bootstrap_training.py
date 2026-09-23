@@ -53,7 +53,12 @@ from .research_cycle import (
 from .runtime import GeneralistRuntime
 from .lineage_migration import refresh_live_lineage_manifest
 from .tokenizer import PAD
-from .training import SFTExample, causal_training_objective, train_sft
+from .training import (
+    SFTExample,
+    causal_training_objective,
+    train_sft,
+    train_sft_residual_recovery,
+)
 
 
 PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v3"
@@ -1833,6 +1838,43 @@ def _language_rehabilitation_gate(
         "anchor_violations_before": _language_guard_violations(anchor, before),
         "anchor_violations_after": _language_guard_violations(anchor, after),
     }
+
+
+def _residual_language_rehabilitation_attempts(
+    *,
+    stage: str,
+    consecutive_rejections: int,
+) -> tuple[tuple[int, float, float, float, float, bool], ...]:
+    """Conservative trust-region plan for the revived 50M residual branch.
+
+    The legacy network stays frozen during rehabilitation. Attempts first train
+    only the zero-initialized residual output columns, then optionally allow the
+    revived SwiGLU input rows to adapt while KL keeps behavior near the
+    pre-attempt checkpoint. Repeated rejections lower LR and strengthen KL
+    instead of escalating anti-repetition/EOS pressure.
+    """
+    if stage not in PHASE5_LANGUAGE_REHABILITATION_STAGES:
+        raise ValueError(f"unknown language rehabilitation stage: {stage}")
+    rejected = max(0, int(consecutive_rejections))
+    lr_scale = 0.5 ** min(3, rejected)
+    kl_base = min(2.0, 0.75 + 0.25 * rejected)
+
+    plans = {
+        "R1_bilingual_foundations": (
+            (64, 7.5e-5 * lr_scale, 0.03, 1.15, kl_base, False),
+            (64, 2.5e-5 * lr_scale, 0.05, 1.20, min(2.5, kl_base + 0.25), True),
+            (48, 1.25e-5 * lr_scale, 0.06, 1.25, min(3.0, kl_base + 0.50), True),
+        ),
+        "R2_simple_responses": (
+            (72, 5.0e-5 * lr_scale, 0.03, 1.15, kl_base, False),
+            (64, 2.0e-5 * lr_scale, 0.05, 1.20, min(2.5, kl_base + 0.25), True),
+        ),
+        "R3_short_dialogue": (
+            (80, 3.75e-5 * lr_scale, 0.025, 1.10, kl_base, False),
+            (64, 1.5e-5 * lr_scale, 0.04, 1.15, min(2.5, kl_base + 0.25), True),
+        ),
+    }
+    return plans[stage]
 
 
 def _rehabilitation_replay_limit(stage: str, consecutive_rejections: int) -> int:
