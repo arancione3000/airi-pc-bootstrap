@@ -840,10 +840,17 @@ def test_dead_capacity_revival_precedes_historical_replacement():
     assert _dead_capacity_revival_due(revived) is False
     assert _historical_language_recovery_due(revived) is False
 
+    almost_due = {
+        **revived,
+        "historical_language_recovery_source_verified": True,
+        "language_rehabilitation": {"consecutive_rejections": 5},
+    }
+    assert _historical_language_recovery_due(almost_due) is False
+
     historical_due = {
         **revived,
         "historical_language_recovery_source_verified": True,
-        "language_rehabilitation": {"consecutive_rejections": 8},
+        "language_rehabilitation": {"consecutive_rejections": 6},
     }
     assert _historical_language_recovery_due(historical_due) is True
 
