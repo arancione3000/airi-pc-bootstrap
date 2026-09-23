@@ -32,8 +32,10 @@ from generalist_lm.bootstrap_training import (
     _elementary_rehabilitation_rows,
     _filter_protected_replay,
     _grow_bootstrap_runtime,
+    _language_rehabilitation_attempts,
     _language_rehabilitation_gate,
     _rehabilitation_cycle_due,
+    _rehabilitation_replay_limit,
     _phase5_memory_safe_batch_plan,
     _phase5_parameter_segment_cap,
     _phase5_recovery_plan,
@@ -985,6 +987,41 @@ def test_language_rehabilitation_replay_filters_holdouts_and_stays_bounded():
     assert counts["elementary_en_rows"] == len(
         curriculum["R1_bilingual_foundations"]["en"]
     )
+
+
+def test_language_rehabilitation_retries_become_more_conservative_after_rollback():
+    base = _language_rehabilitation_attempts(
+        parameters=50_041_536,
+        stage="R1_bilingual_foundations",
+        consecutive_rejections=0,
+    )
+    retry = _language_rehabilitation_attempts(
+        parameters=50_041_536,
+        stage="R1_bilingual_foundations",
+        consecutive_rejections=1,
+    )
+    rescue = _language_rehabilitation_attempts(
+        parameters=50_041_536,
+        stage="R1_bilingual_foundations",
+        consecutive_rejections=2,
+    )
+
+    assert retry != base
+    assert rescue != retry
+    assert retry[0][0] < base[0][0]
+    assert retry[0][1] < base[0][1]
+    assert retry[0][2] >= base[0][2]
+    assert rescue[0][0] < retry[0][0]
+    assert rescue[0][1] < retry[0][1]
+    assert rescue[0][2] >= retry[0][2]
+
+
+def test_language_rehabilitation_retry_expands_protected_replay_diversity():
+    assert _rehabilitation_replay_limit("R1_bilingual_foundations", 0) == 48
+    assert _rehabilitation_replay_limit("R1_bilingual_foundations", 1) == 96
+    assert _rehabilitation_replay_limit("R1_bilingual_foundations", 2) == 144
+    assert _rehabilitation_replay_limit("R3_short_dialogue", 1) == 192
+    assert _rehabilitation_replay_limit("R3_short_dialogue", 10) == 192
 
 
 def test_language_rehabilitation_uses_progressive_fail_closed_gates():
