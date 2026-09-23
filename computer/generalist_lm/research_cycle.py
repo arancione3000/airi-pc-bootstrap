@@ -904,7 +904,13 @@ def _transfer_compatible_weights(
             and int(old.shape[1]) == int(tensor.shape[1])
             and int(tensor.shape[0]) > int(old.shape[0])
         ):
-            migrated = tensor.detach().new_zeros(tensor.shape)
+            # Preserve the target initialization for newly added FFN rows.
+            # Their corresponding columns in ff.down remain zero, so the
+            # network function is unchanged at migration time, while the new
+            # hidden units produce non-zero activations and can immediately
+            # train the zero output columns. Zeroing both sides would create a
+            # dead branch with zero gradients forever.
+            migrated = tensor.detach().clone()
             if str(target_cfg.ff_variant) == "swiglu":
                 if int(old.shape[0]) % 2 or int(tensor.shape[0]) % 2:
                     continue
@@ -935,7 +941,10 @@ def _transfer_compatible_weights(
             and old.ndim == tensor.ndim == 1
             and int(tensor.shape[0]) > int(old.shape[0])
         ):
-            migrated = tensor.detach().new_zeros(tensor.shape)
+            # As with ff.up.weight, retain initialization only in the newly
+            # added hidden coordinates. The zero ff.down columns guarantee
+            # exact function preservation while keeping those units trainable.
+            migrated = tensor.detach().clone()
             if str(target_cfg.ff_variant) == "swiglu":
                 if int(old.shape[0]) % 2 or int(tensor.shape[0]) % 2:
                     continue

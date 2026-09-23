@@ -41,6 +41,7 @@ jobs:
       TARGET_TOKENS: ${{ github.event.inputs.target_tokens || '1000000' }}
       ARCHITECTURE_INTERVAL_TOKENS: '5000000'
       ARCHITECTURE_HANDOFF: 'false'
+      HISTORICAL_LANGUAGE_RECOVERY_REF: 'a33056c2beef538ec68a7d3c88bd65c2fc69b079'
     steps:
       - uses: actions/checkout@v4
 
@@ -143,6 +144,36 @@ jobs:
             echo "Phase 5 target ${effective_target} is already fully persisted; skipping corpus rebuild/training."
           fi
 
+      - name: Prepare verified historical language recovery source
+        if: env.PERSISTED_RUNG_COMPLETE != 'true'
+        run: |
+          set -euo pipefail
+          progress="${STATE_DIR}/bootstrap-data/progress.json"
+          recovery_source=""
+          if [[ -s "${progress}" ]] && jq -e '
+            .lineage_id == "airi-5d3d25177d2e83f7"
+            and ((.language_rehabilitation.consecutive_rejections // 0) >= 4)
+            and ((.historical_language_recovery.completed // false) != true)
+          ' "${progress}" >/dev/null; then
+            echo "Repeated R1 rollback detected; restoring the verified historical healthy best."
+            git -C "${STATE_REPO}" fetch --quiet --depth 1 origin "${HISTORICAL_LANGUAGE_RECOVERY_REF}"
+            recovery_root="/tmp/airi-historical-language-recovery"
+            rm -rf "${recovery_root}"
+            mkdir -p "${recovery_root}"
+            git -C "${STATE_REPO}" archive "${HISTORICAL_LANGUAGE_RECOVERY_REF}" \
+              generalist-state/bootstrap-data/best \
+              | tar -xf - -C "${recovery_root}"
+            recovery_source="${recovery_root}/generalist-state/bootstrap-data/best"
+            test -f "${recovery_source}/model.pt"
+            test -f "${recovery_source}/config.json"
+            test -f "${recovery_source}/metadata.json"
+            jq -e '
+              .parameters == 7021248
+              and .tokens_processed == 31210573
+            ' "${recovery_source}/metadata.json" >/dev/null
+          fi
+          echo "HISTORICAL_RECOVERY_SOURCE=${recovery_source}" >> "${GITHUB_ENV}"
+
       - name: Restore reusable bootstrap source cache
         if: env.PERSISTED_RUNG_COMPLETE != 'true'
         uses: actions/cache@v4
@@ -244,6 +275,10 @@ jobs:
           fi
           for segment in $(seq 1 4); do
             echo "Phase 5 segment ${segment}; target=${TARGET_TOKENS}; budget=${segment_tokens}"
+            recovery_args=()
+            if [[ -n "${HISTORICAL_RECOVERY_SOURCE:-}" ]]; then
+              recovery_args+=(--historical-recovery-source "${HISTORICAL_RECOVERY_SOURCE}")
+            fi
             python -m generalist_lm.bootstrap_training \
               --state-dir "${STATE_DIR}" \
               --repo-root "${GITHUB_WORKSPACE}" \
@@ -252,6 +287,7 @@ jobs:
               --segment-tokens "${segment_tokens}" \
               --batch-size 32 \
               --learning-rate 0.0003 \
+              "${recovery_args[@]}" \
               | tee /tmp/phase5-segment.json
 
             persist_state "target ${TARGET_TOKENS} segment ${segment}"
@@ -266,11 +302,16 @@ jobs:
 
             rung_complete="$(jq -r '.rung_complete' /tmp/phase5-segment.json)"
             capacity_growth_only="$(jq -r '.capacity_growth_only // false' /tmp/phase5-segment.json)"
+            historical_recovery_only="$(jq -r '.historical_recovery_only // false' /tmp/phase5-segment.json)"
             if [[ "${rung_complete}" == "true" ]]; then
               break
             fi
             if [[ "${capacity_growth_only}" == "true" ]]; then
               echo "AIRI 50M assisted growth persisted; resume training in a fresh run."
+              break
+            fi
+            if [[ "${historical_recovery_only}" == "true" ]]; then
+              echo "Healthy historical language checkpoint regrown to 50M and persisted; resume conservatively in a fresh run."
               break
             fi
 
@@ -321,6 +362,7 @@ jobs:
             ${{ env.STATE_DIR }}/bootstrap-data/after.json
             ${{ env.STATE_DIR }}/bootstrap-data/report.json
             ${{ env.STATE_DIR }}/bootstrap-data/language-rehabilitation.json
+            ${{ env.STATE_DIR }}/bootstrap-data/language-recovery.json
             ${{ env.STATE_DIR }}/bootstrap-data/airi-pc-lab-after.json
           if-no-files-found: warn
           retention-days: 14

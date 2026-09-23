@@ -24,6 +24,7 @@ jobs:
       PYTHONPATH: computer
       STATE_REPO: /tmp/airi-phase5-audit-state
       STATE_DIR: /tmp/airi-phase5-audit-state/generalist-state
+      HISTORICAL_LANGUAGE_RECOVERY_REF: 'd9bb8508cd3688711aa51aab76757803c388bae5'
     steps:
       - uses: actions/checkout@v4
 
@@ -52,6 +53,83 @@ jobs:
           else
             echo "No causal-best checkpoint after structural growth; auditing active AIRI independently."
           fi
+
+      - name: Verify historical healthy seed and trainable 50M regrowth
+        run: |
+          set -euo pipefail
+          git -C "${STATE_REPO}" fetch --quiet --depth 1 origin "${HISTORICAL_LANGUAGE_RECOVERY_REF}"
+          recovery_root="/tmp/airi-historical-language-audit"
+          rm -rf "${recovery_root}"
+          mkdir -p "${recovery_root}"
+          git -C "${STATE_REPO}" archive "${HISTORICAL_LANGUAGE_RECOVERY_REF}" generalist-state/bootstrap-data/candidate             | tar -xf - -C "${recovery_root}"
+          export RECOVERY_SOURCE="${recovery_root}/generalist-state/bootstrap-data/candidate"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import torch
+
+          from generalist_lm.bootstrap_training import (
+              _grow_bootstrap_runtime,
+              _historical_language_source_genome,
+          )
+          from generalist_lm.model import parameter_count
+          from generalist_lm.phase5_diagnostics import evaluate_phase5_language
+          from generalist_lm.runtime import GeneralistRuntime
+
+          state = Path(os.environ["STATE_DIR"])
+          source_dir = Path(os.environ["RECOVERY_SOURCE"])
+          progress = json.loads((state / "bootstrap-data" / "progress.json").read_text())
+          metadata = json.loads((source_dir / "metadata.json").read_text())
+
+          assert metadata["parameters"] == 1_251_264
+          assert metadata["tokens_processed"] == 20_002_313
+          source = GeneralistRuntime.from_checkpoint(source_dir, device="cpu")
+          source_report = evaluate_phase5_language(source)
+          assert source_report["pathological_repetition"] is False
+          assert source_report["multiword_output_rate"] >= 0.35
+
+          genome = _historical_language_source_genome(
+              progress,
+              source_parameters=parameter_count(source.model),
+          )
+          grown_genome, grown, growth = _grow_bootstrap_runtime(
+              genome,
+              source,
+              target_parameters=50_000_000,
+          )
+          assert growth["weight_transfer"]["function_preserving_growth"] is True
+          assert 49_000_000 <= parameter_count(grown.model) <= 51_000_000
+
+          ids = torch.tensor([[1, 40, 41, 42, 43, 44, 45, 46]], dtype=torch.long)
+          source.model.eval()
+          grown.model.eval()
+          with torch.no_grad():
+              before = source.model(ids)["logits"]
+              after = grown.model(ids)["logits"]
+          delta = float((before - after).abs().max().item())
+          assert delta <= 1.0e-5
+
+          old_ff = source.config.d_ff
+          new_ff = grown.config.d_ff
+          assert new_ff > old_ff
+          up = grown.model.blocks[0].ff.up.weight
+          down = grown.model.blocks[0].ff.down.weight
+          assert torch.count_nonzero(up[old_ff:new_ff]).item() > 0
+          assert torch.count_nonzero(up[new_ff + old_ff: 2 * new_ff]).item() > 0
+          assert torch.count_nonzero(down[:, old_ff:]).item() == 0
+
+          print(json.dumps({
+              "source_parameters": parameter_count(source.model),
+              "source_report": {k: source_report[k] for k in ("language_nll", "pathological_repetition", "longest_repeated_token_run", "multiword_output_rate", "generation_similarity")},
+              "grown_parameters": parameter_count(grown.model),
+              "source_language_nll": source_report["language_nll"],
+              "source_pathological_repetition": source_report["pathological_repetition"],
+              "source_multiword_output_rate": source_report["multiword_output_rate"],
+              "max_logit_delta": delta,
+              "grown_d_ff": grown_genome.d_ff,
+          }, indent=2, sort_keys=True))
+          PY
 
       - name: Audit active Phase 5 generation and compare compatible best when available
         run: |

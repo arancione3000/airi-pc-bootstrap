@@ -32,6 +32,8 @@ from generalist_lm.bootstrap_training import (
     _elementary_rehabilitation_rows,
     _filter_protected_replay,
     _grow_bootstrap_runtime,
+    _historical_language_recovery_due,
+    _historical_language_source_genome,
     _language_rehabilitation_attempts,
     _language_rehabilitation_gate,
     _rehabilitation_cycle_due,
@@ -66,6 +68,7 @@ from generalist_lm.phase5_diagnostics import (
     protected_bootstrap_texts,
     sft_validation_gate,
 )
+from generalist_lm.research_cycle import _transfer_compatible_weights
 from generalist_lm.runtime import GeneralistRuntime
 from generalist_lm.tokenizer import ByteTokenizer
 from generalist_lm.training import SFTExample, causal_training_objective
@@ -600,6 +603,146 @@ def test_phase5_capacity_growth_builds_a_larger_compatible_runtime():
         before_logits = runtime.model(ids)["logits"]
         grown_logits = grown.model(ids)["logits"]
     assert torch.allclose(before_logits, grown_logits, atol=1e-6, rtol=1e-6)
+
+
+def test_function_preserving_ff_growth_keeps_new_units_trainable():
+    torch = pytest.importorskip("torch")
+    source_cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+        d_ff=64,
+        dropout=0.0,
+        tokenizer_version="byte-v1",
+        ff_variant="swiglu",
+    ).validate()
+    target_cfg = GeneralistLMConfig(
+        **{
+            **source_cfg.to_dict(),
+            "d_ff": 96,
+        }
+    ).validate()
+    tokenizer = ByteTokenizer()
+    source = CausalTransformerLM(source_cfg)
+    target = CausalTransformerLM(target_cfg)
+
+    transfer = _transfer_compatible_weights(
+        source,
+        target,
+        source_tokenizer=tokenizer,
+        target_tokenizer=tokenizer,
+    )
+    assert transfer["function_preserving_growth"] is True
+
+    ids = torch.tensor([[1, 40, 41, 42, 43, 44, 45, 46]], dtype=torch.long)
+    source.eval()
+    target.eval()
+    with torch.no_grad():
+        source_logits = source(ids)["logits"]
+        target_logits = target(ids)["logits"]
+    assert torch.allclose(source_logits, target_logits, atol=1e-6, rtol=1e-6)
+
+    up = target.blocks[0].ff.up.weight
+    down = target.blocks[0].ff.down.weight
+    old_ff = source_cfg.d_ff
+    new_ff = target_cfg.d_ff
+
+    # New gate/value rows keep normal initialization, while their output
+    # columns are zero so the initial function is unchanged.
+    assert torch.count_nonzero(up[old_ff:new_ff]).item() > 0
+    assert torch.count_nonzero(up[new_ff + old_ff: 2 * new_ff]).item() > 0
+    assert torch.count_nonzero(down[:, old_ff:]).item() == 0
+
+    target.train()
+    target.zero_grad(set_to_none=True)
+    loss = target(ids, labels=ids)["loss"]
+    loss.backward()
+    assert target.blocks[0].ff.down.weight.grad[:, old_ff:].abs().sum().item() > 0
+
+
+def test_historical_language_recovery_requires_four_rollbacks_on_current_lineage():
+    base = {
+        "lineage_id": "airi-5d3d25177d2e83f7",
+        "language_rehabilitation": {"consecutive_rejections": 3},
+    }
+    assert _historical_language_recovery_due(base) is False
+
+    due = {
+        **base,
+        "language_rehabilitation": {"consecutive_rejections": 4},
+    }
+    assert _historical_language_recovery_due(due) is True
+
+    completed = {
+        **due,
+        "historical_language_recovery": {"completed": True},
+    }
+    assert _historical_language_recovery_due(completed) is False
+
+    wrong_lineage = {
+        **due,
+        "lineage_id": "other-lineage",
+    }
+    assert _historical_language_recovery_due(wrong_lineage) is False
+
+
+def test_historical_language_recovery_resolves_exact_source_genome():
+    from generalist_lm.evolution import GeneralistGenome
+
+    source = GeneralistGenome(
+        generation=4,
+        parent_id="parent",
+        genome_id="healthy-7m",
+        context_length=128,
+        d_model=96,
+        n_heads=4,
+        n_layers=12,
+        d_ff=1888,
+        dropout=0.0,
+        learning_rate=0.0001875,
+        tokenizer_version="bpe-v1",
+        reasoning_depth=1,
+    ).validate()
+    progress = {
+        "capacity_growth_history": [
+            {
+                "parameters": 7_021_248,
+                "genome": source.to_dict(),
+            }
+        ]
+    }
+
+    recovered = _historical_language_source_genome(
+        progress,
+        source_parameters=7_021_248,
+    )
+    assert recovered.to_dict() == source.to_dict()
+
+    with pytest.raises(RuntimeError):
+        _historical_language_source_genome(
+            progress,
+            source_parameters=50_041_536,
+        )
+
+
+def test_historical_recovery_workflow_is_transactional_and_pinned():
+    workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(
+        encoding="utf-8"
+    )
+    source = Path("computer/generalist_lm/bootstrap_training.py").read_text(
+        encoding="utf-8"
+    )
+    assert "a33056c2beef538ec68a7d3c88bd65c2fc69b079" in workflow
+    assert "generalist-state/bootstrap-data/best" in workflow
+    assert ".parameters == 7021248" in workflow
+    assert ".tokens_processed == 31210573" in workflow
+    assert "--historical-recovery-source" in workflow
+    assert ".historical_recovery_only // false" in workflow
+    assert '"historical_recovery_only": True' in source
+    assert '"discarded_effective_tokens"' in source
+    assert 'reason="phase5_historical_language_recovery"' in source
 
 
 def test_phase5_success_requires_multiword_output():
