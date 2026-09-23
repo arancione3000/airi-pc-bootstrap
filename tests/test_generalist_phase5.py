@@ -41,6 +41,7 @@ from generalist_lm.bootstrap_training import (
     _language_rehabilitation_gate,
     _rehabilitation_cycle_due,
     _rehabilitation_replay_limit,
+    _rehabilitation_strategy_rejection_count,
     _residual_language_rehabilitation_attempts,
     _phase5_memory_safe_batch_plan,
     _phase5_parameter_segment_cap,
@@ -669,6 +670,35 @@ def test_function_preserving_ff_growth_keeps_new_units_trainable():
     loss = target(ids, labels=ids)["loss"]
     loss.backward()
     assert target.blocks[0].ff.down.weight.grad[:, old_ff:].abs().sum().item() > 0
+
+
+def test_residual_rehabilitation_uses_its_own_rejection_counter():
+    old_strategy_state = {
+        "consecutive_rejections": 5,
+    }
+    revived_progress = {
+        "dead_capacity_revival": {"completed": True},
+    }
+
+    assert _rehabilitation_strategy_rejection_count(
+        revived_progress,
+        old_strategy_state,
+    ) == 0
+
+    residual_state = {
+        "consecutive_rejections": 7,
+        "residual_consecutive_rejections": 2,
+    }
+    assert _rehabilitation_strategy_rejection_count(
+        revived_progress,
+        residual_state,
+    ) == 2
+
+    pre_revival_progress = {}
+    assert _rehabilitation_strategy_rejection_count(
+        pre_revival_progress,
+        {"consecutive_rejections": 3},
+    ) == 3
 
 
 def test_residual_rehabilitation_plan_strengthens_kl_instead_of_unlikelihood():
