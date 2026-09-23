@@ -18,7 +18,121 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Recover stalled language bootstrap first
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          headers=(
+            -H "Accept: application/vnd.github+json"
+            -H "Authorization: Bearer ${GH_TOKEN}"
+            -H "X-GitHub-Api-Version: 2022-11-28"
+          )
+
+          active_bootstrap="$(curl --fail-with-body -sS "${headers[@]}" \
+            "${api}/actions/workflows/generalist-bootstrap.yml/runs?per_page=30" \
+            | jq '[.workflow_runs[] | select(
+                .status == "pending"
+                or .status == "queued"
+                or .status == "in_progress"
+                or .status == "waiting"
+                or .status == "requested"
+              )] | length')"
+          if (( active_bootstrap > 0 )); then
+            echo "Language bootstrap is already active; watchdog will not duplicate it."
+            echo "LANGUAGE_WATCHDOG_OWNS=true" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+
+          # Architecture/recovery owns the state-write window. Do not create a
+          # bootstrap/architecture mutual wait; the next watchdog tick can
+          # resume language training after the higher-priority writer exits.
+          active_higher=0
+          for workflow in generalist-architecture-search.yml generalist-incumbent-recovery.yml; do
+            count="$(curl --fail-with-body -sS "${headers[@]}" \
+              "${api}/actions/workflows/${workflow}/runs?per_page=30" \
+              | jq '[.workflow_runs[] | select(
+                  .status == "pending"
+                  or .status == "queued"
+                  or .status == "in_progress"
+                  or .status == "waiting"
+                  or .status == "requested"
+                )] | length')"
+            active_higher="$((active_higher + count))"
+          done
+          if (( active_higher > 0 )); then
+            echo "A higher-priority Generalist writer is active; language recovery waits."
+            echo "LANGUAGE_WATCHDOG_OWNS=true" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+
+          bootstrap_runs="$(curl --fail-with-body -sS "${headers[@]}" \
+            "${api}/actions/workflows/generalist-bootstrap.yml/runs?per_page=5")"
+          last_updated="$(jq -r '.workflow_runs[0].updated_at // empty' <<<"${bootstrap_runs}")"
+          if [[ -n "${last_updated}" ]]; then
+            last_epoch="$(date -u -d "${last_updated}" +%s)"
+            now_epoch="$(date -u +%s)"
+            last_age="$((now_epoch - last_epoch))"
+            if (( last_age < 600 )); then
+              echo "Most recent bootstrap changed only ${last_age}s ago; allowing its handoff to settle."
+              echo "LANGUAGE_WATCHDOG_OWNS=true" >> "${GITHUB_ENV}"
+              exit 0
+            fi
+          fi
+
+          progress_response="$(curl -sS -w '\n%{http_code}' "${headers[@]}" \
+            "${api}/contents/generalist-state/bootstrap-data/progress.json?ref=generalist-state")"
+          progress_http="$(tail -n1 <<<"${progress_response}")"
+          progress_body="$(sed '$d' <<<"${progress_response}")"
+
+          if [[ "${progress_http}" == "404" ]]; then
+            desired=1000000
+            echo "No persistent Phase-5 progress found; recovering bootstrap at ${desired} tokens."
+          elif [[ "${progress_http}" == "200" ]]; then
+            progress_json="$(jq -r '.content' <<<"${progress_body}" | tr -d '\n' | base64 -d)"
+            current="$(jq -r '.tokens_processed // 0' <<<"${progress_json}")"
+            target="$(jq -r '.target_tokens // 1000000' <<<"${progress_json}")"
+            rung_complete="$(jq -r '.rung_complete // false' <<<"${progress_json}")"
+            desired=""
+
+            if (( current < target )); then
+              desired="${target}"
+            elif [[ "${rung_complete}" == "true" ]] || (( current >= target )); then
+              if (( target < 5000000 )); then
+                desired=5000000
+              elif (( target < 20000000 )); then
+                desired=20000000
+              elif (( target < 100000000 )); then
+                desired=100000000
+              elif (( target < 250000000 )); then
+                desired=250000000
+              elif (( target < 500000000 )); then
+                desired=500000000
+              elif (( target < 1000000000 )); then
+                desired=1000000000
+              fi
+            fi
+
+            echo "Phase-5 watchdog state: tokens=${current} target=${target} complete=${rung_complete} desired=${desired:-none}"
+          else
+            echo "Unexpected progress lookup HTTP ${progress_http}; refusing speculative dispatch." >&2
+            exit 2
+          fi
+
+          if [[ -n "${desired:-}" ]]; then
+            curl --fail-with-body -sS --retry 3 --retry-all-errors -X POST "${headers[@]}" \
+              "${api}/actions/workflows/generalist-bootstrap.yml/dispatches" \
+              -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${desired}\"}}"
+            echo "Recovered AIRI language bootstrap at cumulative target ${desired}."
+            echo "LANGUAGE_WATCHDOG_OWNS=true" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+
+          echo "Language bootstrap has no incomplete configured rung."
+
       - name: Dispatch recovery only when research state is stale
+        if: env.LANGUAGE_WATCHDOG_OWNS != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
