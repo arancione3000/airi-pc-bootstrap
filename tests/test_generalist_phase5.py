@@ -29,6 +29,7 @@ from generalist_lm.bootstrap_training import (
     _effective_bootstrap_target,
     _filter_protected_replay,
     _grow_bootstrap_runtime,
+    _phase5_memory_safe_batch_plan,
     _phase5_success,
     _segment_language_gate,
     _language_quality,
@@ -52,6 +53,36 @@ from generalist_lm.tokenizer import ByteTokenizer
 from generalist_lm.training import SFTExample, causal_training_objective
 
 
+
+
+def test_phase5_memory_plan_keeps_7m_fast_and_50m_bounded():
+    micro, accumulation = _phase5_memory_safe_batch_plan(
+        parameters=7_021_248,
+        context_length=128,
+        requested_batch_size=32,
+    )
+    assert micro == 32
+    assert accumulation == 1
+
+    micro, accumulation = _phase5_memory_safe_batch_plan(
+        parameters=50_041_536,
+        context_length=128,
+        requested_batch_size=32,
+    )
+    assert micro == 2
+    assert accumulation == 16
+    assert micro * accumulation == 32
+
+
+def test_phase5_memory_plan_bounds_future_large_lineage():
+    micro, accumulation = _phase5_memory_safe_batch_plan(
+        parameters=80_000_000,
+        context_length=256,
+        requested_batch_size=32,
+    )
+    assert micro == 1
+    assert accumulation == 32
+    assert micro * accumulation == 32
 
 
 def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
