@@ -101,6 +101,7 @@ def _sha256_file(path: Path) -> str:
 OPTIMIZER_MANIFEST_FORMAT = "airi-phase5-sharded-optimizer-v1"
 OPTIMIZER_SHARD_RAW_BYTES = 32 * 1024 * 1024
 OPTIMIZER_SHARD_PREFIX = "optimizer-shard-"
+OPTIMIZER_META_PREFIX = "optimizer-meta-"
 
 
 def _optimizer_tensor_bytes(value: Any) -> int:
@@ -165,6 +166,8 @@ def _remove_optimizer_checkpoint(path: Path) -> None:
     path.unlink(missing_ok=True)
     for shard in path.parent.glob(f"{OPTIMIZER_SHARD_PREFIX}*.pt"):
         shard.unlink(missing_ok=True)
+    for meta in path.parent.glob(f"{OPTIMIZER_META_PREFIX}*.pt"):
+        meta.unlink(missing_ok=True)
 
 
 def _save_optimizer_checkpoint(
@@ -187,6 +190,8 @@ def _save_optimizer_checkpoint(
         torch.save(state_dict, tmp)
         tmp.replace(path)
         for stale in path.parent.glob(f"{OPTIMIZER_SHARD_PREFIX}*.pt"):
+            stale.unlink(missing_ok=True)
+        for stale in path.parent.glob(f"{OPTIMIZER_META_PREFIX}*.pt"):
             stale.unlink(missing_ok=True)
         return {
             "storage": "monolithic",
@@ -229,11 +234,22 @@ def _save_optimizer_checkpoint(
             "state_entries": len(chunk),
         })
 
+    tmp_meta = path.parent / ".optimizer-meta.tmp"
+    torch.save({"param_groups": param_groups}, tmp_meta)
+    meta_sha = _sha256_file(tmp_meta)
+    meta_name = f"{OPTIMIZER_META_PREFIX}{meta_sha[:12]}.pt"
+    meta_target = path.parent / meta_name
+    tmp_meta.replace(meta_target)
+
     manifest = {
         "format": OPTIMIZER_MANIFEST_FORMAT,
         "version": 1,
         "raw_tensor_bytes": int(total_raw_bytes),
-        "param_groups": param_groups,
+        "param_groups_file": {
+            "name": meta_name,
+            "sha256": meta_sha,
+            "size": int(meta_target.stat().st_size),
+        },
         "state_entries": len(states),
         "shards": rows,
     }
@@ -247,10 +263,13 @@ def _save_optimizer_checkpoint(
     for stale in path.parent.glob(f"{OPTIMIZER_SHARD_PREFIX}*.pt"):
         if stale.name not in live_names:
             stale.unlink(missing_ok=True)
+    for stale in path.parent.glob(f"{OPTIMIZER_META_PREFIX}*.pt"):
+        if stale.name != meta_name:
+            stale.unlink(missing_ok=True)
     _optimizer_shard_paths(path, verify=True)
     return {
         "storage": "sharded",
-        "files": [path.name, *sorted(live_names)],
+        "files": [path.name, meta_name, *sorted(live_names)],
         "raw_tensor_bytes": int(total_raw_bytes),
         "shards": int(total),
     }
@@ -265,6 +284,34 @@ def _load_optimizer_checkpoint(optimizer, path: Path) -> dict[str, Any]:
             torch.load(path, map_location="cpu", weights_only=True)
         )
         return {"storage": "monolithic", "files": [path.name]}
+
+    meta_row = manifest.get("param_groups_file")
+    if not isinstance(meta_row, dict):
+        raise ValueError("sharded optimizer manifest requires param_groups_file")
+    meta_name = str(meta_row.get("name") or "")
+    if (
+        not meta_name.startswith(OPTIMIZER_META_PREFIX)
+        or not meta_name.endswith(".pt")
+        or "/" in meta_name
+        or "\\" in meta_name
+    ):
+        raise ValueError("invalid optimizer metadata file name")
+    meta_path = path.parent / meta_name
+    if not meta_path.is_file():
+        raise FileNotFoundError(f"missing optimizer metadata file: {meta_name}")
+    expected_meta_size = int(meta_row.get("size", 0) or 0)
+    if expected_meta_size and meta_path.stat().st_size != expected_meta_size:
+        raise ValueError("optimizer metadata size mismatch")
+    expected_meta_sha = str(meta_row.get("sha256") or "")
+    if expected_meta_sha and _sha256_file(meta_path) != expected_meta_sha:
+        raise ValueError("optimizer metadata digest mismatch")
+    meta_payload = torch.load(meta_path, map_location="cpu", weights_only=True)
+    if (
+        not isinstance(meta_payload, dict)
+        or not isinstance(meta_payload.get("param_groups"), list)
+    ):
+        raise ValueError("invalid optimizer metadata payload")
+    param_groups = meta_payload["param_groups"]
 
     state: dict[Any, Any] = {}
     shards = _optimizer_shard_paths(path, verify=True)
@@ -284,11 +331,11 @@ def _load_optimizer_checkpoint(optimizer, path: Path) -> dict[str, Any]:
         )
     optimizer.load_state_dict({
         "state": state,
-        "param_groups": list(manifest.get("param_groups") or []),
+        "param_groups": param_groups,
     })
     return {
         "storage": "sharded",
-        "files": [path.name, *[shard.name for shard in shards]],
+        "files": [path.name, meta_name, *[shard.name for shard in shards]],
         "shards": len(shards),
     }
 
