@@ -1001,7 +1001,7 @@ def test_historical_recovery_workflow_is_transactional_and_pinned():
     assert ".parameters == 7021248" in workflow
     assert ".tokens_processed == 31210573" in workflow
     assert "--historical-recovery-source" in workflow
-    assert "historical_language_recovery_source_verified" in workflow
+    assert "historical_language_recovery_source_verified" not in workflow
     assert ".dead_capacity_revival_only // false" in workflow
     assert '"dead_capacity_revival_only": True' in source
     assert ".historical_recovery_only // false" in workflow
