@@ -10,6 +10,7 @@ import tempfile
 from typing import Any
 
 from .qualification import qualification_status, qualify_checkpoint
+from .runtime import checkpoint_model_shard_names
 
 
 _SAFE_REF = re.compile(r"^[A-Za-z0-9._/-]+$")
@@ -83,6 +84,13 @@ def sync_production_checkpoint(
         candidate.mkdir()
         prefix = "generalist-state/production"
         for name in _CHECKPOINT_FILES:
+            _extract_file(
+                repo_root,
+                ref,
+                f"{prefix}/{name}",
+                candidate / name,
+            )
+        for name in checkpoint_model_shard_names(candidate):
             _extract_file(
                 repo_root,
                 ref,
