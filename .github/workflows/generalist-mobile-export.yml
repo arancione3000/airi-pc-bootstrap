@@ -170,7 +170,7 @@ jobs:
           git clone --quiet --branch generalist-state --single-branch             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"             "${STATE_ROOT}"
           STATE_SHA="$(git -C "${STATE_ROOT}" rev-parse HEAD)"
           echo "STATE_SHA=${STATE_SHA}" >> "${GITHUB_ENV}"
-          test -f "${STATE_ROOT}/generalist-state/champion/model.pt"
+          test -f "${STATE_ROOT}/generalist-state/champion/model.pt" -o -f "${STATE_ROOT}/generalist-state/champion/model.index.json"
           test -f "${STATE_ROOT}/generalist-state/status.json"
 
       - name: Bind Latest Research to the live Phase-5 lineage
@@ -182,7 +182,7 @@ jobs:
           from pathlib import Path
 
           from generalist_lm.model import parameter_count
-          from generalist_lm.runtime import GeneralistRuntime
+          from generalist_lm.runtime import GeneralistRuntime, checkpoint_has_model
 
           state = Path("/tmp/airi-generalist-mobile-state/generalist-state")
           candidate = state / "bootstrap-data" / "candidate"
@@ -192,7 +192,7 @@ jobs:
           # Mobile "Latest Research" is the exact persisted Phase-5 checkpoint
           # that the language bootstrap resumes and grows.  This preparation
           # mutates only the temporary export checkout, never generalist-state.
-          if not (candidate / "model.pt").is_file():
+          if not checkpoint_has_model(candidate):
               raise SystemExit("live Phase-5 candidate checkpoint is missing")
           if not progress_path.is_file():
               raise SystemExit("live Phase-5 progress is missing")
