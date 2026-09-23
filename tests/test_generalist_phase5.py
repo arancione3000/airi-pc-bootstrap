@@ -130,6 +130,16 @@ def test_bootstrap_janitor_preserves_old_worker_without_replacement():
     assert "AIRI_BOOTSTRAP_JANITOR_RESTART=PASS" in workflow
 
 
+def test_assisted_capacity_growth_happens_before_expensive_corpus_build():
+    source = Path("computer/generalist_lm/bootstrap_training.py").read_text(encoding="utf-8")
+    assert source.index("desired_capacity = _bootstrap_capacity_target") < source.index(
+        "bundle = build_bootstrap_bundle"
+    )
+    assert source.index('"capacity_growth_only": True') < source.index(
+        "bundle = build_bootstrap_bundle"
+    )
+
+
 def test_phase5_refreshes_mobile_bundle_after_each_persisted_segment():
     workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
     assert "generalist-mobile-export.yml/dispatches" in workflow
