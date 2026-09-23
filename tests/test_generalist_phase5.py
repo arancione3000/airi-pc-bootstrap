@@ -142,6 +142,37 @@ def test_phase5_recovery_plan_escapes_old_lr_floor_and_resets_momentum():
     assert floor["learning_rate_scale"] == pytest.approx(1.0 / 64.0)
 
 
+def test_phase5_recovery_plan_keeps_successful_rescue_sticky():
+    plan = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=0.0625,
+        consecutive_rejections=0,
+        recovery_hold=True,
+    )
+    assert plan["effective_budget_tokens"] == 31_250
+    assert plan["learning_rate_scale"] == pytest.approx(0.0625)
+    assert plan["stall_recovery"] is True
+    assert plan["reset_optimizer"] is False
+    assert plan["forced_stage"] == "B_short_sentence_completion"
+
+
+def test_phase5_recovery_plan_reenters_rescue_after_low_lr_rejection():
+    plan = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=0.0375,
+        consecutive_rejections=1,
+    )
+    assert plan["effective_budget_tokens"] == 31_250
+    assert plan["learning_rate_scale"] == pytest.approx(0.0375)
+    assert plan["stall_recovery"] is True
+    assert plan["reset_optimizer"] is True
+    assert plan["forced_stage"] == "B_short_sentence_completion"
+
+
 def test_phase5_recovery_plan_does_not_penalize_healthy_training():
     plan = _phase5_recovery_plan(
         1_000_000,
