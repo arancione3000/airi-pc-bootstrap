@@ -456,13 +456,260 @@ def _grow_bootstrap_runtime(
     }
 
 
-def _historical_language_recovery_due(progress: dict[str, Any]) -> bool:
-    """Escalate from repeated SFT rollback to a known-good checkpoint recovery."""
+def _dead_capacity_revival_due(progress: dict[str, Any]) -> bool:
+    """Revive the zero-gradient FFN capacity created by the legacy 50M growth."""
     rehabilitation = dict(progress.get("language_rehabilitation") or {})
-    recovery = dict(progress.get("historical_language_recovery") or {})
+    revival = dict(progress.get("dead_capacity_revival") or {})
     return bool(
         str(progress.get("lineage_id") or "") == ASSISTED_CAPACITY_LINEAGE_ID
+        and bool(progress.get("assisted_capacity_growth_completed"))
         and int(rehabilitation.get("consecutive_rejections", 0) or 0) >= 4
+        and not bool(revival.get("completed"))
+    )
+
+
+def _dead_capacity_source_ff_width(
+    progress: dict[str, Any],
+    *,
+    current_d_ff: int,
+) -> int:
+    """Resolve the FF width immediately before the assisted large-model growth."""
+    history = list(progress.get("capacity_growth_history") or [])
+    source_parameters = None
+    for entry in reversed(history):
+        genome = entry.get("genome")
+        if not isinstance(genome, dict):
+            continue
+        if int(genome.get("d_ff", 0) or 0) != int(current_d_ff):
+            continue
+        source_parameters = int(entry.get("source_parameters", 0) or 0)
+        if source_parameters > 0:
+            break
+
+    if source_parameters:
+        for entry in reversed(history):
+            if int(entry.get("parameters", 0) or 0) != source_parameters:
+                continue
+            genome = entry.get("genome")
+            if isinstance(genome, dict):
+                width = int(genome.get("d_ff", 0) or 0)
+                if 0 < width < int(current_d_ff):
+                    return width
+
+    candidates = []
+    for entry in history:
+        genome = entry.get("genome")
+        if not isinstance(genome, dict):
+            continue
+        width = int(genome.get("d_ff", 0) or 0)
+        if 0 < width < int(current_d_ff):
+            candidates.append(width)
+    if not candidates:
+        raise RuntimeError("cannot resolve pre-growth FF width for dead-capacity revival")
+    return max(candidates)
+
+
+def _revive_dead_ffn_capacity(
+    root: Path,
+    progress: dict[str, Any],
+    runtime: GeneralistRuntime,
+    *,
+    candidate_dir: Path,
+    optimizer_path: Path,
+    base_model_sha: str,
+    seed: int = 50_041_536,
+) -> dict[str, Any]:
+    """Make legacy zeroed FFN expansion trainable without changing its function.
+
+    The original same-width 7M->50M migration zeroed both the newly added
+    SwiGLU input rows and the matching output columns.  That preserved logits,
+    but also made those units a zero-gradient dead branch.  Reinitialize only
+    the *input* side while the output columns remain exactly zero: logits stay
+    identical at the revival boundary, yet the output columns immediately get
+    gradients and can learn a corrective residual on the next training step.
+    """
+    import torch
+
+    if str(runtime.config.ff_variant) != "swiglu":
+        raise RuntimeError("dead-capacity revival currently requires SwiGLU")
+    current_d_ff = int(runtime.config.d_ff)
+    source_d_ff = _dead_capacity_source_ff_width(
+        progress,
+        current_d_ff=current_d_ff,
+    )
+    if source_d_ff >= current_d_ff:
+        raise RuntimeError("dead-capacity revival requires expanded FF width")
+
+    probe_ids = torch.tensor(
+        [[1, 40, 41, 42, 43, 44, 45, 46]],
+        dtype=torch.long,
+        device=runtime.device,
+    )
+    runtime.model.eval()
+    with torch.no_grad():
+        before_logits = runtime.model(probe_ids)["logits"].detach().clone()
+
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(int(seed))
+    revived_rows = 0
+    revived_columns = 0
+    layers = 0
+    before_max_new_up = 0.0
+    before_max_new_down = 0.0
+
+    with torch.no_grad():
+        for block in runtime.model.blocks:
+            ff = getattr(block, "ff", None)
+            up = getattr(ff, "up", None)
+            down = getattr(ff, "down", None)
+            if up is None or down is None:
+                raise RuntimeError("unexpected FFN layout during dead-capacity revival")
+            if tuple(up.weight.shape) != (2 * current_d_ff, int(runtime.config.d_model)):
+                raise RuntimeError("unexpected SwiGLU up-projection shape")
+            if tuple(down.weight.shape) != (int(runtime.config.d_model), current_d_ff):
+                raise RuntimeError("unexpected SwiGLU down-projection shape")
+
+            new_gate = up.weight[source_d_ff:current_d_ff]
+            new_value = up.weight[
+                current_d_ff + source_d_ff : 2 * current_d_ff
+            ]
+            new_down = down.weight[:, source_d_ff:current_d_ff]
+
+            layer_up_max = max(
+                float(new_gate.abs().max().item()) if new_gate.numel() else 0.0,
+                float(new_value.abs().max().item()) if new_value.numel() else 0.0,
+            )
+            layer_down_max = (
+                float(new_down.abs().max().item()) if new_down.numel() else 0.0
+            )
+            before_max_new_up = max(before_max_new_up, layer_up_max)
+            before_max_new_down = max(before_max_new_down, layer_down_max)
+
+            # Fail closed if this capacity is no longer the legacy dead branch.
+            # We must never overwrite already-learned large-model coordinates.
+            if layer_up_max > 1.0e-12 or layer_down_max > 1.0e-12:
+                raise RuntimeError(
+                    "expanded FFN capacity is not an untouched zero-gradient branch; "
+                    "refusing destructive revival"
+                )
+
+            gate_noise = torch.randn(
+                tuple(new_gate.shape),
+                generator=generator,
+                dtype=new_gate.dtype,
+                device="cpu",
+            ).to(device=new_gate.device)
+            value_noise = torch.randn(
+                tuple(new_value.shape),
+                generator=generator,
+                dtype=new_value.dtype,
+                device="cpu",
+            ).to(device=new_value.device)
+            new_gate.copy_(gate_noise * 0.02)
+            new_value.copy_(value_noise * 0.02)
+            # new_down intentionally stays exactly zero.
+            revived_rows += int(new_gate.shape[0] + new_value.shape[0])
+            revived_columns += int(new_down.shape[1])
+            layers += 1
+
+    runtime.model.eval()
+    with torch.no_grad():
+        after_logits = runtime.model(probe_ids)["logits"]
+    max_logit_delta = float((before_logits - after_logits).abs().max().item())
+    if max_logit_delta > 1.0e-7:
+        raise RuntimeError(
+            f"dead-capacity revival changed live logits: {max_logit_delta}"
+        )
+
+    # Prove the revived branch can receive a gradient before persisting it.
+    runtime.model.train()
+    runtime.model.zero_grad(set_to_none=True)
+    grad_ids = probe_ids
+    loss = runtime.model(grad_ids, labels=grad_ids)["loss"]
+    loss.backward()
+    gradient_sum = 0.0
+    for block in runtime.model.blocks:
+        down = block.ff.down.weight
+        if down.grad is not None:
+            gradient_sum += float(
+                down.grad[:, source_d_ff:current_d_ff].abs().sum().item()
+            )
+    runtime.model.zero_grad(set_to_none=True)
+    runtime.model.eval()
+    if not math.isfinite(gradient_sum) or gradient_sum <= 0.0:
+        raise RuntimeError("revived FFN output columns still receive zero gradient")
+
+    _remove_optimizer_checkpoint(optimizer_path)
+    bootstrap_root = root / "bootstrap-data"
+    shutil.rmtree(bootstrap_root / "best", ignore_errors=True)
+    shutil.rmtree(bootstrap_root / ".segment-best", ignore_errors=True)
+    shutil.rmtree(bootstrap_root / "pre-sft", ignore_errors=True)
+    shutil.rmtree(bootstrap_root / "pre-anticollapse", ignore_errors=True)
+    runtime.save_checkpoint(
+        candidate_dir,
+        metadata={
+            "role": "phase5_dead_capacity_revived_candidate",
+            "production_qualified": False,
+            "base_champion_model_sha256": base_model_sha,
+            "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
+            "valid_tokens_processed": int(
+                progress.get("valid_tokens_processed", 0) or 0
+            ),
+            "source_d_ff": source_d_ff,
+            "target_d_ff": current_d_ff,
+        },
+    )
+
+    report = {
+        "completed": True,
+        "version": "phase5-dead-capacity-revival-v1",
+        "source_d_ff": source_d_ff,
+        "target_d_ff": current_d_ff,
+        "layers": layers,
+        "revived_up_rows": revived_rows,
+        "revived_down_columns": revived_columns,
+        "before_max_new_up": before_max_new_up,
+        "before_max_new_down": before_max_new_down,
+        "max_logit_delta": max_logit_delta,
+        "new_down_gradient_sum": gradient_sum,
+        "tokens_preserved": int(progress.get("tokens_processed", 0) or 0),
+        "valid_tokens_preserved": int(
+            progress.get("valid_tokens_processed", 0) or 0
+        ),
+        "completed_at_unix": int(time.time()),
+    }
+    progress["dead_capacity_revival"] = report
+    progress["best_validation_loss"] = None
+    progress["bad_eval_count"] = 0
+    progress["language_rehabilitation"] = {
+        "version": PHASE5_LANGUAGE_REHABILITATION_VERSION,
+        "next_stage_index": 0,
+        "completed_cycles": 0,
+        "consecutive_rejections": 0,
+        "last_accepted": False,
+        "last_stage": "dead_capacity_revival",
+        "updated_at_unix": int(time.time()),
+    }
+    progress["updated_at_unix"] = int(time.time())
+    _atomic_json(root / "bootstrap-data" / "progress.json", progress)
+    _atomic_json(root / "bootstrap-data" / "dead-capacity-revival.json", report)
+    refresh_live_lineage_manifest(
+        root,
+        reason="phase5_dead_capacity_revival",
+    )
+    return report
+
+
+def _historical_language_recovery_due(progress: dict[str, Any]) -> bool:
+    """Use historical replacement only after structural revival also fails."""
+    rehabilitation = dict(progress.get("language_rehabilitation") or {})
+    recovery = dict(progress.get("historical_language_recovery") or {})
+    revival = dict(progress.get("dead_capacity_revival") or {})
+    return bool(
+        str(progress.get("lineage_id") or "") == ASSISTED_CAPACITY_LINEAGE_ID
+        and bool(revival.get("completed"))
+        and bool(progress.get("historical_language_recovery_source_verified"))
+        and int(rehabilitation.get("consecutive_rejections", 0) or 0) >= 8
         and not bool(recovery.get("completed"))
     )
 
@@ -2271,6 +2518,35 @@ def run_segment(
                 "rebased_from_converged_champion": bool(rebase_to_champion),
             },
         )
+
+    if _dead_capacity_revival_due(progress):
+        revival_report = _revive_dead_ffn_capacity(
+            root,
+            progress,
+            runtime,
+            candidate_dir=candidate_dir,
+            optimizer_path=optimizer_path,
+            base_model_sha=base_model_sha,
+        )
+        return {
+            "ok": True,
+            "lineage_id": str(progress.get("lineage_id") or ""),
+            "version": PHASE5_BOOTSTRAP_VERSION,
+            "target_tokens": int(target_tokens),
+            "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
+            "valid_tokens_processed": int(
+                progress.get("valid_tokens_processed", 0) or 0
+            ),
+            "accepted_rehabilitation_tokens": int(
+                progress.get("accepted_rehabilitation_tokens", 0) or 0
+            ),
+            "segment_tokens_processed": 0,
+            "parameters": int(parameter_count(runtime.model)),
+            "dead_capacity_revival_only": True,
+            "dead_capacity_revival_report": revival_report,
+            "rung_complete": False,
+            "early_stopped": False,
+        }
 
     desired_capacity = _bootstrap_capacity_target(target_tokens)
     current_capacity = int(parameter_count(runtime.model))
