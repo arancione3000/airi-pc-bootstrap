@@ -1192,6 +1192,36 @@ def _pretraining_domain_weights(
     return out
 
 
+def _memory_safe_batch_plan(
+    genome: GeneralistGenome,
+    *,
+    vocab_size: int,
+    requested_accumulation: int = 1,
+) -> tuple[int, int, int]:
+    """Bound activation memory while preserving at least the old effective batch.
+
+    Parameter count alone is insufficient: context length scales activations,
+    so use a simple pressure proxy normalized to the current 128-token lineage.
+    """
+    params = int(estimate_parameter_count(genome.model_config(vocab_size)))
+    pressure = int(math.ceil(params * max(1.0, float(genome.context_length) / 128.0)))
+    if pressure <= 20_000_000:
+        micro_batch = 4
+    elif pressure <= 64_000_000:
+        micro_batch = 2
+    else:
+        micro_batch = 1
+
+    requested_accumulation = max(1, min(64, int(requested_accumulation)))
+    old_effective_batch = 4 * requested_accumulation
+    accumulation = max(
+        requested_accumulation,
+        int(math.ceil(old_effective_batch / micro_batch)),
+    )
+    accumulation = max(1, min(64, accumulation))
+    return micro_batch, accumulation, pressure
+
+
 def _train_genome(
     genome: GeneralistGenome,
     *,
@@ -1213,6 +1243,13 @@ def _train_genome(
 ) -> tuple[GeneralistRuntime, dict[str, Any]]:
     tokenizer = tokenizer or ByteTokenizer()
     model = CausalTransformerLM(genome.model_config(tokenizer.vocab_size))
+    micro_batch_size, safe_accumulation_steps, memory_pressure = (
+        _memory_safe_batch_plan(
+            genome,
+            vocab_size=tokenizer.vocab_size,
+            requested_accumulation=gradient_accumulation_steps,
+        )
+    )
     transfer = (
         _transfer_compatible_weights(
             source_model,
@@ -1238,7 +1275,7 @@ def _train_genome(
             tokenizer,
             pretrain_documents,
             steps=int(pretrain_steps),
-            batch_size=4,
+            batch_size=micro_batch_size,
             learning_rate=min(1e-3, max(1e-5, genome.learning_rate * 0.5)),
             weight_decay=0.01,
             seed=seed + 101,
@@ -1275,12 +1312,12 @@ def _train_genome(
             )
         ],
         steps=steps,
-        batch_size=4,
+        batch_size=micro_batch_size,
         learning_rate=sft_learning_rate,
         weight_decay=0.0,
         seed=seed,
         device=device,
-        gradient_accumulation_steps=gradient_accumulation_steps,
+        gradient_accumulation_steps=safe_accumulation_steps,
         precision=precision,
         repetition_unlikelihood_weight=repetition_unlikelihood_weight,
         eos_loss_weight=eos_loss_weight,
@@ -1292,6 +1329,13 @@ def _train_genome(
     validation["training"] = report
     validation["pretraining"] = pretraining
     validation["weight_transfer"] = transfer
+    validation["training_resource_plan"] = {
+        "parameters": int(parameter_count(runtime.model)),
+        "memory_pressure": int(memory_pressure),
+        "micro_batch_size": int(micro_batch_size),
+        "gradient_accumulation_steps": int(safe_accumulation_steps),
+        "effective_batch_size": int(micro_batch_size * safe_accumulation_steps),
+    }
     validation["anti_collapse_objective"] = {
         "repetition_unlikelihood_weight": float(repetition_unlikelihood_weight),
         "eos_loss_weight": float(eos_loss_weight),
@@ -1335,6 +1379,13 @@ def _continue_champion(
     """
     genome = _continual_candidate_genome(champion_genome, cycle)
     tokenizer = champion_runtime.tokenizer
+    micro_batch_size, safe_accumulation_steps, memory_pressure = (
+        _memory_safe_batch_plan(
+            genome,
+            vocab_size=tokenizer.vocab_size,
+            requested_accumulation=gradient_accumulation_steps,
+        )
+    )
     model = copy.deepcopy(champion_runtime.model)
     if pretrain_documents and int(pretrain_steps) > 0:
         pretraining = pretrain_causal(
@@ -1342,7 +1393,7 @@ def _continue_champion(
             tokenizer,
             pretrain_documents,
             steps=int(pretrain_steps),
-            batch_size=4,
+            batch_size=micro_batch_size,
             learning_rate=min(1e-3, max(1e-5, genome.learning_rate * 0.5)),
             weight_decay=0.01,
             seed=seed + 101,
@@ -1368,12 +1419,12 @@ def _continue_champion(
             )
         ],
         steps=steps,
-        batch_size=4,
+        batch_size=micro_batch_size,
         learning_rate=min(float(genome.learning_rate), 1e-3),
         weight_decay=0.0,
         seed=seed,
         device=device,
-        gradient_accumulation_steps=gradient_accumulation_steps,
+        gradient_accumulation_steps=safe_accumulation_steps,
         precision=precision,
     )
     runtime = GeneralistRuntime(model, genome.model_config(tokenizer.vocab_size), tokenizer, device=device)
@@ -1382,6 +1433,13 @@ def _continue_champion(
     validation["score"] = _research_score(validation, validation["parameters"])
     validation["training"] = report
     validation["pretraining"] = pretraining
+    validation["training_resource_plan"] = {
+        "parameters": int(parameter_count(runtime.model)),
+        "memory_pressure": int(memory_pressure),
+        "micro_batch_size": int(micro_batch_size),
+        "gradient_accumulation_steps": int(safe_accumulation_steps),
+        "effective_batch_size": int(micro_batch_size * safe_accumulation_steps),
+    }
     validation["continual_learning"] = True
     return genome, runtime, validation
 
