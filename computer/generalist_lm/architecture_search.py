@@ -22,6 +22,7 @@ from .generalist_swarm import (
 from .mathesis_bridge import mathesis_architecture_hypotheses
 from .meta_controller import decide_next_action
 from .model import estimate_parameter_count
+from .runtime import checkpoint_has_model, checkpoint_model_sha256
 from .lineage_migration import (
     active_lineage_snapshot,
     adaptive_architecture_parameter_cap,
@@ -97,12 +98,14 @@ def _load_incumbent_candidate(
         report.update({"available": True, "reason": "external_pretrained_forbidden"})
         return None, report
     required = [
-        checkpoint / "model.pt",
         checkpoint / "config.json",
         checkpoint / "tokenizer.json",
         checkpoint / "metadata.json",
     ]
-    if not all(path.is_file() and path.stat().st_size > 0 for path in required):
+    if (
+        not checkpoint_has_model(checkpoint)
+        or not all(path.is_file() and path.stat().st_size > 0 for path in required)
+    ):
         report.update({"available": True, "reason": "checkpoint_incomplete"})
         return None, report
 
@@ -434,9 +437,7 @@ def prepare_architecture_search(
     inherited_live_source = dict(base.get("live_lineage_source") or {})
     live_model_sha = str(
         inherited_live_source.get("model_sha256")
-        or hashlib.sha256(
-            (Path(live["checkpoint"]) / "model.pt").read_bytes()
-        ).hexdigest()
+        or checkpoint_model_sha256(Path(live["checkpoint"]))
     )
     lineage_id = str(
         inherited_live_source.get("lineage_id")
@@ -931,7 +932,6 @@ def finalize_architecture_search(
                 shutil.rmtree(checkpoint_target, ignore_errors=True)
                 incumbent_root.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(best_checkpoint, checkpoint_target)
-                model_path = checkpoint_target / "model.pt"
                 summary = {
                     "schema": 1,
                     "version": "airi-architecture-incumbent-v1",
@@ -971,7 +971,7 @@ def finalize_architecture_search(
                     "architecture": best_spec.to_dict(),
                     "fingerprint": best_spec.fingerprint(),
                     "parent_fingerprint": parent_fingerprint,
-                    "model_sha256": _checkpoint_sha256(model_path),
+                    "model_sha256": checkpoint_model_sha256(checkpoint_target),
                     "research_only": True,
                     "production_qualified": False,
                     "recovered": False,
