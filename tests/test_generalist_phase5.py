@@ -41,6 +41,7 @@ from generalist_lm.bootstrap_training import (
     _language_rehabilitation_gate,
     _rehabilitation_cycle_due,
     _rehabilitation_replay_limit,
+    _residual_language_rehabilitation_attempts,
     _phase5_memory_safe_batch_plan,
     _phase5_parameter_segment_cap,
     _phase5_recovery_plan,
@@ -75,7 +76,11 @@ from generalist_lm.phase5_diagnostics import (
 from generalist_lm.research_cycle import _transfer_compatible_weights
 from generalist_lm.runtime import GeneralistRuntime
 from generalist_lm.tokenizer import ByteTokenizer
-from generalist_lm.training import SFTExample, causal_training_objective
+from generalist_lm.training import (
+    SFTExample,
+    causal_training_objective,
+    train_sft_residual_recovery,
+)
 
 
 
@@ -664,6 +669,120 @@ def test_function_preserving_ff_growth_keeps_new_units_trainable():
     loss = target(ids, labels=ids)["loss"]
     loss.backward()
     assert target.blocks[0].ff.down.weight.grad[:, old_ff:].abs().sum().item() > 0
+
+
+def test_residual_rehabilitation_plan_strengthens_kl_instead_of_unlikelihood():
+    first = _residual_language_rehabilitation_attempts(
+        stage="R1_bilingual_foundations",
+        consecutive_rejections=0,
+    )
+    later = _residual_language_rehabilitation_attempts(
+        stage="R1_bilingual_foundations",
+        consecutive_rejections=2,
+    )
+
+    assert first[0][2] <= 0.05
+    assert first[0][3] <= 1.25
+    assert first[0][4] > 0.0
+    assert first[0][5] is False
+    assert later[0][1] < first[0][1]
+    assert later[0][4] > first[0][4]
+    assert later[0][2] == first[0][2]
+    assert later[0][3] == first[0][3]
+
+
+def test_residual_kl_recovery_keeps_legacy_weights_bit_stable():
+    torch = pytest.importorskip("torch")
+    source_ff = 64
+    target_ff = 96
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=64,
+        d_model=32,
+        n_heads=4,
+        n_layers=2,
+        d_ff=target_ff,
+        dropout=0.0,
+        tokenizer_version="byte-v1",
+        ff_variant="swiglu",
+    ).validate()
+    model = CausalTransformerLM(cfg)
+
+    # Recreate the old dead branch, then revive it exactly as the live 50M was.
+    with torch.no_grad():
+        for block in model.blocks:
+            block.ff.up.weight[source_ff:target_ff].zero_()
+            block.ff.up.weight[target_ff + source_ff : 2 * target_ff].zero_()
+            block.ff.down.weight[:, source_ff:target_ff].zero_()
+    runtime = GeneralistRuntime(
+        model,
+        cfg,
+        tokenizer=ByteTokenizer(),
+        device="cpu",
+    )
+    _revive_dead_ffn_model_capacity(
+        runtime,
+        source_d_ff=source_ff,
+        seed=123,
+    )
+
+    reference = CausalTransformerLM(cfg)
+    reference.load_state_dict(model.state_dict())
+    before = {
+        name: tensor.detach().clone()
+        for name, tensor in model.state_dict().items()
+    }
+    examples = [
+        SFTExample([
+            {"role": "user", "content": "Say hello."},
+            {"role": "assistant", "content": "Hello there."},
+        ]),
+        SFTExample([
+            {"role": "user", "content": "Name one fruit."},
+            {"role": "assistant", "content": "Apple."},
+        ]),
+    ]
+
+    report = train_sft_residual_recovery(
+        model,
+        reference,
+        ByteTokenizer(),
+        examples,
+        source_d_ff=source_ff,
+        steps=3,
+        batch_size=1,
+        learning_rate=2e-4,
+        seed=9,
+        device="cpu",
+        repetition_unlikelihood_weight=0.0,
+        eos_loss_weight=1.0,
+        kl_weight=1.0,
+        train_upstream=False,
+    )
+
+    changed_new_down = False
+    after = model.state_dict()
+    for name, old_value in before.items():
+        new_value = after[name]
+        if name.endswith(".ff.down.weight"):
+            assert torch.equal(
+                old_value[:, :source_ff],
+                new_value[:, :source_ff],
+            )
+            if not torch.equal(
+                old_value[:, source_ff:target_ff],
+                new_value[:, source_ff:target_ff],
+            ):
+                changed_new_down = True
+        else:
+            assert torch.equal(old_value, new_value)
+
+    assert changed_new_down is True
+    assert report["mode"] == "residual_kl_recovery"
+    assert report["train_upstream"] is False
+    assert report["teacher_kl_weight"] == pytest.approx(1.0)
+    assert report["mean_teacher_kl_loss"] >= 0.0
+    assert report["trainable_coordinate_count"] > 0
 
 
 def test_dead_capacity_revival_precedes_historical_replacement():
