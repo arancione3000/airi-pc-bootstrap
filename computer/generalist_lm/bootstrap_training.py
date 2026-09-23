@@ -62,6 +62,10 @@ PHASE5_250M_UNIQUE_CORPUS_TOKENS = 40_000_000
 PHASE5_500M_UNIQUE_CORPUS_TOKENS = 60_000_000
 PHASE5_1B_UNIQUE_CORPUS_TOKENS = 100_000_000
 
+PHASE5_OPTIMIZER_MANIFEST_FORMAT = "airi-phase5-optimizer-sharded-v1"
+PHASE5_OPTIMIZER_SHARD_PREFIX = "optimizer-shard-"
+PHASE5_OPTIMIZER_SHARD_RAW_BYTES = 32 * 1024 * 1024
+
 # One-time human-assisted capacity gift for the current AIRI lineage only.
 # Once this lineage reaches the requested tier the marker is persisted and this
 # path becomes permanently dormant; future growth returns to AIRI's own search.
@@ -200,6 +204,186 @@ def _grow_bootstrap_runtime(
         "parameters": int(parameter_count(model)),
         "genome": grown_genome.to_dict(),
         "weight_transfer": transfer,
+    }
+
+
+
+def _sha256_path(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _optimizer_value_bytes(value: Any) -> int:
+    try:
+        import torch
+        if torch.is_tensor(value):
+            return int(value.numel()) * int(value.element_size())
+    except Exception:
+        pass
+    if isinstance(value, dict):
+        return sum(_optimizer_value_bytes(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return sum(_optimizer_value_bytes(item) for item in value)
+    return 0
+
+
+def _phase5_optimizer_shard_paths(optimizer_path: Path) -> list[Path]:
+    return sorted(
+        optimizer_path.parent.glob(f"{PHASE5_OPTIMIZER_SHARD_PREFIX}*.pt")
+    )
+
+
+def _remove_phase5_optimizer_state(optimizer_path: Path) -> None:
+    _remove_phase5_optimizer_state(optimizer_path)
+    for shard in _phase5_optimizer_shard_paths(optimizer_path):
+        shard.unlink(missing_ok=True)
+
+
+def _save_phase5_optimizer_state(
+    torch_module,
+    optimizer_path: Path,
+    state_dict: dict[str, Any],
+    *,
+    shard_raw_bytes: int = PHASE5_OPTIMIZER_SHARD_RAW_BYTES,
+) -> dict[str, Any]:
+    """Persist AdamW state below GitHub's per-file size limit."""
+    optimizer_path.parent.mkdir(parents=True, exist_ok=True)
+    state = dict(state_dict.get("state") or {})
+    param_groups = list(state_dict.get("param_groups") or [])
+    raw_bytes = sum(_optimizer_value_bytes(value) for value in state.values())
+
+    if raw_bytes <= int(shard_raw_bytes):
+        tmp = optimizer_path.with_suffix(optimizer_path.suffix + ".tmp")
+        torch_module.save(
+            {"state": state, "param_groups": param_groups},
+            tmp,
+        )
+        tmp.replace(optimizer_path)
+        for stale in _phase5_optimizer_shard_paths(optimizer_path):
+            stale.unlink(missing_ok=True)
+        return {
+            "storage": "monolithic",
+            "files": [optimizer_path.name],
+            "raw_tensor_bytes": int(raw_bytes),
+        }
+
+    groups: list[dict[Any, Any]] = []
+    current: dict[Any, Any] = {}
+    current_bytes = 0
+    limit = max(1, int(shard_raw_bytes))
+    for param_id, value in state.items():
+        size = _optimizer_value_bytes(value)
+        if current and current_bytes + size > limit:
+            groups.append(current)
+            current = {}
+            current_bytes = 0
+        current[param_id] = value
+        current_bytes += size
+    if current:
+        groups.append(current)
+
+    rows: list[dict[str, Any]] = []
+    live_names: set[str] = set()
+    total = len(groups)
+    for index, group in enumerate(groups, 1):
+        tmp = optimizer_path.parent / f".optimizer-shard-{index:05d}.tmp"
+        torch_module.save({"state": group}, tmp)
+        sha = _sha256_path(tmp)
+        name = (
+            f"{PHASE5_OPTIMIZER_SHARD_PREFIX}{index:05d}-of-{total:05d}-"
+            f"{sha[:12]}.pt"
+        )
+        target = optimizer_path.parent / name
+        tmp.replace(target)
+        live_names.add(name)
+        rows.append({
+            "name": name,
+            "sha256": sha,
+            "size": int(target.stat().st_size),
+            "state_ids": [int(item) for item in group.keys()],
+        })
+
+    manifest = {
+        "format": PHASE5_OPTIMIZER_MANIFEST_FORMAT,
+        "version": 1,
+        "raw_tensor_bytes": int(raw_bytes),
+        "param_groups": param_groups,
+        "shards": rows,
+    }
+    tmp_manifest = optimizer_path.with_suffix(optimizer_path.suffix + ".tmp")
+    torch_module.save(manifest, tmp_manifest)
+    tmp_manifest.replace(optimizer_path)
+
+    for stale in _phase5_optimizer_shard_paths(optimizer_path):
+        if stale.name not in live_names:
+            stale.unlink(missing_ok=True)
+
+    # Verify before returning so a persisted checkpoint never points at a
+    # partial/corrupt optimizer state.
+    _load_phase5_optimizer_state(torch_module, optimizer_path)
+    return {
+        "storage": "sharded",
+        "files": [optimizer_path.name, *sorted(live_names)],
+        "raw_tensor_bytes": int(raw_bytes),
+        "shards": int(total),
+    }
+
+
+def _load_phase5_optimizer_state(
+    torch_module,
+    optimizer_path: Path,
+) -> dict[str, Any]:
+    payload = torch_module.load(
+        optimizer_path,
+        map_location="cpu",
+        weights_only=True,
+    )
+    if not (
+        isinstance(payload, dict)
+        and payload.get("format") == PHASE5_OPTIMIZER_MANIFEST_FORMAT
+    ):
+        return payload
+
+    rows = payload.get("shards")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("sharded Phase-5 optimizer manifest requires shards")
+    merged: dict[Any, Any] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("invalid Phase-5 optimizer shard entry")
+        name = str(row.get("name") or "")
+        if (
+            not name.startswith(PHASE5_OPTIMIZER_SHARD_PREFIX)
+            or not name.endswith(".pt")
+            or "/" in name
+            or "\\" in name
+        ):
+            raise ValueError("invalid Phase-5 optimizer shard name")
+        shard_path = optimizer_path.parent / name
+        if not shard_path.is_file():
+            raise FileNotFoundError(f"missing Phase-5 optimizer shard: {name}")
+        expected_size = int(row.get("size", 0) or 0)
+        if expected_size and shard_path.stat().st_size != expected_size:
+            raise ValueError(f"Phase-5 optimizer shard size mismatch: {name}")
+        expected_sha = str(row.get("sha256") or "")
+        if expected_sha and _sha256_path(shard_path) != expected_sha:
+            raise ValueError(f"Phase-5 optimizer shard digest mismatch: {name}")
+        shard = torch_module.load(
+            shard_path,
+            map_location="cpu",
+            weights_only=True,
+        )
+        shard_state = dict((shard or {}).get("state") or {})
+        overlap = set(merged).intersection(shard_state)
+        if overlap:
+            raise ValueError("duplicate Phase-5 optimizer state across shards")
+        merged.update(shard_state)
+    return {
+        "state": merged,
+        "param_groups": list(payload.get("param_groups") or []),
     }
 
 
@@ -1331,7 +1515,9 @@ def run_segment(
         weight_decay=0.01,
     )
     if optimizer_path.is_file():
-        optimizer.load_state_dict(torch.load(optimizer_path, map_location="cpu", weights_only=True))
+        optimizer.load_state_dict(
+            _load_phase5_optimizer_state(torch, optimizer_path)
+        )
 
     segment_language_before = evaluate_phase5_language(runtime)
     guard_payload = _load_json(language_guard_path) if language_guard_path.is_file() else {}
@@ -1645,7 +1831,12 @@ def run_segment(
             "segment_language_guard": True,
         },
     )
-    torch.save(optimizer.state_dict(), optimizer_path)
+    optimizer_storage = _save_phase5_optimizer_state(
+        torch,
+        optimizer_path,
+        optimizer.state_dict(),
+    )
+    progress["optimizer_storage"] = optimizer_storage
 
     rung_complete = int(progress["tokens_processed"]) >= target_tokens or early_stopped
     progress["early_stopped"] = bool(early_stopped)
