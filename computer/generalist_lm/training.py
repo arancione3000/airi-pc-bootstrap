@@ -95,6 +95,7 @@ def loss_on_examples(
     import torch
     if not examples:
         raise ValueError("no SFT examples")
+    anchors = list(anchor_examples or [])
     model.eval()
     chunk = max(1, int(batch_size))
     total_weighted_loss = 0.0
@@ -430,6 +431,7 @@ def train_sft_residual_recovery(
     tokenizer: ByteTokenizer,
     examples: list[SFTExample],
     *,
+    anchor_examples: list[SFTExample] | None = None,
     source_d_ff: int,
     steps: int = 64,
     batch_size: int = 2,
@@ -554,20 +556,43 @@ def train_sft_residual_recovery(
             repetition_window=int(repetition_window),
         )
 
-        with torch.no_grad():
-            reference_logits = reference_model(ids)["logits"][:, :-1, :].float()
-        student_logits = result["logits"][:, :-1, :].float()
-        valid = labels[:, 1:] != -100
-        teacher_log_probs = F.log_softmax(reference_logits, dim=-1)
-        teacher_probs = teacher_log_probs.exp()
-        student_log_probs = F.log_softmax(student_logits, dim=-1)
-        token_kl = (
-            teacher_probs * (teacher_log_probs - student_log_probs)
-        ).sum(dim=-1)
-        if bool(valid.any()):
-            kl_loss = token_kl.masked_select(valid).mean()
-        else:
-            kl_loss = token_kl.mean() * 0.0
+        kl_loss = raw_loss.detach() * 0.0
+        anchor_token_count = 0
+        if kl_weight > 0.0:
+            if not anchors:
+                raise RuntimeError(
+                    "residual KL recovery requires protected replay anchors"
+                )
+            anchor_indices = [
+                rng.randrange(len(anchors))
+                for _ in range(batch_size)
+            ]
+            anchor_ids, anchor_labels = _batch(
+                anchors,
+                tokenizer,
+                model.config.context_length,
+                anchor_indices,
+            )
+            anchor_ids = anchor_ids.to(device_obj)
+            anchor_labels = anchor_labels.to(device_obj)
+            anchor_student_logits = model(anchor_ids)["logits"][:, :-1, :].float()
+            with torch.no_grad():
+                anchor_reference_logits = reference_model(anchor_ids)[
+                    "logits"
+                ][:, :-1, :].float()
+
+            valid_anchor = anchor_labels[:, 1:] != -100
+            teacher_log_probs = F.log_softmax(anchor_reference_logits, dim=-1)
+            teacher_probs = teacher_log_probs.exp()
+            student_log_probs = F.log_softmax(anchor_student_logits, dim=-1)
+            token_kl = (
+                teacher_probs * (teacher_log_probs - student_log_probs)
+            ).sum(dim=-1)
+            anchor_token_count = int(valid_anchor.sum().item())
+            if anchor_token_count:
+                kl_loss = token_kl.masked_select(valid_anchor).mean()
+            else:
+                kl_loss = token_kl.mean() * 0.0
 
         total_loss = raw_loss + kl_weight * kl_loss
         if not torch.isfinite(total_loss):
@@ -590,6 +615,7 @@ def train_sft_residual_recovery(
             **objective_stats,
             "teacher_kl_loss": float(kl_loss.detach().cpu()),
             "teacher_kl_weight": kl_weight,
+            "teacher_anchor_tokens": int(anchor_token_count),
         }
 
     final_loss = loss_on_examples(
@@ -614,6 +640,7 @@ def train_sft_residual_recovery(
         "train_upstream": bool(train_upstream),
         "trainable_coordinate_count": int(trainable_coordinate_count),
         "teacher_kl_weight": kl_weight,
+        "anchor_example_count": len(anchors),
         "mean_teacher_kl_loss": (
             float(sum(kl_losses) / len(kl_losses)) if kl_losses else 0.0
         ),
