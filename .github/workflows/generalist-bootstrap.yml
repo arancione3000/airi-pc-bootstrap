@@ -41,7 +41,7 @@ jobs:
       TARGET_TOKENS: ${{ github.event.inputs.target_tokens || '1000000' }}
       ARCHITECTURE_INTERVAL_TOKENS: '5000000'
       ARCHITECTURE_HANDOFF: 'false'
-      HISTORICAL_LANGUAGE_RECOVERY_REF: 'a33056c2beef538ec68a7d3c88bd65c2fc69b079'
+      HISTORICAL_LANGUAGE_RECOVERY_REF: '374f10b0bd70b7abb3d6d3dc27e7dc8870a48f15'
     steps:
       - uses: actions/checkout@v4
 
@@ -156,7 +156,7 @@ jobs:
             and ((.language_rehabilitation.consecutive_rejections // 0) >= 6)
             and ((.historical_language_recovery.completed // false) != true)
           ' "${progress}" >/dev/null; then
-            echo "Repeated R1 rollback detected; restoring the verified historical healthy best."
+            echo "Repeated rehabilitation rollback detected; restoring the last accepted 50M checkpoint."
             git -C "${STATE_REPO}" fetch --quiet --depth 1 origin "${HISTORICAL_LANGUAGE_RECOVERY_REF}"
             recovery_root="/tmp/airi-historical-language-recovery"
             rm -rf "${recovery_root}"
@@ -169,8 +169,8 @@ jobs:
             test -f "${recovery_source}/config.json"
             test -f "${recovery_source}/metadata.json"
             jq -e '
-              .parameters == 7021248
-              and .tokens_processed == 31210573
+              .parameters == 50041536
+              and .tokens_processed == 31860813
             ' "${recovery_source}/metadata.json" >/dev/null
           fi
           echo "HISTORICAL_RECOVERY_SOURCE=${recovery_source}" >> "${GITHUB_ENV}"

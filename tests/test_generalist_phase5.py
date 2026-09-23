@@ -893,8 +893,8 @@ def test_dead_capacity_revival_precedes_historical_replacement():
 def test_bootstrap_historical_recovery_fetch_is_not_circular():
     workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
     assert "historical_language_recovery_source_verified" not in workflow
-    assert ".parameters == 7021248" in workflow
-    assert "and .tokens_processed == 31210573" in workflow
+    assert ".parameters == 50041536" in workflow
+    assert "and .tokens_processed == 31860813" in workflow
 
 
 def test_dead_capacity_revival_preserves_logits_and_enables_new_gradients():
@@ -1024,10 +1024,10 @@ def test_historical_recovery_workflow_is_transactional_and_pinned():
     source = Path("computer/generalist_lm/bootstrap_training.py").read_text(
         encoding="utf-8"
     )
-    assert "a33056c2beef538ec68a7d3c88bd65c2fc69b079" in workflow
+    assert "374f10b0bd70b7abb3d6d3dc27e7dc8870a48f15" in workflow
     assert "generalist-state/bootstrap-data/best" in workflow
-    assert ".parameters == 7021248" in workflow
-    assert ".tokens_processed == 31210573" in workflow
+    assert ".parameters == 50041536" in workflow
+    assert ".tokens_processed == 31860813" in workflow
     assert "--historical-recovery-source" in workflow
     assert "historical_language_recovery_source_verified" not in workflow
     assert ".dead_capacity_revival_only // false" in workflow
@@ -1035,6 +1035,10 @@ def test_historical_recovery_workflow_is_transactional_and_pinned():
     assert ".historical_recovery_only // false" in workflow
     assert '"historical_recovery_only": True' in source
     assert '"discarded_effective_tokens"' in source
+    assert '"direct_capacity_restore"' in source
+    assert 'progress["causal_recovery_mode"] = True' in source
+    assert 'not bool(progress.get("causal_recovery_mode", False))' in source
+    assert '_revive_dead_ffn_model_capacity(' in source
     assert 'reason="phase5_historical_language_recovery"' in source
 
 
