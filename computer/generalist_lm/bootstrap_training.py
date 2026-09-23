@@ -53,7 +53,12 @@ from .research_cycle import (
 from .runtime import GeneralistRuntime
 from .lineage_migration import refresh_live_lineage_manifest
 from .tokenizer import PAD
-from .training import SFTExample, causal_training_objective, train_sft
+from .training import (
+    SFTExample,
+    causal_training_objective,
+    train_sft,
+    train_sft_residual_recovery,
+)
 
 
 PHASE5_BOOTSTRAP_VERSION = "phase5-language-bootstrap-v3"
@@ -1835,6 +1840,43 @@ def _language_rehabilitation_gate(
     }
 
 
+def _residual_language_rehabilitation_attempts(
+    *,
+    stage: str,
+    consecutive_rejections: int,
+) -> tuple[tuple[int, float, float, float, float, bool], ...]:
+    """Conservative trust-region plan for the revived 50M residual branch.
+
+    The legacy network stays frozen during rehabilitation. Attempts first train
+    only the zero-initialized residual output columns, then optionally allow the
+    revived SwiGLU input rows to adapt while KL keeps behavior near the
+    pre-attempt checkpoint. Repeated rejections lower LR and strengthen KL
+    instead of escalating anti-repetition/EOS pressure.
+    """
+    if stage not in PHASE5_LANGUAGE_REHABILITATION_STAGES:
+        raise ValueError(f"unknown language rehabilitation stage: {stage}")
+    rejected = max(0, int(consecutive_rejections))
+    lr_scale = 0.5 ** min(3, rejected)
+    kl_base = min(2.0, 0.75 + 0.25 * rejected)
+
+    plans = {
+        "R1_bilingual_foundations": (
+            (64, 7.5e-5 * lr_scale, 0.03, 1.15, kl_base, False),
+            (64, 2.5e-5 * lr_scale, 0.05, 1.20, min(2.5, kl_base + 0.25), True),
+            (48, 1.25e-5 * lr_scale, 0.06, 1.25, min(3.0, kl_base + 0.50), True),
+        ),
+        "R2_simple_responses": (
+            (72, 5.0e-5 * lr_scale, 0.03, 1.15, kl_base, False),
+            (64, 2.0e-5 * lr_scale, 0.05, 1.20, min(2.5, kl_base + 0.25), True),
+        ),
+        "R3_short_dialogue": (
+            (80, 3.75e-5 * lr_scale, 0.025, 1.10, kl_base, False),
+            (64, 1.5e-5 * lr_scale, 0.04, 1.15, min(2.5, kl_base + 0.25), True),
+        ),
+    }
+    return plans[stage]
+
+
 def _rehabilitation_replay_limit(stage: str, consecutive_rejections: int) -> int:
     """Increase protected replay diversity after a failed rehabilitation attempt."""
     if stage not in PHASE5_LANGUAGE_REHABILITATION_STAGES:
@@ -1981,34 +2023,125 @@ def _run_language_rehabilitation_stage(
         max_new_tokens=32,
     )
     parameters = parameter_count(runtime.model)
-    stage_attempts = _language_rehabilitation_attempts(
-        parameters=int(parameters),
-        stage=stage,
-        consecutive_rejections=int(consecutive_rejections),
+    persisted_progress = _load_json(bootstrap_root / "progress.json")
+    revival = dict(persisted_progress.get("dead_capacity_revival") or {})
+    residual_source_d_ff = int(revival.get("source_d_ff", 0) or 0)
+    residual_mode = bool(
+        revival.get("completed")
+        and residual_source_d_ff > 0
+        and residual_source_d_ff < int(runtime.config.d_ff)
     )
+
+    residual_supervised_rows = list(rows)
+    residual_anchor_rows: list[SFTExample] = []
+    if residual_mode:
+        stage_curriculum = _elementary_rehabilitation_rows().get(stage) or {}
+        elementary_fingerprints = {
+            _sft_row_fingerprint(row)
+            for language_rows in stage_curriculum.values()
+            for row in language_rows
+        }
+        residual_supervised_rows = [
+            row for row in rows
+            if _sft_row_fingerprint(row) in elementary_fingerprints
+        ]
+        residual_anchor_rows = [
+            row for row in rows
+            if _sft_row_fingerprint(row) not in elementary_fingerprints
+        ]
+        if not residual_supervised_rows:
+            raise RuntimeError("residual rehabilitation has no elementary supervision rows")
+        if not residual_anchor_rows:
+            raise RuntimeError("residual rehabilitation has no protected replay anchors")
+
+    if residual_mode:
+        stage_attempts = [
+            {
+                "steps": int(steps),
+                "learning_rate": float(learning_rate),
+                "repetition_unlikelihood_weight": float(anti_weight),
+                "eos_loss_weight": float(eos_weight),
+                "teacher_kl_weight": float(kl_weight),
+                "train_upstream": bool(train_upstream),
+                "mode": "residual_kl_recovery",
+            }
+            for (
+                steps,
+                learning_rate,
+                anti_weight,
+                eos_weight,
+                kl_weight,
+                train_upstream,
+            ) in _residual_language_rehabilitation_attempts(
+                stage=stage,
+                consecutive_rejections=int(consecutive_rejections),
+            )
+        ]
+    else:
+        stage_attempts = [
+            {
+                "steps": int(steps),
+                "learning_rate": float(learning_rate),
+                "repetition_unlikelihood_weight": float(anti_weight),
+                "eos_loss_weight": float(eos_weight),
+                "teacher_kl_weight": 0.0,
+                "train_upstream": True,
+                "mode": "full_model_sft",
+            }
+            for steps, learning_rate, anti_weight, eos_weight in _language_rehabilitation_attempts(
+                parameters=int(parameters),
+                stage=stage,
+                consecutive_rejections=int(consecutive_rejections),
+            )
+        ]
+
     attempts: list[dict[str, Any]] = []
     selected_index: int | None = None
 
-    for index, (steps, learning_rate, anti_weight, eos_weight) in enumerate(
-        stage_attempts
-    ):
+    for index, plan in enumerate(stage_attempts):
         trial = GeneralistRuntime.from_checkpoint(pre_dir, device="cpu")
-        training = train_sft(
-            trial.model,
-            trial.tokenizer,
-            rows,
-            steps=int(steps),
-            batch_size=2,
-            learning_rate=float(learning_rate),
-            weight_decay=0.01,
-            seed=int(seed + index * 101),
-            device="cpu",
-            gradient_accumulation_steps=1,
-            precision="fp32",
-            repetition_unlikelihood_weight=float(anti_weight),
-            eos_loss_weight=float(eos_weight),
-            repetition_window=16,
-        )
+        if residual_mode:
+            reference = GeneralistRuntime.from_checkpoint(pre_dir, device="cpu")
+            training = train_sft_residual_recovery(
+                trial.model,
+                reference.model,
+                trial.tokenizer,
+                residual_supervised_rows,
+                anchor_examples=residual_anchor_rows,
+                source_d_ff=residual_source_d_ff,
+                steps=int(plan["steps"]),
+                batch_size=2,
+                learning_rate=float(plan["learning_rate"]),
+                seed=int(seed + index * 101),
+                device="cpu",
+                repetition_unlikelihood_weight=float(
+                    plan["repetition_unlikelihood_weight"]
+                ),
+                eos_loss_weight=float(plan["eos_loss_weight"]),
+                repetition_window=16,
+                kl_weight=float(plan["teacher_kl_weight"]),
+                train_upstream=bool(plan["train_upstream"]),
+            )
+            del reference
+        else:
+            training = train_sft(
+                trial.model,
+                trial.tokenizer,
+                rows,
+                steps=int(plan["steps"]),
+                batch_size=2,
+                learning_rate=float(plan["learning_rate"]),
+                weight_decay=0.01,
+                seed=int(seed + index * 101),
+                device="cpu",
+                gradient_accumulation_steps=1,
+                precision="fp32",
+                repetition_unlikelihood_weight=float(
+                    plan["repetition_unlikelihood_weight"]
+                ),
+                eos_loss_weight=float(plan["eos_loss_weight"]),
+                repetition_window=16,
+            )
         after = evaluate_phase5_language(trial)
         sft_after = evaluate_sft_validation(
             trial,
@@ -2032,6 +2165,16 @@ def _run_language_rehabilitation_stage(
         )
         attempt = {
             "index": int(index),
+            "training_mode": str(plan["mode"]),
+            "residual_source_d_ff": (
+                int(residual_source_d_ff) if residual_mode else None
+            ),
+            "residual_supervision_rows": (
+                len(residual_supervised_rows) if residual_mode else None
+            ),
+            "residual_anchor_rows": (
+                len(residual_anchor_rows) if residual_mode else None
+            ),
             "training": training,
             "validation_before": before,
             "validation_after": after,
@@ -2072,15 +2215,13 @@ def _run_language_rehabilitation_stage(
             "rollback_model_manifest_sha256": rollback_manifest_sha,
             "accepted_supervised_tokens": 0,
             "consecutive_rejections_before": int(consecutive_rejections),
-            "attempt_plan": [
-                {
-                    "steps": int(steps),
-                    "learning_rate": float(learning_rate),
-                    "repetition_unlikelihood_weight": float(anti_weight),
-                    "eos_loss_weight": float(eos_weight),
-                }
-                for steps, learning_rate, anti_weight, eos_weight in stage_attempts
-            ],
+            "training_mode": (
+                "residual_kl_recovery" if residual_mode else "full_model_sft"
+            ),
+            "residual_source_d_ff": (
+                int(residual_source_d_ff) if residual_mode else None
+            ),
+            "attempt_plan": [dict(plan) for plan in stage_attempts],
             "attempts": attempts,
             "reason": "all rehabilitation attempts failed progressive or protected replay gates",
         }
@@ -2102,15 +2243,13 @@ def _run_language_rehabilitation_stage(
         "rollback_model_manifest_sha256": rollback_manifest_sha,
         "accepted_supervised_tokens": accepted_tokens,
         "consecutive_rejections_before": int(consecutive_rejections),
-        "attempt_plan": [
-            {
-                "steps": int(steps),
-                "learning_rate": float(learning_rate),
-                "repetition_unlikelihood_weight": float(anti_weight),
-                "eos_loss_weight": float(eos_weight),
-            }
-            for steps, learning_rate, anti_weight, eos_weight in stage_attempts
-        ],
+        "training_mode": (
+            "residual_kl_recovery" if residual_mode else "full_model_sft"
+        ),
+        "residual_source_d_ff": (
+            int(residual_source_d_ff) if residual_mode else None
+        ),
+        "attempt_plan": [dict(plan) for plan in stage_attempts],
         "selected_attempt": int(selected_index),
         "attempts": attempts,
         "reason": "progressive language and protected replay gates passed",
