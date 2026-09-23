@@ -43,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf "${STATE_REPO}"
-          git clone --quiet --branch generalist-state --single-branch \
+          git clone --quiet --depth 1 --branch generalist-state --single-branch \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             "${STATE_REPO}"
           test -f "${STATE_DIR}/bootstrap-data/candidate/model.pt"
