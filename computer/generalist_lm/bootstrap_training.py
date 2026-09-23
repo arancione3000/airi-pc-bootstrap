@@ -1734,6 +1734,34 @@ def _rehabilitation_needed(
     )
 
 
+def _rehabilitation_strategy_rejection_count(
+    progress: dict[str, Any],
+    rehabilitation_state: dict[str, Any],
+) -> int:
+    """Return rejections for the *current* rehabilitation optimizer strategy.
+
+    Full-model SFT failures must not make a newly introduced residual/KL
+    strategy start at an artificially tiny learning rate. Once dead-capacity
+    revival is active, residual failures are tracked independently.
+    """
+    revival = dict(progress.get("dead_capacity_revival") or {})
+    if bool(revival.get("completed")):
+        return max(
+            0,
+            int(
+                rehabilitation_state.get(
+                    "residual_consecutive_rejections",
+                    0,
+                )
+                or 0
+            ),
+        )
+    return max(
+        0,
+        int(rehabilitation_state.get("consecutive_rejections", 0) or 0),
+    )
+
+
 def _rehabilitation_cycle_due(
     current: dict[str, Any],
     anchor: dict[str, Any],
@@ -2983,8 +3011,12 @@ def run_segment(
             ) + 1
         stage = PHASE5_LANGUAGE_REHABILITATION_STAGES[next_stage_index]
         curriculum = _elementary_rehabilitation_rows()
-        rejection_count = int(
+        total_rejection_count = int(
             rehabilitation_state.get("consecutive_rejections", 0) or 0
+        )
+        rejection_count = _rehabilitation_strategy_rejection_count(
+            progress,
+            rehabilitation_state,
         )
         rehabilitation_rows, rehabilitation_counts = _rehabilitation_replay_rows(
             stage,
@@ -3014,6 +3046,8 @@ def run_segment(
         )
         rehabilitation_report.update({
             "curriculum": rehabilitation_counts,
+            "global_consecutive_rejections_before": int(total_rejection_count),
+            "strategy_consecutive_rejections_before": int(rejection_count),
             "protected_replay_manifest_sha256": str(
                 replay_manifest.get("corpus_sha256") or ""
             ),
@@ -3042,6 +3076,11 @@ def run_segment(
             rehabilitation_state["last_accepted_stage"] = stage
             rehabilitation_state["last_accepted_tokens"] = accepted_tokens
             rehabilitation_state["consecutive_rejections"] = 0
+            if (
+                str(rehabilitation_report.get("training_mode") or "")
+                == "residual_kl_recovery"
+            ):
+                rehabilitation_state["residual_consecutive_rejections"] = 0
             runtime.save_checkpoint(
                 candidate_dir,
                 metadata={
@@ -3063,6 +3102,17 @@ def run_segment(
             rehabilitation_state["consecutive_rejections"] = int(
                 rehabilitation_state.get("consecutive_rejections", 0) or 0
             ) + 1
+            if (
+                str(rehabilitation_report.get("training_mode") or "")
+                == "residual_kl_recovery"
+            ):
+                rehabilitation_state["residual_consecutive_rejections"] = int(
+                    rehabilitation_state.get(
+                        "residual_consecutive_rejections",
+                        0,
+                    )
+                    or 0
+                ) + 1
             progress["valid_tokens_processed"] = valid_before
         rehabilitation_state["version"] = PHASE5_LANGUAGE_REHABILITATION_VERSION
         rehabilitation_state["last_stage"] = stage
