@@ -422,3 +422,201 @@ def train_sft(
         "supervised_tokens": int(supervised_tokens),
         "objective": last_objective_stats,
     }
+
+
+def train_sft_residual_recovery(
+    model,
+    reference_model,
+    tokenizer: ByteTokenizer,
+    examples: list[SFTExample],
+    *,
+    source_d_ff: int,
+    steps: int = 64,
+    batch_size: int = 2,
+    learning_rate: float = 5e-5,
+    seed: int = 7,
+    device: str = "cpu",
+    repetition_unlikelihood_weight: float = 0.04,
+    eos_loss_weight: float = 1.25,
+    repetition_window: int = 16,
+    kl_weight: float = 0.75,
+    train_upstream: bool = False,
+) -> dict[str, Any]:
+    """Trust-region SFT for the revived FFN residual branch.
+
+    The pre-revival language model is treated as an immutable reference. Only
+    the revived SwiGLU coordinates may move; all legacy parameters and all
+    legacy coordinates inside the widened FFN stay bit-stable. A token-wise
+    teacher KL term limits the new residual's drift while ordinary SFT and a
+    light target-safe unlikelihood term teach the missing language behavior.
+    """
+    import torch
+    from torch.nn import functional as F
+
+    if not examples:
+        raise ValueError("no SFT examples")
+    if str(getattr(model.config, "ff_variant", "")) != "swiglu":
+        raise ValueError("residual recovery requires a SwiGLU model")
+    if tuple(model.state_dict().keys()) != tuple(reference_model.state_dict().keys()):
+        raise ValueError("reference model architecture mismatch")
+
+    steps = max(1, int(steps))
+    batch_size = max(1, int(batch_size))
+    source_d_ff = int(source_d_ff)
+    target_d_ff = int(model.config.d_ff)
+    if source_d_ff <= 0 or source_d_ff >= target_d_ff:
+        raise ValueError("source_d_ff must identify the pre-growth FF width")
+    kl_weight = max(0.0, float(kl_weight))
+
+    device_obj = torch.device(device)
+    model.to(device_obj)
+    reference_model.to(device_obj)
+    reference_model.eval()
+    for parameter in reference_model.parameters():
+        parameter.requires_grad_(False)
+
+    # Freeze every whole parameter first. We then enable only the widened FFN
+    # tensors and mask their legacy coordinates after backward.
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+
+    gradient_masks: list[tuple[Any, Any]] = []
+    trainable_parameters = []
+    trainable_coordinate_count = 0
+
+    for block in model.blocks:
+        ff = block.ff
+        up = ff.up
+        down = ff.down
+
+        down.weight.requires_grad_(True)
+        down_mask = torch.zeros_like(down.weight, device=device_obj)
+        down_mask[:, source_d_ff:target_d_ff] = 1
+        gradient_masks.append((down.weight, down_mask))
+        trainable_parameters.append(down.weight)
+        trainable_coordinate_count += int(down_mask.sum().item())
+
+        if bool(train_upstream):
+            up.weight.requires_grad_(True)
+            up_mask = torch.zeros_like(up.weight, device=device_obj)
+            up_mask[source_d_ff:target_d_ff, :] = 1
+            up_mask[target_d_ff + source_d_ff : 2 * target_d_ff, :] = 1
+            gradient_masks.append((up.weight, up_mask))
+            trainable_parameters.append(up.weight)
+            trainable_coordinate_count += int(up_mask.sum().item())
+
+            if up.bias is not None:
+                up.bias.requires_grad_(True)
+                bias_mask = torch.zeros_like(up.bias, device=device_obj)
+                bias_mask[source_d_ff:target_d_ff] = 1
+                bias_mask[target_d_ff + source_d_ff : 2 * target_d_ff] = 1
+                gradient_masks.append((up.bias, bias_mask))
+                trainable_parameters.append(up.bias)
+                trainable_coordinate_count += int(bias_mask.sum().item())
+
+    if not trainable_parameters or trainable_coordinate_count <= 0:
+        raise RuntimeError("residual recovery has no trainable coordinates")
+
+    rng = random.Random(seed)
+    torch.manual_seed(seed)
+    initial_loss = loss_on_examples(model, tokenizer, examples, device=str(device_obj))
+    model.train()
+    optimizer = torch.optim.AdamW(
+        trainable_parameters,
+        lr=float(learning_rate),
+        weight_decay=0.0,
+    )
+
+    losses: list[float] = []
+    kl_losses: list[float] = []
+    supervised_tokens = 0
+    last_objective_stats: dict[str, Any] = {}
+
+    for _ in range(steps):
+        optimizer.zero_grad(set_to_none=True)
+        indices = [rng.randrange(len(examples)) for _ in range(batch_size)]
+        ids, labels = _batch(
+            examples,
+            tokenizer,
+            model.config.context_length,
+            indices,
+        )
+        ids, labels = ids.to(device_obj), labels.to(device_obj)
+        supervised_tokens += int((labels[:, 1:] != -100).sum().item())
+
+        result = model(ids)
+        raw_loss, objective_stats = causal_training_objective(
+            result["logits"],
+            labels,
+            ids,
+            eos_loss_weight=float(eos_loss_weight),
+            repetition_unlikelihood_weight=float(repetition_unlikelihood_weight),
+            repetition_window=int(repetition_window),
+        )
+
+        with torch.no_grad():
+            reference_logits = reference_model(ids)["logits"][:, :-1, :].float()
+        student_logits = result["logits"][:, :-1, :].float()
+        valid = labels[:, 1:] != -100
+        teacher_log_probs = F.log_softmax(reference_logits, dim=-1)
+        teacher_probs = teacher_log_probs.exp()
+        student_log_probs = F.log_softmax(student_logits, dim=-1)
+        token_kl = (
+            teacher_probs * (teacher_log_probs - student_log_probs)
+        ).sum(dim=-1)
+        if bool(valid.any()):
+            kl_loss = token_kl.masked_select(valid).mean()
+        else:
+            kl_loss = token_kl.mean() * 0.0
+
+        total_loss = raw_loss + kl_weight * kl_loss
+        if not torch.isfinite(total_loss):
+            raise RuntimeError("non-finite residual recovery loss")
+        total_loss.backward()
+
+        # The optimizer owns whole tensors, but only these coordinates may
+        # receive gradients. weight_decay=0 guarantees masked coordinates remain
+        # unchanged even though their containing tensor is optimized.
+        for parameter, mask in gradient_masks:
+            if parameter.grad is not None:
+                parameter.grad.mul_(mask)
+
+        torch.nn.utils.clip_grad_norm_(trainable_parameters, 1.0)
+        optimizer.step()
+
+        losses.append(float(total_loss.detach().cpu()))
+        kl_losses.append(float(kl_loss.detach().cpu()))
+        last_objective_stats = {
+            **objective_stats,
+            "teacher_kl_loss": float(kl_loss.detach().cpu()),
+            "teacher_kl_weight": kl_weight,
+        }
+
+    final_loss = loss_on_examples(
+        model,
+        tokenizer,
+        examples,
+        device=str(device_obj),
+    )
+    return {
+        "ok": bool(final_loss < initial_loss),
+        "mode": "residual_kl_recovery",
+        "steps": steps,
+        "batch_size": batch_size,
+        "learning_rate": float(learning_rate),
+        "initial_loss": float(initial_loss),
+        "final_loss": float(final_loss),
+        "best_step_loss": min(losses),
+        "loss_improvement": float(initial_loss - final_loss),
+        "supervised_tokens": int(supervised_tokens),
+        "source_d_ff": source_d_ff,
+        "target_d_ff": target_d_ff,
+        "train_upstream": bool(train_upstream),
+        "trainable_coordinate_count": int(trainable_coordinate_count),
+        "teacher_kl_weight": kl_weight,
+        "mean_teacher_kl_loss": (
+            float(sum(kl_losses) / len(kl_losses)) if kl_losses else 0.0
+        ),
+        "max_teacher_kl_loss": max(kl_losses) if kl_losses else 0.0,
+        "objective": last_objective_stats,
+    }
