@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+import generalist_lm.bootstrap_training as bootstrap_training
 
 from generalist_lm.bootstrap_data import (
     BootstrapDataBundle,
@@ -21,19 +22,26 @@ from generalist_lm.bootstrap_data import (
     write_bootstrap_replay,
 )
 from generalist_lm.bootstrap_training import (
+    PHASE5_LANGUAGE_REHABILITATION_STAGES,
     _anti_collapse_rescue_gate,
     _anti_collapse_weights,
     _assisted_capacity_target,
     _bootstrap_capacity_target,
     _bootstrap_corpus_target,
     _effective_bootstrap_target,
+    _elementary_rehabilitation_rows,
     _filter_protected_replay,
     _grow_bootstrap_runtime,
+    _language_rehabilitation_gate,
+    _rehabilitation_cycle_due,
     _phase5_memory_safe_batch_plan,
     _phase5_parameter_segment_cap,
     _phase5_recovery_plan,
     _phase5_recovery_segment_budget,
     _phase5_success,
+    _rehabilitation_needed,
+    _rehabilitation_replay_rows,
+    _run_language_rehabilitation_stage,
     _load_optimizer_checkpoint,
     _optimizer_manifest,
     _optimizer_shard_paths,
@@ -917,6 +925,318 @@ def _language_report(
         "pathological_repetition": pathological,
         "longest_repeated_token_run": 4 if not pathological else 12,
     }
+
+
+def test_language_rehabilitation_curriculum_is_bilingual_elementary_and_protected():
+    curriculum = _elementary_rehabilitation_rows()
+    assert tuple(curriculum) == PHASE5_LANGUAGE_REHABILITATION_STAGES
+    protected = protected_bootstrap_texts()
+
+    for stage in PHASE5_LANGUAGE_REHABILITATION_STAGES:
+        assert set(curriculum[stage]) == {"it", "en"}
+        assert len(curriculum[stage]["it"]) >= 4
+        assert len(curriculum[stage]["en"]) >= 4
+        for language in ("it", "en"):
+            for row in curriculum[stage][language]:
+                contents = {
+                    " ".join(message["content"].strip().casefold().split())
+                    for message in row.messages
+                }
+                assert not contents & protected
+
+
+def test_language_rehabilitation_replay_filters_holdouts_and_stays_bounded():
+    curriculum = _elementary_rehabilitation_rows()
+    heldout = SFTExample([
+        {"role": "user", "content": "held-out prompt"},
+        {"role": "assistant", "content": "held-out answer"},
+    ])
+    leaked_probe = SFTExample([
+        {"role": "user", "content": PHASE5_PROBES[0]["prompt"]},
+        {"role": "assistant", "content": "not the protected target"},
+    ])
+    replay = [heldout, leaked_probe] + [
+        SFTExample([
+            {"role": "user", "content": f"safe replay {index}"},
+            {"role": "assistant", "content": f"safe answer {index}"},
+        ])
+        for index in range(20)
+    ]
+
+    rows, counts = _rehabilitation_replay_rows(
+        "R1_bilingual_foundations",
+        curriculum,
+        replay,
+        heldout_sft=[heldout],
+        max_replay_rows=8,
+    )
+    normalized_messages = {
+        " ".join(message["content"].strip().casefold().split())
+        for row in rows
+        for message in row.messages
+    }
+    assert "held-out prompt" not in normalized_messages
+    assert "ciao" not in normalized_messages
+    assert counts["protected_rows_filtered"] == 2
+    assert counts["protected_replay_rows"] == 8
+    assert counts["elementary_it_rows"] == len(
+        curriculum["R1_bilingual_foundations"]["it"]
+    )
+    assert counts["elementary_en_rows"] == len(
+        curriculum["R1_bilingual_foundations"]["en"]
+    )
+
+
+def test_language_rehabilitation_uses_progressive_fail_closed_gates():
+    anchor = _language_report(
+        nll=2.80,
+        repetition=0.42,
+        similarity=0.18,
+        multiword=0.70,
+        pathological=False,
+    )
+    collapsed = _language_report(
+        nll=3.30,
+        repetition=0.70,
+        similarity=0.08,
+        multiword=0.20,
+        pathological=True,
+    )
+    repetition_recovered = _language_report(
+        nll=3.31,
+        repetition=0.60,
+        similarity=0.08,
+        multiword=0.20,
+        pathological=False,
+    )
+    accepted, report = _language_rehabilitation_gate(
+        "R1_bilingual_foundations",
+        collapsed,
+        repetition_recovered,
+        anchor,
+    )
+    assert accepted is True
+    assert report["gate"] == "repetition_recovery"
+
+    elementary_recovered = _language_report(
+        nll=3.20,
+        repetition=0.56,
+        similarity=0.12,
+        multiword=0.43,
+        pathological=False,
+    )
+    accepted, report = _language_rehabilitation_gate(
+        "R2_simple_responses",
+        repetition_recovered,
+        elementary_recovered,
+        anchor,
+    )
+    assert accepted is True
+    assert report["gate"] == "elementary_language"
+
+    dialogue_regressed = dict(elementary_recovered)
+    dialogue_regressed["multiword_output_rate"] = 0.20
+    accepted, report = _language_rehabilitation_gate(
+        "R3_short_dialogue",
+        elementary_recovered,
+        dialogue_regressed,
+        anchor,
+    )
+    assert accepted is False
+    assert "multi-word" in " ".join(report["reasons"])
+
+
+def test_language_rehabilitation_reenters_when_live_checkpoint_collapses():
+    anchor = _language_report(
+        nll=2.80,
+        repetition=0.42,
+        similarity=0.18,
+        multiword=0.70,
+        pathological=False,
+    )
+    healthy = dict(anchor)
+    collapsed = dict(anchor)
+    collapsed["pathological_repetition"] = True
+    collapsed["repetition_rate"] = 0.72
+
+    assert _rehabilitation_needed(healthy, anchor) is False
+    assert _rehabilitation_needed(collapsed, anchor) is True
+
+
+def test_language_rehabilitation_finishes_an_active_progressive_cycle():
+    healthy = {
+        "language_nll": 2.8,
+        "pathological_repetition": False,
+        "repetition_rate": 0.3,
+        "generation_similarity": 0.7,
+        "non_empty_rate": 1.0,
+        "multiword_output_rate": 0.8,
+        "token_entropy": 3.0,
+    }
+    assert _rehabilitation_cycle_due(healthy, healthy, 0) is False
+    assert _rehabilitation_cycle_due(healthy, healthy, 1) is True
+    assert _rehabilitation_cycle_due(healthy, healthy, 2) is True
+    assert _rehabilitation_cycle_due(healthy, healthy, 3) is False
+
+
+def test_language_rehabilitation_stage_counts_only_accepted_exact_tokens(
+    tmp_path: Path,
+    monkeypatch,
+):
+    pytest.importorskip("torch")
+    runtime = GeneralistRuntime.fresh(_tiny_phase5_model().config)
+    before = _language_report(
+        nll=3.30,
+        repetition=0.70,
+        similarity=0.08,
+        multiword=0.20,
+        pathological=True,
+    )
+    after = _language_report(
+        nll=3.31,
+        repetition=0.58,
+        similarity=0.09,
+        multiword=0.30,
+        pathological=False,
+    )
+    reports = iter((before, after))
+    monkeypatch.setattr(
+        bootstrap_training,
+        "evaluate_phase5_language",
+        lambda _runtime: dict(next(reports)),
+    )
+    stable_sft = {
+        "language_nll": 2.0,
+        "repetition_rate": 0.20,
+        "token_entropy": 3.0,
+        "unique_token_ratio": 0.80,
+        "longest_repeated_token_run": 2,
+        "non_empty_rate": 1.0,
+    }
+    monkeypatch.setattr(
+        bootstrap_training,
+        "evaluate_sft_validation",
+        lambda *_args, **_kwargs: dict(stable_sft),
+    )
+    monkeypatch.setattr(
+        bootstrap_training,
+        "train_sft",
+        lambda *_args, **_kwargs: {
+            "ok": True,
+            "supervised_tokens": 321,
+        },
+    )
+
+    selected, report = _run_language_rehabilitation_stage(
+        runtime,
+        "R1_bilingual_foundations",
+        [SFTExample([
+            {"role": "user", "content": "safe prompt"},
+            {"role": "assistant", "content": "safe answer"},
+        ])],
+        [SFTExample([
+            {"role": "user", "content": "heldout prompt"},
+            {"role": "assistant", "content": "heldout answer"},
+        ])],
+        before,
+        bootstrap_root=tmp_path,
+        base_model_sha="a" * 64,
+        seed=7,
+    )
+    assert report["accepted"] is True
+    assert report["accepted_supervised_tokens"] == 321
+    assert report["rollback_verified"] is True
+    assert sum(p.numel() for p in selected.model.parameters()) == sum(
+        p.numel() for p in runtime.model.parameters()
+    )
+
+
+def test_language_rehabilitation_stage_restores_exact_checkpoint_on_rejection(
+    tmp_path: Path,
+    monkeypatch,
+):
+    torch = pytest.importorskip("torch")
+    runtime = GeneralistRuntime.fresh(_tiny_phase5_model().config)
+    original = {
+        name: tensor.detach().clone()
+        for name, tensor in runtime.model.state_dict().items()
+    }
+    unchanged = _language_report(
+        nll=3.20,
+        repetition=0.56,
+        similarity=0.12,
+        multiword=0.43,
+        pathological=False,
+    )
+    monkeypatch.setattr(
+        bootstrap_training,
+        "evaluate_phase5_language",
+        lambda _runtime: dict(unchanged),
+    )
+    stable_sft = {
+        "language_nll": 2.0,
+        "repetition_rate": 0.20,
+        "token_entropy": 3.0,
+        "unique_token_ratio": 0.80,
+        "longest_repeated_token_run": 2,
+        "non_empty_rate": 1.0,
+    }
+    monkeypatch.setattr(
+        bootstrap_training,
+        "evaluate_sft_validation",
+        lambda *_args, **_kwargs: dict(stable_sft),
+    )
+    monkeypatch.setattr(
+        bootstrap_training,
+        "train_sft",
+        lambda *_args, **_kwargs: {
+            "ok": True,
+            "supervised_tokens": 999,
+        },
+    )
+
+    restored, report = _run_language_rehabilitation_stage(
+        runtime,
+        "R2_simple_responses",
+        [SFTExample([
+            {"role": "user", "content": "safe prompt"},
+            {"role": "assistant", "content": "safe answer"},
+        ])],
+        [SFTExample([
+            {"role": "user", "content": "heldout prompt"},
+            {"role": "assistant", "content": "heldout answer"},
+        ])],
+        unchanged,
+        bootstrap_root=tmp_path,
+        base_model_sha="b" * 64,
+        seed=11,
+    )
+    assert report["accepted"] is False
+    assert report["rolled_back"] is True
+    assert report["rollback_verified"] is True
+    assert report["accepted_supervised_tokens"] == 0
+    for name, tensor in restored.model.state_dict().items():
+        assert torch.equal(tensor, original[name])
+
+
+def test_checkpoint_audit_enforces_valid_tokens_lineage_and_rollback_contract():
+    audit_source = Path("computer/generalist_lm/bootstrap_audit.py").read_text(
+        encoding="utf-8"
+    )
+    audit_workflow = Path(
+        ".github/workflows/generalist-bootstrap-audit.yml"
+    ).read_text(encoding="utf-8")
+    bootstrap_workflow = Path(
+        ".github/workflows/generalist-bootstrap.yml"
+    ).read_text(encoding="utf-8")
+
+    assert '"valid_tokens_processed"' in audit_source
+    assert '"accepted_rehabilitation_tokens"' in audit_source
+    assert '"lineage_preserved"' in audit_source
+    assert '"rollback_verified"' in audit_source
+    assert ".valid_tokens.invariant_holds == true" in audit_workflow
+    assert ".language_rehabilitation.rollback_verified == true" in audit_workflow
+    assert "bootstrap-data/language-rehabilitation.json" in bootstrap_workflow
 
 
 def test_segment_language_guard_rejects_regression_from_good_anchor():

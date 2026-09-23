@@ -347,6 +347,7 @@ def train_sft(
         enabled=(precision == "fp16" and device_obj.type == "cuda"),
     )
     losses: list[float] = []
+    supervised_tokens = 0
     last_objective_stats = {
         "causal_ce_loss": float(initial_loss),
         "repetition_unlikelihood_loss": 0.0,
@@ -368,6 +369,7 @@ def train_sft(
                 indices,
             )
             ids, labels = ids.to(device_obj), labels.to(device_obj)
+            supervised_tokens += int((labels[:, 1:] != -100).sum().item())
 
             with torch.autocast(
                 device_type=device_obj.type,
@@ -417,5 +419,6 @@ def train_sft(
         "final_loss": final_loss,
         "best_step_loss": min(losses),
         "loss_improvement": initial_loss - final_loss,
+        "supervised_tokens": int(supervised_tokens),
         "objective": last_objective_stats,
     }

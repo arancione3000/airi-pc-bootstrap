@@ -173,6 +173,7 @@ def test_sft_actually_reduces_language_model_loss():
     assert report["ok"] is True
     assert report["final_loss"] < report["initial_loss"]
     assert report["loss_improvement"] > 0
+    assert report["supervised_tokens"] > 0
 
 
 def test_checkpoint_roundtrip(tmp_path: Path):
@@ -1900,6 +1901,7 @@ def test_training_gradient_accumulation_reports_effective_batch_and_learns():
     assert report["effective_batch_size"] == 2
     assert report["gradient_accumulation_steps"] == 2
     assert report["final_loss"] < report["initial_loss"]
+    assert report["supervised_tokens"] > 0
 
 
 def test_training_rejects_fp16_on_cpu():
