@@ -1900,21 +1900,24 @@ def _residual_language_rehabilitation_attempts(
         raise ValueError(f"unknown language rehabilitation stage: {stage}")
     rejected = max(0, int(consecutive_rejections))
     lr_scale = 0.5 ** min(3, rejected)
-    kl_base = min(2.0, 0.75 + 0.25 * rejected)
+    # Live 50M evidence showed that a ~1e-5 output-residual step with strong
+    # behavioral KL removed pathological repetition while passing replay. Start
+    # in that measured trust region; retries get smaller and more constrained.
+    kl_base = min(2.5, 1.75 + 0.25 * rejected)
 
     plans = {
         "R1_bilingual_foundations": (
-            (64, 7.5e-5 * lr_scale, 0.03, 1.15, kl_base, False),
-            (64, 2.5e-5 * lr_scale, 0.05, 1.20, min(2.5, kl_base + 0.25), True),
-            (48, 1.25e-5 * lr_scale, 0.06, 1.25, min(3.0, kl_base + 0.50), True),
+            (64, 1.0e-5 * lr_scale, 0.03, 1.15, kl_base, False),
+            (48, 5.0e-6 * lr_scale, 0.03, 1.15, min(2.75, kl_base + 0.25), False),
+            (48, 2.5e-6 * lr_scale, 0.04, 1.20, min(3.0, kl_base + 0.50), True),
         ),
         "R2_simple_responses": (
-            (72, 5.0e-5 * lr_scale, 0.03, 1.15, kl_base, False),
-            (64, 2.0e-5 * lr_scale, 0.05, 1.20, min(2.5, kl_base + 0.25), True),
+            (72, 7.5e-6 * lr_scale, 0.025, 1.10, kl_base, False),
+            (56, 3.75e-6 * lr_scale, 0.035, 1.15, min(2.75, kl_base + 0.25), True),
         ),
         "R3_short_dialogue": (
-            (80, 3.75e-5 * lr_scale, 0.025, 1.10, kl_base, False),
-            (64, 1.5e-5 * lr_scale, 0.04, 1.15, min(2.5, kl_base + 0.25), True),
+            (80, 5.0e-6 * lr_scale, 0.02, 1.10, kl_base, False),
+            (56, 2.5e-6 * lr_scale, 0.03, 1.15, min(2.75, kl_base + 0.25), True),
         ),
     }
     return plans[stage]
@@ -3033,6 +3036,14 @@ def run_segment(
             progress,
             rehabilitation_state,
         )
+        residual_strategy_active = bool(
+            (progress.get("dead_capacity_revival") or {}).get("completed")
+        )
+        replay_rejection_count = (
+            max(3, int(rejection_count))
+            if residual_strategy_active
+            else int(rejection_count)
+        )
         rehabilitation_rows, rehabilitation_counts = _rehabilitation_replay_rows(
             stage,
             curriculum,
@@ -3040,9 +3051,11 @@ def run_segment(
             heldout_sft=bundle.sft_validation,
             max_replay_rows=_rehabilitation_replay_limit(
                 stage,
-                rejection_count,
+                replay_rejection_count,
             ),
-            replay_offset=rejection_count * 37,
+            # Rotate with global history for diversity, while hyperparameters
+            # use only the current strategy's rejection history.
+            replay_offset=total_rejection_count * 37,
         )
         lineage_before = str(
             _load_json(root / "lineage.json").get("lineage_id") or ""
@@ -3056,7 +3069,7 @@ def run_segment(
             guard_anchor,
             bootstrap_root=bootstrap_root,
             base_model_sha=base_model_sha,
-            seed=91 + next_stage_index * 1009 + rejection_count * 100_003,
+            seed=91 + next_stage_index * 1009 + total_rejection_count * 100_003,
             consecutive_rejections=rejection_count,
         )
         rehabilitation_report.update({
