@@ -166,6 +166,34 @@ def test_phase5_recovery_plan_escapes_old_lr_floor_and_resets_momentum():
     assert floor["learning_rate_scale"] == pytest.approx(1.0 / 64.0)
 
 
+def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
+    plan = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=0.0625,
+        consecutive_rejections=0,
+        recovery_hold=False,
+        last_segment_accepted=True,
+    )
+    assert plan["effective_budget_tokens"] == 250_000
+    assert plan["parameter_cap_tokens"] == 250_000
+    assert plan["stable_fast_lane"] is True
+    assert plan["stall_recovery"] is False
+
+    rejected = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=0.0625,
+        consecutive_rejections=1,
+        recovery_hold=False,
+        last_segment_accepted=False,
+    )
+    assert rejected["stable_fast_lane"] is False
+    assert rejected["effective_budget_tokens"] == 62_500
+
+
 def test_phase5_recovery_plan_keeps_successful_rescue_sticky():
     plan = _phase5_recovery_plan(
         1_000_000,
