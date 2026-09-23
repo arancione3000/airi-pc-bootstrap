@@ -711,9 +711,10 @@ def test_residual_rehabilitation_plan_strengthens_kl_instead_of_unlikelihood():
         consecutive_rejections=2,
     )
 
+    assert first[0][1] == pytest.approx(1.0e-5)
     assert first[0][2] <= 0.05
     assert first[0][3] <= 1.25
-    assert first[0][4] > 0.0
+    assert first[0][4] == pytest.approx(1.75)
     assert first[0][5] is False
     assert later[0][1] < first[0][1]
     assert later[0][4] > first[0][4]
