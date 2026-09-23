@@ -239,6 +239,16 @@ def test_continuum_watchdog_recovers_stranded_language_training():
     assert "if: needs.bootstrap-gate.outputs.active != 'true'" in workflow
 
 
+def test_bootstrap_restores_state_shallow_and_unshallows_only_for_rebase():
+    workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "git clone --quiet --depth 1 --branch generalist-state --single-branch" in workflow
+    assert 'git rev-parse --is-shallow-repository' in workflow
+    assert "git fetch --quiet --unshallow origin generalist-state" in workflow
+    assert "generalist-state advanced; expanding shallow history only for safe reconciliation." in workflow
+
+
 def test_phase5_fasttrack_handoff_preserves_live_app_lineage():
     workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
     assert "Dispatch next in-place language rung" in workflow
