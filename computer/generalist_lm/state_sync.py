@@ -13,7 +13,7 @@ from .qualification import qualification_status, qualify_checkpoint
 
 
 _SAFE_REF = re.compile(r"^[A-Za-z0-9._/-]+$")
-_CHECKPOINT_FILES = ("config.json", "model.pt", "metadata.json", "benchmark.json")
+_BASE_CHECKPOINT_FILES = ("config.json", "metadata.json", "benchmark.json")
 
 
 def _validate_git_name(value: str, label: str) -> str:
@@ -30,6 +30,11 @@ def _run_git(repo_root: Path, args: list[str], *, stdout=None) -> subprocess.Com
         stderr=subprocess.PIPE,
         check=False,
     )
+
+
+def _ref_has_file(repo_root: Path, ref: str, source_path: str) -> bool:
+    check = _run_git(repo_root, ["cat-file", "-e", f"{ref}:{source_path}"])
+    return check.returncode == 0
 
 
 def _extract_file(repo_root: Path, ref: str, source_path: str, target: Path) -> None:
@@ -82,13 +87,70 @@ def sync_production_checkpoint(
         candidate = Path(tmp) / "candidate"
         candidate.mkdir()
         prefix = "generalist-state/production"
-        for name in _CHECKPOINT_FILES:
+        for name in _BASE_CHECKPOINT_FILES:
             _extract_file(
                 repo_root,
                 ref,
                 f"{prefix}/{name}",
                 candidate / name,
             )
+
+        config = json.loads((candidate / "config.json").read_text(encoding="utf-8"))
+        if not isinstance(config, dict):
+            raise ValueError("remote checkpoint config must be a JSON object")
+        tokenizer_version = str(config.get("tokenizer_version", "byte-v1"))
+        if tokenizer_version == "bpe-v1":
+            _extract_file(
+                repo_root,
+                ref,
+                f"{prefix}/tokenizer.json",
+                candidate / "tokenizer.json",
+            )
+        elif tokenizer_version != "byte-v1":
+            raise ValueError(
+                f"unsupported remote checkpoint tokenizer: {tokenizer_version}"
+            )
+
+        if _ref_has_file(repo_root, ref, f"{prefix}/model.pt"):
+            _extract_file(
+                repo_root,
+                ref,
+                f"{prefix}/model.pt",
+                candidate / "model.pt",
+            )
+        else:
+            _extract_file(
+                repo_root,
+                ref,
+                f"{prefix}/model.index.json",
+                candidate / "model.index.json",
+            )
+            index = json.loads(
+                (candidate / "model.index.json").read_text(encoding="utf-8")
+            )
+            shards = index.get("shards") if isinstance(index, dict) else None
+            if not isinstance(shards, list) or not shards:
+                raise ValueError("remote model shard index has no shards")
+            seen = set()
+            for row in shards:
+                if not isinstance(row, dict):
+                    raise ValueError("invalid remote model shard entry")
+                name = str(row.get("file") or "")
+                if (
+                    not name
+                    or name in seen
+                    or Path(name).name != name
+                    or not name.startswith("model-shard-")
+                    or not name.endswith(".pt")
+                ):
+                    raise ValueError("unsafe remote model shard filename")
+                seen.add(name)
+                _extract_file(
+                    repo_root,
+                    ref,
+                    f"{prefix}/{name}",
+                    candidate / name,
+                )
 
         # Never trust the remote benchmark JSON as the authority. Re-run the
         # protected qualification suite locally against the copied weights.
