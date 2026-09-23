@@ -65,7 +65,7 @@ from .research_cycle import (
     adaptive_domain_weights,
     research_seed,
 )
-from .runtime import GeneralistRuntime
+from .runtime import GeneralistRuntime, checkpoint_has_model, checkpoint_model_sha256
 from .verified_self_play import (
     generate_verified_multiagent_rows,
     generate_verified_self_play_rows,
@@ -390,7 +390,7 @@ def _persisted_specialist_candidate(
     for island in ("language", "coding", "reasoning", "tools", "efficiency"):
         folder = specialists / island
         summary_path = folder / "summary.json"
-        if not summary_path.is_file() or not (folder / "model.pt").is_file():
+        if not summary_path.is_file() or not checkpoint_has_model(folder):
             continue
         try:
             summary = _load_json(summary_path)
@@ -457,9 +457,7 @@ def prepare_swarm(
     live = active_lineage_snapshot(root)
     champion_genome = live["genome"]
     champion_runtime = live["runtime"]
-    live_model_sha = hashlib.sha256(
-        (Path(live["checkpoint"]) / "model.pt").read_bytes()
-    ).hexdigest()
+    live_model_sha = checkpoint_model_sha256(Path(live["checkpoint"]))
 
     live_cfg = champion_runtime.config
     max_params = min(
