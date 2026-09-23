@@ -41,7 +41,7 @@ jobs:
       TARGET_TOKENS: ${{ github.event.inputs.target_tokens || '1000000' }}
       ARCHITECTURE_INTERVAL_TOKENS: '5000000'
       ARCHITECTURE_HANDOFF: 'false'
-      HISTORICAL_LANGUAGE_RECOVERY_REF: '374f10b0bd70b7abb3d6d3dc27e7dc8870a48f15'
+      HISTORICAL_LANGUAGE_RECOVERY_REF: 'e7c2c14de4359dfab952f903a17e65fdf3877899'
     steps:
       - uses: actions/checkout@v4
 
@@ -156,22 +156,36 @@ jobs:
             and ((.language_rehabilitation.consecutive_rejections // 0) >= 6)
             and ((.historical_language_recovery.completed // false) != true)
           ' "${progress}" >/dev/null; then
-            echo "Repeated rehabilitation rollback detected; restoring the last accepted 50M checkpoint."
+            echo "Repeated R3 rollback detected; restoring the accepted healthy R2 50M checkpoint."
             git -C "${STATE_REPO}" fetch --quiet --depth 1 origin "${HISTORICAL_LANGUAGE_RECOVERY_REF}"
             recovery_root="/tmp/airi-historical-language-recovery"
             rm -rf "${recovery_root}"
             mkdir -p "${recovery_root}"
             git -C "${STATE_REPO}" archive "${HISTORICAL_LANGUAGE_RECOVERY_REF}" \
-              generalist-state/bootstrap-data/best \
+              generalist-state/bootstrap-data/candidate \
+              generalist-state/bootstrap-data/language-rehabilitation.json \
               | tar -xf - -C "${recovery_root}"
-            recovery_source="${recovery_root}/generalist-state/bootstrap-data/best"
+            recovery_source="${recovery_root}/generalist-state/bootstrap-data/candidate"
             test -f "${recovery_source}/model.pt"
             test -f "${recovery_source}/config.json"
             test -f "${recovery_source}/metadata.json"
             jq -e '
               .parameters == 50041536
-              and .tokens_processed == 31860813
+              and .tokens_processed == 31864877
+              and .valid_tokens_processed == 31870531
+              and .language_rehabilitation_stage == "R2_simple_responses"
             ' "${recovery_source}/metadata.json" >/dev/null
+            jq -e '
+              .accepted == true
+              and .stage == "R2_simple_responses"
+              and .selected_attempt == 0
+              and .lineage_preserved == true
+              and .rollback_verified == true
+              and .attempts[0].accepted == true
+              and .attempts[0].validation_after.pathological_repetition == false
+              and .attempts[0].validation_after.multiword_output_rate >= 0.80
+              and .attempts[0].validation_after.language_nll < 2.60
+            ' "${recovery_root}/generalist-state/bootstrap-data/language-rehabilitation.json" >/dev/null
           fi
           echo "HISTORICAL_RECOVERY_SOURCE=${recovery_source}" >> "${GITHUB_ENV}"
 
