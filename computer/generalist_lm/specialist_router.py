@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .runtime import GeneralistRuntime
+from .runtime import GeneralistRuntime, checkpoint_has_model
 
 _ALLOWED = {"language", "coding", "reasoning", "tools", "efficiency"}
 
@@ -32,7 +32,7 @@ def specialist_manifest(state_dir: str | Path) -> dict[str, Any]:
     for island in sorted(_ALLOWED):
         summary_path = root / island / "summary.json"
         checkpoint = root / island
-        if not summary_path.is_file() or not (checkpoint / "model.pt").is_file():
+        if not summary_path.is_file() or not checkpoint_has_model(checkpoint):
             continue
         try:
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
