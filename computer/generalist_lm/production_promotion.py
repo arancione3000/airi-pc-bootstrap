@@ -9,6 +9,7 @@ from typing import Any
 
 from .evolution import promotion_decision
 from .qualification import QUALIFICATION_VERSION, checkpoint_digest, qualification_status, qualify_checkpoint
+from .runtime import checkpoint_model_files
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -34,7 +35,7 @@ def _copy_checkpoint(source: Path, target: Path, *, source_digest: str) -> None:
         raise ValueError("research checkpoint config must be a JSON object")
     tokenizer_version = str(config.get("tokenizer_version", "byte-v1"))
 
-    names = ["config.json", "model.pt", "metadata.json"]
+    names = ["config.json", "metadata.json"]
     if tokenizer_version == "bpe-v1":
         names.append("tokenizer.json")
     elif tokenizer_version != "byte-v1":
@@ -45,6 +46,9 @@ def _copy_checkpoint(source: Path, target: Path, *, source_digest: str) -> None:
         if not src.exists() or not src.is_file():
             raise FileNotFoundError(f"research checkpoint is missing {name}")
         shutil.copy2(src, target / name)
+
+    for src in checkpoint_model_files(source):
+        shutil.copy2(src, target / src.name)
 
     # A byte checkpoint must never inherit a stale tokenizer artifact from an
     # interrupted/previous candidate directory.
