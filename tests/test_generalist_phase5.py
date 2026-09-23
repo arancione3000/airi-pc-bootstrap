@@ -39,6 +39,7 @@ from generalist_lm.bootstrap_training import (
     _historical_language_source_genome,
     _language_rehabilitation_attempts,
     _language_rehabilitation_gate,
+    _language_guard_violations,
     _rehabilitation_cycle_due,
     _rehabilitation_replay_limit,
     _rehabilitation_strategy_rejection_count,
@@ -894,7 +895,9 @@ def test_bootstrap_historical_recovery_fetch_is_not_circular():
     workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(encoding="utf-8")
     assert "historical_language_recovery_source_verified" not in workflow
     assert ".parameters == 50041536" in workflow
-    assert "and .tokens_processed == 31860813" in workflow
+    assert "and .tokens_processed == 31864877" in workflow
+    assert "and .valid_tokens_processed == 31870531" in workflow
+    assert '.language_rehabilitation_stage == "R2_simple_responses"' in workflow
 
 
 def test_dead_capacity_revival_preserves_logits_and_enables_new_gradients():
@@ -1024,10 +1027,11 @@ def test_historical_recovery_workflow_is_transactional_and_pinned():
     source = Path("computer/generalist_lm/bootstrap_training.py").read_text(
         encoding="utf-8"
     )
-    assert "374f10b0bd70b7abb3d6d3dc27e7dc8870a48f15" in workflow
-    assert "generalist-state/bootstrap-data/best" in workflow
+    assert "e7c2c14de4359dfab952f903a17e65fdf3877899" in workflow
+    assert "generalist-state/bootstrap-data/candidate" in workflow
+    assert "generalist-state/bootstrap-data/language-rehabilitation.json" in workflow
     assert ".parameters == 50041536" in workflow
-    assert ".tokens_processed == 31860813" in workflow
+    assert ".tokens_processed == 31864877" in workflow
     assert "--historical-recovery-source" in workflow
     assert "historical_language_recovery_source_verified" not in workflow
     assert ".dead_capacity_revival_only // false" in workflow
@@ -1036,7 +1040,10 @@ def test_historical_recovery_workflow_is_transactional_and_pinned():
     assert '"historical_recovery_only": True' in source
     assert '"discarded_effective_tokens"' in source
     assert '"direct_capacity_restore"' in source
-    assert 'progress["causal_recovery_mode"] = True' in source
+    assert '"source_evidence_reused": bool(source_evidence_reused)' in source
+    assert 'progress["valid_tokens_processed"] = source_valid_tokens' in source
+    assert 'len(PHASE5_LANGUAGE_REHABILITATION_STAGES)' in source
+    assert 'progress["causal_recovery_mode"] = source_needs_recovery' in source
     assert 'not bool(progress.get("causal_recovery_mode", False))' in source
     assert '_revive_dead_ffn_model_capacity(' in source
     assert 'reason="phase5_historical_language_recovery"' in source
@@ -1548,6 +1555,30 @@ def test_r1_recovery_entropy_uses_durable_anchor_not_collapsed_baseline():
     assert report["protected_entropy_floor"] == pytest.approx(2.074)
     assert report["anchor_violations_after"] == []
     assert "protected token entropy collapsed" not in report["reasons"]
+
+
+def test_language_guard_does_not_reject_healthy_confident_r2_on_entropy_alone():
+    anchor_report = _language_report(
+        nll=2.8579669708901263,
+        repetition=0.44345238095238093,
+        similarity=0.11521977193147724,
+        multiword=0.42857142857142855,
+        pathological=False,
+    )
+    anchor_report["non_empty_rate"] = 1.0
+    anchor_report["token_entropy"] = 2.6741511739258255
+
+    r2 = _language_report(
+        nll=2.4580977419589427,
+        repetition=0.19340917541105512,
+        similarity=0.22141353247491355,
+        multiword=0.8571428571428571,
+        pathological=False,
+    )
+    r2["non_empty_rate"] = 1.0
+    r2["token_entropy"] = 1.9657190847978243
+
+    assert _language_guard_violations(anchor_report, r2) == []
 
 
 def test_r1_non_recovery_still_rejects_material_entropy_collapse():
