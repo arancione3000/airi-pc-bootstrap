@@ -2182,7 +2182,7 @@
   "assisted_capacity_growth_completed": true,
   "bad_eval_count": 0,
   "base_champion_model_sha256": "af9ff3d8fbc921b1b144fb8df982808b58ef1c3c69dcc06f2b160fc3d7a084c0",
-  "best_validation_loss": 2.0544674433767796,
+  "best_validation_loss": 2.050278417766094,
   "bootstrap_replay": {
     "corpus_file": "replay-corpus.jsonl.gz",
     "corpus_sha256": "baf173782f9ca92429bfae93cf09b365a871e52adb463de6f09e44f0c4456b4d",
@@ -4748,15 +4748,15 @@
     "version": "phase5-language-rehabilitation-v1"
   },
   "last_objective": {
-    "causal_ce_loss": 1.4291282892227173,
+    "causal_ce_loss": 1.6194467544555664,
     "eos_loss_weight": 1.6,
-    "repetition_negative_count": 2939,
-    "repetition_unlikelihood_loss": 0.013452709652483463,
+    "repetition_negative_count": 3167,
+    "repetition_unlikelihood_loss": 0.012374931946396828,
     "repetition_unlikelihood_weight": 0.05
   },
-  "last_train_loss": 1.5070535317063332,
-  "last_validation_loss": 2.0544674433767796,
-  "learning_rate": 3.698575806702264e-06,
+  "last_train_loss": 1.5671866461634636,
+  "last_validation_loss": 2.050278417766094,
+  "learning_rate": 3.6967479665531013e-06,
   "lineage_id": "airi-5d3d25177d2e83f7",
   "optimization_passes_target": 5.0,
   "optimizer_reset_after_language_rehabilitation": true,
@@ -4764,20 +4764,20 @@
   "optimizer_storage": {
     "files": [
       "optimizer.pt",
-      "optimizer-meta-4ef296c36282.pt",
-      "optimizer-shard-00001-of-00013-e979d29ca3b7.pt",
-      "optimizer-shard-00002-of-00013-6351671a17c3.pt",
-      "optimizer-shard-00003-of-00013-61c1d77a66eb.pt",
-      "optimizer-shard-00004-of-00013-588c942e2a76.pt",
-      "optimizer-shard-00005-of-00013-e3a9519c8e9a.pt",
-      "optimizer-shard-00006-of-00013-9c4e091fc7e6.pt",
-      "optimizer-shard-00007-of-00013-ca6fe1341ed4.pt",
-      "optimizer-shard-00008-of-00013-220773c96e7a.pt",
-      "optimizer-shard-00009-of-00013-9dfa5b0f2668.pt",
-      "optimizer-shard-00010-of-00013-08eb950025d9.pt",
-      "optimizer-shard-00011-of-00013-352abf6c58f1.pt",
-      "optimizer-shard-00012-of-00013-dcaf5469dab2.pt",
-      "optimizer-shard-00013-of-00013-5d4b5532f215.pt"
+      "optimizer-meta-58a63f57f7c9.pt",
+      "optimizer-shard-00001-of-00013-5484d0cffba1.pt",
+      "optimizer-shard-00002-of-00013-c82f3a1ea861.pt",
+      "optimizer-shard-00003-of-00013-8793532fd138.pt",
+      "optimizer-shard-00004-of-00013-f1cd6b420b28.pt",
+      "optimizer-shard-00005-of-00013-0da7e66ae9e4.pt",
+      "optimizer-shard-00006-of-00013-515e9ec741e1.pt",
+      "optimizer-shard-00007-of-00013-def26763d3f7.pt",
+      "optimizer-shard-00008-of-00013-3a50287bbc93.pt",
+      "optimizer-shard-00009-of-00013-25ea09f53f0c.pt",
+      "optimizer-shard-00010-of-00013-186398e91285.pt",
+      "optimizer-shard-00011-of-00013-8f574bd6d96c.pt",
+      "optimizer-shard-00012-of-00013-1c11a6e2da6b.pt",
+      "optimizer-shard-00013-of-00013-ef676beb40fa.pt"
     ],
     "raw_tensor_bytes": 400332688,
     "shards": 13,
@@ -4799,7 +4799,7 @@
     "validation_blocks": 7826,
     "version": "phase5-stage-block-cache-v1"
   },
-  "parameter_segment_cap_tokens": 250000,
+  "parameter_segment_cap_tokens": 62500,
   "rung_complete": false,
   "schema": 1,
   "segment_guard_acceptances": [
@@ -4874,15 +4874,23 @@
       "recovery_mode": false,
       "segment_tokens": 32512,
       "tokens_processed": 32246893
+    },
+    {
+      "after_quality": -1.4713474139450597,
+      "before_quality": -1.408229065053697,
+      "learning_rate_scale": 0.015625,
+      "recovery_mode": false,
+      "segment_tokens": 32512,
+      "tokens_processed": 32279405
     }
   ],
-  "segment_guard_consecutive_rejections": 1,
-  "segment_guard_effective_budget_tokens": 250000,
-  "segment_guard_last_accepted": false,
-  "segment_guard_last_attempted_steps": 62,
-  "segment_guard_last_attempted_tokens": 251968,
-  "segment_guard_lr_scale": 0.015625,
-  "segment_guard_optimizer_reset_for_stall": true,
+  "segment_guard_consecutive_rejections": 0,
+  "segment_guard_effective_budget_tokens": 31250,
+  "segment_guard_last_accepted": true,
+  "segment_guard_last_attempted_steps": 8,
+  "segment_guard_last_attempted_tokens": 32512,
+  "segment_guard_lr_scale": 0.01875,
+  "segment_guard_optimizer_reset_for_stall": false,
   "segment_guard_recovery_accept_streak": 0,
   "segment_guard_recovery_budget_active": true,
   "segment_guard_recovery_hold": false,
@@ -5300,9 +5308,9 @@
     }
   ],
   "segment_guard_requested_budget_tokens": 1000000,
-  "segment_guard_rescue_stage": "B_short_sentence_completion",
+  "segment_guard_rescue_stage": null,
   "segment_guard_stable_fast_lane": false,
-  "segment_guard_stall_recovery_active": true,
+  "segment_guard_stall_recovery_active": false,
   "sft_accepted_rungs": [
     20000000
   ],
@@ -17413,9 +17421,9 @@
       "word_output_rate": 1.0
     }
   },
-  "steps": 7935,
+  "steps": 7943,
   "target_tokens": 100000000,
-  "tokens_processed": 32246893,
+  "tokens_processed": 32279405,
   "training_resource_plan": {
     "context_length": 128,
     "effective_batch_size": 32,
@@ -17424,7 +17432,7 @@
     "parameters": 50041536
   },
   "unique_corpus_target_tokens": 20000000,
-  "updated_at_unix": 1790213259,
-  "valid_tokens_processed": 32252547,
+  "updated_at_unix": 1790214023,
+  "valid_tokens_processed": 32285059,
   "version": "phase5-language-bootstrap-v3"
 }
