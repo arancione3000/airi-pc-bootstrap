@@ -2185,8 +2185,8 @@
   "best_validation_loss": 2.0343909660975137,
   "bootstrap_replay": {
     "corpus_file": "replay-corpus.jsonl.gz",
-    "corpus_sha256": "baf173782f9ca92429bfae93cf09b365a871e52adb463de6f09e44f0c4456b4d",
-    "documents": 22844,
+    "corpus_sha256": "233285a572c313e2489f21bcda6751f9888f5dfb9f3196735c70ecb8b1251681",
+    "documents": 22851,
     "external_model_distillation_used": false,
     "held_out_phase5_suite_excluded": true,
     "schema": 1,
@@ -2195,7 +2195,7 @@
     "sft_file": "replay-sft.jsonl.gz",
     "sft_sha256": "e9526f24f80f012f2071285147c6bab67491ed581d554bb74c45e6f322f0c687",
     "sft_validation_excluded": true,
-    "source_manifest_sha256": "da496c871361a0859737cb8f8273dfd78d96d902b24571236aeb6cad4e5703e1",
+    "source_manifest_sha256": "d86069c4730349ecfa576ecbacf228a0ee2cb2e6260a840f6733b16978ceb9f0",
     "token_counts_by_bucket": {
       "dialogue": 200002,
       "language-en": 399997,
@@ -4735,6 +4735,9 @@
     "valid_tokens_before_recovery": 31870531,
     "version": "phase5-historical-language-recovery-v3"
   },
+  "language_guard_anchor_source": "durable_best_suite_migration",
+  "language_guard_prompt_count": 14,
+  "language_guard_suite": "phase5-language-holdout-v2",
   "language_rehabilitation": {
     "completed_cycles": 1,
     "consecutive_rejections": 0,
@@ -4756,9 +4759,93 @@
   },
   "last_train_loss": 1.4668245539069176,
   "last_validation_loss": 2.0343909660975137,
+  "learning_efficiency": {
+    "acceptance_rate": 0.0,
+    "accepted_segments": 0,
+    "accepted_tokens": 0,
+    "accepted_tokens_per_hour": 0.0,
+    "attempted_segments": 1,
+    "attempted_tokens": 32512,
+    "attempted_tokens_per_hour": 1151166.7293113044,
+    "checkpoint_persist_seconds": 0.0,
+    "cumulative_language_quality_gain": 0.0,
+    "effective_new_tokens": 0,
+    "elapsed_training_seconds": 101.6735430409999,
+    "history": [
+      {
+        "accepted": false,
+        "accepted_tokens": 0,
+        "attempted_tokens": 32512,
+        "checkpoint_persist_seconds": 0.0,
+        "elapsed_training_seconds": 101.6735430409999,
+        "language_nll_delta": -0.03994279055251271,
+        "language_quality_gain": 0.0,
+        "multiword_delta": 0.0,
+        "reference_kl_weight": 0.5,
+        "repetition_delta": 0.11256972131957926,
+        "replay_fraction": 0.2,
+        "replay_tokens": 1757,
+        "updated_at_unix": 1790232797
+      }
+    ],
+    "learning_gain_per_100k_tokens": 0.0,
+    "optimizer": {
+      "betas": [
+        0.9,
+        0.95
+      ],
+      "eps": 1e-08,
+      "name": "AdamW",
+      "parameter_groups": {
+        "attention_and_norm": {
+          "lr_multiplier": 0.35,
+          "parameters": 447168,
+          "sample_names": [
+            "blocks.0.attn_norm.weight",
+            "blocks.0.attn_norm.bias",
+            "blocks.0.ff_norm.weight",
+            "blocks.0.ff_norm.bias"
+          ],
+          "tensors": 74
+        },
+        "embeddings": {
+          "lr_multiplier": 0.25,
+          "parameters": 49152,
+          "sample_names": [
+            "token_embedding.weight",
+            "position_embedding.weight"
+          ],
+          "tensors": 2
+        },
+        "ffn": {
+          "lr_multiplier": 1.0,
+          "parameters": 49545216,
+          "sample_names": [
+            "blocks.0.ff.up.weight",
+            "blocks.0.ff.down.weight",
+            "blocks.1.ff.up.weight",
+            "blocks.1.ff.down.weight"
+          ],
+          "tensors": 24
+        }
+      },
+      "parameters": 50041536,
+      "tied_embedding_lm_head": true,
+      "weight_decay": 0.01
+    },
+    "reference_kl_weight": 0.5,
+    "replay_fraction": 0.2,
+    "replay_tokens": 1757,
+    "rollback_rate": 1.0,
+    "rollback_segments": 1,
+    "started_tokens_processed": 32815853,
+    "unique_data_fraction": 0.32,
+    "updated_at_unix": 1790232797,
+    "version": "phase5-learning-efficiency-v1"
+  },
   "learning_rate": 4.399705452567038e-06,
   "lineage_id": "airi-5d3d25177d2e83f7",
-  "optimization_passes_target": 5.0,
+  "optimization_passes_target": 3.125,
   "optimizer_reset_after_language_rehabilitation": true,
   "optimizer_reset_after_sft": true,
   "optimizer_storage": {
@@ -4785,21 +4872,101 @@
   },
   "packed_block_cache": {
     "block_counts": {
-      "A_frequent_word_contexts": 415,
-      "B_short_sentence_completion": 78324,
-      "C_causal_next_sentence": 148432
+      "A_frequent_word_contexts": 46043,
+      "B_short_sentence_completion": 115654,
+      "C_causal_next_sentence": 237447
     },
     "hits": {
-      "A_frequent_word_contexts": true,
-      "B_short_sentence_completion": true,
-      "C_causal_next_sentence": true,
-      "validation": true
+      "A_frequent_word_contexts": false,
+      "B_short_sentence_completion": false,
+      "C_causal_next_sentence": false,
+      "validation": false
     },
-    "manifest_content_sha256": "da496c871361a0859737cb8f8273dfd78d96d902b24571236aeb6cad4e5703e1",
-    "validation_blocks": 7826,
+    "manifest_content_sha256": "d86069c4730349ecfa576ecbacf228a0ee2cb2e6260a840f6733b16978ceb9f0",
+    "validation_blocks": 12567,
     "version": "phase5-stage-block-cache-v1"
   },
   "parameter_segment_cap_tokens": 62500,
+  "protected_continual_training": {
+    "anti_repetition_weight": 0.02,
+    "enabled": true,
+    "fragile_language_state": true,
+    "holdout_excluded": true,
+    "optimizer": {
+      "betas": [
+        0.9,
+        0.95
+      ],
+      "eps": 1e-08,
+      "lr_multipliers": {
+        "attention_and_norm": 0.35,
+        "embeddings": 0.25,
+        "ffn": 1.0,
+        "lm_head": 0.5
+      },
+      "name": "AdamW",
+      "weight_decay": 0.01
+    },
+    "reference_checkpoint": "pre_segment_live_lineage",
+    "reference_kl_temperature": 1.0,
+    "reference_kl_weight": 0.5,
+    "replay_fraction": 0.2,
+    "replay_loss_weight": 0.25,
+    "replay_rows": {
+      "elementary_rows": 32,
+      "held_out_filtered": 0,
+      "protected_sft_rows": 512,
+      "total_rows": 544
+    },
+    "segment_warmup_steps": 4,
+    "unique_corpus_target_tokens": 32000000,
+    "unique_data_fraction": 0.32,
+    "version": "phase5-protected-causal-v1"
+  },
+  "protected_optimizer": {
+    "betas": [
+      0.9,
+      0.95
+    ],
+    "eps": 1e-08,
+    "name": "AdamW",
+    "parameter_groups": {
+      "attention_and_norm": {
+        "lr_multiplier": 0.35,
+        "parameters": 447168,
+        "sample_names": [
+          "blocks.0.attn_norm.weight",
+          "blocks.0.attn_norm.bias",
+          "blocks.0.ff_norm.weight",
+          "blocks.0.ff_norm.bias"
+        ],
+        "tensors": 74
+      },
+      "embeddings": {
+        "lr_multiplier": 0.25,
+        "parameters": 49152,
+        "sample_names": [
+          "token_embedding.weight",
+          "position_embedding.weight"
+        ],
+        "tensors": 2
+      },
+      "ffn": {
+        "lr_multiplier": 1.0,
+        "parameters": 49545216,
+        "sample_names": [
+          "blocks.0.ff.up.weight",
+          "blocks.0.ff.down.weight",
+          "blocks.1.ff.up.weight",
+          "blocks.1.ff.down.weight"
+        ],
+        "tensors": 24
+      }
+    },
+    "parameters": 50041536,
+    "tied_embedding_lm_head": true,
+    "weight_decay": 0.01
+  },
   "rung_complete": false,
   "schema": 1,
   "segment_guard_acceptances": [
@@ -4908,7 +5075,7 @@
       "tokens_processed": 32815853
     }
   ],
-  "segment_guard_consecutive_rejections": 11,
+  "segment_guard_consecutive_rejections": 12,
   "segment_guard_effective_budget_tokens": 31250,
   "segment_guard_last_accepted": false,
   "segment_guard_last_attempted_steps": 8,
@@ -4918,24 +5085,8 @@
   "segment_guard_recovery_accept_streak": 0,
   "segment_guard_recovery_budget_active": true,
   "segment_guard_recovery_hold": false,
-  "segment_guard_recovery_mode": false,
+  "segment_guard_recovery_mode": true,
   "segment_guard_rejections": [
-    {
-      "after_quality": -4.555270322056345,
-      "attempted_steps": 8,
-      "attempted_tokens": 32512,
-      "before_quality": -4.556663859187991,
-      "learning_rate_scale": 0.01875,
-      "reasons": [
-        "lineage is below its durable language anchor and this segment did not measurably recover quality",
-        "language NLL exceeds durable anchor by more than 0.15",
-        "pathological repetition reappeared",
-        "generation similarity fell below durable anchor",
-        "multiword output rate fell below durable anchor"
-      ],
-      "recovery_mode": true,
-      "tokens_processed": 31832365
-    },
     {
       "after_quality": -4.547149231828555,
       "attempted_steps": 8,
@@ -5368,12 +5519,27 @@
       ],
       "recovery_mode": false,
       "tokens_processed": 32815853
+    },
+    {
+      "after_quality": -0.9622315790373471,
+      "attempted_steps": 8,
+      "attempted_tokens": 32512,
+      "before_quality": -0.7991499060849752,
+      "learning_rate_scale": 0.015625,
+      "reasons": [
+        "segment repetition rate regressed by more than 0.06",
+        "lineage is below its durable language anchor and this segment did not measurably recover quality",
+        "repetition rate exceeds durable anchor by more than 0.08"
+      ],
+      "recovery_mode": true,
+      "tokens_processed": 32815853
     }
   ],
   "segment_guard_requested_budget_tokens": 1000000,
   "segment_guard_rescue_stage": "B_short_sentence_completion",
   "segment_guard_stable_fast_lane": true,
   "segment_guard_stall_recovery_active": true,
+  "segment_guard_success_streak": 0,
   "sft_accepted_rungs": [
     20000000
   ],
@@ -17494,8 +17660,8 @@
     "micro_batch_size": 2,
     "parameters": 50041536
   },
-  "unique_corpus_target_tokens": 20000000,
-  "updated_at_unix": 1790229816,
+  "unique_corpus_target_tokens": 32000000,
+  "updated_at_unix": 1790232797,
   "valid_tokens_processed": 32821507,
   "version": "phase5-language-bootstrap-v3"
 }

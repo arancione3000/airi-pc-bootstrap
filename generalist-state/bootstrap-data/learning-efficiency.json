@@ -1,0 +1,84 @@
+{
+  "acceptance_rate": 0.0,
+  "accepted_segments": 0,
+  "accepted_tokens": 0,
+  "accepted_tokens_per_hour": 0.0,
+  "attempted_segments": 1,
+  "attempted_tokens": 32512,
+  "attempted_tokens_per_hour": 1151166.7293113044,
+  "checkpoint_persist_seconds": 0.0,
+  "cumulative_language_quality_gain": 0.0,
+  "effective_new_tokens": 0,
+  "elapsed_training_seconds": 101.6735430409999,
+  "history": [
+    {
+      "accepted": false,
+      "accepted_tokens": 0,
+      "attempted_tokens": 32512,
+      "checkpoint_persist_seconds": 0.0,
+      "elapsed_training_seconds": 101.6735430409999,
+      "language_nll_delta": -0.03994279055251271,
+      "language_quality_gain": 0.0,
+      "multiword_delta": 0.0,
+      "reference_kl_weight": 0.5,
+      "repetition_delta": 0.11256972131957926,
+      "replay_fraction": 0.2,
+      "replay_tokens": 1757,
+      "updated_at_unix": 1790232797
+    }
+  ],
+  "learning_gain_per_100k_tokens": 0.0,
+  "optimizer": {
+    "betas": [
+      0.9,
+      0.95
+    ],
+    "eps": 1e-08,
+    "name": "AdamW",
+    "parameter_groups": {
+      "attention_and_norm": {
+        "lr_multiplier": 0.35,
+        "parameters": 447168,
+        "sample_names": [
+          "blocks.0.attn_norm.weight",
+          "blocks.0.attn_norm.bias",
+          "blocks.0.ff_norm.weight",
+          "blocks.0.ff_norm.bias"
+        ],
+        "tensors": 74
+      },
+      "embeddings": {
+        "lr_multiplier": 0.25,
+        "parameters": 49152,
+        "sample_names": [
+          "token_embedding.weight",
+          "position_embedding.weight"
+        ],
+        "tensors": 2
+      },
+      "ffn": {
+        "lr_multiplier": 1.0,
+        "parameters": 49545216,
+        "sample_names": [
+          "blocks.0.ff.up.weight",
+          "blocks.0.ff.down.weight",
+          "blocks.1.ff.up.weight",
+          "blocks.1.ff.down.weight"
+        ],
+        "tensors": 24
+      }
+    },
+    "parameters": 50041536,
+    "tied_embedding_lm_head": true,
+    "weight_decay": 0.01
+  },
+  "reference_kl_weight": 0.5,
+  "replay_fraction": 0.2,
+  "replay_tokens": 1757,
+  "rollback_rate": 1.0,
+  "rollback_segments": 1,
+  "started_tokens_processed": 32815853,
+  "unique_data_fraction": 0.32,
+  "updated_at_unix": 1790232797,
+  "version": "phase5-learning-efficiency-v1"
+}
