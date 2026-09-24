@@ -32,6 +32,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Install emulator GUI runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpulse0
+
       - name: Start Airi-PC GUI runtime
         env:
           AIRI_EVOLUTION_DAEMON: '0'
