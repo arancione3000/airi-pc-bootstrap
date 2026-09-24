@@ -4768,17 +4768,17 @@
   "last_train_loss": 1.3835361003875732,
   "last_validation_loss": 2.0343909660975137,
   "learning_efficiency": {
-    "acceptance_rate": 0.06060606060606061,
+    "acceptance_rate": 0.058823529411764705,
     "accepted_segments": 2,
     "accepted_tokens": 16256,
-    "accepted_tokens_per_hour": 19936.97344102123,
-    "attempted_segments": 33,
-    "attempted_tokens": 926592,
-    "attempted_tokens_per_hour": 1137345.5473504313,
+    "accepted_tokens_per_hour": 19714.80035844811,
+    "attempted_segments": 34,
+    "attempted_tokens": 934720,
+    "attempted_tokens_per_hour": 1134526.328956524,
     "checkpoint_persist_seconds": 2.421005121000235,
     "cumulative_language_quality_gain": 0.044359240450248305,
     "effective_new_tokens": 16256,
-    "elapsed_training_seconds": 2932.9091829399995,
+    "elapsed_training_seconds": 2965.988460659999,
     "history": [
       {
         "accepted": false,
@@ -5274,6 +5274,21 @@
         "replay_fraction": 0.2,
         "replay_tokens": 400,
         "updated_at_unix": 1790276614
+      },
+      {
+        "accepted": false,
+        "accepted_tokens": 0,
+        "attempted_tokens": 8128,
+        "checkpoint_persist_seconds": 0.0,
+        "elapsed_training_seconds": 33.07927771999948,
+        "language_nll_delta": -0.007941911310674676,
+        "language_quality_gain": 0.0,
+        "multiword_delta": 0.0,
+        "reference_kl_weight": 0.5,
+        "repetition_delta": 0.1299112864835339,
+        "replay_fraction": 0.2,
+        "replay_tokens": 508,
+        "updated_at_unix": 1790277854
       }
     ],
     "learning_gain_per_100k_tokens": 0.2728791858406023,
@@ -5323,12 +5338,12 @@
     },
     "reference_kl_weight": 0.5,
     "replay_fraction": 0.2,
-    "replay_tokens": 47032,
-    "rollback_rate": 0.9393939393939394,
-    "rollback_segments": 31,
+    "replay_tokens": 47540,
+    "rollback_rate": 0.9411764705882353,
+    "rollback_segments": 32,
     "started_tokens_processed": 32815853,
     "unique_data_fraction": 0.32,
-    "updated_at_unix": 1790276614,
+    "updated_at_unix": 1790277854,
     "version": "phase5-learning-efficiency-v1"
   },
   "learning_rate": 1.8327486696247453e-06,
@@ -5588,7 +5603,7 @@
       "tokens_processed": 32832109
     }
   ],
-  "segment_guard_consecutive_rejections": 1,
+  "segment_guard_consecutive_rejections": 2,
   "segment_guard_effective_budget_tokens": 8000,
   "segment_guard_last_accepted": false,
   "segment_guard_last_attempted_steps": 2,
@@ -5600,18 +5615,6 @@
   "segment_guard_recovery_hold": false,
   "segment_guard_recovery_mode": false,
   "segment_guard_rejections": [
-    {
-      "after_quality": -1.4051453111315626,
-      "attempted_steps": 8,
-      "attempted_tokens": 32512,
-      "before_quality": -1.3800959590369228,
-      "learning_rate_scale": 0.015625,
-      "reasons": [
-        "repetition rate exceeds durable anchor by more than 0.08"
-      ],
-      "recovery_mode": false,
-      "tokens_processed": 32815853
-    },
     {
       "after_quality": -0.9622315790373471,
       "attempted_steps": 8,
@@ -6046,6 +6049,19 @@
       "attempted_tokens": 8128,
       "before_quality": -0.7547906656347269,
       "learning_rate_scale": 0.01875,
+      "reasons": [
+        "segment repetition rate regressed by more than 0.06",
+        "repetition rate exceeds durable anchor by more than 0.08"
+      ],
+      "recovery_mode": false,
+      "tokens_processed": 32832109
+    },
+    {
+      "after_quality": -0.9984049127401995,
+      "attempted_steps": 2,
+      "attempted_tokens": 8128,
+      "before_quality": -0.7547906656347269,
+      "learning_rate_scale": 0.015625,
       "reasons": [
         "segment repetition rate regressed by more than 0.06",
         "repetition rate exceeds durable anchor by more than 0.08"
@@ -18181,7 +18197,7 @@
     "protected_replay_micro_batch_size": 2
   },
   "unique_corpus_target_tokens": 32000000,
-  "updated_at_unix": 1790276614,
+  "updated_at_unix": 1790277854,
   "valid_tokens_processed": 32837763,
   "version": "phase5-language-bootstrap-v3"
 }
