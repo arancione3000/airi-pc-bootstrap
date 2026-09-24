@@ -1223,6 +1223,19 @@ def _phase5_recovery_plan(
         # rejected tokens.
         segment_budget = min(int(segment_budget), 31_250)
 
+    # Controlled 50M ablation: the same update improved NLL/repetition at
+    # 8,128 tokens but failed the unchanged guard at 16,256. Check short
+    # prefixes during sustained stalls, then require real success streaks.
+    micro_recovery = bool(
+        40_000_000 <= int(parameters) < 64_000_000
+        and persisted_scale <= 0.0625
+        and (rejected >= 1 or recovery_hold or (last_segment_accepted and 0 < accepted_streak <= 3))
+    )
+    if micro_recovery:
+        stable_fast_lane = False
+        micro_cap = 8_000 if accepted_streak < 2 else 16_000 if accepted_streak == 2 else 32_000
+        segment_budget = min(int(segment_budget), micro_cap)
+
     if rejected <= 0:
         lr_scale = persisted_scale
     else:
@@ -1238,6 +1251,7 @@ def _phase5_recovery_plan(
         "learning_rate_scale": float(lr_scale),
         "stall_recovery": bool(stall_recovery),
         "stable_fast_lane": bool(stable_fast_lane),
+        "micro_recovery": micro_recovery,
         # Reset stale AdamW momentum only when entering rescue because of a
         # rejection.  After an accepted rescue segment, keep its valid
         # optimizer state while the sticky hold continues.
@@ -4051,6 +4065,9 @@ def run_segment(
         "consecutive_rejections_before": int(consecutive_rejections),
         "elapsed_training_seconds": float(elapsed_training_seconds),
         "replay_tokens": int(replay_tokens_trained),
+        "actual_replay_token_fraction": replay_tokens_trained / max(1, replay_tokens_trained + attempted_tokens),
+        "new_supervised_tokens": int(attempted_tokens),
+        "replay_supervised_tokens": int(replay_tokens_trained),
         "replay_fraction": float(protected_plan["replay_fraction"]),
         "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
         "protected_causal_version": PHASE5_PROTECTED_CAUSAL_VERSION,

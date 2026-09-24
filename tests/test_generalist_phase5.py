@@ -159,7 +159,7 @@ def test_phase5_recovery_plan_escapes_old_lr_floor_and_resets_momentum():
         persisted_lr_scale=0.0625,
         consecutive_rejections=3,
     )
-    assert deeper["effective_budget_tokens"] == 31_250
+    assert deeper["effective_budget_tokens"] == 8_000
     assert deeper["learning_rate_scale"] == pytest.approx(0.0625)
 
     floor = _phase5_recovery_plan(
@@ -183,7 +183,7 @@ def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
         last_segment_accepted=True,
         success_streak=1,
     )
-    assert first["effective_budget_tokens"] == 62_500
+    assert first["effective_budget_tokens"] == 8_000
     assert first["stable_fast_lane"] is False
 
     second = _phase5_recovery_plan(
@@ -196,7 +196,7 @@ def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
         last_segment_accepted=True,
         success_streak=2,
     )
-    assert second["effective_budget_tokens"] == 125_000
+    assert second["effective_budget_tokens"] == 16_000
 
     plan = _phase5_recovery_plan(
         1_000_000,
@@ -208,9 +208,9 @@ def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
         last_segment_accepted=True,
         success_streak=3,
     )
-    assert plan["effective_budget_tokens"] == 250_000
+    assert plan["effective_budget_tokens"] == 32_000
     assert plan["parameter_cap_tokens"] == 250_000
-    assert plan["stable_fast_lane"] is True
+    assert plan["stable_fast_lane"] is False
     assert plan["stall_recovery"] is False
 
     rejected = _phase5_recovery_plan(
@@ -235,7 +235,7 @@ def test_phase5_recovery_plan_keeps_successful_rescue_sticky():
         consecutive_rejections=0,
         recovery_hold=True,
     )
-    assert plan["effective_budget_tokens"] == 31_250
+    assert plan["effective_budget_tokens"] == 8_000
     assert plan["learning_rate_scale"] == pytest.approx(0.0625)
     assert plan["stall_recovery"] is True
     assert plan["reset_optimizer"] is False
@@ -250,7 +250,7 @@ def test_phase5_recovery_plan_reenters_rescue_after_low_lr_rejection():
         persisted_lr_scale=0.0375,
         consecutive_rejections=1,
     )
-    assert plan["effective_budget_tokens"] == 31_250
+    assert plan["effective_budget_tokens"] == 8_000
     assert plan["learning_rate_scale"] == pytest.approx(0.0375)
     assert plan["stall_recovery"] is True
     assert plan["reset_optimizer"] is True
@@ -2426,3 +2426,16 @@ def test_sampling_controls_preserve_raw_greedy_default():
         repetition_penalty=1.08,
     )
     assert sampled.shape == first.shape
+
+
+def test_sustained_stall_uses_measured_short_update_and_grows_only_after_successes():
+    common = dict(parameters=50_041_536, context_length=128, persisted_lr_scale=1/64)
+    stalled = _phase5_recovery_plan(1_000_000, consecutive_rejections=27, **common)
+    assert stalled["effective_budget_tokens"] == 8_000
+    assert stalled["reset_optimizer"] is True
+    for streak, budget in ((1,8_000),(2,16_000),(3,32_000)):
+        accepted = _phase5_recovery_plan(1_000_000, consecutive_rejections=0,
+            last_segment_accepted=True, success_streak=streak, **common)
+        assert accepted["effective_budget_tokens"] == budget
+    retry = _phase5_recovery_plan(1_000_000, consecutive_rejections=4, success_streak=0, **common)
+    assert retry["effective_budget_tokens"] == 8_000
