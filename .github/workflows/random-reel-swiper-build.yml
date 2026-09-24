@@ -23,9 +23,13 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: Run gesture safety unit tests
+        working-directory: android/random-reel-swiper
+        run: gradle :app:testDebugUnitTest --stacktrace
+
       - name: Build debug APK
         working-directory: android/random-reel-swiper
-        run: gradle assembleDebug --stacktrace
+        run: gradle :app:assembleDebug --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
