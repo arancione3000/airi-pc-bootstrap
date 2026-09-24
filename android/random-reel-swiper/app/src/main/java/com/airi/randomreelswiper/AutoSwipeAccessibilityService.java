@@ -16,21 +16,30 @@ import android.view.accessibility.AccessibilityEvent;
 import android.widget.Button;
 
 import java.util.Random;
+import java.util.Set;
 
 public class AutoSwipeAccessibilityService extends AccessibilityService {
     private static AutoSwipeAccessibilityService instance;
+
+    private static final Set<String> ALLOWED_PACKAGES = Set.of(
+            "com.instagram.android",
+            "com.instagram.lite"
+    );
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Random random = new Random();
     private boolean running = false;
     private Button stopOverlay;
     private WindowManager windowManager;
+    private volatile String foregroundPackage = "";
 
     private final Runnable swipeRunnable = new Runnable() {
         @Override
         public void run() {
             if (!running) return;
-            performRandomSwipe();
+            if (isAllowedForegroundPackage()) {
+                performRandomSwipe();
+            }
             scheduleNextSwipe();
         }
     };
@@ -52,7 +61,11 @@ public class AutoSwipeAccessibilityService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // Deliberately unused: the app does not inspect other apps' screen contents.
+        // We only keep the foreground package name. Screen contents are never read.
+        CharSequence packageName = event.getPackageName();
+        if (packageName != null) {
+            foregroundPackage = packageName.toString();
+        }
     }
 
     @Override
@@ -88,65 +101,32 @@ public class AutoSwipeAccessibilityService extends AccessibilityService {
         handler.postDelayed(swipeRunnable, delayMs);
     }
 
+    static boolean isAllowedPackage(String packageName) {
+        return packageName != null && ALLOWED_PACKAGES.contains(packageName);
+    }
+
+    private boolean isAllowedForegroundPackage() {
+        return isAllowedPackage(foregroundPackage);
+    }
+
     private void performRandomSwipe() {
-        if (windowManager == null) return;
+        if (windowManager == null || !isAllowedForegroundPackage()) return;
 
         Point size = new Point();
         Display display = windowManager.getDefaultDisplay();
         display.getRealSize(size);
-        int w = size.x;
-        int h = size.y;
 
-        // Safe central area: avoids status/quick-settings region, bottom navigation,
-        // and the upper-right STOP overlay.
-        final float minX = w * 0.18f;
-        final float maxX = w * 0.82f;
-        final float minY = h * 0.22f;
-        final float maxY = h * 0.80f;
-
-        float startX = randomRange(w * 0.28f, w * 0.72f);
-        float startY = randomRange(h * 0.34f, h * 0.70f);
-
-        // Fully random direction: 0..360 degrees, so gestures may go up, down,
-        // left, right or diagonally. X/Y amplitudes are scaled to screen shape.
-        double angle = random.nextDouble() * Math.PI * 2.0;
-        float horizontalReach = randomRange(w * 0.18f, w * 0.34f);
-        float verticalReach = randomRange(h * 0.16f, h * 0.30f);
-
-        float endX = clamp(startX + (float) Math.cos(angle) * horizontalReach, minX, maxX);
-        float endY = clamp(startY + (float) Math.sin(angle) * verticalReach, minY, maxY);
-
-        // If clamping made the gesture too short, push it in the opposite random direction.
-        float dx = endX - startX;
-        float dy = endY - startY;
-        float minDistance = Math.min(w, h) * 0.14f;
-        if (Math.hypot(dx, dy) < minDistance) {
-            endX = clamp(startX - (float) Math.cos(angle) * horizontalReach, minX, maxX);
-            endY = clamp(startY - (float) Math.sin(angle) * verticalReach, minY, maxY);
-        }
-
-        long duration = 2_000L + random.nextInt(2_001); // 2–4 seconds
+        GesturePlan plan = GesturePlan.random(random, size.x, size.y);
 
         Path path = new Path();
-        path.moveTo(startX, startY);
-
-        // Curved control point adds small natural variation while staying safe.
-        float midX = clamp(
-                (startX + endX) / 2f + randomRange(-w * 0.08f, w * 0.08f),
-                minX,
-                maxX
-        );
-        float midY = clamp(
-                (startY + endY) / 2f + randomRange(-h * 0.05f, h * 0.05f),
-                minY,
-                maxY
-        );
-        path.quadTo(midX, midY, endX, endY);
+        path.moveTo(plan.startX, plan.startY);
+        path.quadTo(plan.midX, plan.midY, plan.endX, plan.endY);
 
         GestureDescription gesture = new GestureDescription.Builder()
-                .addStroke(new GestureDescription.StrokeDescription(path, 0, duration))
+                .addStroke(new GestureDescription.StrokeDescription(path, 0, plan.durationMs))
                 .build();
 
+        // This dispatches one continuous drag stroke; it never dispatches a tap/click action.
         dispatchGesture(gesture, null, null);
     }
 
