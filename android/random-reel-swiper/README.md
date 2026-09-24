@@ -5,9 +5,9 @@ Android app that performs user-enabled randomized upward swipes using Android's 
 ## Behavior
 
 - Random delay between swipes: **10–60 seconds**
-- Random central start/end coordinates
-- Random diagonal drift and slight curve
-- Random gesture duration: **280–800 ms**
+- Random central start/end coordinates and random direction (360°)
+- Random up/down/left/right/diagonal movement with a slight curve
+- Random gesture duration: **2–4 seconds**
 - Avoids the top and bottom screen regions
 - Floating **STOP** button in the upper-right corner while active
 - Does not inspect accessibility window contents
