@@ -1229,9 +1229,10 @@ def _phase5_recovery_plan(
     micro_recovery = bool(
         40_000_000 <= int(parameters) < 64_000_000
         and persisted_scale <= 0.0625
-        and (rejected >= 4 or recovery_hold or (last_segment_accepted and 0 < accepted_streak <= 3))
+        and (rejected >= 1 or recovery_hold or (last_segment_accepted and 0 < accepted_streak <= 3))
     )
     if micro_recovery:
+        stable_fast_lane = False
         micro_cap = 8_000 if accepted_streak < 2 else 16_000 if accepted_streak == 2 else 32_000
         segment_budget = min(int(segment_budget), micro_cap)
 
