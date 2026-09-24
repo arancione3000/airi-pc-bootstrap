@@ -72,8 +72,8 @@ public class AutoSwipeAccessibilityService extends AccessibilityService {
         running = true;
         showStopOverlay();
 
-        // Small randomized head-start so the user has time to open Reels.
-        handler.postDelayed(swipeRunnable, 2000L + random.nextInt(4001));
+        // The first swipe follows the same requested random 10–60 second interval.
+        scheduleNextSwipe();
     }
 
     public void stopAutomation() {
