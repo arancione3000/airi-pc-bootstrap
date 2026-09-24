@@ -4908,7 +4908,7 @@
       "tokens_processed": 32815853
     }
   ],
-  "segment_guard_consecutive_rejections": 8,
+  "segment_guard_consecutive_rejections": 9,
   "segment_guard_effective_budget_tokens": 31250,
   "segment_guard_last_accepted": false,
   "segment_guard_last_attempted_steps": 8,
@@ -4920,22 +4920,6 @@
   "segment_guard_recovery_hold": false,
   "segment_guard_recovery_mode": false,
   "segment_guard_rejections": [
-    {
-      "after_quality": -4.598761123334867,
-      "attempted_steps": 16,
-      "attempted_tokens": 65024,
-      "before_quality": -4.590417520156869,
-      "learning_rate_scale": 0.125,
-      "reasons": [
-        "lineage is below its durable language anchor and this segment did not measurably recover quality",
-        "language NLL exceeds durable anchor by more than 0.15",
-        "pathological repetition reappeared",
-        "generation similarity fell below durable anchor",
-        "multiword output rate fell below durable anchor"
-      ],
-      "recovery_mode": true,
-      "tokens_processed": 31799853
-    },
     {
       "after_quality": -4.6069576974540745,
       "attempted_steps": 16,
@@ -5376,6 +5360,19 @@
         "segment repetition rate regressed by more than 0.06",
         "segment generation similarity regressed",
         "repetition rate exceeds durable anchor by more than 0.08"
+      ],
+      "recovery_mode": false,
+      "tokens_processed": 32815853
+    },
+    {
+      "after_quality": -1.634400714236198,
+      "attempted_steps": 8,
+      "attempted_tokens": 32512,
+      "before_quality": -1.380095641496474,
+      "learning_rate_scale": 0.015625,
+      "reasons": [
+        "segment multiword output rate regressed",
+        "multiword output rate fell below durable anchor"
       ],
       "recovery_mode": false,
       "tokens_processed": 32815853
@@ -17506,7 +17503,7 @@
     "parameters": 50041536
   },
   "unique_corpus_target_tokens": 20000000,
-  "updated_at_unix": 1790227373,
+  "updated_at_unix": 1790228095,
   "valid_tokens_processed": 32821507,
   "version": "phase5-language-bootstrap-v3"
 }
