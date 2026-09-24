@@ -14,3 +14,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "RandomReelSwiper"
 include(":app")
+include(":safetyhost")
+include(":blockedhost")
