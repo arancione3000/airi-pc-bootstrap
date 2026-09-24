@@ -56,26 +56,27 @@ final class GesturePlan {
         }
 
         if (!found) {
-            // Extremely unlikely fallback: choose a long cardinal drag, never a tap.
-            int direction = random.nextInt(4);
-            float distance = minDimension * 0.35f;
-            switch (direction) {
-                case 0:
-                    endX = clamp(startX + distance, minX, maxX);
-                    chosenAngle = 0.0;
-                    break;
-                case 1:
-                    endY = clamp(startY + distance, minY, maxY);
-                    chosenAngle = Math.PI / 2.0;
-                    break;
-                case 2:
-                    endX = clamp(startX - distance, minX, maxX);
-                    chosenAngle = Math.PI;
-                    break;
-                default:
-                    endY = clamp(startY - distance, minY, maxY);
-                    chosenAngle = Math.PI * 1.5;
-                    break;
+            // Extremely unlikely fallback: use the cardinal direction with the most
+            // available room, guaranteeing a real drag rather than a near-tap.
+            float rightRoom = maxX - startX;
+            float downRoom = maxY - startY;
+            float leftRoom = startX - minX;
+            float upRoom = startY - minY;
+            float room = Math.max(Math.max(rightRoom, leftRoom), Math.max(downRoom, upRoom));
+            float distance = Math.min(room, minDimension * 0.35f);
+
+            if (room == rightRoom) {
+                endX = startX + distance;
+                chosenAngle = 0.0;
+            } else if (room == downRoom) {
+                endY = startY + distance;
+                chosenAngle = Math.PI / 2.0;
+            } else if (room == leftRoom) {
+                endX = startX - distance;
+                chosenAngle = Math.PI;
+            } else {
+                endY = startY - distance;
+                chosenAngle = Math.PI * 1.5;
             }
         }
 
