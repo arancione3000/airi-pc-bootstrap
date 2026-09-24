@@ -1,0 +1,67 @@
+name: Airi-PC Android Emulator Safety Test
+
+on:
+  push:
+    branches: [ random-reel-swiper-app ]
+    paths:
+      - 'android/random-reel-swiper/**'
+      - 'computer/**'
+      - '.github/workflows/random-reel-swiper-emulator-safety.yml'
+  workflow_dispatch:
+
+jobs:
+  emulator-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Start Airi-PC GUI runtime
+        env:
+          AIRI_EVOLUTION_DAEMON: '0'
+          AIRI_GENERALIST_ENABLE: '0'
+          AIRI_FORCE_RESTART: '1'
+          DISPLAY_NUM: '99'
+        run: |
+          chmod +x computer/start.sh
+          ./computer/start.sh | tee /tmp/airi-start.txt
+          curl -fsS http://127.0.0.1:9010/ready
+          curl -fsS http://127.0.0.1:9010/tools > /tmp/airi-tools.json
+
+      - name: Android emulator visual safety test
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          DISPLAY: ':99'
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: false
+          emulator-options: -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          working-directory: android/random-reel-swiper
+          script: bash emulator-safety-test.sh
+
+      - name: Upload safety evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RandomReelSwiper-safety-evidence
+          path: android/random-reel-swiper/test-artifacts/**
+          if-no-files-found: warn
