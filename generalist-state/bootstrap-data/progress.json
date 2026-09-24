@@ -4908,13 +4908,13 @@
       "tokens_processed": 32815853
     }
   ],
-  "segment_guard_consecutive_rejections": 0,
+  "segment_guard_consecutive_rejections": 1,
   "segment_guard_effective_budget_tokens": 250000,
-  "segment_guard_last_accepted": true,
+  "segment_guard_last_accepted": false,
   "segment_guard_last_attempted_steps": 62,
   "segment_guard_last_attempted_tokens": 251968,
-  "segment_guard_lr_scale": 0.0225,
-  "segment_guard_optimizer_reset_for_stall": false,
+  "segment_guard_lr_scale": 0.015625,
+  "segment_guard_optimizer_reset_for_stall": true,
   "segment_guard_recovery_accept_streak": 0,
   "segment_guard_recovery_budget_active": true,
   "segment_guard_recovery_hold": false,
@@ -5342,12 +5342,25 @@
       ],
       "recovery_mode": false,
       "tokens_processed": 32531373
+    },
+    {
+      "after_quality": -1.629900342766112,
+      "attempted_steps": 62,
+      "attempted_tokens": 251968,
+      "before_quality": -1.3800959590369228,
+      "learning_rate_scale": 0.0225,
+      "reasons": [
+        "segment repetition rate regressed by more than 0.06",
+        "repetition rate exceeds durable anchor by more than 0.08"
+      ],
+      "recovery_mode": false,
+      "tokens_processed": 32815853
     }
   ],
   "segment_guard_requested_budget_tokens": 1000000,
-  "segment_guard_rescue_stage": null,
+  "segment_guard_rescue_stage": "B_short_sentence_completion",
   "segment_guard_stable_fast_lane": true,
-  "segment_guard_stall_recovery_active": false,
+  "segment_guard_stall_recovery_active": true,
   "sft_accepted_rungs": [
     20000000
   ],
@@ -17469,7 +17482,7 @@
     "parameters": 50041536
   },
   "unique_corpus_target_tokens": 20000000,
-  "updated_at_unix": 1790219431,
+  "updated_at_unix": 1790221147,
   "valid_tokens_processed": 32821507,
   "version": "phase5-language-bootstrap-v3"
 }
