@@ -4908,7 +4908,7 @@
       "tokens_processed": 32815853
     }
   ],
-  "segment_guard_consecutive_rejections": 10,
+  "segment_guard_consecutive_rejections": 11,
   "segment_guard_effective_budget_tokens": 31250,
   "segment_guard_last_accepted": false,
   "segment_guard_last_attempted_steps": 8,
@@ -4920,22 +4920,6 @@
   "segment_guard_recovery_hold": false,
   "segment_guard_recovery_mode": false,
   "segment_guard_rejections": [
-    {
-      "after_quality": -4.558060603695093,
-      "attempted_steps": 8,
-      "attempted_tokens": 32512,
-      "before_quality": -4.556663859187991,
-      "learning_rate_scale": 0.0375,
-      "reasons": [
-        "lineage is below its durable language anchor and this segment did not measurably recover quality",
-        "language NLL exceeds durable anchor by more than 0.15",
-        "pathological repetition reappeared",
-        "generation similarity fell below durable anchor",
-        "multiword output rate fell below durable anchor"
-      ],
-      "recovery_mode": true,
-      "tokens_processed": 31832365
-    },
     {
       "after_quality": -4.555270322056345,
       "attempted_steps": 8,
@@ -5366,6 +5350,18 @@
       "attempted_steps": 8,
       "attempted_tokens": 32512,
       "before_quality": -1.380095641496474,
+      "learning_rate_scale": 0.015625,
+      "reasons": [
+        "repetition rate exceeds durable anchor by more than 0.08"
+      ],
+      "recovery_mode": false,
+      "tokens_processed": 32815853
+    },
+    {
+      "after_quality": -1.4051453111315626,
+      "attempted_steps": 8,
+      "attempted_tokens": 32512,
+      "before_quality": -1.3800959590369228,
       "learning_rate_scale": 0.015625,
       "reasons": [
         "repetition rate exceeds durable anchor by more than 0.08"
@@ -17499,7 +17495,7 @@
     "parameters": 50041536
   },
   "unique_corpus_target_tokens": 20000000,
-  "updated_at_unix": 1790228820,
+  "updated_at_unix": 1790229816,
   "valid_tokens_processed": 32821507,
   "version": "phase5-language-bootstrap-v3"
 }
