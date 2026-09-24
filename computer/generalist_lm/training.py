@@ -288,6 +288,50 @@ def causal_training_objective(
     return total, stats
 
 
+def reference_kl_loss(
+    student_logits,
+    reference_logits,
+    labels,
+    *,
+    temperature: float = 1.0,
+):
+    """Masked forward KL from a frozen reference to the live causal model.
+
+    Only supervised next-token positions participate.  This makes the helper
+    suitable for protected SFT replay where prompt tokens carry ``-100``
+    labels, while the temperature-squared correction keeps gradient scale
+    comparable across bounded temperatures.
+    """
+    import torch
+    from torch.nn import functional as F
+
+    if student_logits.shape != reference_logits.shape:
+        raise ValueError("student/reference logits must have identical shapes")
+    if student_logits.ndim != 3 or labels.ndim != 2:
+        raise ValueError("unexpected reference KL tensor rank")
+    if student_logits.shape[:2] != labels.shape:
+        raise ValueError("reference KL labels must match batch/time dimensions")
+
+    scale = max(0.25, min(4.0, float(temperature)))
+    student = student_logits[:, :-1, :].float() / scale
+    reference = reference_logits[:, :-1, :].float() / scale
+    valid = labels[:, 1:] != -100
+    token_count = int(valid.sum().item())
+    if token_count <= 0:
+        return student.sum() * 0.0, 0
+
+    reference_log_probs = F.log_softmax(reference, dim=-1)
+    reference_probs = reference_log_probs.exp()
+    student_log_probs = F.log_softmax(student, dim=-1)
+    token_kl = (
+        reference_probs * (reference_log_probs - student_log_probs)
+    ).sum(dim=-1)
+    loss = token_kl.masked_select(valid).mean().clamp_min(0.0) * (scale ** 2)
+    if not torch.isfinite(loss):
+        raise RuntimeError("non-finite protected reference KL")
+    return loss, token_count
+
+
 def train_sft(
     model,
     tokenizer: ByteTokenizer,

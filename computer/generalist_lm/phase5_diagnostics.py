@@ -10,6 +10,8 @@ from .tokenizer import EOS, BYTE_OFFSET, VOCAB_SIZE as BYTE_VOCAB_SIZE
 from .training import SFTExample, nll_stats_on_examples
 
 
+PHASE5_LANGUAGE_SUITE_VERSION = "phase5-language-holdout-v2"
+
 PHASE5_PROBES: tuple[dict[str, str], ...] = (
     {"language": "it", "prompt": "Ciao", "target": "Ciao!"},
     {"language": "it", "prompt": "Come ti chiami?", "target": "Mi chiamo AIRI."},
@@ -18,6 +20,22 @@ PHASE5_PROBES: tuple[dict[str, str], ...] = (
     {"language": "it", "prompt": "Scrivi tre parole italiane.", "target": "casa sole mare"},
     {"language": "en", "prompt": "Hello", "target": "Hello!"},
     {"language": "en", "prompt": "Write one simple sentence.", "target": "The cat is sleeping."},
+    {"language": "it", "prompt": "Descrivi una mattina di pioggia.", "target": "La pioggia bagna le strade al mattino."},
+    {"language": "it", "prompt": "Che cosa fa un insegnante?", "target": "Un insegnante aiuta gli studenti a imparare."},
+    {"language": "it", "prompt": "Continua: Oggi vorrei", "target": "fare una passeggiata nel parco."},
+    {"language": "it", "prompt": "Scrivi due parole gentili.", "target": "grazie prego"},
+    {"language": "en", "prompt": "Tell me one fact about birds.", "target": "Birds have feathers."},
+    {"language": "en", "prompt": "Complete: The grass is", "target": "green after the rain."},
+    {"language": "en", "prompt": "What does a teacher do?", "target": "A teacher helps students learn."},
+)
+
+PHASE5_CONVERSATIONAL_PROBES: tuple[str, ...] = (
+    "Ciao, come stai?",
+    "Come ti chiami?",
+    "Dimmi una cosa semplice sui gatti.",
+    "Che colore è il cielo?",
+    "Hello, how are you?",
+    "Tell me something about dogs.",
 )
 
 
@@ -30,7 +48,13 @@ def protected_bootstrap_texts() -> set[str]:
     for row in PHASE5_PROBES:
         out.add(_norm(row["prompt"]))
         out.add(_norm(row["target"]))
+    out.update(_norm(prompt) for prompt in PHASE5_CONVERSATIONAL_PROBES)
     return out
+
+
+def _word_tokens(text: str) -> list[str]:
+    """Return Unicode alphabetic words without treating spaces as words."""
+    return re.findall(r"[^\W\d_]+", str(text), flags=re.UNICODE)
 
 
 def _longest_run(ids: list[int]) -> int:
@@ -209,7 +233,7 @@ def evaluate_sft_validation(
         all_ids.extend(trace["generated_token_ids"])
         similarities.append(float(similarity))
         nonempty.append(bool(output.strip()))
-        word_outputs.append(bool(re.findall(r"[^\\W\\d_]+", output, flags=re.UNICODE)))
+        word_outputs.append(bool(_word_tokens(output)))
 
     nll = nll_stats_on_examples(
         runtime.model,
@@ -326,7 +350,7 @@ def evaluate_phase5_language(runtime, *, max_new_tokens: int = 48) -> dict[str, 
         similarities.append(float(similarity))
         exact.append(bool(is_exact))
         nonempty.append(bool(output.strip()))
-        words = re.findall(r"[^\\W\\d_]+", output, flags=re.UNICODE)
+        words = _word_tokens(output)
         word_outputs.append(bool(words))
         multiword_outputs.append(len(words) >= 2)
 
@@ -362,7 +386,7 @@ def evaluate_phase5_language(runtime, *, max_new_tokens: int = 48) -> dict[str, 
 
     return {
         "schema": 1,
-        "suite": "phase5-language-holdout-v1",
+        "suite": PHASE5_LANGUAGE_SUITE_VERSION,
         "suite_training_excluded": True,
         "prompt_count": len(PHASE5_PROBES),
         "language_nll": float(language_nll["nll_per_byte"]),
@@ -390,6 +414,34 @@ def evaluate_phase5_language(runtime, *, max_new_tokens: int = 48) -> dict[str, 
         },
         "dominant_token_fraction": float(dominant_fraction),
         "pathological_repetition": pathological,
+        "traces": traces,
+    }
+
+
+def evaluate_conversational_probes(
+    runtime,
+    *,
+    max_new_tokens: int = 32,
+) -> dict[str, Any]:
+    """Persist human-readable, training-excluded bilingual conversation traces."""
+    traces = []
+    for prompt in PHASE5_CONVERSATIONAL_PROBES:
+        trace = _single_greedy_trace(
+            runtime,
+            prompt,
+            max_new_tokens=max_new_tokens,
+        )
+        traces.append({
+            "prompt": prompt,
+            "output": str(trace.get("raw_output") or ""),
+            "generation_length": int(trace.get("generation_length", 0) or 0),
+            "repetition_rate": float(trace.get("repetition_rate", 0.0) or 0.0),
+        })
+    return {
+        "schema": 1,
+        "suite": "phase5-conversational-probe-v1",
+        "suite_training_excluded": True,
+        "prompt_count": len(traces),
         "traces": traces,
     }
 

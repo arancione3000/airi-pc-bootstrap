@@ -49,6 +49,9 @@ from generalist_lm.bootstrap_training import (
     _phase5_recovery_plan,
     _phase5_recovery_segment_budget,
     _phase5_success,
+    _protected_continual_plan,
+    _protected_optimizer,
+    _record_learning_efficiency,
     _rehabilitation_needed,
     _rehabilitation_replay_rows,
     _run_language_rehabilitation_stage,
@@ -69,6 +72,7 @@ from generalist_lm.pretraining import (
 from generalist_lm.phase5_diagnostics import (
     PHASE5_PROBES,
     _single_greedy_trace,
+    _word_tokens,
     degeneration_gate,
     evaluate_phase5_language,
     evaluate_sft_validation,
@@ -81,6 +85,7 @@ from generalist_lm.tokenizer import ByteTokenizer
 from generalist_lm.training import (
     SFTExample,
     causal_training_objective,
+    reference_kl_loss,
     train_sft_residual_recovery,
 )
 
@@ -168,6 +173,31 @@ def test_phase5_recovery_plan_escapes_old_lr_floor_and_resets_momentum():
 
 
 def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
+    first = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=0.0625,
+        consecutive_rejections=0,
+        recovery_hold=False,
+        last_segment_accepted=True,
+        success_streak=1,
+    )
+    assert first["effective_budget_tokens"] == 62_500
+    assert first["stable_fast_lane"] is False
+
+    second = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=0.0625,
+        consecutive_rejections=0,
+        recovery_hold=False,
+        last_segment_accepted=True,
+        success_streak=2,
+    )
+    assert second["effective_budget_tokens"] == 125_000
+
     plan = _phase5_recovery_plan(
         1_000_000,
         parameters=50_041_536,
@@ -176,6 +206,7 @@ def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
         consecutive_rejections=0,
         recovery_hold=False,
         last_segment_accepted=True,
+        success_streak=3,
     )
     assert plan["effective_budget_tokens"] == 250_000
     assert plan["parameter_cap_tokens"] == 250_000
@@ -258,6 +289,106 @@ def test_phase5_memory_plan_keeps_7m_fast_and_50m_bounded():
     assert micro == 2
     assert accumulation == 16
     assert micro * accumulation == 32
+
+
+def test_protected_continual_plan_strengthens_replay_near_anchor_cliff():
+    anchor = {
+        "repetition_rate": 0.19,
+        "multiword_output_rate": 0.86,
+        "pathological_repetition": False,
+    }
+    fragile = {
+        "repetition_rate": 0.27,
+        "multiword_output_rate": 0.71,
+        "pathological_repetition": False,
+    }
+    plan = _protected_continual_plan(
+        fragile,
+        anchor,
+        consecutive_rejections=3,
+        success_streak=0,
+    )
+    assert plan["replay_fraction"] == pytest.approx(0.20)
+    assert plan["replay_loss_weight"] == pytest.approx(0.25)
+    assert plan["reference_kl_weight"] == pytest.approx(0.50)
+    assert plan["anti_repetition_weight"] > 0.0
+    assert plan["optimizer"]["betas"] == [0.9, 0.95]
+
+    stable = dict(anchor)
+    stable["repetition_rate"] = 0.18
+    plan = _protected_continual_plan(
+        stable,
+        anchor,
+        consecutive_rejections=0,
+        success_streak=5,
+    )
+    assert plan["replay_fraction"] == pytest.approx(0.10)
+    assert plan["reference_kl_weight"] < 0.50
+
+
+def test_protected_optimizer_covers_model_once_and_favors_ffn():
+    pytest.importorskip("torch")
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=32,
+        d_model=32,
+        n_heads=4,
+        n_layers=2,
+        d_ff=96,
+        dropout=0.0,
+        tokenizer_version="byte-v1",
+    ).validate()
+    model = CausalTransformerLM(cfg)
+    optimizer, report = _protected_optimizer(model, learning_rate=1e-4)
+    expected = sum(parameter.numel() for parameter in model.parameters())
+    assert report["parameters"] == expected
+    assert report["parameter_groups"]["ffn"]["lr_multiplier"] == 1.0
+    assert report["parameter_groups"]["embeddings"]["lr_multiplier"] == 0.25
+    ids = [id(parameter) for group in optimizer.param_groups for parameter in group["params"]]
+    assert len(ids) == len(set(ids))
+
+
+def test_learning_efficiency_counts_only_accepted_new_tokens():
+    progress = {"tokens_processed": 1000}
+    plan = {
+        "replay_fraction": 0.20,
+        "reference_kl_weight": 0.50,
+    }
+    metrics = _record_learning_efficiency(
+        progress,
+        accepted=False,
+        attempted_tokens=32_000,
+        replay_tokens=2_000,
+        elapsed_training_seconds=360.0,
+        checkpoint_persist_seconds=0.0,
+        before={"language_nll": 2.4, "repetition_rate": 0.2, "multiword_output_rate": 0.8},
+        after={"language_nll": 2.3, "repetition_rate": 0.3, "multiword_output_rate": 0.8},
+        protected_plan=plan,
+        optimizer_report={"name": "AdamW"},
+        unique_corpus_target_tokens=32_000_000,
+        target_tokens=100_000_000,
+    )
+    assert metrics["attempted_tokens"] == 32_000
+    assert metrics["accepted_tokens"] == 0
+    assert metrics["rollback_rate"] == 1.0
+    metrics = _record_learning_efficiency(
+        progress,
+        accepted=True,
+        attempted_tokens=64_000,
+        replay_tokens=4_000,
+        elapsed_training_seconds=360.0,
+        checkpoint_persist_seconds=12.0,
+        before={"language_nll": 2.4, "repetition_rate": 0.2, "multiword_output_rate": 0.8},
+        after={"language_nll": 2.3, "repetition_rate": 0.2, "multiword_output_rate": 0.8},
+        protected_plan=plan,
+        optimizer_report={"name": "AdamW"},
+        unique_corpus_target_tokens=32_000_000,
+        target_tokens=100_000_000,
+    )
+    assert metrics["accepted_tokens"] == 64_000
+    assert metrics["effective_new_tokens"] == 64_000
+    assert metrics["acceptance_rate"] == pytest.approx(0.5)
+    assert metrics["unique_data_fraction"] == pytest.approx(0.32)
 
 
 def test_phase5_memory_plan_bounds_future_large_lineage():
@@ -533,7 +664,7 @@ def test_phase5_conversation_rescue_separates_unique_corpus_from_training_budget
     assert _bootstrap_corpus_target(5_000_000) == 5_000_000
     assert _bootstrap_corpus_target(20_000_000) == 5_000_000
     assert _bootstrap_corpus_target(50_000_000) == 5_000_000
-    assert _bootstrap_corpus_target(100_000_000) == 20_000_000
+    assert _bootstrap_corpus_target(100_000_000) == 32_000_000
     assert _bootstrap_corpus_target(250_000_000) == 40_000_000
     assert _bootstrap_corpus_target(500_000_000) == 60_000_000
     assert _bootstrap_corpus_target(1_000_000_000) == 100_000_000
@@ -1072,11 +1203,12 @@ def test_phase5_success_requires_multiword_output():
     assert ok, reasons
 
 def test_phase5_holdout_suite_is_explicit_and_protected():
-    assert len(PHASE5_PROBES) == 7
+    assert len(PHASE5_PROBES) == 14
     protected = protected_bootstrap_texts()
     assert "ciao" in protected
     assert "hello" in protected
     assert "write one simple sentence." in protected
+    assert "ciao, come stai?" in protected
 
 
 def test_bootstrap_sources_are_explicitly_licensed_and_pinned():
@@ -1341,6 +1473,33 @@ def test_anti_collapse_objective_penalizes_wrong_recent_token_mass():
     assert float(guarded.detach()) > float(base.detach())
     guarded.backward()
     assert torch.isfinite(logits.grad).all()
+
+
+def test_reference_kl_is_zero_for_same_model_and_pushes_student_back():
+    torch = pytest.importorskip("torch")
+    reference = torch.randn(2, 5, 16)
+    labels = torch.tensor([
+        [-100, -100, 4, 5, 6],
+        [-100, 7, 8, 9, 10],
+    ])
+    identical = reference.clone().requires_grad_(True)
+    zero, tokens = reference_kl_loss(identical, reference, labels)
+    assert tokens == 7
+    assert float(zero.detach()) == pytest.approx(0.0, abs=1e-6)
+
+    shifted = (reference + torch.linspace(0.0, 1.0, 16)).requires_grad_(True)
+    loss, tokens = reference_kl_loss(shifted, reference, labels)
+    assert tokens == 7
+    assert float(loss.detach()) > 0.0
+    loss.backward()
+    assert shifted.grad is not None
+    assert torch.isfinite(shifted.grad).all()
+
+
+def test_word_metric_counts_unicode_words_not_spaces_or_punctuation():
+    assert _word_tokens("The speciie.") == ["The", "speciie"]
+    assert _word_tokens("Grazie, prego!") == ["Grazie", "prego"]
+    assert _word_tokens("  ...  ") == []
 
 
 def test_anti_collapse_schedule_only_activates_for_measured_collapse():
