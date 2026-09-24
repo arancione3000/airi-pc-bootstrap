@@ -38,6 +38,8 @@ jobs:
           AIRI_GENERALIST_ENABLE: '0'
           AIRI_FORCE_RESTART: '1'
           DISPLAY_NUM: '99'
+          AIRIPC_WORKSPACE_ROOT: ${{ github.workspace }}
+          AIRI_ROOT: ${{ github.workspace }}
         run: |
           chmod +x computer/start.sh
           ./computer/start.sh | tee /tmp/airi-start.txt
