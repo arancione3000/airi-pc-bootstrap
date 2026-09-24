@@ -4748,15 +4748,15 @@
     "version": "phase5-language-rehabilitation-v1"
   },
   "last_objective": {
-    "causal_ce_loss": 1.434505581855774,
+    "causal_ce_loss": 1.4550577402114868,
     "eos_loss_weight": 1.6,
-    "repetition_negative_count": 2881,
-    "repetition_unlikelihood_loss": 0.012237888760864735,
+    "repetition_negative_count": 2910,
+    "repetition_unlikelihood_loss": 0.014729163609445095,
     "repetition_unlikelihood_weight": 0.05
   },
-  "last_train_loss": 1.420666553080082,
+  "last_train_loss": 1.4803815633058548,
   "last_validation_loss": 2.038058908035358,
-  "learning_rate": 4.419051244253194e-06,
+  "learning_rate": 3.6807046966123026e-06,
   "lineage_id": "airi-5d3d25177d2e83f7",
   "optimization_passes_target": 5.0,
   "optimizer_reset_after_language_rehabilitation": true,
@@ -4764,20 +4764,20 @@
   "optimizer_storage": {
     "files": [
       "optimizer.pt",
-      "optimizer-meta-9db1d7eb275a.pt",
-      "optimizer-shard-00001-of-00013-028de10d45bc.pt",
-      "optimizer-shard-00002-of-00013-d08956e53402.pt",
-      "optimizer-shard-00003-of-00013-1b9febc17c23.pt",
-      "optimizer-shard-00004-of-00013-2edcc9615025.pt",
-      "optimizer-shard-00005-of-00013-f86a5384a6f0.pt",
-      "optimizer-shard-00006-of-00013-5510ad2e3be3.pt",
-      "optimizer-shard-00007-of-00013-0d549576f554.pt",
-      "optimizer-shard-00008-of-00013-5d06932679f5.pt",
-      "optimizer-shard-00009-of-00013-2d980670ab26.pt",
-      "optimizer-shard-00010-of-00013-7c3b070dcec2.pt",
-      "optimizer-shard-00011-of-00013-ee087b5a8b22.pt",
-      "optimizer-shard-00012-of-00013-8c12df241378.pt",
-      "optimizer-shard-00013-of-00013-b97521b4cedf.pt"
+      "optimizer-meta-70be1ee6e1f8.pt",
+      "optimizer-shard-00001-of-00013-86ff19e61d79.pt",
+      "optimizer-shard-00002-of-00013-b42de71b214b.pt",
+      "optimizer-shard-00003-of-00013-45903c1c42ac.pt",
+      "optimizer-shard-00004-of-00013-1df747321e50.pt",
+      "optimizer-shard-00005-of-00013-b09c3bae1ac5.pt",
+      "optimizer-shard-00006-of-00013-bfe6c9b937c7.pt",
+      "optimizer-shard-00007-of-00013-581473f77d15.pt",
+      "optimizer-shard-00008-of-00013-462ed7007b33.pt",
+      "optimizer-shard-00009-of-00013-14ce4358747d.pt",
+      "optimizer-shard-00010-of-00013-1b255269c4fc.pt",
+      "optimizer-shard-00011-of-00013-6fa3a9d05afd.pt",
+      "optimizer-shard-00012-of-00013-550b4b2bd9ee.pt",
+      "optimizer-shard-00013-of-00013-88cdabb76709.pt"
     ],
     "raw_tensor_bytes": 400332688,
     "shards": 13,
@@ -4799,7 +4799,7 @@
     "validation_blocks": 7826,
     "version": "phase5-stage-block-cache-v1"
   },
-  "parameter_segment_cap_tokens": 250000,
+  "parameter_segment_cap_tokens": 62500,
   "rung_complete": false,
   "schema": 1,
   "segment_guard_acceptances": [
@@ -4890,15 +4890,23 @@
       "recovery_mode": false,
       "segment_tokens": 251968,
       "tokens_processed": 32531373
+    },
+    {
+      "after_quality": -1.461976081970828,
+      "before_quality": -1.4565972881642657,
+      "learning_rate_scale": 0.015625,
+      "recovery_mode": false,
+      "segment_tokens": 32512,
+      "tokens_processed": 32563885
     }
   ],
-  "segment_guard_consecutive_rejections": 1,
-  "segment_guard_effective_budget_tokens": 250000,
-  "segment_guard_last_accepted": false,
-  "segment_guard_last_attempted_steps": 62,
-  "segment_guard_last_attempted_tokens": 251968,
-  "segment_guard_lr_scale": 0.015625,
-  "segment_guard_optimizer_reset_for_stall": true,
+  "segment_guard_consecutive_rejections": 0,
+  "segment_guard_effective_budget_tokens": 31250,
+  "segment_guard_last_accepted": true,
+  "segment_guard_last_attempted_steps": 8,
+  "segment_guard_last_attempted_tokens": 32512,
+  "segment_guard_lr_scale": 0.01875,
+  "segment_guard_optimizer_reset_for_stall": false,
   "segment_guard_recovery_accept_streak": 0,
   "segment_guard_recovery_budget_active": true,
   "segment_guard_recovery_hold": false,
@@ -5329,9 +5337,9 @@
     }
   ],
   "segment_guard_requested_budget_tokens": 1000000,
-  "segment_guard_rescue_stage": "B_short_sentence_completion",
-  "segment_guard_stable_fast_lane": true,
-  "segment_guard_stall_recovery_active": true,
+  "segment_guard_rescue_stage": null,
+  "segment_guard_stable_fast_lane": false,
+  "segment_guard_stall_recovery_active": false,
   "sft_accepted_rungs": [
     20000000
   ],
@@ -17442,9 +17450,9 @@
       "word_output_rate": 1.0
     }
   },
-  "steps": 8005,
+  "steps": 8013,
   "target_tokens": 100000000,
-  "tokens_processed": 32531373,
+  "tokens_processed": 32563885,
   "training_resource_plan": {
     "context_length": 128,
     "effective_batch_size": 32,
@@ -17453,7 +17461,7 @@
     "parameters": 50041536
   },
   "unique_corpus_target_tokens": 20000000,
-  "updated_at_unix": 1790216723,
-  "valid_tokens_processed": 32537027,
+  "updated_at_unix": 1790217734,
+  "valid_tokens_processed": 32569539,
   "version": "phase5-language-bootstrap-v3"
 }
