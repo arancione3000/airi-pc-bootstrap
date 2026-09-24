@@ -4908,7 +4908,7 @@
       "tokens_processed": 32815853
     }
   ],
-  "segment_guard_consecutive_rejections": 2,
+  "segment_guard_consecutive_rejections": 3,
   "segment_guard_effective_budget_tokens": 31250,
   "segment_guard_last_accepted": false,
   "segment_guard_last_attempted_steps": 8,
@@ -5364,6 +5364,18 @@
       "learning_rate_scale": 0.015625,
       "reasons": [
         "segment repetition rate regressed by more than 0.06",
+        "repetition rate exceeds durable anchor by more than 0.08"
+      ],
+      "recovery_mode": false,
+      "tokens_processed": 32815853
+    },
+    {
+      "after_quality": -1.4395027964268516,
+      "attempted_steps": 8,
+      "attempted_tokens": 32512,
+      "before_quality": -1.3800959590369228,
+      "learning_rate_scale": 0.015625,
+      "reasons": [
         "repetition rate exceeds durable anchor by more than 0.08"
       ],
       "recovery_mode": false,
@@ -17495,7 +17507,7 @@
     "parameters": 50041536
   },
   "unique_corpus_target_tokens": 20000000,
-  "updated_at_unix": 1790222056,
+  "updated_at_unix": 1790223083,
   "valid_tokens_processed": 32821507,
   "version": "phase5-language-bootstrap-v3"
 }
