@@ -4751,26 +4751,34 @@
     "version": "phase5-language-rehabilitation-v1"
   },
   "last_objective": {
-    "causal_ce_loss": 1.2368061542510986,
+    "causal_ce_loss": 2.0786945819854736,
     "eos_loss_weight": 1.6,
-    "repetition_negative_count": 2882,
-    "repetition_unlikelihood_loss": 0.008990941569209099,
-    "repetition_unlikelihood_weight": 0.05
+    "protected_reference_kl_loss": 2.4231767383753322e-05,
+    "protected_reference_kl_weight": 0.5,
+    "protected_reference_tokens": 254,
+    "protected_replay_fraction": 0.2,
+    "protected_replay_loss": 2.189836025238037,
+    "protected_replay_loss_weight": 0.25,
+    "protected_replay_supervised_tokens": 254,
+    "repetition_negative_count": 3093,
+    "repetition_unlikelihood_loss": 0.00885805580765009,
+    "repetition_unlikelihood_weight": 0.05,
+    "segment_warmup_factor": 0.5
   },
-  "last_train_loss": 1.4668245539069176,
+  "last_train_loss": 1.557670995593071,
   "last_validation_loss": 2.0343909660975137,
   "learning_efficiency": {
-    "acceptance_rate": 0.0,
-    "accepted_segments": 0,
-    "accepted_tokens": 0,
-    "accepted_tokens_per_hour": 0.0,
-    "attempted_segments": 27,
-    "attempted_tokens": 877824,
-    "attempted_tokens_per_hour": 1153555.4908405738,
-    "checkpoint_persist_seconds": 0.0,
-    "cumulative_language_quality_gain": 0.0,
-    "effective_new_tokens": 0,
-    "elapsed_training_seconds": 2739.5009820439996,
+    "acceptance_rate": 0.03571428571428571,
+    "accepted_segments": 1,
+    "accepted_tokens": 8128,
+    "accepted_tokens_per_hour": 10551.4985954801,
+    "attempted_segments": 28,
+    "attempted_tokens": 885952,
+    "attempted_tokens_per_hour": 1150618.0350626057,
+    "checkpoint_persist_seconds": 1.2163651969999592,
+    "cumulative_language_quality_gain": 0.020631358737378203,
+    "effective_new_tokens": 8128,
+    "elapsed_training_seconds": 2771.9252634749996,
     "history": [
       {
         "accepted": false,
@@ -5176,9 +5184,24 @@
         "replay_fraction": 0.2,
         "replay_tokens": 1659,
         "updated_at_unix": 1790267560
+      },
+      {
+        "accepted": true,
+        "accepted_tokens": 8128,
+        "attempted_tokens": 8128,
+        "checkpoint_persist_seconds": 1.2163651969999592,
+        "elapsed_training_seconds": 32.424281431000054,
+        "language_nll_delta": -0.006044997382409711,
+        "language_quality_gain": 0.020631358737378203,
+        "multiword_delta": 0.0,
+        "reference_kl_weight": 0.5,
+        "repetition_delta": -0.011873100632738692,
+        "replay_fraction": 0.2,
+        "replay_tokens": 501,
+        "updated_at_unix": 1790269620
       }
     ],
-    "learning_gain_per_100k_tokens": 0.0,
+    "learning_gain_per_100k_tokens": 0.2538306931271925,
     "optimizer": {
       "betas": [
         0.9,
@@ -5225,15 +5248,15 @@
     },
     "reference_kl_weight": 0.5,
     "replay_fraction": 0.2,
-    "replay_tokens": 44409,
-    "rollback_rate": 1.0,
+    "replay_tokens": 44910,
+    "rollback_rate": 0.9642857142857143,
     "rollback_segments": 27,
     "started_tokens_processed": 32815853,
     "unique_data_fraction": 0.32,
-    "updated_at_unix": 1790267560,
+    "updated_at_unix": 1790269620,
     "version": "phase5-learning-efficiency-v1"
   },
-  "learning_rate": 4.399705452567038e-06,
+  "learning_rate": 1.8329796551985207e-06,
   "lineage_id": "airi-5d3d25177d2e83f7",
   "optimization_passes_target": 3.125,
   "optimizer_reset_after_language_rehabilitation": true,
@@ -5241,20 +5264,20 @@
   "optimizer_storage": {
     "files": [
       "optimizer.pt",
-      "optimizer-meta-b4ddd319209d.pt",
-      "optimizer-shard-00001-of-00013-63a08415aab8.pt",
-      "optimizer-shard-00002-of-00013-4abc88e0eba6.pt",
-      "optimizer-shard-00003-of-00013-a0fe127165d2.pt",
-      "optimizer-shard-00004-of-00013-50d602704bfa.pt",
-      "optimizer-shard-00005-of-00013-3ef385cf70fd.pt",
-      "optimizer-shard-00006-of-00013-e1b1a1088be6.pt",
-      "optimizer-shard-00007-of-00013-27acf8141435.pt",
-      "optimizer-shard-00008-of-00013-84944b6e35f7.pt",
-      "optimizer-shard-00009-of-00013-63a7271765f9.pt",
-      "optimizer-shard-00010-of-00013-3ef2f27ba174.pt",
-      "optimizer-shard-00011-of-00013-b8c552c88dcc.pt",
-      "optimizer-shard-00012-of-00013-3dfda4bfd7d7.pt",
-      "optimizer-shard-00013-of-00013-783f43f881d9.pt"
+      "optimizer-meta-68ffa82c8da6.pt",
+      "optimizer-shard-00001-of-00013-97c519f4d39d.pt",
+      "optimizer-shard-00002-of-00013-0e7b4b9d2b48.pt",
+      "optimizer-shard-00003-of-00013-f7d485e85d34.pt",
+      "optimizer-shard-00004-of-00013-3ba64f1b2ee0.pt",
+      "optimizer-shard-00005-of-00013-287a6ca4a849.pt",
+      "optimizer-shard-00006-of-00013-590ee791dd3f.pt",
+      "optimizer-shard-00007-of-00013-175463b60ae4.pt",
+      "optimizer-shard-00008-of-00013-aa79c97ba584.pt",
+      "optimizer-shard-00009-of-00013-60273b3c259e.pt",
+      "optimizer-shard-00010-of-00013-78e030ce47a9.pt",
+      "optimizer-shard-00011-of-00013-6155659b072d.pt",
+      "optimizer-shard-00012-of-00013-039c1a81afeb.pt",
+      "optimizer-shard-00013-of-00013-c293515bac69.pt"
     ],
     "raw_tensor_bytes": 400332688,
     "shards": 13,
@@ -5357,6 +5380,7 @@
     "tied_embedding_lm_head": true,
     "weight_decay": 0.01
   },
+  "protected_optimizer_migration_reset": false,
   "rung_complete": false,
   "schema": 1,
   "segment_guard_acceptances": [
@@ -5463,18 +5487,30 @@
       "recovery_mode": false,
       "segment_tokens": 251968,
       "tokens_processed": 32815853
+    },
+    {
+      "after_quality": -0.778518547347597,
+      "before_quality": -0.7991499060849752,
+      "elapsed_training_seconds": 32.424281431000054,
+      "learning_rate_scale": 0.015625,
+      "recovery_mode": true,
+      "reference_kl_weight": 0.5,
+      "replay_fraction": 0.2,
+      "replay_tokens": 501,
+      "segment_tokens": 8128,
+      "tokens_processed": 32823981
     }
   ],
-  "segment_guard_consecutive_rejections": 38,
-  "segment_guard_effective_budget_tokens": 31250,
-  "segment_guard_last_accepted": false,
-  "segment_guard_last_attempted_steps": 8,
-  "segment_guard_last_attempted_tokens": 32512,
+  "segment_guard_consecutive_rejections": 0,
+  "segment_guard_effective_budget_tokens": 8000,
+  "segment_guard_last_accepted": true,
+  "segment_guard_last_attempted_steps": 2,
+  "segment_guard_last_attempted_tokens": 8128,
   "segment_guard_lr_scale": 0.015625,
-  "segment_guard_optimizer_reset_for_stall": true,
-  "segment_guard_recovery_accept_streak": 0,
+  "segment_guard_optimizer_reset_for_stall": false,
+  "segment_guard_recovery_accept_streak": 1,
   "segment_guard_recovery_budget_active": true,
-  "segment_guard_recovery_hold": false,
+  "segment_guard_recovery_hold": true,
   "segment_guard_recovery_mode": true,
   "segment_guard_rejections": [
     {
@@ -5932,9 +5968,9 @@
   ],
   "segment_guard_requested_budget_tokens": 1000000,
   "segment_guard_rescue_stage": "B_short_sentence_completion",
-  "segment_guard_stable_fast_lane": true,
+  "segment_guard_stable_fast_lane": false,
   "segment_guard_stall_recovery_active": true,
-  "segment_guard_success_streak": 0,
+  "segment_guard_success_streak": 1,
   "sft_accepted_rungs": [
     20000000
   ],
@@ -18045,18 +18081,19 @@
       "word_output_rate": 1.0
     }
   },
-  "steps": 8075,
+  "steps": 8077,
   "target_tokens": 100000000,
-  "tokens_processed": 32815853,
+  "tokens_processed": 32823981,
   "training_resource_plan": {
     "context_length": 128,
     "effective_batch_size": 32,
     "gradient_accumulation_steps": 16,
     "micro_batch_size": 2,
-    "parameters": 50041536
+    "parameters": 50041536,
+    "protected_replay_micro_batch_size": 2
   },
   "unique_corpus_target_tokens": 32000000,
-  "updated_at_unix": 1790267560,
-  "valid_tokens_processed": 32821507,
+  "updated_at_unix": 1790269620,
+  "valid_tokens_processed": 32829635,
   "version": "phase5-language-bootstrap-v3"
 }
