@@ -1,8 +1,6 @@
 plugins {
     id("com.android.application")
-    testOptions { unitTests.isIncludeAndroidResources = false }
 }
-
 
 android {
     namespace = "com.airi.randomreelswiper"
@@ -12,8 +10,8 @@ android {
         applicationId = "com.airi.randomreelswiper"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     buildTypes {
@@ -26,6 +24,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = false
     }
 }
 
