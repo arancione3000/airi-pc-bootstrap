@@ -1,16 +1,204 @@
 {
-  "academic_fallback": null,
+  "academic_fallback": "openalex",
   "errors": [
     {
       "error": "HTTPError:HTTP Error 406: Not Acceptable",
       "provider": "arxiv"
-    },
-    {
-      "error": "HTTPError:HTTP Error 429: Too Many Requests",
-      "provider": "openalex"
     }
   ],
   "evidence": [
+    {
+      "digest": "54503246a54bfa5b3173653f73769b66eb06a38be8f2720bcb5cd8ef450c644e",
+      "provider": "openalex",
+      "published": "2026-12-31",
+      "source_id": "https://openalex.org/W7162095276",
+      "summary": "Online neural learning requires models that update after each incoming example, remain calibrated under distributional change, and avoid brittle gradient transmission. The original version of this work used a small static benchmark, a shallow model, few random seeds, and no significance tests. This revision reformulates the problem as genuine prequential online learning and introduces Smooth Online Activation Routing (SOAR), a Hedge-style routing algorithm over smooth activation experts trained by singleinstance adaptive updates. SOAR links activation smoothness with online regret through a prediction-with-expert-advice bound: the mixture incurs only logarithmic-exponential-weight overhead relative to the best activation expert in hindsight, while each expert uses diagonal adaptive online gradients. We evaluate two-hidden-layer online neural networks on eight streams, fourteen methods, thirteen comparators, and eight random seeds, yielding 896 fully reproducible runs. The benchmark includes four real scikit-learn data sets and four synthetic streaming tasks with stationary, nonlinear, gradual-drift, and sudden-drift regimes. Across all dataset-seed blocks, SOAR obtains the best mean final accuracy ( $92.56 \\%$ ), best mean negative log-likelihood ( 0.199 ), and best prequential accuracy ( $86.83 \\%$ ). Paired Wilcoxon and Holm-corrected tests show significant improvements over ReLU, LeakyReLU, ELU, Softplus, Adam, SGD, and the compact ablation; improvements over the strongest fixed TeLU activation are positive but not statistically significant. The results support a nuanced conclusion: adaptive smooth activation routing is a robust online-learning mechanism and the best overall method in this controlled benchmark suite, but fixed smooth activations remain highly competitive on small static data. topics=Data Stream Mining Techniques Domain Adaptation and Few-Shot Learning Stochastic Gradient Optimization Techniques oa=True oa_status=gold",
+      "tags": [
+        "dataset"
+      ],
+      "title": "SOAR: Smooth Online Activation Routing for Stable Neural Learning from Evolving Streams",
+      "url": "https://pub.respai.de/articles/1-2/3sniu.html"
+    },
+    {
+      "digest": "784184d3e830a08fb87e432cb71a909a2b29f9a03a4abc5dde126cda4cc6a379",
+      "provider": "openalex",
+      "published": "2026-12-31",
+      "source_id": "https://openalex.org/W7164183113",
+      "summary": "Do large language models (LLMs) possess a measurable \"personality,\" and how do the linguistic properties of training corpora shape their cognitive style and downstream reasoning? This paper approaches these questions from a sociolinguistic perspective on machine \"identity.\" This manuscript is positioned explicitly as a conceptual perspective paper: it does not present original experimental data, nor does it constitute a systematic review with defined search strategies or inclusion criteria. Instead, it synthesises key published findings into two original theoretical frameworks intended to guide future empirical and engineering work. We examine evidence that LLMs exhibit reliable, valid Big Five personality traits—particularly in large, instruction-tuned models—and that continued pre-training on domain-specific corpora may shape those traits through measurable linguistic features: imperative ratio, type-token ratio (TTR), and syntactic complexity. We then analyse how standard-language ideology embedded in training corpora is amplified in model outputs, disadvantaging dialect and minority-language communities. Building on these findings, we propose two conceptual contributions: (1) a Personality Engineering (PE) framework for targeted continued pre-training to cultivate task-appropriate cognitive profiles, and (2) a Language Ideology Propagation Model (LIPM) mapping the pipeline from corpus composition to societal impact. Both frameworks are explicitly conceptual and require empirical validation before they can function as operational guidelines. Their value lies in structuring future research and providing a shared vocabulary for cross-disciplinary collaboration, with direct implications for responsible AI deployment. topics=Artificial Intelligence in Healthcare and Education Language and cultural evolution Topic Modeling oa=True oa_status=gold",
+      "tags": [
+        "dataset",
+        "long-context",
+        "reasoning",
+        "tokenizer"
+      ],
+      "title": "The Sociolinguistics of Machine Identity: LLM Personality and Ideology Propagation",
+      "url": "https://pub.respai.de/articles/1-2/4gli.html"
+    },
+    {
+      "digest": "f9748eed553d4a6b48cc57f1b09523066d865c72fbf692be23339847900360b5",
+      "provider": "openalex",
+      "published": "2026-12-10",
+      "source_id": "https://openalex.org/W7197044566",
+      "summary": "Adeno-associated virus (AAV) vectors have demonstrated strong clinical efficacy across multiple monogenic disorders, yet neutralizing antibodies (NAbs) remain major barriers to vector redosing and durable transduction. To address this limitation, we developed a sequence-based artificial intelligence framework integrating Bidirectional Encoder Representations from Transformers (BERT) and Evolutionary Scale Modeling with Low-Rank Adaptation (ESM-LoRA) to identify human-tolerant, virus-specific motifs across human and viral proteins using sliding-window analyses and multi-layer fine-tuning. Using capsid-derived segments from AAV2 and AAV843, we prioritized surface-accessible, virus-polarized peptides as candidate decoys and evaluated their ability to block AAV-targeted antibodies. The models achieved high accuracy in distinguishing human versus viral fragments, and selected peptides bound AAV-specific antibodies with nanomolar affinity, competitively restored capsid binding, and recovered >60% of baseline transduction in the presence of NAbs. In mouse models with pre-existing or redosing-induced antibodies, coadministration of decoy peptides and an IgG-degrading enzyme reduced high-titer NAbs to approximately 1:4 and restored hepatic transgene expression without detectable inflammatory or peptide-specific immune responses. A contrastive variational autoencoder (VAE) further generated non-natural peptides with broader epitope coverage. These results support sequence-driven AI design of short, low-immunogenicity decoy peptides as a translational strategy to mitigate NAb interference and enhance the feasibility of AAV redosing. topics=Virus-based gene therapy research vaccines and immunoinformatics approaches Monoclonal and Polyclonal Antibodies Research oa=True oa_status=green",
+      "tags": [],
+      "title": "Sequence-based artificial intelligence-guided inhibitory peptides to counteract AAV neutralizing antibodies in gene therapy.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/42740894"
+    },
+    {
+      "digest": "7a2500e5a39f548ac4be9e0cebe6ddbe3be2c72953a60a3561eba96050e262fe",
+      "provider": "openalex",
+      "published": "2026-09-23",
+      "source_id": "https://openalex.org/W4415241254",
+      "summary": "Lorentz Local Canonicalization (LLoCa) ensures exact Lorentz-equivariance for arbitrary neural networks with minimal computational overhead. For the LHC, it equivariantly predicts local reference frames for each particle and propagates any-order tensorial information between them. We apply it to graph networks and transformers. We showcase its cutting-edge performance on amplitude regression, end-to-end event generation, and jet tagging. For jet tagging, we introduce a large top tagging dataset to benchmark LLoCa versions of a range of established benchmark architectures and highlight the importance of symmetry breaking. topics=Relativity and Gravitational Theory Noncommutative and Quantum Gravity Theories Quantum Mechanics and Applications oa=True oa_status=diamond",
+      "tags": [
+        "dataset"
+      ],
+      "title": "Lorentz-equivariance without limitations",
+      "url": "https://doi.org/10.21468/scipostphyscore.9.3.058"
+    },
+    {
+      "digest": "b06de944537f3ee36f18fcfa5152c0337ff9e9fb5833e5ae968777f9fa98ab39",
+      "provider": "openalex",
+      "published": "2026-09-23",
+      "source_id": "https://openalex.org/W7214029437",
+      "summary": "Compression of a transformer's KV cache is usually reported as one number: the fraction of full-context quality retained. We ask what the missing fraction is made of. Training only 3.67M memory-slot parameters with the backbone frozen, we find that fraction is set by a single property of the task—how much of the answer can be copied from the context rather than inferred. Splitting predicted tokens on that property separates them sharply: tokens that never appeared recover at +202%, above the verbatim cache they replace, while tokens seen exactly once reach +45%. Posed as a task—recover a random five-digit code hidden in the context—64 learned slots answer none of 150 trials and leave the model worse off than with no context at all, while 84 verbatim entries answer 98% when they are the right ones. The same property says where each kind of memory pays. On held-out text, 64 learned slots are worth as much as 576 entries selected by H2O, and giving 64 of H2O's 576 entries to the slots recovers 101% of the gap, more than the full cache. On the needle task the slots are dead weight and everything rests on selection: SnapKV with the question in its window answers 99%, the same policies committing before the question arrives answer at most 20%, and our own retrieval, one set of positions shared by every layer, answers 12%. Across 0.6B to 14B each resource alone is flat, while what the slots add behind a fixed selection peaks at 1.7B–4B and halves by 14B. We also quantify two measurement hazards: fine-tuning the backbone improves the no-context baseline by 0.58 nats, inflating every relative compression metric, and pooling scale points measured under different quantisation and corpora manufactured a clean monotone trend that a controlled sweep does not show. This version corrects a bug in version 1's attention scoring and every conclusion that rested on it. Version 2 corrects a bug in version 1 and every conclusion that rested on it. The bug: every policy that selects context by attention — our deployable retrieval and our implementations of H2O and SnapKV — recomputed attention by hand without applying the rotary position embedding to the query, while the cached keys carry it. The scores were therefore not the model's attention (on a test sequence, 1 of 32 top positions agreed). Version 2 rotates the query and checks hand-computed attention against the eager implementation at every layer before any experiment runs. What changed:- Baselines: H2O and SnapKV now sel topics=Algorithms and Data Compression Parallel Computing and Optimization Techniques Information Retrieval and Search Behavior oa=True oa_status=green",
+      "tags": [
+        "efficiency",
+        "long-context"
+      ],
+      "title": "What Context Compression Cannot Buy: Diagnosing the Recall Ceiling with a Frozen Backbone",
+      "url": "https://doi.org/10.5281/zenodo.22897853"
+    },
+    {
+      "digest": "d24ab6c7c267df9a9991fa17f77d00285cbdf924ed3bb389da94ec505c13563f",
+      "provider": "openalex",
+      "published": "2026-09-23",
+      "source_id": "https://openalex.org/W7214096856",
+      "summary": "Compression of a transformer's KV cache is usually reported as one number: the fraction of full-context quality retained. We ask what the missing fraction is made of. Training only 3.67M memory-slot parameters with the backbone frozen, we find that fraction is set by a single property of the task—how much of the answer can be copied from the context rather than inferred. Splitting predicted tokens on that property separates them sharply: tokens that never appeared recover at +202%, above the verbatim cache they replace, while tokens seen exactly once reach +45%. Posed as a task—recover a random five-digit code hidden in the context—64 learned slots answer none of 150 trials and leave the model worse off than with no context at all, while 84 verbatim entries answer 98% when they are the right ones. The same property says where each kind of memory pays. On held-out text, 64 learned slots are worth as much as 576 entries selected by H2O, and giving 64 of H2O's 576 entries to the slots recovers 101% of the gap, more than the full cache. On the needle task the slots are dead weight and everything rests on selection: SnapKV with the question in its window answers 99%, the same policies committing before the question arrives answer at most 20%, and our own retrieval, one set of positions shared by every layer, answers 12%. Across 0.6B to 14B each resource alone is flat, while what the slots add behind a fixed selection peaks at 1.7B–4B and halves by 14B. We also quantify two measurement hazards: fine-tuning the backbone improves the no-context baseline by 0.58 nats, inflating every relative compression metric, and pooling scale points measured under different quantisation and corpora manufactured a clean monotone trend that a controlled sweep does not show. This version corrects a bug in version 1's attention scoring and every conclusion that rested on it. Version 2 corrects a bug in version 1 and every conclusion that rested on it. The bug: every policy that selects context by attention — our deployable retrieval and our implementations of H2O and SnapKV — recomputed attention by hand without applying the rotary position embedding to the query, while the cached keys carry it. The scores were therefore not the model's attention (on a test sequence, 1 of 32 top positions agreed). Version 2 rotates the query and checks hand-computed attention against the eager implementation at every layer before any experiment runs. What changed:- Baselines: H2O and SnapKV now sel topics=Parallel Computing and Optimization Techniques Logic, programming, and type systems Natural Language Processing Techniques oa=True oa_status=green",
+      "tags": [
+        "efficiency",
+        "long-context"
+      ],
+      "title": "What Context Compression Cannot Buy: Diagnosing the Recall Ceiling with a Frozen Backbone",
+      "url": "https://doi.org/10.5281/zenodo.22913648"
+    },
+    {
+      "digest": "8102f9abd24b61fea603c0731dd8ce75a0b119673c86ffece6b649359bf82db1",
+      "provider": "openalex",
+      "published": "2026-09-22",
+      "source_id": "https://openalex.org/W4402954341",
+      "summary": "We present a framework for assistive robot manipulation that addresses two fundamental challenges: efficient adaptation of large-scale models for scene affordance understanding and effective learning of robot actions by grounding the visual affordance. To tackle the first challenge, we adopt a parameter-efficient prompt tuning method, prepending learnable text prompts to a frozen vision model to predict affordances, while considering spatial and semantic relationships in multi-task scenarios. For the second challenge, we propose a flow matching method, representing a robot visuomotor policy as a conditional process of flowing random waypoints to desired robot actions. We introduce a real-world dataset with 10 tasks to evaluate our approach. Experiments show our prompt tuning method achieves competitive or superior performance to other finetuning protocols across data scales, while satisfying parameter efficiency. Furthermore, flow matching yields more stable training and faster inference compared to diffusion policy; specifically, 1-step flow matching achieves comparable accuracy to 16-step DDIM while reducing inference time by roughly 85%. Our framework seamlessly unifies high-level parameter-efficient affordance representation learning with low-level flow matching policies, illustrating how explicit affordances serve as effective spatial grounding for flow-based policies. https://github.com/HRI-EU/flow_matching . topics=Reinforcement Learning in Robotics Robot Manipulation and Learning oa=True oa_status=gold",
+      "tags": [
+        "dataset",
+        "efficiency"
+      ],
+      "title": "Affordance-based robot manipulation with flow matching",
+      "url": "https://doi.org/10.3389/frobt.2026.1906861"
+    },
+    {
+      "digest": "b24c43fd8fcf30b38f4095cd12786f7b4bb939c44661deb9c00d10e341246965",
+      "provider": "openalex",
+      "published": "2026-09-22",
+      "source_id": "https://openalex.org/W7214098864",
+      "summary": "Visual object removal can eliminate a target from video frames, yet its acoustic trace persists in the soundtrack, causing obvious audio-visual inconsistency. Existing video inpainting models operate solely on pixels, while audio editing models, especially for the sound removal task, are typically driven by text and therefore rely on limited single-modal control, which is less effective than multimodal guidance that provides stronger semantic grounding and temporal synchronization cues. In this paper, we present Text-Visual Guided Sound Removal (TV-AudioRemover), a target sound removal framework that leverages the visually edited video together with a natural-language instruction to suppress the sound associated with the removed visual object from the original audio mixture. To acquire high-quality training data, we devise a pipeline to construct a million-scale dataset of single-object audio-visual aligned samples, from which we synthesize mixture-target pairs customized for model training. To effectively leverage visual context and follow instruction intent, we augment the model architecture with task tokens, generalizable instruction modeling, and modality-specific global guidance. We further adopt multi-task training to strengthen task-role comprehension, and employ a hard-mixture curriculum that leverages semantically similar acoustic mixtures during fine-tuning to enhance fine-grained source discrimination. To support evaluation, we present AV-Remove-Bench, a comprehensive audio-visual object removal benchmark, along with dedicated objective metrics and an MLLM-based evaluation protocol. Experiments demonstrate that our method achieves state-of-the-art performance on both subjective and objective metrics. Project page: https://yjx-research.github.io/TV-AudioRemover/. topics=Generative Adversarial Networks and Image Synthesis Speech and Audio Processing Image Enhancement Techniques oa=True oa_status=green",
+      "tags": [
+        "curriculum",
+        "dataset"
+      ],
+      "title": "TV-AudioRemover: Joint Text-Visual Guided Sound Removal with Multi-Task Hard-Mixture Curriculum",
+      "url": "https://doi.org/10.48550/arxiv.2609.25864"
+    },
+    {
+      "digest": "f3051bf935d8bcc6ac50e40af57274d36b1ea77b6404333cc8dd1b19a5ea634a",
+      "provider": "openalex",
+      "published": "2026-09-19",
+      "source_id": "https://openalex.org/W7213591856",
+      "summary": "topics=Islamic Studies and History Gender and Women's Rights Marriage and Sexual Relationships oa=True oa_status=green",
+      "tags": [],
+      "title": "Islam and Feminism: A Qualitative Documentary Analysis of Gender, Marital Rights, and Public Authority in Selected Islamic Texts and Juristic Traditions",
+      "url": "https://doi.org/10.21203/rs.3.rs-11069744/v1"
+    },
+    {
+      "digest": "2e1ae82b21263959c7e909791070fa9da677f73c1a697c10ea822c0f7686744a",
+      "provider": "openalex",
+      "published": "2026-09-19",
+      "source_id": "https://openalex.org/W7213617200",
+      "summary": "Abstract Large language models write code fluently, yet the programs they produce carry defect rates that ordinary functional evaluation seldom exposes, and detection systems that could catch these faults act too late to shape the generation that created them. This paper argues that generation and detection should be optimized together rather than in sequence, and it makes that argument concrete through one specific coupling: the detector’s node-level risk estimates are mapped back onto decoder positions and used to reweight the generation loss token by token, while a composite reward built from test outcomes and defect probability supplies a second, sampled gradient. Generator and detector are updated in alternation under a bounded schedule; failed candidates re-enter the detector’s training stream, and twelve mutation operators widen its exposure to underrepresented fault families. Using Qwen2.5-Coder-7B-Instruct as the generator and a gated graph neural network as the detector, and averaging five independent seeds, the coupled method lowered the defect rate of test-passing code from 0.216 ± 0.008 to 0.128 ± 0.008 while raising pass@10 from 0.724 ± 0.008 to 0.761 ± 0.008. Every defect rate reported here is scored by a reference detector frozen outside the loop, so the improvement cannot be an artefact of a critic grading its own pupil. Detection F1 rose from 0.627 ± 0.011 to 0.681 ± 0.011, although that gain confounds the coupling with the larger training stream the coupled detector receives. Ablation isolates token-level blame assignment as the component doing most of the work, and a controlled error-injection study quantifies how far detector mistakes propagate into generation. The evidence is confined to function-level Python and C, and concurrency faults remain resistant, so the claims made here are deliberately bounded to that setting; code, configurations and per-seed records accompany the submission so the boundary can be tested directly. topics=Software Testing and Debugging Techniques Software Engineering Research Software Reliability and Analysis Research oa=True oa_status=gold",
+      "tags": [
+        "code",
+        "optimizer"
+      ],
+      "title": "Token-level defect feedback and alternating optimization for coupled code generation and defect detection with large language models",
+      "url": "https://doi.org/10.1038/s41598-026-71524-z"
+    },
+    {
+      "digest": "94bf75b3e1b3bc2cdb730da44a5634fa27b1deb48b9797d329a57683f94319a6",
+      "provider": "openalex",
+      "published": "2026-10-01",
+      "source_id": "https://openalex.org/W7202008909",
+      "summary": "Modern software systems evolve rapidly under CI/CD practices, where tests are critical for quality. However, substantial code changes often render existing test cases obsolete, causing pipeline disruptions, reduced productivity, and compromised quality. Recent automatic test update approaches leverage LLMs to refine test cases via execution feedback and exact-matching context retrieval, prioritizing executability and line coverage but suffering three limitations: (1) neglecting test assertion adequacy, weakening fault detection; (2) relying on coarse line coverage instead of specific uncovered lines/branches; (3) using exact-matching retrieval, which fails for LLM hallucinated queries. To address these, we propose MuMuTestUp, a mutation-guided multi-agent framework with three specialized agents: Mutation Analysis (strengthens assertions via surviving mutants), Coverage Analysis (generates targeted repair instructions for uncovered lines/branches), and Semantic Retrieval (handles hallucinations via semantic-similarity search). We also construct PRBENCH, a 571-sample pull-request-level dataset from 10 open-source Java projects (validated for cross-commit update scenarios). Evaluations against state-of-the-art baselines use both open-source (Deepseek-V3.2) and closed-source (GPT-4.1) LLMs. topics=Software Testing and Debugging Techniques Software Engineering Research Software System Performance and Reliability oa=True oa_status=green",
+      "tags": [
+        "dataset"
+      ],
+      "title": "Mutation-based multi-agent test case update",
+      "url": "https://ink.library.smu.edu.sg/sis_research/11196"
+    },
+    {
+      "digest": "e0090c19644d5c607a9f57d69cd1a2504e2c7949445d56661e8c71c2dcd8e5c2",
+      "provider": "openalex",
+      "published": "2026-09-23",
+      "source_id": "https://openalex.org/W7204236562",
+      "summary": "How can humans make sense of the rapid takeoff of artificial intelligence (AI)? We studied the sensemaking dynamics of AI through an open-ended, mixed-methods study with computational text analysis of millions of AI-related newspaper articles and social media posts grounded in 57 semi-structured interviews with AI professionals in 2021 and 2023—before and after the recent surge of public interest. We identify a range of sociological frames (interpretive schemas that structure collective cognition) and show how AI professionals use frames to address significant cognitive challenges, such as assigning responsibility for societal impacts. We develop a framework of three primary debates across which frames are adopted and contested: (i) the method of AI development, between frames of top-down expert systems and bottom-up emergent capabilities, (ii) the mind of an AI system, ranging from a passive tool to a humanlike “digital mind,” and (iii) the morality of how AI is used, particularly the decision of whether to slow down or speed up AI development. As humanity enters the era of transformative AI, technologists and policymakers must account for the framing dynamics that will circumscribe our beliefs, values, and actions. topics=Ethics and Social Impacts of AI Computational and Text Analysis Methods Artificial Intelligence in Healthcare and Education oa=True oa_status=hybrid",
+      "tags": [],
+      "title": "Method, Mind, and Morality: How People Make Sense of Artificial Intelligence",
+      "url": "https://doi.org/10.1145/3816971"
+    },
+    {
+      "digest": "cfff4c61557567932c6988c9220527fc697021ca9afe496b37d902faa630cabe",
+      "provider": "openalex",
+      "published": "2026-09-22",
+      "source_id": "https://openalex.org/W7214013155",
+      "summary": "Malignant peripheral nerve sheath tumors (MPNSTs) are aggressive sarcomas that arise sporadically or in the setting of neurofibromatosis type 1 (NF1). Although benign plexiform neurofibromas (PNs) are common in NF1, only a subset undergo malignant transformation, and the molecular events that define high-risk progression remain incompletely understood. A major axis of biological heterogeneity in MPNST is loss of Polycomb Repressive Complex 2 (PRC2), commonly detected through loss of H3K27me3 and frequently mediated by alterations in SUZ12 or EED. This dissertation integrates three manuscript-based studies to define genomic resources, tumor-intrinsic vulnerabilities, and immune microenvironmental remodeling in NF1-associated peripheral nerve sheath tumors, with emphasis on PRC2-loss versus PRC2-retained disease. Chapter 1 presents an updated Johns Hopkins NF1 biospecimen repository dataset, including whole-exome and RNA sequencing from NF1-associated peripheral nerve sheath tumors. This resource provides standardized, reusable genomic data from cutaneous neurofibromas, plexiform neurofibromas, atypical neurofibromatous neoplasms of uncertain biologic potential, diffuse neurofibromas, and MPNSTs. The dataset validates expected NF1-associated genomic patterns and supports broad reanalysis by the NF1 research community. Chapter 2 investigates the chromatin and signaling consequences of PRC2 deficiency in MPNST. Integrative epigenomic, transcriptomic, and proteomic profiling demonstrates that PRC2 loss produces coordinated depletion of H3K27me3 and gain of active chromatin features, activating a fetal-like growth program centered on IGF2 and IGF2BP family members. Functional experiments show that PRC2-deficient MPNST cells are selectively dependent on IGF2 signaling, nominating the IGF2-IGF2BP axis as a therapeutic vulnerability. Chapter 3 integrates whole-exome sequencing, bulk and single-cell transcriptomics, quantitative proteomics, histone post-translational modification profiling, and imaging mass cytometry in paired PN and MPNST specimens. These analyses reveal that PRC2-loss tumors follow distinct evolutionary routes and establish an immunosuppressive spatial ecosystem marked by M2 macrophages, regulatory T cells, reduced cytotoxic T-cell access, and attenuated interferon and antigen-presentation programs. In vivo validation in immunocompetent syngeneic models demonstrates selective suppression of SUZ12KO tumor growth by the CSF1R inhibitor pexidartinib, topics=Neurofibromatosis and Schwannoma Cases Sarcoma Diagnosis and Treatment Meningioma and schwannoma management oa=True oa_status=green",
+      "tags": [
+        "dataset"
+      ],
+      "title": "Dissecting Tumor Evolution and Immune Composition in PRC2 Loss (H3K27me3 Loss) vs Retained MPNST",
+      "url": "https://openscholarship.wustl.edu/art_sci_etds/3882"
+    },
+    {
+      "digest": "679ef6b017141a68fe0bd17ae328fd66614ba102d4578791ea3bade481623e50",
+      "provider": "openalex",
+      "published": "2026-09-21",
+      "source_id": "https://openalex.org/W7134093810",
+      "summary": "Intelligent systems increasingly have more decision-relevant capabilities and resources than they can use everywhere at once. This paper develops intelligence by appointment as a research program for making the right capability present at the right place and moment without surrendering continuing coverage, resource limits, deadlines, or bounded authority. An appointment is a temporary, governed, and revocable grant over capability, placement, time, resources, protected reserve, state, authority, and exit. The paper develops an eight-commitment reference kernel, an appointment control plane, an intermediate representation, runtime enforcement and evidence mechanisms, and a matched experimental program for determining when appointment machinery earns its complexity. Embodied intelligent systems provide the primary proving ground, while device–edge–cloud systems, tool-using AI, scientific workflows, and other heterogeneous systems test whether the abstraction transfers. The broader research question is whether intelligence should be treated less as a permanently installed property of components and more as a capability that systems can deliberately place, constrain, observe, revoke, and recover. The paper also develops a forward-looking engineering agenda spanning compilers, runtimes, hardware substrates, assurance, adversarial appointment capture, state lifecycle, and trace-driven co-design. Brad Pierce developed the central formulation and retains final editorial responsibility. An AI language model assisted in preparing the paper. topics=Big Data and Digital Economy Advanced Neural Network Applications IoT and Edge/Fog Computing oa=True oa_status=green",
+      "tags": [
+        "long-context"
+      ],
+      "title": "Intelligence by Appointment",
+      "url": "http://arxiv.org/abs/2603.05225"
+    },
+    {
+      "digest": "eb43e43640f390e9c25e05d2aea73573fd79ffaed2fa04ba370f179ef277db9b",
+      "provider": "openalex",
+      "published": "2026-09-23",
+      "source_id": "https://openalex.org/W4416756394",
+      "summary": "In AI, existential risk denotes the hypothetical threat posed by an artificial system that would possess both the capability and the objective, either directly or indirectly, to eradicate humanity. This issue is gaining prominence in scientific debate due to recent technical advancements and increased media coverage. In parallel, AI progress has sparked speculation and studies about the potential emergence of artificial consciousness. The two questions, AI consciousness and existential risk, are sometimes conflated, as if the former entailed the latter. Here, I explain that this view stems from a common confusion between consciousness and intelligence. Yet these two properties are empirically and theoretically distinct. Arguably, while intelligence is a direct predictor of an AI system’s existential threat, consciousness is not. There are, however, certain incidental scenarios in which consciousness could influence existential risk, in either direction. Consciousness could be viewed as a means towards AI alignment, thereby lowering existential risk; or, it could be a precondition for reaching certain capabilities or levels of intelligence, and thus positively related to existential risk. Recognizing these distinctions can help AI safety researchers and public policymakers focus on the most pressing issues. topics=Psychology of Moral and Emotional Judgment Neuroethics, Human Enhancement, Biomedical Innovations Space Science and Extraterrestrial Life oa=True oa_status=green",
+      "tags": [
+        "long-context"
+      ],
+      "title": "AI Consciousness and Existential Risk",
+      "url": "https://doi.org/10.1142/s2705078526500049"
+    },
+    {
+      "digest": "9d766219189e04f08073511c60b68c8baae406bf41bab91d456835d9e2153e21",
+      "provider": "openalex",
+      "published": "2026-09-21",
+      "source_id": "https://openalex.org/W7213740059",
+      "summary": "This narrative inquiry explored the perspectives of three professional art therapists of color. This study explored the past experience of being a graduate art therapy student of color on several levels. It also explored the impact of cultural competency course in relation to the experience of being a student of color. This experience is important in terms of how being an ethnic minority can affect the learning environment in relation to graduate experience of students of color and how cultural competency is taught to all students. This study explored the art recommendations of therapy professionals of color for cultural competency in art therapy education. The narrative inquiry was conducted at the annual 2006 American Art Therapy Association Conference. Three interviews were recorded and transcribed and analyzed using the Zoom Model. Narrative themes that surfaced suggest there is no consistency in the perception of the graduate art therapy student of color experience. Each of the participants had different individual experiences which were unique. This study is important because it attempts to cover the depth and breadth of the student of color experience in graduate school. topics=Art Therapy and Mental Health Counseling Practices and Supervision Occupational Therapy Practice and Research oa=True oa_status=green",
+      "tags": [],
+      "title": "Graduate Art Therapy Experience of Students of Color",
+      "url": "https://digitalcommons.odu.edu/evmshealthprofessions_etds/41"
+    },
     {
       "digest": "583ae7d0855ccd7077da2dd654c6ca2a48cfd350db05d726f8e40efce83c6768",
       "provider": "github",
@@ -107,60 +295,25 @@
       ],
       "title": "OpenMOSS/rope_pp",
       "url": "https://github.com/OpenMOSS/rope_pp"
-    },
-    {
-      "digest": "0697e07bce493c93f138eb0909c55c6cd9b0ac579d5549dcc0731364d41e47e5",
-      "provider": "github",
-      "published": "2026-07-30T16:06:30Z",
-      "source_id": "aneeshads/ERA5-session-5-assignment",
-      "summary": "A Data Mixture and Curriculum Specification for a 40-Billion-Parameter India-First Language Model license=unknown topics= stars=0",
-      "tags": [
-        "curriculum"
-      ],
-      "title": "aneeshads/ERA5-session-5-assignment",
-      "url": "https://github.com/aneeshads/ERA5-session-5-assignment"
-    },
-    {
-      "digest": "5f09573180ba614685a97c74717b363f9274f3f64f3e421618b5a3e0b331846b",
-      "provider": "github",
-      "published": "2026-08-18T01:25:34Z",
-      "source_id": "bcode0127-debug/Compositional-Reasoning-Arithmetic",
-      "summary": "Comparing LSTM and Transformer architectures for mathematical reasoning license=unknown topics= stars=1",
-      "tags": [
-        "reasoning"
-      ],
-      "title": "bcode0127-debug/Compositional-Reasoning-Arithmetic",
-      "url": "https://github.com/bcode0127-debug/Compositional-Reasoning-Arithmetic"
-    },
-    {
-      "digest": "18455c5013ecc83bdfeb6c702bf24c0c157221a3dcf0686740ac54b2e1c1d6fd",
-      "provider": "github",
-      "published": "2026-06-16T16:08:29Z",
-      "source_id": "deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System",
-      "summary": "Developed an AI-powered Physics Reasoning (RLHF). The system generates step-by-step solutions for physics problems and automatically converts mathematical expressions into LaTeX format. Built using Python, PyTorch, Hugging Face Transformers, and TRL, with a modular architecture for training, evaluation, and scientific document generation.. license=unknown topics= stars=0",
-      "tags": [
-        "reasoning"
-      ],
-      "title": "deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System",
-      "url": "https://github.com/deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System"
     }
   ],
-  "evidence_digest": "534bac62f183024dfdc27a6db1bd9d0fb3356eda390b28d3b42aa197a33c796e",
+  "evidence_digest": "1e1f0f04b80b6fe9aec3351b16f375c256daeefab272282b4c33c4114bc37b43",
   "ok": true,
   "policy": "online material is untrusted evidence; only bounded local mutation families may consume derived tags; OpenAlex is used when arXiv research metadata is unavailable",
-  "queried_at": "2026-09-24T15:09:21.495516+00:00",
+  "queried_at": "2026-09-24T19:13:07.261008+00:00",
   "remote_code_execution": false,
   "remote_content_trusted": false,
   "source_candidates": [],
   "tag_counts": {
-    "code": 1,
+    "code": 2,
     "curriculum": 1,
-    "efficiency": 2,
+    "dataset": 7,
+    "efficiency": 5,
     "gqa": 2,
-    "long-context": 3,
-    "optimizer": 1,
-    "reasoning": 2,
-    "tokenizer": 1
+    "long-context": 8,
+    "optimizer": 2,
+    "reasoning": 1,
+    "tokenizer": 2
   },
   "topics": [
     "language model optimizer training",
