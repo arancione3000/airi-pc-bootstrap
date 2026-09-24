@@ -2332,7 +2332,10 @@ def test_phase5_cached_greedy_trace_matches_uncached_reference():
     assert cached["raw_output"] == uncached["raw_output"]
     assert cached["longest_repeated_token_run"] == uncached["longest_repeated_token_run"]
     assert cached["repetition_rate"] == pytest.approx(uncached["repetition_rate"])
-    assert cached["token_entropy"] == pytest.approx(uncached["token_entropy"], abs=1e-7)
+    # Cached and uncached attention use different floating-point reduction
+    # orders on recent CPU Torch builds.  Token decisions must remain exact;
+    # entropy only needs a sub-micro-unit numerical tolerance.
+    assert cached["token_entropy"] == pytest.approx(uncached["token_entropy"], abs=5e-7)
     assert cached["top1_probability"] == pytest.approx(
         uncached["top1_probability"], abs=1e-7
     )
