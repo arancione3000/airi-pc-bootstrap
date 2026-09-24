@@ -394,3 +394,12 @@ Capability honesty:
   learning-efficiency telemetry records attempts, acceptance/rollback rates,
   replay/new tokens, quality deltas, accepted tokens/hour, checkpoint time and
   periodic training-excluded conversational traces.
+
+
+## 2026-09-24: bounded causal recovery experiment after #182
+
+Scope: Generalist training duration, telemetry and tests only. Dynamic baseline at task start: 32,815,853 causal / 32,821,507 valid tokens; lineage airi-5d3d25177d2e83f7, 50,041,536 parameters. Initially 11 protected attempts and zero accepted; continuation observed 27/0.
+
+Controlled local diagnostics used the actual candidate and training-only persisted replay as a causal sample, not fresh full corpus. Baseline reproduced exactly: NLL 2.054368900679231, repetition .25353717698973643. Weighted replay gradient ~3.7 versus causal ~4.1; nominal replay token percentage does not measure its optimizer pressure. KL from live reference starts at zero. Anti-repetition .02/.10/.20 and causal KL .5 gave essentially identical two-step generations. FFN .5/.25 improved micro output, but FFN .5 failed unchanged guard at 16k.
+
+Unmodified objective/batch32: 8,128 tokens gave NLL 2.0422212, repetition .2294508, multiword/nonempty 1, pathological false; 16,256 gave NLL 2.0169244, repetition .2994937, gate rejected. Hypothesis: accept bounded useful prefixes instead of discarding them after a longer drift. Only recovery duration changes: 8k, then 16k/32k after actual successive acceptances. All quality thresholds remain unchanged. Local workspace reset lost uncommitted raw experimental files; these are observed results transcribed from tool outputs, not claimed reproducible fresh-corpus proof. Live collation and full CI remain required.

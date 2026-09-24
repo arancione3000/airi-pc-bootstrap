@@ -2426,3 +2426,16 @@ def test_sampling_controls_preserve_raw_greedy_default():
         repetition_penalty=1.08,
     )
     assert sampled.shape == first.shape
+
+
+def test_sustained_stall_uses_measured_short_update_and_grows_only_after_successes():
+    common = dict(parameters=50_041_536, context_length=128, persisted_lr_scale=1/64)
+    stalled = _phase5_recovery_plan(1_000_000, consecutive_rejections=27, **common)
+    assert stalled["effective_budget_tokens"] == 8_000
+    assert stalled["reset_optimizer"] is True
+    for streak, budget in ((1,8_000),(2,16_000),(3,32_000)):
+        accepted = _phase5_recovery_plan(1_000_000, consecutive_rejections=0,
+            last_segment_accepted=True, success_streak=streak, **common)
+        assert accepted["effective_budget_tokens"] == budget
+    retry = _phase5_recovery_plan(1_000_000, consecutive_rejections=4, success_streak=0, **common)
+    assert retry["effective_budget_tokens"] == 8_000
