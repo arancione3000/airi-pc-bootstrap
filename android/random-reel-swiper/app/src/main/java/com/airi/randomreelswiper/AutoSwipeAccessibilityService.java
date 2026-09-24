@@ -97,28 +97,50 @@ public class AutoSwipeAccessibilityService extends AccessibilityService {
         int w = size.x;
         int h = size.y;
 
-        // Central safe corridor: no top controls/status shade, no bottom nav area,
-        // and no contact with the STOP overlay.
-        float startX = randomRange(w * 0.30f, w * 0.70f);
-        float startY = randomRange(h * 0.64f, h * 0.80f);
+        // Safe central area: avoids status/quick-settings region, bottom navigation,
+        // and the upper-right STOP overlay.
+        final float minX = w * 0.18f;
+        final float maxX = w * 0.82f;
+        final float minY = h * 0.22f;
+        final float maxY = h * 0.80f;
 
-        // Upward swipe with random diagonal drift.
-        float driftX = randomRange(-w * 0.18f, w * 0.18f);
-        float endX = clamp(startX + driftX, w * 0.22f, w * 0.78f);
-        float endY = randomRange(h * 0.28f, h * 0.45f);
+        float startX = randomRange(w * 0.28f, w * 0.72f);
+        float startY = randomRange(h * 0.34f, h * 0.70f);
 
-        long duration = 280L + random.nextInt(521); // 280–800 ms
+        // Fully random direction: 0..360 degrees, so gestures may go up, down,
+        // left, right or diagonally. X/Y amplitudes are scaled to screen shape.
+        double angle = random.nextDouble() * Math.PI * 2.0;
+        float horizontalReach = randomRange(w * 0.18f, w * 0.34f);
+        float verticalReach = randomRange(h * 0.16f, h * 0.30f);
+
+        float endX = clamp(startX + (float) Math.cos(angle) * horizontalReach, minX, maxX);
+        float endY = clamp(startY + (float) Math.sin(angle) * verticalReach, minY, maxY);
+
+        // If clamping made the gesture too short, push it in the opposite random direction.
+        float dx = endX - startX;
+        float dy = endY - startY;
+        float minDistance = Math.min(w, h) * 0.14f;
+        if (Math.hypot(dx, dy) < minDistance) {
+            endX = clamp(startX - (float) Math.cos(angle) * horizontalReach, minX, maxX);
+            endY = clamp(startY - (float) Math.sin(angle) * verticalReach, minY, maxY);
+        }
+
+        long duration = 2_000L + random.nextInt(2_001); // 2–4 seconds
 
         Path path = new Path();
         path.moveTo(startX, startY);
 
-        // Slight curve makes consecutive gestures less mechanically identical.
+        // Curved control point adds small natural variation while staying safe.
         float midX = clamp(
-                (startX + endX) / 2f + randomRange(-w * 0.06f, w * 0.06f),
-                w * 0.20f,
-                w * 0.80f
+                (startX + endX) / 2f + randomRange(-w * 0.08f, w * 0.08f),
+                minX,
+                maxX
         );
-        float midY = (startY + endY) / 2f;
+        float midY = clamp(
+                (startY + endY) / 2f + randomRange(-h * 0.05f, h * 0.05f),
+                minY,
+                maxY
+        );
         path.quadTo(midX, midY, endX, endY);
 
         GestureDescription gesture = new GestureDescription.Builder()
