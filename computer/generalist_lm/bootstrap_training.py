@@ -30,6 +30,7 @@ from .evolution import GeneralistGenome, progressive_scale_candidate
 from .model import CausalTransformerLM, parameter_count
 from .phase5_diagnostics import (
     degeneration_gate,
+    evaluate_conversational_probes,
     evaluate_phase5_language,
     evaluate_sft_validation,
     protected_bootstrap_texts,
@@ -56,6 +57,8 @@ from .tokenizer import PAD
 from .training import (
     SFTExample,
     causal_training_objective,
+    encode_sft_example,
+    reference_kl_loss,
     train_sft,
     train_sft_residual_recovery,
 )
@@ -72,10 +75,12 @@ PHASE5_LANGUAGE_REHABILITATION_STAGES = (
 )
 PHASE5_CAPACITY_GROWTH_VERSION = "phase5-capacity-growth-v2"
 PHASE5_BASE_UNIQUE_CORPUS_TOKENS = 5_000_000
-PHASE5_100M_UNIQUE_CORPUS_TOKENS = 20_000_000
+PHASE5_100M_UNIQUE_CORPUS_TOKENS = 32_000_000
 PHASE5_250M_UNIQUE_CORPUS_TOKENS = 40_000_000
 PHASE5_500M_UNIQUE_CORPUS_TOKENS = 60_000_000
 PHASE5_1B_UNIQUE_CORPUS_TOKENS = 100_000_000
+PHASE5_PROTECTED_CAUSAL_VERSION = "phase5-protected-causal-v1"
+PHASE5_LEARNING_EFFICIENCY_VERSION = "phase5-learning-efficiency-v1"
 
 # One-time human-assisted capacity gift for the current AIRI lineage only.
 # Once this lineage reaches the requested tier the marker is persisted and this
@@ -1148,6 +1153,7 @@ def _phase5_recovery_plan(
     consecutive_rejections: int,
     recovery_hold: bool = False,
     last_segment_accepted: bool = False,
+    success_streak: int = 0,
 ) -> dict[str, Any]:
     """Return a bounded rescue plan that cannot livelock at the old LR floor.
 
@@ -1163,19 +1169,35 @@ def _phase5_recovery_plan(
         parameters=int(parameters),
         context_length=int(context_length),
     )
+    accepted_streak = max(0, int(success_streak))
     stable_fast_lane = bool(
         int(consecutive_rejections) == 0
         and bool(last_segment_accepted)
+        and accepted_streak >= 3
         and not bool(recovery_hold)
         and int(parameters) < 64_000_000
         and int(context_length) <= 128
     )
-    if stable_fast_lane and parameter_cap is not None:
-        # A 50M checkpoint that just passed the protected language gate can
-        # safely amortize evaluation/checkpoint overhead over a larger unit.
-        # Any rejection immediately clears last_segment_accepted and returns
-        # the next transaction to the conservative recovery budget.
-        parameter_cap = max(int(parameter_cap), 250_000)
+    if (
+        parameter_cap is not None
+        and int(consecutive_rejections) == 0
+        and bool(last_segment_accepted)
+        and not bool(recovery_hold)
+        and 40_000_000 <= int(parameters) < 64_000_000
+    ):
+        # Promote transaction size only after repeated accepted checkpoints.
+        # The previous one-success -> 250k jump repeatedly crossed the durable
+        # anchor and wasted CPU.  The ladder is immediately abandoned on the
+        # first rollback.
+        if accepted_streak >= 5:
+            progressive_cap = 500_000
+        elif accepted_streak >= 3:
+            progressive_cap = 250_000
+        elif accepted_streak >= 2:
+            progressive_cap = 125_000
+        else:
+            progressive_cap = 62_500
+        parameter_cap = max(int(parameter_cap), int(progressive_cap))
     segment_budget = _phase5_recovery_segment_budget(
         requested,
         consecutive_rejections=rejected,
@@ -1232,6 +1254,296 @@ def _batch(blocks: list[list[int]], indices: list[int], *, device):
     labels = ids.clone()
     labels[labels == PAD] = -100
     return ids, labels
+
+
+def _protected_continual_plan(
+    before: dict[str, Any],
+    anchor: dict[str, Any],
+    *,
+    consecutive_rejections: int,
+    success_streak: int,
+) -> dict[str, Any]:
+    """Bound replay/KL pressure from live quality headroom.
+
+    The plan keeps new causal data dominant.  A fragile checkpoint uses a 20%
+    normalized replay share and stronger trust region; stable checkpoints step
+    down to 15%, then 10% only after several consecutive acceptances.
+    """
+    rejected = max(0, int(consecutive_rejections))
+    streak = max(0, int(success_streak))
+    repetition = float(before.get("repetition_rate", 1.0) or 1.0)
+    anchor_repetition = float(anchor.get("repetition_rate", 1.0) or 1.0)
+    multiword = float(before.get("multiword_output_rate", 0.0) or 0.0)
+    fragile = bool(
+        rejected > 0
+        or bool(before.get("pathological_repetition"))
+        or repetition >= anchor_repetition + 0.05
+        or multiword < 0.80
+    )
+    if fragile:
+        replay_fraction = 0.20
+        kl_weight = 0.50
+        anti_repetition_weight = 0.02
+    elif streak >= 4:
+        replay_fraction = 0.10
+        kl_weight = 0.20
+        anti_repetition_weight = 0.005
+    else:
+        replay_fraction = 0.15
+        kl_weight = 0.30
+        anti_repetition_weight = 0.01
+    return {
+        "version": PHASE5_PROTECTED_CAUSAL_VERSION,
+        "enabled": True,
+        "fragile_language_state": fragile,
+        "replay_fraction": float(replay_fraction),
+        "replay_loss_weight": float(replay_fraction / (1.0 - replay_fraction)),
+        "reference_kl_weight": float(kl_weight),
+        "reference_kl_temperature": 1.0,
+        "anti_repetition_weight": float(anti_repetition_weight),
+        "segment_warmup_steps": 4 if fragile else 2,
+        "optimizer": {
+            "name": "AdamW",
+            "betas": [0.9, 0.95],
+            "eps": 1e-8,
+            "weight_decay": 0.01,
+            "lr_multipliers": {
+                "embeddings": 0.25,
+                "attention_and_norm": 0.35,
+                "ffn": 1.0,
+                "lm_head": 0.50,
+            },
+        },
+    }
+
+
+def _protected_optimizer(model, *, learning_rate: float):
+    """Build deterministic discriminative AdamW groups without duplicates."""
+    import torch
+
+    multipliers = {
+        "embeddings": 0.25,
+        "attention_and_norm": 0.35,
+        "ffn": 1.0,
+        "lm_head": 0.50,
+    }
+    grouped: dict[str, list[Any]] = {key: [] for key in multipliers}
+    names: dict[str, list[str]] = {key: [] for key in multipliers}
+    seen: set[int] = set()
+    for name, parameter in model.named_parameters():
+        if not parameter.requires_grad or id(parameter) in seen:
+            continue
+        seen.add(id(parameter))
+        if ".ff." in name:
+            group = "ffn"
+        elif name.startswith("lm_head."):
+            group = "lm_head"
+        elif "token_embedding" in name or "position_embedding" in name:
+            group = "embeddings"
+        else:
+            group = "attention_and_norm"
+        grouped[group].append(parameter)
+        names[group].append(name)
+
+    parameter_total = sum(int(p.numel()) for p in model.parameters() if p.requires_grad)
+    grouped_total = sum(int(p.numel()) for rows in grouped.values() for p in rows)
+    if parameter_total != grouped_total:
+        raise RuntimeError("protected optimizer parameter grouping is incomplete")
+
+    param_groups = [
+        {
+            "params": grouped[group],
+            "lr": float(learning_rate) * float(multipliers[group]),
+            "lr_multiplier": float(multipliers[group]),
+            "group_name": group,
+            "weight_decay": 0.01,
+        }
+        for group in multipliers
+        if grouped[group]
+    ]
+    optimizer = torch.optim.AdamW(
+        param_groups,
+        lr=float(learning_rate),
+        betas=(0.9, 0.95),
+        eps=1e-8,
+        weight_decay=0.01,
+    )
+    report = {
+        "name": "AdamW",
+        "betas": [0.9, 0.95],
+        "eps": 1e-8,
+        "weight_decay": 0.01,
+        "tied_embedding_lm_head": bool(
+            getattr(model, "lm_head", None) is not None
+            and getattr(model, "token_embedding", None) is not None
+            and model.lm_head.weight is model.token_embedding.weight
+        ),
+        "parameter_groups": {
+            group: {
+                "parameters": sum(int(p.numel()) for p in grouped[group]),
+                "tensors": len(grouped[group]),
+                "lr_multiplier": float(multipliers[group]),
+                "sample_names": names[group][:4],
+            }
+            for group in multipliers
+            if grouped[group]
+        },
+        "parameters": int(grouped_total),
+    }
+    return optimizer, report
+
+
+def _protected_causal_replay_rows(
+    protected_sft,
+    *,
+    heldout_sft=(),
+) -> tuple[list[SFTExample], dict[str, int]]:
+    elementary = []
+    for stage in PHASE5_LANGUAGE_REHABILITATION_STAGES:
+        rows = _elementary_rehabilitation_rows()[stage]
+        elementary.extend(rows["it"])
+        elementary.extend(rows["en"])
+    combined, filtered = _filter_protected_replay(
+        elementary + list(protected_sft),
+        heldout_sft=heldout_sft,
+    )
+    combined = sorted(combined, key=_sft_row_fingerprint)
+    if not combined:
+        raise RuntimeError("protected continual training has no safe replay rows")
+    return combined, {
+        "elementary_rows": len(elementary),
+        "protected_sft_rows": len(protected_sft),
+        "held_out_filtered": int(filtered),
+        "total_rows": len(combined),
+    }
+
+
+def _sft_training_batch(runtime, rows, indices):
+    import torch
+
+    encoded = [
+        encode_sft_example(
+            rows[index],
+            runtime.tokenizer,
+            runtime.config.context_length,
+        )
+        for index in indices
+    ]
+    ids = torch.stack([row[0] for row in encoded]).to(runtime.device)
+    labels = torch.stack([row[1] for row in encoded]).to(runtime.device)
+    return ids, labels
+
+
+def _record_learning_efficiency(
+    progress: dict[str, Any],
+    *,
+    accepted: bool,
+    attempted_tokens: int,
+    replay_tokens: int,
+    elapsed_training_seconds: float,
+    checkpoint_persist_seconds: float,
+    before: dict[str, Any],
+    after: dict[str, Any],
+    protected_plan: dict[str, Any],
+    optimizer_report: dict[str, Any],
+    unique_corpus_target_tokens: int,
+    target_tokens: int,
+) -> dict[str, Any]:
+    attempted = max(0, int(attempted_tokens))
+    replay = max(0, int(replay_tokens))
+    elapsed = max(0.0, float(elapsed_training_seconds))
+    persisted = max(0.0, float(checkpoint_persist_seconds))
+    state = dict(progress.get("learning_efficiency") or {})
+    if state.get("version") != PHASE5_LEARNING_EFFICIENCY_VERSION:
+        state = {
+            "version": PHASE5_LEARNING_EFFICIENCY_VERSION,
+            "started_tokens_processed": int(progress.get("tokens_processed", 0) or 0)
+            - (attempted if accepted else 0),
+            "attempted_tokens": 0,
+            "accepted_tokens": 0,
+            "attempted_segments": 0,
+            "accepted_segments": 0,
+            "rollback_segments": 0,
+            "replay_tokens": 0,
+            "elapsed_training_seconds": 0.0,
+            "checkpoint_persist_seconds": 0.0,
+            "cumulative_language_quality_gain": 0.0,
+            "history": [],
+        }
+    quality_gain = (
+        _language_quality(after) - _language_quality(before)
+        if accepted else 0.0
+    )
+    state["attempted_tokens"] = int(state.get("attempted_tokens", 0) or 0) + attempted
+    state["accepted_tokens"] = int(state.get("accepted_tokens", 0) or 0) + (
+        attempted if accepted else 0
+    )
+    state["attempted_segments"] = int(state.get("attempted_segments", 0) or 0) + 1
+    state["accepted_segments"] = int(state.get("accepted_segments", 0) or 0) + int(accepted)
+    state["rollback_segments"] = int(state.get("rollback_segments", 0) or 0) + int(not accepted)
+    state["replay_tokens"] = int(state.get("replay_tokens", 0) or 0) + replay
+    state["elapsed_training_seconds"] = float(
+        state.get("elapsed_training_seconds", 0.0) or 0.0
+    ) + elapsed
+    state["checkpoint_persist_seconds"] = float(
+        state.get("checkpoint_persist_seconds", 0.0) or 0.0
+    ) + persisted
+    state["cumulative_language_quality_gain"] = float(
+        state.get("cumulative_language_quality_gain", 0.0) or 0.0
+    ) + float(quality_gain)
+
+    attempts = max(1, int(state["attempted_segments"]))
+    training_hours = max(1e-9, float(state["elapsed_training_seconds"]) / 3600.0)
+    net_hours = max(
+        1e-9,
+        (
+            float(state["elapsed_training_seconds"])
+            + float(state["checkpoint_persist_seconds"])
+        ) / 3600.0,
+    )
+    accepted_tokens = int(state["accepted_tokens"])
+    state.update({
+        "acceptance_rate": float(state["accepted_segments"] / attempts),
+        "rollback_rate": float(state["rollback_segments"] / attempts),
+        "accepted_tokens_per_hour": float(accepted_tokens / net_hours),
+        "attempted_tokens_per_hour": float(state["attempted_tokens"] / training_hours),
+        "effective_new_tokens": int(accepted_tokens),
+        "unique_data_fraction": float(
+            min(1.0, int(unique_corpus_target_tokens) / max(1, int(target_tokens)))
+        ),
+        "replay_fraction": float(protected_plan["replay_fraction"]),
+        "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
+        "optimizer": optimizer_report,
+        "learning_gain_per_100k_tokens": float(
+            state["cumulative_language_quality_gain"]
+            * 100_000.0
+            / max(1, accepted_tokens)
+        ),
+        "updated_at_unix": int(time.time()),
+    })
+    event = {
+        "accepted": bool(accepted),
+        "attempted_tokens": attempted,
+        "accepted_tokens": attempted if accepted else 0,
+        "replay_tokens": replay,
+        "elapsed_training_seconds": elapsed,
+        "checkpoint_persist_seconds": persisted,
+        "language_nll_delta": float(after.get("language_nll", 0.0) or 0.0)
+        - float(before.get("language_nll", 0.0) or 0.0),
+        "repetition_delta": float(after.get("repetition_rate", 0.0) or 0.0)
+        - float(before.get("repetition_rate", 0.0) or 0.0),
+        "multiword_delta": float(after.get("multiword_output_rate", 0.0) or 0.0)
+        - float(before.get("multiword_output_rate", 0.0) or 0.0),
+        "language_quality_gain": float(quality_gain),
+        "replay_fraction": float(protected_plan["replay_fraction"]),
+        "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
+        "updated_at_unix": int(time.time()),
+    }
+    history = list(state.get("history") or [])
+    history.append(event)
+    state["history"] = history[-64:]
+    progress["learning_efficiency"] = state
+    return state
 
 
 def _effective_bootstrap_target(
@@ -1339,7 +1651,7 @@ def _frequent_word_documents(documents):
     counts: Counter[str] = Counter()
     parsed: list[tuple[Any, list[str]]] = []
     for document in documents:
-        words = re.findall(r"[^\\W\\d_]+", document.text.casefold(), flags=re.UNICODE)
+        words = re.findall(r"[^\W\d_]+", document.text.casefold(), flags=re.UNICODE)
         parsed.append((document, words))
         counts.update(words)
     frequent = {word for word, _count in counts.most_common(768)}
@@ -1481,6 +1793,50 @@ def _language_guard_violations(
     ):
         reasons.append("token entropy fell below durable anchor")
     return reasons
+
+
+def _compatible_language_anchor(
+    bootstrap_root: Path,
+    current_report: dict[str, Any],
+    guard_payload: dict[str, Any],
+    language_guard_path: Path,
+) -> tuple[dict[str, Any], str]:
+    """Return an anchor evaluated with the exact current diagnostic suite.
+
+    Metric fixes or larger probe sets cannot be compared numerically with a
+    legacy seven-prompt report.  Re-evaluate the persisted durable-best
+    checkpoint when available; only fall back to the current healthy lineage
+    when no compatible historical checkpoint exists.
+    """
+    existing = dict(guard_payload.get("report") or {})
+    if (
+        existing
+        and str(existing.get("suite") or "") == str(current_report.get("suite") or "")
+        and int(existing.get("prompt_count", 0) or 0)
+        == int(current_report.get("prompt_count", 0) or 0)
+    ):
+        return existing, str(guard_payload.get("source") or "persisted_anchor")
+
+    best_dir = bootstrap_root / "language-guard-best"
+    source = "current_live_lineage_suite_migration"
+    migrated = current_report
+    if (best_dir / "model.pt").is_file():
+        durable = GeneralistRuntime.from_checkpoint(best_dir, device="cpu")
+        migrated = evaluate_phase5_language(durable)
+        source = "durable_best_suite_migration"
+        del durable
+    _atomic_json(
+        language_guard_path,
+        {
+            "schema": 1,
+            "version": "phase5-segment-language-guard-v2",
+            "source": source,
+            "report": migrated,
+            "legacy_report": existing or None,
+            "updated_at_unix": int(time.time()),
+        },
+    )
+    return migrated, source
 
 
 def _segment_language_gate(
@@ -2712,6 +3068,8 @@ def run_segment(
     after_path = bootstrap_root / "after.json"
     language_guard_path = bootstrap_root / "language-guard.json"
     segment_guard_path = bootstrap_root / "segment-guard-last.json"
+    efficiency_path = bootstrap_root / "learning-efficiency.json"
+    conversational_probe_path = bootstrap_root / "conversational-probe-last.json"
     rehabilitation_report_path = bootstrap_root / "language-rehabilitation.json"
     segment_best_dir = bootstrap_root / ".segment-best"
     bootstrap_root.mkdir(parents=True, exist_ok=True)
@@ -3166,6 +3524,19 @@ def run_segment(
                 "created_at_unix": int(time.time()),
             },
         )
+        guard_payload = _load_json(language_guard_path)
+
+    guard_anchor, guard_source = _compatible_language_anchor(
+        bootstrap_root,
+        segment_language_before,
+        guard_payload,
+        language_guard_path,
+    )
+    progress["language_guard_suite"] = str(segment_language_before.get("suite") or "")
+    progress["language_guard_prompt_count"] = int(
+        segment_language_before.get("prompt_count", 0) or 0
+    )
+    progress["language_guard_anchor_source"] = guard_source
 
     rehabilitation_state = dict(progress.get("language_rehabilitation") or {})
     if (
@@ -3365,19 +3736,10 @@ def run_segment(
             "early_stopped": False,
         }
 
-    optimizer = torch.optim.AdamW(
-        runtime.model.parameters(),
-        lr=float(base_learning_rate),
-        weight_decay=0.01,
-    )
-    optimizer_storage = None
-    if optimizer_path.is_file():
-        optimizer_storage = _load_optimizer_checkpoint(optimizer, optimizer_path)
-
-    progress_before_segment = copy.deepcopy(progress)
     consecutive_rejections = int(
         progress.get("segment_guard_consecutive_rejections", 0) or 0
     )
+    success_streak = int(progress.get("segment_guard_success_streak", 0) or 0)
     recovery_plan = _phase5_recovery_plan(
         segment_tokens,
         parameters=int(parameter_count(runtime.model)),
@@ -3388,7 +3750,33 @@ def run_segment(
         consecutive_rejections=consecutive_rejections,
         recovery_hold=bool(progress.get("segment_guard_recovery_hold", False)),
         last_segment_accepted=bool(progress.get("segment_guard_last_accepted", False)),
+        success_streak=success_streak,
     )
+    previous_protected_version = str(
+        (progress.get("protected_continual_training") or {}).get("version") or ""
+    )
+    protected_plan = _protected_continual_plan(
+        segment_language_before,
+        guard_anchor,
+        consecutive_rejections=consecutive_rejections,
+        success_streak=success_streak,
+    )
+    protected_rows, protected_row_counts = _protected_causal_replay_rows(
+        protected_replay.sft_train,
+        heldout_sft=bundle.sft_validation,
+    )
+    protected_migration = (
+        previous_protected_version != PHASE5_PROTECTED_CAUSAL_VERSION
+    )
+    progress["protected_continual_training"] = {
+        **protected_plan,
+        "replay_rows": protected_row_counts,
+        "unique_corpus_target_tokens": int(corpus_target_tokens),
+        "unique_data_fraction": float(corpus_target_tokens / max(1, target_tokens)),
+        "holdout_excluded": True,
+        "reference_checkpoint": "pre_segment_live_lineage",
+    }
+    progress_before_segment = copy.deepcopy(progress)
     segment_lr_scale = float(recovery_plan["learning_rate_scale"])
     retry_seed_offset = int(consecutive_rejections) * 1_000_003
     shutil.rmtree(segment_best_dir, ignore_errors=True)
@@ -3411,19 +3799,17 @@ def run_segment(
     )
     progress["segment_guard_rescue_stage"] = recovery_plan["forced_stage"]
 
-    if bool(recovery_plan["reset_optimizer"]):
-        # The model is already the exact pre-segment rollback checkpoint.  A
-        # fresh optimizer removes stale AdamW momentum that can repeatedly push
-        # the same 50M lineage back across the language guard.
-        optimizer = torch.optim.AdamW(
-            runtime.model.parameters(),
-            lr=float(base_learning_rate) * segment_lr_scale,
-            weight_decay=0.01,
-        )
-        optimizer_storage = None
-        progress["segment_guard_optimizer_reset_for_stall"] = True
-    else:
-        progress["segment_guard_optimizer_reset_for_stall"] = False
+    optimizer, optimizer_report = _protected_optimizer(
+        runtime.model,
+        learning_rate=float(base_learning_rate) * segment_lr_scale,
+    )
+    reset_optimizer = bool(recovery_plan["reset_optimizer"] or protected_migration)
+    optimizer_storage = None
+    if optimizer_path.is_file() and not reset_optimizer:
+        optimizer_storage = _load_optimizer_checkpoint(optimizer, optimizer_path)
+    progress["segment_guard_optimizer_reset_for_stall"] = bool(reset_optimizer)
+    progress["protected_optimizer"] = optimizer_report
+    progress["protected_optimizer_migration_reset"] = bool(protected_migration)
     eval_every_steps = max(8, int(eval_every_steps))
     best_loss = progress.get("best_validation_loss")
     best_loss = float(best_loss) if best_loss is not None else float("inf")
@@ -3444,8 +3830,15 @@ def run_segment(
         "effective_batch_size": int(effective_batch_size),
         "micro_batch_size": int(micro_batch_size),
         "gradient_accumulation_steps": int(gradient_accumulation_steps),
+        "protected_replay_micro_batch_size": 2,
     }
 
+    reference_model = copy.deepcopy(runtime.model).to(runtime.device)
+    reference_model.eval()
+    for reference_parameter in reference_model.parameters():
+        reference_parameter.requires_grad_(False)
+    replay_tokens_trained = 0
+    segment_started_at = time.perf_counter()
     runtime.model.train()
     while (
         int(progress["tokens_processed"]) < target_tokens
@@ -3476,10 +3869,24 @@ def run_segment(
             target_tokens=target_tokens,
             warmup_tokens=min(100_000, max(20_000, target_tokens // 10)),
         )
+        segment_step = step - int(progress_before_segment.get("steps", 0) or 0)
+        segment_warmup_steps = max(
+            1,
+            int(protected_plan.get("segment_warmup_steps", 1) or 1),
+        )
+        segment_warmup_factor = min(
+            1.0,
+            float(segment_step + 1) / float(segment_warmup_steps),
+        )
+        lr *= segment_warmup_factor
         for group in optimizer.param_groups:
-            group["lr"] = lr
+            group["lr"] = lr * float(group.get("lr_multiplier", 1.0) or 1.0)
 
         anti_weight, eos_weight = _anti_collapse_weights(stage, before)
+        anti_weight = max(
+            float(anti_weight),
+            float(protected_plan.get("anti_repetition_weight", 0.0) or 0.0),
+        )
         supervised = 0
         weighted_loss = 0.0
         objective_stats = {}
@@ -3513,6 +3920,66 @@ def run_segment(
             # reproduces the full effective batch even with padded examples.
             (loss * (micro_supervised / supervised)).backward()
             objective_stats = micro_objective
+
+        replay_rng = random.Random(
+            9_000_000 + step * 97 + retry_seed_offset
+        )
+        replay_indices = [
+            replay_rng.randrange(len(protected_rows))
+            for _ in range(2)
+        ]
+        replay_ids, replay_labels = _sft_training_batch(
+            runtime,
+            protected_rows,
+            replay_indices,
+        )
+        replay_supervised = int((replay_labels[:, 1:] != -100).sum().item())
+        if replay_supervised <= 0:
+            raise RuntimeError("protected replay batch has no supervised tokens")
+        replay_result = runtime.model(replay_ids)
+        replay_loss, _replay_objective = causal_training_objective(
+            replay_result["logits"],
+            replay_labels,
+            replay_ids,
+            eos_loss_weight=1.0,
+            repetition_unlikelihood_weight=anti_weight,
+            repetition_window=16,
+        )
+        with torch.no_grad():
+            reference_logits = reference_model(replay_ids)["logits"]
+        kl_loss, kl_tokens = reference_kl_loss(
+            replay_result["logits"],
+            reference_logits,
+            replay_labels,
+            temperature=float(
+                protected_plan.get("reference_kl_temperature", 1.0) or 1.0
+            ),
+        )
+        protected_loss = (
+            float(protected_plan["replay_loss_weight"]) * replay_loss
+            + float(protected_plan["reference_kl_weight"]) * kl_loss
+        )
+        if not torch.isfinite(protected_loss):
+            raise RuntimeError("non-finite protected continual loss")
+        protected_loss.backward()
+        replay_tokens_trained += replay_supervised
+        objective_stats = {
+            **objective_stats,
+            "protected_replay_loss": float(replay_loss.detach().cpu()),
+            "protected_replay_loss_weight": float(
+                protected_plan["replay_loss_weight"]
+            ),
+            "protected_replay_fraction": float(
+                protected_plan["replay_fraction"]
+            ),
+            "protected_replay_supervised_tokens": int(replay_supervised),
+            "protected_reference_kl_loss": float(kl_loss.detach().cpu()),
+            "protected_reference_kl_weight": float(
+                protected_plan["reference_kl_weight"]
+            ),
+            "protected_reference_tokens": int(kl_tokens),
+            "segment_warmup_factor": float(segment_warmup_factor),
+        }
 
         torch.nn.utils.clip_grad_norm_(runtime.model.parameters(), 1.0)
         optimizer.step()
@@ -3565,6 +4032,8 @@ def run_segment(
             runtime.model.train()
 
     segment_language_after = evaluate_phase5_language(runtime)
+    elapsed_training_seconds = time.perf_counter() - segment_started_at
+    del reference_model
     attempted_tokens = int(progress["tokens_processed"]) - processed_before_segment
     attempted_steps = int(progress["steps"]) - int(
         progress_before_segment.get("steps", 0) or 0
@@ -3580,6 +4049,12 @@ def run_segment(
         "attempted_steps": int(attempted_steps),
         "learning_rate_scale": float(segment_lr_scale),
         "consecutive_rejections_before": int(consecutive_rejections),
+        "elapsed_training_seconds": float(elapsed_training_seconds),
+        "replay_tokens": int(replay_tokens_trained),
+        "replay_fraction": float(protected_plan["replay_fraction"]),
+        "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
+        "protected_causal_version": PHASE5_PROTECTED_CAUSAL_VERSION,
+        "optimizer": optimizer_report,
     })
     _atomic_json(segment_guard_path, segment_guard)
 
@@ -3638,12 +4113,29 @@ def run_segment(
             next_plan["reset_optimizer"]
         )
         progress["segment_guard_last_accepted"] = False
+        progress["segment_guard_success_streak"] = 0
         progress["segment_guard_recovery_mode"] = bool(
             segment_guard.get("recovery_mode")
         )
         progress["early_stopped"] = False
         progress["rung_complete"] = False
+        progress["protected_optimizer"] = optimizer_report
+        efficiency = _record_learning_efficiency(
+            progress,
+            accepted=False,
+            attempted_tokens=attempted_tokens,
+            replay_tokens=replay_tokens_trained,
+            elapsed_training_seconds=elapsed_training_seconds,
+            checkpoint_persist_seconds=0.0,
+            before=segment_language_before,
+            after=segment_language_after,
+            protected_plan=protected_plan,
+            optimizer_report=optimizer_report,
+            unique_corpus_target_tokens=corpus_target_tokens,
+            target_tokens=target_tokens,
+        )
         progress["updated_at_unix"] = int(time.time())
+        _atomic_json(efficiency_path, efficiency)
         _atomic_json(progress_path, progress)
         lineage_manifest = refresh_live_lineage_manifest(
             root,
@@ -3666,6 +4158,7 @@ def run_segment(
             "segment_rejected": True,
             "segment_guard_path": str(segment_guard_path),
             "next_learning_rate_scale": float(progress["segment_guard_lr_scale"]),
+            "learning_efficiency": efficiency,
         }
 
     if segment_best_dir.is_dir():
@@ -3704,6 +4197,7 @@ def run_segment(
             max(1.0 / 64.0, float(segment_lr_scale) * 1.20),
         )
     progress["segment_guard_last_accepted"] = True
+    progress["segment_guard_success_streak"] = int(success_streak + 1)
     progress["segment_guard_stall_recovery_active"] = recovery_hold
     progress["segment_guard_rescue_stage"] = (
         "B_short_sentence_completion" if recovery_hold else None
@@ -3720,6 +4214,10 @@ def run_segment(
         "after_quality": float(segment_guard["after_quality"]),
         "recovery_mode": bool(segment_guard["recovery_mode"]),
         "learning_rate_scale": float(segment_lr_scale),
+        "replay_fraction": float(protected_plan["replay_fraction"]),
+        "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
+        "replay_tokens": int(replay_tokens_trained),
+        "elapsed_training_seconds": float(elapsed_training_seconds),
     })
     progress["segment_guard_acceptances"] = accepted_history[-32:]
 
@@ -3736,7 +4234,7 @@ def run_segment(
             language_guard_path,
             {
                 "schema": 1,
-                "version": "phase5-segment-language-guard-v1",
+                "version": "phase5-segment-language-guard-v2",
                 "source": "accepted_segment_improvement",
                 "report": segment_language_after,
                 "tokens_processed": int(progress["tokens_processed"]),
@@ -3744,6 +4242,7 @@ def run_segment(
             },
         )
 
+    checkpoint_persist_started = time.perf_counter()
     runtime.save_checkpoint(
         candidate_dir,
         metadata={
@@ -3756,7 +4255,33 @@ def run_segment(
         },
     )
     optimizer_storage = _save_optimizer_checkpoint(optimizer, optimizer_path)
+    checkpoint_persist_seconds = time.perf_counter() - checkpoint_persist_started
     progress["optimizer_storage"] = optimizer_storage
+    efficiency = _record_learning_efficiency(
+        progress,
+        accepted=True,
+        attempted_tokens=attempted_tokens,
+        replay_tokens=replay_tokens_trained,
+        elapsed_training_seconds=elapsed_training_seconds,
+        checkpoint_persist_seconds=checkpoint_persist_seconds,
+        before=segment_language_before,
+        after=segment_language_after,
+        protected_plan=protected_plan,
+        optimizer_report=optimizer_report,
+        unique_corpus_target_tokens=corpus_target_tokens,
+        target_tokens=target_tokens,
+    )
+    segment_guard["checkpoint_persist_seconds"] = float(checkpoint_persist_seconds)
+    _atomic_json(segment_guard_path, segment_guard)
+    _atomic_json(efficiency_path, efficiency)
+    if int(efficiency.get("accepted_segments", 0) or 0) % 3 == 0:
+        conversational = evaluate_conversational_probes(runtime)
+        conversational.update({
+            "tokens_processed": int(progress["tokens_processed"]),
+            "accepted_segments": int(efficiency["accepted_segments"]),
+            "created_at_unix": int(time.time()),
+        })
+        _atomic_json(conversational_probe_path, conversational)
 
     rung_complete = int(progress["tokens_processed"]) >= target_tokens or early_stopped
     progress["early_stopped"] = bool(early_stopped)
@@ -4103,6 +4628,10 @@ def run_segment(
         "last_train_loss": last_train_loss,
         "last_validation_loss": last_validation_loss,
         "best_validation_loss": progress.get("best_validation_loss"),
+        "learning_efficiency": progress.get("learning_efficiency"),
+        "protected_continual_training": progress.get(
+            "protected_continual_training"
+        ),
         "report_path": str(bootstrap_root / "report.json") if rung_complete else None,
     }
 

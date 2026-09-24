@@ -369,3 +369,28 @@ Capability honesty:
   inconsistent;
 - `Ciao`, `Come ti chiami?`, simple Italian/English prompts and dialogue remain
   held out for diagnosis and are never copied into rehabilitation training.
+
+
+## 2026-09-24 — Protected causal continual training
+
+- the healthy 50M R2 lineage advanced to 32,815,853 accepted causal tokens, but
+  then produced ten consecutive guarded rollbacks (764,032 attempted tokens,
+  zero accepted), showing that smaller segments and the 1/64 LR floor alone
+  could not prevent causal forgetting;
+- every causal step now keeps new data dominant while mixing a bounded 10–20%
+  training-only bilingual/dialogue replay and a frozen pre-segment forward-KL
+  trust region; held-out SFT and Phase-5/conversational probes remain excluded;
+- AdamW uses fresh bounded momentum (`betas=(0.9, 0.95)`), a short per-segment
+  warmup and discriminative rates: full LR for the widened FFN, lower rates for
+  embeddings, attention/norms and the LM head; migration resets incompatible
+  optimizer state once and rollback retries remain fresh;
+- segment growth is progressive (about 32k -> 64k -> 125k -> 250k -> 500k)
+  only after consecutive accepted checkpoints, and any rejection resets the
+  streak immediately;
+- the previously double-escaped Unicode word regex counted non-word spans and
+  made `multiword_output_rate` noisy. It is corrected and the durable anchor is
+  re-evaluated from `language-guard-best` under the expanded 14-probe suite;
+- the 100M tier now targets 32M reviewed unique corpus tokens (up from 20M), and
+  learning-efficiency telemetry records attempts, acceptance/rollback rates,
+  replay/new tokens, quality deltas, accepted tokens/hour, checkpoint time and
+  periodic training-excluded conversational traces.
