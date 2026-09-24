@@ -31,7 +31,7 @@ public class MainActivity extends Activity {
         root.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
         TextView info = new TextView(this);
-        info.setText("Swipe casuali ogni 10–60 secondi, concentrati nella zona centrale dello schermo.\n\n1) Abilita il servizio Accessibilità\n2) Torna qui e premi START\n3) Apri Instagram/Reels\n4) Usa il pulsante STOP flottante per fermare tutto");
+        info.setText("Swipe casuali ogni 10–60 secondi, in direzioni casuali e con movimento di 2–4 secondi nella zona centrale dello schermo.\n\n1) Abilita il servizio Accessibilità\n2) Torna qui e premi START\n3) Apri Instagram/Reels\n4) Usa il pulsante STOP flottante per fermare tutto");
         info.setTextColor(Color.LTGRAY);
         info.setTextSize(16);
         info.setPadding(0, dp(24), 0, dp(24));
