@@ -322,6 +322,85 @@ def _group_clip(optimizer, caps: dict[str, float] | None) -> dict[str, float]:
     return norms
 
 
+def _capture_gradients(model):
+    return {
+        name: parameter.grad.detach().float().clone()
+        for name, parameter in model.named_parameters()
+        if parameter.grad is not None
+    }
+
+
+def _merge_conflict_aware_gradients(
+    model,
+    causal_gradients,
+    *,
+    minimum_replay_weight: float,
+    target_cosine: float,
+    maximum_replay_weight: float = 64.0,
+) -> dict[str, float]:
+    import torch
+
+    dot = 0.0
+    causal_sq = 0.0
+    replay_sq = 0.0
+    for name, parameter in model.named_parameters():
+        causal = causal_gradients.get(name)
+        replay = parameter.grad
+        if causal is None or replay is None:
+            continue
+        replay_value = replay.detach().float()
+        dot += float(torch.sum(causal * replay_value).item())
+        causal_sq += float(torch.sum(causal * causal).item())
+        replay_sq += float(torch.sum(replay_value * replay_value).item())
+
+    causal_norm = math.sqrt(max(0.0, causal_sq))
+    replay_norm = math.sqrt(max(0.0, replay_sq))
+    cosine_before = dot / max(1e-12, causal_norm * replay_norm)
+    desired_dot = max(0.0, float(target_cosine)) * causal_norm * replay_norm
+    required_weight = (
+        max(0.0, (desired_dot - dot) / max(1e-12, replay_sq))
+        if replay_sq > 0.0
+        else 0.0
+    )
+    replay_weight = min(
+        max(0.0, float(maximum_replay_weight)),
+        max(float(minimum_replay_weight), required_weight),
+    )
+
+    merged_dot = 0.0
+    merged_sq = 0.0
+    for name, parameter in model.named_parameters():
+        causal = causal_gradients.get(name)
+        replay = parameter.grad
+        if causal is None:
+            continue
+        if replay is None:
+            merged = causal
+        else:
+            merged = causal + replay_weight * replay.detach().float()
+        parameter.grad = merged.to(
+            device=parameter.device,
+            dtype=parameter.dtype,
+        )
+        if replay is not None:
+            replay_value = replay.detach().float()
+            merged_dot += float(torch.sum(merged * replay_value).item())
+        merged_sq += float(torch.sum(merged * merged).item())
+
+    cosine_after = merged_dot / max(
+        1e-12,
+        math.sqrt(max(0.0, merged_sq)) * replay_norm,
+    )
+    return {
+        "causal_replay_cosine_before": float(cosine_before),
+        "merged_replay_cosine_after": float(cosine_after),
+        "adaptive_replay_weight": float(replay_weight),
+        "required_replay_weight": float(required_weight),
+        "causal_gradient_norm": float(causal_norm),
+        "replay_gradient_norm": float(replay_norm),
+    }
+
+
 def _gradient_pressure(
     runtime,
     reference_model,
@@ -507,16 +586,18 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
     validation_seed_indices = list(range(47, 55))
     variants = [
         {
-            "name": f"TRUST_LR_{lr_factor:g}_SEED_{seed_index}",
+            "name": f"CONFLICT_COS_{target_cosine:g}_SEED_{seed_index}",
             "optimizer_state": "reset",
             "steps": 1,
             "retry_rejection_index": seed_index,
-            "lr_factor": lr_factor,
+            "lr_factor": 1.0,
             "replay_batch_size": 2,
             "replay_sampling": "elementary",
-            "replay_loss_weight": 4.00,
+            "gradient_strategy": "conflict_aware",
+            "minimum_replay_weight": 0.25,
+            "target_replay_cosine": target_cosine,
         }
-        for lr_factor in (1.0, 0.5, 0.25, 0.125)
+        for target_cosine in (0.0, 0.05, 0.10)
         for seed_index in validation_seed_indices
     ]
 
@@ -625,6 +706,14 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 )
                 (loss * (count / max(1, supervised))).backward()
 
+            gradient_strategy = str(
+                variant.get("gradient_strategy", "weighted_sum")
+            )
+            causal_gradients = None
+            if gradient_strategy == "conflict_aware":
+                causal_gradients = _capture_gradients(model)
+                optimizer.zero_grad(set_to_none=True)
+
             replay_rng = random.Random(
                 9_000_000 + step * 97 + variant_retry_seed_offset
             )
@@ -679,8 +768,26 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 replay_labels,
                 temperature=float(protected_plan["reference_kl_temperature"]),
             )
-            protected_loss = replay_loss_weight * replay_loss + kl_weight * kl_loss
-            protected_loss.backward()
+            conflict_stats = {}
+            if gradient_strategy == "conflict_aware":
+                protected_loss = replay_loss + kl_weight * kl_loss
+                protected_loss.backward()
+                conflict_stats = _merge_conflict_aware_gradients(
+                    model,
+                    causal_gradients or {},
+                    minimum_replay_weight=float(
+                        variant.get("minimum_replay_weight", 0.25)
+                    ),
+                    target_cosine=float(
+                        variant.get("target_replay_cosine", 0.0)
+                    ),
+                    maximum_replay_weight=float(
+                        variant.get("maximum_replay_weight", 64.0)
+                    ),
+                )
+            else:
+                protected_loss = replay_loss_weight * replay_loss + kl_weight * kl_loss
+                protected_loss.backward()
 
             gradient_before_clip = _group_gradient_stats(model)
             group_clip_observed = _group_clip(optimizer, group_clip_caps)
@@ -701,6 +808,8 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 "protected_replay_loss": float(replay_loss.detach().cpu()),
                 "protected_reference_kl_loss": float(kl_loss.detach().cpu()),
                 "protected_reference_tokens": int(kl_tokens),
+                "gradient_strategy": gradient_strategy,
+                "conflict_stats": conflict_stats,
             })
 
         after = evaluate_phase5_language(runtime)
