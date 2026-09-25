@@ -504,19 +504,18 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
     if not elementary_indices or not general_indices:
         raise RuntimeError("replay ablation requires elementary and general replay pools")
 
-    validation_seed_indices = list(range(47, 55))
+    validation_seed_indices = list(range(0, 8))
     variants = [
         {
-            "name": f"TRUST_LR_{lr_factor:g}_SEED_{seed_index}",
+            "name": f"POST_ACCEPT_LR_HALF_SEED_{seed_index}",
             "optimizer_state": "reset",
             "steps": 1,
             "retry_rejection_index": seed_index,
-            "lr_factor": lr_factor,
+            "lr_factor": 0.5,
             "replay_batch_size": 2,
             "replay_sampling": "elementary",
             "replay_loss_weight": 4.00,
         }
-        for lr_factor in (1.0, 0.5, 0.25, 0.125)
         for seed_index in validation_seed_indices
     ]
 
