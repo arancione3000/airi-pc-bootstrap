@@ -481,88 +481,31 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
     )
     del pressure_runtime
 
+    seed_indices = [
+        0, 1, 2, 3, 4, 5, 6, 7,
+        8, 12, 16, 24, 31, 32, 33, 34,
+        35, 36, 37, 38, 39, 40, 48, 56, 63,
+    ]
     variants = [
         {
-            "name": "Z_zero_update_control",
-            "optimizer_state": "persisted",
-            "lr_factor": 0.0,
-            "attention_multiplier": 0.0,
-            "embedding_multiplier": 0.0,
-            "ffn_multiplier": 0.0,
-        },
-        {
-            "name": "AA_global_1_256",
-            "optimizer_state": "persisted",
-            "lr_factor": 0.25,
-            "attention_multiplier": 0.35,
-            "embedding_multiplier": 0.25,
-            "ffn_multiplier": 1.0,
-        },
-        {
-            "name": "AB_global_1_512",
-            "optimizer_state": "persisted",
-            "lr_factor": 0.125,
-            "attention_multiplier": 0.35,
-            "embedding_multiplier": 0.25,
-            "ffn_multiplier": 1.0,
-        },
-        {
-            "name": "AC_global_1_1024",
-            "optimizer_state": "persisted",
-            "lr_factor": 0.0625,
-            "attention_multiplier": 0.35,
-            "embedding_multiplier": 0.25,
-            "ffn_multiplier": 1.0,
-        },
-        {
-            "name": "AD_mass_ul_0_2_current",
-            "optimizer_state": "persisted",
+            "name": f"SEED2_{seed_index:02d}",
+            "optimizer_state": "reset",
             "lr_factor": 1.0,
-            "anti_repetition_weight": 0.20,
-            "anti_repetition_aggregation": "recent_probability_mass",
-        },
-        {
-            "name": "AE_mass_ul_0_5_current",
-            "optimizer_state": "persisted",
-            "lr_factor": 1.0,
-            "anti_repetition_weight": 0.50,
-            "anti_repetition_aggregation": "recent_probability_mass",
-        },
-        {
-            "name": "AF_mass_ul_1_current",
-            "optimizer_state": "persisted",
-            "lr_factor": 1.0,
-            "anti_repetition_weight": 1.00,
-            "anti_repetition_aggregation": "recent_probability_mass",
-        },
-        {
-            "name": "AG_mass_ul_2_current",
-            "optimizer_state": "persisted",
-            "lr_factor": 1.0,
-            "anti_repetition_weight": 2.00,
-            "anti_repetition_aggregation": "recent_probability_mass",
-        },
-        {
-            "name": "AH_mass_ul_0_5_ffn_only",
-            "optimizer_state": "persisted",
-            "lr_factor": 1.0,
-            "attention_multiplier": 0.0,
-            "embedding_multiplier": 0.0,
-            "ffn_multiplier": 1.0,
-            "anti_repetition_weight": 0.50,
-            "anti_repetition_aggregation": "recent_probability_mass",
-        },
-        {
-            "name": "AI_mass_ul_1_ffn_only",
-            "optimizer_state": "persisted",
-            "lr_factor": 1.0,
-            "attention_multiplier": 0.0,
-            "embedding_multiplier": 0.0,
-            "ffn_multiplier": 1.0,
-            "anti_repetition_weight": 1.00,
-            "anti_repetition_aggregation": "recent_probability_mass",
-        },
+            "retry_rejection_index": seed_index,
+            "steps": 2,
+        }
+        for seed_index in seed_indices
     ]
+    variants.extend([
+        {
+            "name": f"SEED1_{seed_index:02d}",
+            "optimizer_state": "reset",
+            "lr_factor": 1.0,
+            "retry_rejection_index": seed_index,
+            "steps": 1,
+        }
+        for seed_index in (0, 3, 8, 16, 31, 38, 48, 63)
+    ])
 
     results = []
     for variant in variants:
@@ -613,9 +556,15 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
         replay_supervised_total = 0
 
         local_steps = max(1, int(variant.get("steps", 2)))
+        variant_retry_index = int(
+            variant.get("retry_rejection_index", rejected)
+        )
+        variant_retry_seed_offset = variant_retry_index * 1_000_003
         for local_step in range(local_steps):
             step = start_step + local_step
-            rng = random.Random(5_000_000 + step + retry_seed_offset)
+            rng = random.Random(
+                5_000_000 + step + variant_retry_seed_offset
+            )
             indices = [rng.randrange(len(blocks)) for _ in range(32)]
             optimizer.zero_grad(set_to_none=True)
 
@@ -658,7 +607,9 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 )
                 (loss * (count / max(1, supervised))).backward()
 
-            replay_rng = random.Random(9_000_000 + step * 97 + retry_seed_offset)
+            replay_rng = random.Random(
+                9_000_000 + step * 97 + variant_retry_seed_offset
+            )
             replay_indices = [replay_rng.randrange(len(protected_rows)) for _ in range(2)]
             replay_ids, replay_labels = _sft_training_batch(runtime, protected_rows, replay_indices)
             replay_count = int((replay_labels[:, 1:] != -100).sum().item())
@@ -721,6 +672,8 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             "name": variant["name"],
             "accepted_by_unchanged_guard": bool(accepted),
             "optimizer_state": state_mode,
+            "retry_rejection_index": variant_retry_index,
+            "attempted_steps": local_steps,
             "optimizer_storage": storage,
             "effective_scale": effective_scale,
             "steps": local_steps,
