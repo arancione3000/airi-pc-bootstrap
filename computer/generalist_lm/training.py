@@ -486,6 +486,7 @@ def train_sft_residual_recovery(
     repetition_window: int = 16,
     kl_weight: float = 0.75,
     train_upstream: bool = False,
+    sampling_mode: str = "random",
 ) -> dict[str, Any]:
     """Trust-region SFT for the revived FFN residual branch.
 
@@ -513,6 +514,9 @@ def train_sft_residual_recovery(
     if source_d_ff <= 0 or source_d_ff >= target_d_ff:
         raise ValueError("source_d_ff must identify the pre-growth FF width")
     kl_weight = max(0.0, float(kl_weight))
+    sampling = str(sampling_mode).strip().lower()
+    if sampling not in {"random", "cyclic"}:
+        raise ValueError("sampling_mode must be 'random' or 'cyclic'")
 
     device_obj = torch.device(device)
     model.to(device_obj)
@@ -578,9 +582,16 @@ def train_sft_residual_recovery(
     supervised_tokens = 0
     last_objective_stats: dict[str, Any] = {}
 
-    for _ in range(steps):
+    for step_index in range(steps):
         optimizer.zero_grad(set_to_none=True)
-        indices = [rng.randrange(len(examples)) for _ in range(batch_size)]
+        if sampling == "cyclic":
+            start = (int(seed) + step_index * batch_size) % len(examples)
+            indices = [
+                (start + offset) % len(examples)
+                for offset in range(batch_size)
+            ]
+        else:
+            indices = [rng.randrange(len(examples)) for _ in range(batch_size)]
         ids, labels = _batch(
             examples,
             tokenizer,
@@ -607,10 +618,19 @@ def train_sft_residual_recovery(
                 raise RuntimeError(
                     "residual KL recovery requires protected replay anchors"
                 )
-            anchor_indices = [
-                rng.randrange(len(anchors))
-                for _ in range(batch_size)
-            ]
+            if sampling == "cyclic":
+                anchor_start = (
+                    int(seed) * 1009 + step_index * batch_size
+                ) % len(anchors)
+                anchor_indices = [
+                    (anchor_start + offset) % len(anchors)
+                    for offset in range(batch_size)
+                ]
+            else:
+                anchor_indices = [
+                    rng.randrange(len(anchors))
+                    for _ in range(batch_size)
+                ]
             anchor_ids, anchor_labels = _batch(
                 anchors,
                 tokenizer,
@@ -682,6 +702,7 @@ def train_sft_residual_recovery(
         "source_d_ff": source_d_ff,
         "target_d_ff": target_d_ff,
         "train_upstream": bool(train_upstream),
+        "sampling_mode": sampling,
         "trainable_coordinate_count": int(trainable_coordinate_count),
         "teacher_kl_weight": kl_weight,
         "anchor_example_count": len(anchors),
