@@ -13,11 +13,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: airi-phase5-calibration-ablation
-  cancel-in-progress: true
+  group: airi-phase5-calibration-ablation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
 
 jobs:
   ablation:
+    strategy:
+      fail-fast: false
+      matrix:
+        policy:
+          - R2_B12_S16_LR1E6_KL5
+          - R2_B24_S12_LR1E6_KL5
+          - R2_B12_S16_LR625E7_KL5
+          - R2_B24_S8_LR125E6_KL5
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -45,12 +53,13 @@ jobs:
           set -euo pipefail
           python -m generalist_lm.phase5_calibration_ablation \
             --state-dir "${STATE_DIR}" \
+            --policy "${{ matrix.policy }}" \
             --output /tmp/phase5-calibration.json \
             | tee /tmp/phase5-calibration.stdout.json
       - name: Upload calibration evidence
         uses: actions/upload-artifact@v4
         with:
-          name: AIRI-Phase5-Residual-Calibration-${{ github.run_number }}
+          name: AIRI-Phase5-Residual-Calibration-${{ matrix.policy }}-${{ github.run_number }}
           path: /tmp/phase5-calibration.json
           if-no-files-found: error
           retention-days: 7
