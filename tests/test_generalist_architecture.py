@@ -690,6 +690,72 @@ def test_meta_controller_routes_language_collapse_to_architecture_search(tmp_pat
     assert decision["permissions"]["may_weaken_promotion_gates"] is False
 
 
+def test_meta_controller_prefers_live_status_collapse_over_stale_checkpoint_metrics(
+    tmp_path: Path,
+):
+    (tmp_path / "champion").mkdir()
+    (tmp_path / "champion" / "research-metrics.json").write_text(
+        json.dumps({
+            "parameters": 115_328,
+            "canary": {"nll_per_byte": 1.9},
+        }),
+        encoding="utf-8",
+    )
+    (tmp_path / "status.json").write_text(
+        json.dumps({
+            "cycle": 119,
+            "champion_report": {
+                "parameters": 115_328,
+                "generation_pathological_repetition": True,
+                "generation_repetition_rate": 0.81,
+                "generation_unique_token_ratio": 0.18,
+                "generation_longest_repeated_token_run": 14,
+                "domain_nll_per_byte": {"language": 4.2},
+            },
+        }),
+        encoding="utf-8",
+    )
+    decision = decide_next_action(tmp_path)
+    assert decision["action"] == "architecture_search"
+    assert "autoregressive language collapse remains" in decision["reasons"]
+    assert decision["observations"]["pathological_repetition"] is True
+    assert decision["observations"]["repetition_rate"] == pytest.approx(0.81)
+    assert decision["observations"]["unique_token_ratio"] == pytest.approx(0.18)
+    assert decision["observations"]["longest_repeated_token_run"] == 14
+    assert decision["observations"]["language_nll"] == pytest.approx(4.2)
+    assert decision["observations"]["degeneration_evidence"]["status_champion"] is True
+
+
+def test_meta_controller_uses_rotating_canary_collapse(tmp_path: Path):
+    (tmp_path / "champion").mkdir()
+    (tmp_path / "champion" / "research-metrics.json").write_text(
+        json.dumps({"parameters": 1_300_000}),
+        encoding="utf-8",
+    )
+    (tmp_path / "status.json").write_text(
+        json.dumps({
+            "cycle": 120,
+            "champion_report": {
+                "parameters": 1_300_000,
+                "generation_repetition_rate": 0.20,
+                "generation_unique_token_ratio": 0.65,
+                "canary": {
+                    "generation_repetition_rate": 0.83,
+                    "generation_unique_token_ratio": 0.15,
+                    "generation_longest_repeated_token_run": 12,
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+    decision = decide_next_action(tmp_path)
+    assert decision["action"] == "architecture_search"
+    assert "autoregressive language collapse remains" in decision["reasons"]
+    assert decision["observations"]["repetition_rate"] == pytest.approx(0.83)
+    assert decision["observations"]["unique_token_ratio"] == pytest.approx(0.15)
+    assert decision["observations"]["longest_repeated_token_run"] == 12
+
+
 def test_language_rescue_assigns_majority_pretraining_mass_to_natural_text():
     documents = [
         CorpusDocument("general:a", "General prose sentence long enough.", "a", 35, "general"),
