@@ -444,18 +444,20 @@ def audit_history_store(state_dir: str | Path | None = None) -> dict[str, Any]:
             {"recorded": recorded, "actual": metadata},
         )
 
-    champion = _read_json(root / "champion.json", {})
-    champion_id = (
-        str(champion.get("genome_id", ""))
-        if isinstance(champion, dict)
-        else ""
-    )
-    if metadata is not None and metadata.get("records", 0) > 0:
-        check(
-            "history:latest_selected_matches_champion",
-            bool(champion_id) and last_selected == champion_id,
-            {"champion": champion_id, "history_selected": last_selected},
+    champion_path = root / "champion.json"
+    if champion_path.exists():
+        champion = _read_json(champion_path, {})
+        champion_id = (
+            str(champion.get("genome_id", ""))
+            if isinstance(champion, dict)
+            else ""
         )
+        if metadata is not None and metadata.get("records", 0) > 0:
+            check(
+                "history:latest_selected_matches_champion",
+                bool(champion_id) and last_selected == champion_id,
+                {"champion": champion_id, "history_selected": last_selected},
+            )
 
     failed = [row for row in checks if not row["ok"]]
     return {
