@@ -1,5 +1,5 @@
 name: AIRI Phase 5 Residual Calibration Ablation
-# matrix-v2 trigger
+# upstream-residual-matrix-v1
 
 on:
   workflow_dispatch:
@@ -37,10 +37,10 @@ jobs:
       fail-fast: false
       matrix:
         policy:
-          - R2_B12_S16_LR1E6_KL5
-          - R2_B24_S12_LR1E6_KL5
-          - R2_B12_S16_LR625E7_KL5
-          - R2_B24_S8_LR125E6_KL5
+          - UP_COV_B6_S8_LR3125E7_KL5
+          - UP_COV_B6_S12_LR3125E7_KL10
+          - UP_COV_B6_S8_LR625E7_KL10
+          - UP_COV_B12_S8_LR3125E7_KL10
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
