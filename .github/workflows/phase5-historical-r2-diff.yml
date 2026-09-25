@@ -1,0 +1,61 @@
+name: AIRI Phase 5 Historical R2 Diff
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/phase5_historical_r2_diff.py'
+      - '.github/workflows/phase5-historical-r2-diff.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: airi-phase5-historical-r2-diff-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: computer
+      CURRENT_REPO: /tmp/airi-current-state
+      CURRENT_DIR: /tmp/airi-current-state/generalist-state/bootstrap-data/candidate
+      OLD_REPO: /tmp/airi-r2-state
+      OLD_DIR: /tmp/airi-r2-state/generalist-state/bootstrap-data/candidate
+      R2_SHA: e7c2c14de4359dfab952f903a17e65fdf3877899
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+      - name: Clone current and historical state
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch generalist-state --single-branch \
+            "https://github.com/${GITHUB_REPOSITORY}.git" "${CURRENT_REPO}"
+          git clone --quiet --no-checkout --filter=blob:none \
+            "https://github.com/${GITHUB_REPOSITORY}.git" "${OLD_REPO}"
+          git -C "${OLD_REPO}" fetch --quiet --depth 1 origin "${R2_SHA}"
+          git -C "${OLD_REPO}" checkout --quiet --detach "${R2_SHA}"
+          test -f "${CURRENT_DIR}/model.pt"
+          test -f "${OLD_DIR}/model.pt"
+      - name: Compare live and accepted R2 checkpoint
+        run: |
+          python -m generalist_lm.phase5_historical_r2_diff \
+            --current "${CURRENT_DIR}" \
+            --historical "${OLD_DIR}" \
+            --source-d-ff 1888 \
+            --output /tmp/r2-diff.json \
+            | tee /tmp/r2-diff.stdout.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AIRI-Phase5-Historical-R2-Diff-${{ github.run_number }}
+          path: /tmp/r2-diff.json
+          if-no-files-found: error
+          retention-days: 7
