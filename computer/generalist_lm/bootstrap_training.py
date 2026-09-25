@@ -79,7 +79,7 @@ PHASE5_100M_UNIQUE_CORPUS_TOKENS = 32_000_000
 PHASE5_250M_UNIQUE_CORPUS_TOKENS = 40_000_000
 PHASE5_500M_UNIQUE_CORPUS_TOKENS = 60_000_000
 PHASE5_1B_UNIQUE_CORPUS_TOKENS = 100_000_000
-PHASE5_PROTECTED_CAUSAL_VERSION = "phase5-protected-causal-v1"
+PHASE5_PROTECTED_CAUSAL_VERSION = "phase5-protected-causal-v2"
 PHASE5_LEARNING_EFFICIENCY_VERSION = "phase5-learning-efficiency-v1"
 
 # One-time human-assisted capacity gift for the current AIRI lineage only.
@@ -1231,9 +1231,32 @@ def _phase5_recovery_plan(
         and persisted_scale <= 0.0625
         and (rejected >= 1 or recovery_hold or (last_segment_accepted and 0 < accepted_streak <= 3))
     )
+    deep_stall_micro_recovery = bool(
+        micro_recovery
+        and (
+            rejected >= 8
+            or (
+                bool(recovery_hold)
+                and 0 < accepted_streak < 2
+            )
+        )
+    )
     if micro_recovery:
         stable_fast_lane = False
-        micro_cap = 8_000 if accepted_streak < 2 else 16_000 if accepted_streak == 2 else 32_000
+        if deep_stall_micro_recovery:
+            # Live ablation on the stalled 50M checkpoint showed that the
+            # guard-safe rescue prefix is one effective batch (~4,064 causal
+            # tokens). Keep one more accepted rescue at that size before
+            # re-entering the normal 8k -> 16k -> 32k ladder.
+            micro_cap = 4_000
+        else:
+            micro_cap = (
+                8_000
+                if accepted_streak < 2
+                else 16_000
+                if accepted_streak == 2
+                else 32_000
+            )
         segment_budget = min(int(segment_budget), micro_cap)
 
     if rejected <= 0:
@@ -1252,6 +1275,7 @@ def _phase5_recovery_plan(
         "stall_recovery": bool(stall_recovery),
         "stable_fast_lane": bool(stable_fast_lane),
         "micro_recovery": micro_recovery,
+        "deep_stall_micro_recovery": bool(deep_stall_micro_recovery),
         # Reset stale AdamW momentum only when entering rescue because of a
         # rejection.  After an accepted rescue segment, keep its valid
         # optimizer state while the sticky hold continues.
@@ -1276,6 +1300,7 @@ def _protected_continual_plan(
     *,
     consecutive_rejections: int,
     success_streak: int,
+    deep_stall_recovery: bool = False,
 ) -> dict[str, Any]:
     """Bound replay/KL pressure from live quality headroom.
 
@@ -1294,24 +1319,43 @@ def _protected_continual_plan(
         or repetition >= anchor_repetition + 0.05
         or multiword < 0.80
     )
-    if fragile:
+    elementary_trust_region = bool(deep_stall_recovery and fragile)
+    if elementary_trust_region:
+        # The live 50M ablation showed that generic protected replay does not
+        # constrain greedy diversity near the durable-anchor cliff. A single
+        # 4k rescue step with elementary bilingual replay and a 4.0 loss
+        # weight passed the unchanged guard while still improving NLL.
+        replay_fraction = 0.80
+        replay_loss_weight = 4.00
+        replay_sampling = "elementary"
+        kl_weight = 0.50
+        anti_repetition_weight = 0.02
+    elif fragile:
         replay_fraction = 0.20
+        replay_loss_weight = replay_fraction / (1.0 - replay_fraction)
+        replay_sampling = "uniform"
         kl_weight = 0.50
         anti_repetition_weight = 0.02
     elif streak >= 4:
         replay_fraction = 0.10
+        replay_loss_weight = replay_fraction / (1.0 - replay_fraction)
+        replay_sampling = "uniform"
         kl_weight = 0.20
         anti_repetition_weight = 0.005
     else:
         replay_fraction = 0.15
+        replay_loss_weight = replay_fraction / (1.0 - replay_fraction)
+        replay_sampling = "uniform"
         kl_weight = 0.30
         anti_repetition_weight = 0.01
     return {
         "version": PHASE5_PROTECTED_CAUSAL_VERSION,
         "enabled": True,
         "fragile_language_state": fragile,
+        "elementary_trust_region": bool(elementary_trust_region),
+        "replay_sampling": replay_sampling,
         "replay_fraction": float(replay_fraction),
-        "replay_loss_weight": float(replay_fraction / (1.0 - replay_fraction)),
+        "replay_loss_weight": float(replay_loss_weight),
         "reference_kl_weight": float(kl_weight),
         "reference_kl_temperature": 1.0,
         "anti_repetition_weight": float(anti_repetition_weight),
@@ -1430,6 +1474,20 @@ def _protected_causal_replay_rows(
         "held_out_filtered": int(filtered),
         "total_rows": len(combined),
     }
+
+
+def _elementary_protected_replay_indices(rows) -> list[int]:
+    elementary_fingerprints: set[str] = set()
+    curriculum = _elementary_rehabilitation_rows()
+    for stage in PHASE5_LANGUAGE_REHABILITATION_STAGES:
+        stage_rows = curriculum[stage]
+        for row in list(stage_rows["it"]) + list(stage_rows["en"]):
+            elementary_fingerprints.add(_sft_row_fingerprint(row))
+    return [
+        index
+        for index, row in enumerate(rows)
+        if _sft_row_fingerprint(row) in elementary_fingerprints
+    ]
 
 
 def _sft_training_batch(runtime, rows, indices):
@@ -3774,17 +3832,35 @@ def run_segment(
         guard_anchor,
         consecutive_rejections=consecutive_rejections,
         success_streak=success_streak,
+        deep_stall_recovery=bool(
+            recovery_plan.get("deep_stall_micro_recovery", False)
+        ),
     )
     protected_rows, protected_row_counts = _protected_causal_replay_rows(
         protected_replay.sft_train,
         heldout_sft=bundle.sft_validation,
     )
+    elementary_replay_indices = _elementary_protected_replay_indices(
+        protected_rows
+    )
+    if (
+        str(protected_plan.get("replay_sampling") or "uniform")
+        == "elementary"
+        and not elementary_replay_indices
+    ):
+        raise RuntimeError(
+            "deep-stall protected training has no elementary replay rows"
+        )
+    elementary_replay_index_set = set(elementary_replay_indices)
     protected_migration = (
         previous_protected_version != PHASE5_PROTECTED_CAUSAL_VERSION
     )
     progress["protected_continual_training"] = {
         **protected_plan,
-        "replay_rows": protected_row_counts,
+        "replay_rows": {
+            **protected_row_counts,
+            "safe_elementary_rows": len(elementary_replay_indices),
+        },
         "unique_corpus_target_tokens": int(corpus_target_tokens),
         "unique_data_fraction": float(corpus_target_tokens / max(1, target_tokens)),
         "holdout_excluded": True,
@@ -3852,6 +3928,8 @@ def run_segment(
     for reference_parameter in reference_model.parameters():
         reference_parameter.requires_grad_(False)
     replay_tokens_trained = 0
+    replay_rows_trained = 0
+    elementary_replay_rows_trained = 0
     segment_started_at = time.perf_counter()
     runtime.model.train()
     while (
@@ -3938,10 +4016,23 @@ def run_segment(
         replay_rng = random.Random(
             9_000_000 + step * 97 + retry_seed_offset
         )
-        replay_indices = [
-            replay_rng.randrange(len(protected_rows))
-            for _ in range(2)
-        ]
+        if str(protected_plan.get("replay_sampling") or "uniform") == "elementary":
+            replay_indices = [
+                elementary_replay_indices[
+                    replay_rng.randrange(len(elementary_replay_indices))
+                ]
+                for _ in range(2)
+            ]
+        else:
+            replay_indices = [
+                replay_rng.randrange(len(protected_rows))
+                for _ in range(2)
+            ]
+        replay_rows_trained += len(replay_indices)
+        elementary_replay_rows_trained += sum(
+            int(index in elementary_replay_index_set)
+            for index in replay_indices
+        )
         replay_ids, replay_labels = _sft_training_batch(
             runtime,
             protected_rows,
@@ -4065,6 +4156,16 @@ def run_segment(
         "consecutive_rejections_before": int(consecutive_rejections),
         "elapsed_training_seconds": float(elapsed_training_seconds),
         "replay_tokens": int(replay_tokens_trained),
+        "replay_sampling": str(
+            protected_plan.get("replay_sampling") or "uniform"
+        ),
+        "replay_rows_sampled": int(replay_rows_trained),
+        "replay_elementary_rows_sampled": int(
+            elementary_replay_rows_trained
+        ),
+        "replay_elementary_row_fraction": float(
+            elementary_replay_rows_trained / max(1, replay_rows_trained)
+        ),
         "actual_replay_token_fraction": replay_tokens_trained / max(1, replay_tokens_trained + attempted_tokens),
         "new_supervised_tokens": int(attempted_tokens),
         "replay_supervised_tokens": int(replay_tokens_trained),
