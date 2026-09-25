@@ -4768,17 +4768,17 @@
   "last_train_loss": 1.3835361003875732,
   "last_validation_loss": 2.0343909660975137,
   "learning_efficiency": {
-    "acceptance_rate": 0.03333333333333333,
+    "acceptance_rate": 0.03278688524590164,
     "accepted_segments": 2,
     "accepted_tokens": 16256,
-    "accepted_tokens_per_hour": 15420.535634577654,
-    "attempted_segments": 60,
-    "attempted_tokens": 1146048,
-    "attempted_tokens_per_hour": 1087841.7386252827,
+    "accepted_tokens_per_hour": 15308.722095950994,
+    "attempted_segments": 61,
+    "attempted_tokens": 1154176,
+    "attempted_tokens_per_hour": 1087608.0652233101,
     "checkpoint_persist_seconds": 2.421005121000235,
     "cumulative_language_quality_gain": 0.044359240450248305,
     "effective_new_tokens": 16256,
-    "elapsed_training_seconds": 3792.6222661889988,
+    "elapsed_training_seconds": 3820.3409232229988,
     "history": [
       {
         "accepted": false,
@@ -5679,6 +5679,21 @@
         "replay_fraction": 0.2,
         "replay_tokens": 468,
         "updated_at_unix": 1790310465
+      },
+      {
+        "accepted": false,
+        "accepted_tokens": 0,
+        "attempted_tokens": 8128,
+        "checkpoint_persist_seconds": 0.0,
+        "elapsed_training_seconds": 27.71865703399999,
+        "language_nll_delta": -0.009547072997207806,
+        "language_quality_gain": 0.0,
+        "multiword_delta": 0.0,
+        "reference_kl_weight": 0.5,
+        "repetition_delta": 0.06685127968965543,
+        "replay_fraction": 0.2,
+        "replay_tokens": 440,
+        "updated_at_unix": 1790311429
       }
     ],
     "learning_gain_per_100k_tokens": 0.2728791858406023,
@@ -5728,12 +5743,12 @@
     },
     "reference_kl_weight": 0.5,
     "replay_fraction": 0.2,
-    "replay_tokens": 57897,
-    "rollback_rate": 0.9666666666666667,
-    "rollback_segments": 58,
+    "replay_tokens": 58337,
+    "rollback_rate": 0.9672131147540983,
+    "rollback_segments": 59,
     "started_tokens_processed": 32815853,
     "unique_data_fraction": 0.32,
-    "updated_at_unix": 1790310465,
+    "updated_at_unix": 1790311429,
     "version": "phase5-learning-efficiency-v1"
   },
   "learning_rate": 1.8327486696247453e-06,
@@ -5993,7 +6008,7 @@
       "tokens_processed": 32832109
     }
   ],
-  "segment_guard_consecutive_rejections": 28,
+  "segment_guard_consecutive_rejections": 29,
   "segment_guard_effective_budget_tokens": 8000,
   "segment_guard_last_accepted": false,
   "segment_guard_last_attempted_steps": 2,
@@ -6005,20 +6020,6 @@
   "segment_guard_recovery_hold": false,
   "segment_guard_recovery_mode": false,
   "segment_guard_rejections": [
-    {
-      "after_quality": -0.9369327267825102,
-      "attempted_steps": 8,
-      "attempted_tokens": 32512,
-      "before_quality": -0.7991499060849752,
-      "learning_rate_scale": 0.015625,
-      "reasons": [
-        "segment repetition rate regressed by more than 0.06",
-        "lineage is below its durable language anchor and this segment did not measurably recover quality",
-        "repetition rate exceeds durable anchor by more than 0.08"
-      ],
-      "recovery_mode": true,
-      "tokens_processed": 32815853
-    },
     {
       "after_quality": -0.8050592785458035,
       "attempted_steps": 2,
@@ -6409,6 +6410,19 @@
     },
     {
       "after_quality": -0.9444272124992426,
+      "attempted_steps": 2,
+      "attempted_tokens": 8128,
+      "before_quality": -0.7547908831456025,
+      "learning_rate_scale": 0.015625,
+      "reasons": [
+        "segment repetition rate regressed by more than 0.06",
+        "repetition rate exceeds durable anchor by more than 0.08"
+      ],
+      "recovery_mode": false,
+      "tokens_processed": 32832109
+    },
+    {
+      "after_quality": -0.875016782961671,
       "attempted_steps": 2,
       "attempted_tokens": 8128,
       "before_quality": -0.7547908831456025,
@@ -18548,7 +18562,7 @@
     "protected_replay_micro_batch_size": 2
   },
   "unique_corpus_target_tokens": 32000000,
-  "updated_at_unix": 1790310465,
+  "updated_at_unix": 1790311429,
   "valid_tokens_processed": 32837763,
   "version": "phase5-language-bootstrap-v3"
 }
