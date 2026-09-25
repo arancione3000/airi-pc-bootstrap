@@ -1,0 +1,175 @@
+name: AIRI Generalist 100M Packed Cache Prewarm
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/generalist-packed-cache-prewarm.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/generalist-packed-cache-prewarm.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: airi-generalist-packed-cache-prewarm
+  cancel-in-progress: true
+
+jobs:
+  prewarm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: computer
+      STATE_REPO: /tmp/airi-packed-prewarm-state
+      STATE_DIR: /tmp/airi-packed-prewarm-state/generalist-state
+      CACHE_DIR: /tmp/airi-generalist-phase5-cache
+      TARGET_TOKENS: '100000000'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install CPU data runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check 'datasets>=3.6,<5'
+
+      - name: Restore reviewed source cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CACHE_DIR }}
+          key: airi-generalist-phase5-data-v2-${{ runner.os }}-${{ env.TARGET_TOKENS }}
+          restore-keys: |
+            airi-generalist-phase5-data-v2-${{ runner.os }}-
+
+      - name: Restore any existing packed cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CACHE_DIR }}/phase5-packed-blocks-v1
+          key: airi-generalist-phase5-packed-v1-${{ runner.os }}-${{ env.TARGET_TOKENS }}-prewarm-${{ github.run_id }}
+          restore-keys: |
+            airi-generalist-phase5-packed-v1-${{ runner.os }}-${{ env.TARGET_TOKENS }}-
+
+      - name: Restore live AIRI state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf "${STATE_REPO}"
+          git clone --quiet --branch generalist-state --single-branch             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"             "${STATE_REPO}"
+          test -s "${STATE_DIR}/bootstrap-data/manifest.json"
+          test -s "${STATE_DIR}/bootstrap-data/candidate/model.pt"
+
+      - name: Build exact verified 100M packed blocks
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import re
+          from pathlib import Path
+
+          from generalist_lm.bootstrap_data import build_bootstrap_bundle
+          from generalist_lm.bootstrap_training import _frequent_word_documents
+          from generalist_lm.pretraining import (
+              load_packed_block_cache,
+              pack_causal_blocks,
+              save_packed_block_cache,
+          )
+          from generalist_lm.runtime import GeneralistRuntime
+
+          state = Path("/tmp/airi-packed-prewarm-state/generalist-state")
+          cache = Path("/tmp/airi-generalist-phase5-cache")
+          bootstrap = state / "bootstrap-data"
+          manifest = json.loads((bootstrap / "manifest.json").read_text(encoding="utf-8"))
+          runtime = GeneralistRuntime.from_checkpoint(bootstrap / "candidate", device="cpu")
+
+          bundle = build_bootstrap_bundle(
+              runtime.tokenizer,
+              cache_dir=cache,
+              target_tokens=20_000_000,
+              previous_manifest=manifest,
+          )
+          old_sha = str(manifest.get("manifest_content_sha256") or "")
+          new_sha = str(bundle.manifest.get("manifest_content_sha256") or "")
+          if not old_sha or new_sha != old_sha:
+              raise SystemExit(f"manifest identity changed: {old_sha} != {new_sha}")
+          if int(bundle.manifest.get("actual_selected_tokens", 0) or 0) < 19_000_000:
+              raise SystemExit("reviewed corpus coverage is below 95%")
+
+          root = cache / "phase5-packed-blocks-v1"
+          root.mkdir(parents=True, exist_ok=True)
+          base = {
+              "version": "phase5-stage-block-cache-v1",
+              "manifest_content_sha256": new_sha,
+              "tokenizer_version": str(runtime.tokenizer.version),
+              "tokenizer_vocab_size": int(runtime.tokenizer.vocab_size),
+              "context_length": int(runtime.config.context_length),
+          }
+
+          def identity(split):
+              return {**base, "split": split}
+
+          def path(split):
+              safe = re.sub(r"[^a-zA-Z0-9_.-]+", "-", split)
+              digest = hashlib.sha256(
+                  json.dumps(identity(split), sort_keys=True).encode("utf-8")
+              ).hexdigest()[:20]
+              return root / f"{safe}-{digest}.bin"
+
+          specs = {
+              "A_frequent_word_contexts": _frequent_word_documents(bundle.train_documents),
+              "B_short_sentence_completion": [
+                  row for row in bundle.train_documents if len(row.text) <= 220
+              ] or list(bundle.train_documents),
+              "C_causal_next_sentence": list(bundle.train_documents),
+              "validation": list(bundle.validation_documents),
+          }
+
+          report = {}
+          for split, documents in specs.items():
+              target = path(split)
+              cached = load_packed_block_cache(
+                  target,
+                  expected_identity=identity(split),
+              )
+              if cached is None:
+                  cached = pack_causal_blocks(
+                      documents,
+                      runtime.tokenizer,
+                      context_length=runtime.config.context_length,
+                  )
+                  save_packed_block_cache(
+                      target,
+                      cached,
+                      block_size=runtime.config.context_length,
+                      identity=identity(split),
+                  )
+                  hit = False
+              else:
+                  hit = True
+              if not cached:
+                  raise SystemExit(f"empty packed split: {split}")
+              report[split] = {"blocks": len(cached), "cache_hit": hit}
+
+          print(json.dumps({
+              "ok": True,
+              "manifest_content_sha256": new_sha,
+              "parameters": sum(p.numel() for p in runtime.model.parameters()),
+              "tokenizer_version": runtime.tokenizer.version,
+              "tokenizer_vocab_size": runtime.tokenizer.vocab_size,
+              "context_length": runtime.config.context_length,
+              "splits": report,
+          }, indent=2, sort_keys=True))
+          PY
+
+      - name: Verify packed cache files
+        run: |
+          set -euo pipefail
+          test "$(find "${CACHE_DIR}/phase5-packed-blocks-v1" -type f -name '*.bin' | wc -l)" -ge 4
+          du -sh "${CACHE_DIR}/phase5-packed-blocks-v1"
