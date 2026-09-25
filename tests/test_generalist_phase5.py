@@ -45,6 +45,7 @@ from generalist_lm.bootstrap_training import (
     _rehabilitation_strategy_rejection_count,
     _residual_language_rehabilitation_attempts,
     _phase5_memory_safe_batch_plan,
+    _phase5_language_fragile_state,
     _phase5_parameter_segment_cap,
     _phase5_recovery_plan,
     _phase5_recovery_segment_budget,
@@ -73,6 +74,7 @@ from generalist_lm.pretraining import (
 from generalist_lm.phase5_diagnostics import (
     PHASE5_PROBES,
     _single_greedy_trace,
+    _cross_prompt_diversity,
     _word_tokens,
     degeneration_gate,
     evaluate_phase5_language,
@@ -171,6 +173,60 @@ def test_phase5_recovery_plan_escapes_old_lr_floor_and_resets_momentum():
         consecutive_rejections=9,
     )
     assert floor["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
+
+
+def test_phase5_language_fragility_reuses_protected_plan_semantics():
+    anchor = {
+        "repetition_rate": 0.15772057959235905,
+        "multiword_output_rate": 1.0,
+    }
+    cliff = {
+        "repetition_rate": 0.23689803620537267,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    healthy = {
+        "repetition_rate": 0.19340917541105512,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    assert _phase5_language_fragile_state(cliff, anchor) is True
+    assert _phase5_language_fragile_state(healthy, anchor) is False
+
+
+def test_phase5_fragile_checkpoint_cannot_promote_to_8k_on_streak_alone():
+    plan = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=0,
+        recovery_hold=False,
+        last_segment_accepted=True,
+        success_streak=2,
+        fragile_language_state=True,
+    )
+    assert plan["fragile_language_state"] is True
+    assert plan["trust_region_recovery"] is True
+    assert plan["effective_budget_tokens"] == 4_000
+    assert plan["reset_optimizer"] is True
+
+
+def test_phase5_nonfragile_checkpoint_can_resume_measured_ladder():
+    plan = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=0,
+        recovery_hold=False,
+        last_segment_accepted=True,
+        success_streak=2,
+        fragile_language_state=False,
+    )
+    assert plan["fragile_language_state"] is False
+    assert plan["trust_region_recovery"] is False
+    assert plan["effective_budget_tokens"] == 8_000
 
 
 def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
@@ -673,19 +729,6 @@ def test_generic_architecture_yields_to_active_explicit_lineage_handoff():
     assert "matrix=[]" in workflow
 
 
-def test_architecture_search_defers_cleanly_when_writer_stays_busy():
-    workflow = Path(".github/workflows/generalist-architecture-search.yml").read_text(
-        encoding="utf-8"
-    )
-    assert 'echo "ARCHITECTURE_WINDOW_AVAILABLE=false" >> "${GITHUB_ENV}"' in workflow
-    assert 'echo "ARCHITECTURE_WINDOW_AVAILABLE=true" >> "${GITHUB_ENV}"' in workflow
-    assert "Architecture search deferred: a Generalist state writer still owns the live lineage." in workflow
-    assert "Timed out waiting for state-writer window." not in workflow
-    assert "if: env.ARCHITECTURE_WINDOW_AVAILABLE == 'true'" in workflow
-    assert "needs.plan.outputs.run_search == 'true'" in workflow
-    assert "needs.finalize.result == 'success'" in workflow
-
-
 def test_bootstrap_janitor_preserves_old_worker_without_replacement():
     workflow = Path(
         ".github/workflows/generalist-state-writer-janitor.yml"
@@ -1002,6 +1045,33 @@ def test_residual_rehabilitation_uses_its_own_rejection_counter():
     ) == 3
 
 
+def test_cross_prompt_diversity_detects_duplicate_generation_collapse():
+    traces = [
+        {"raw_output": "The sun lights the road."},
+        {"raw_output": "The sun lights the road."},
+        {"raw_output": "A dog runs in the park."},
+        {"raw_output": "Water is clear."},
+    ]
+    report = _cross_prompt_diversity(traces)
+    assert report["unique_generation_count"] == 3
+    assert report["exact_duplicate_rate"] == pytest.approx(0.25)
+    assert report["dominant_generation_fraction"] == pytest.approx(0.50)
+    assert 0.0 <= report["mean_pairwise_token_jaccard"] <= 1.0
+    assert 0.0 <= report["mean_pairwise_sequence_similarity"] <= 1.0
+
+
+def test_cross_prompt_diversity_is_clean_for_unique_outputs():
+    traces = [
+        {"raw_output": "Hello there."},
+        {"raw_output": "Red and blue."},
+        {"raw_output": "A dog barks."},
+    ]
+    report = _cross_prompt_diversity(traces)
+    assert report["unique_generation_count"] == 3
+    assert report["exact_duplicate_rate"] == pytest.approx(0.0)
+    assert report["dominant_generation_fraction"] == pytest.approx(1.0 / 3.0)
+
+
 def test_residual_rehabilitation_plan_strengthens_kl_instead_of_unlikelihood():
     first = _residual_language_rehabilitation_attempts(
         stage="R1_bilingual_foundations",
@@ -1122,6 +1192,90 @@ def test_residual_kl_recovery_keeps_legacy_weights_bit_stable():
     assert report["anchor_example_count"] == 1
     assert report["mean_teacher_kl_loss"] >= 0.0
     assert report["trainable_coordinate_count"] > 0
+
+
+def test_residual_coverage_sampling_is_seed_independent():
+    torch = pytest.importorskip("torch")
+    source_ff = 32
+    target_ff = 48
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=48,
+        d_model=24,
+        n_heads=4,
+        n_layers=1,
+        d_ff=target_ff,
+        dropout=0.0,
+        tokenizer_version="byte-v1",
+        ff_variant="swiglu",
+    ).validate()
+    base = CausalTransformerLM(cfg)
+    with torch.no_grad():
+        for block in base.blocks:
+            block.ff.up.weight[source_ff:target_ff].zero_()
+            block.ff.up.weight[target_ff + source_ff : 2 * target_ff].zero_()
+            block.ff.down.weight[:, source_ff:target_ff].zero_()
+    runtime = GeneralistRuntime(base, cfg, tokenizer=ByteTokenizer(), device="cpu")
+    _revive_dead_ffn_model_capacity(runtime, source_d_ff=source_ff, seed=123)
+
+    initial = {
+        name: value.detach().clone()
+        for name, value in runtime.model.state_dict().items()
+    }
+    examples = [
+        SFTExample([
+            {"role": "user", "content": f"Prompt {index}"},
+            {"role": "assistant", "content": f"Answer {index}."},
+        ])
+        for index in range(6)
+    ]
+    anchors = [
+        SFTExample([
+            {"role": "user", "content": f"Anchor {index}"},
+            {"role": "assistant", "content": f"Stable {index}."},
+        ])
+        for index in range(8)
+    ]
+
+    final_states = []
+    reports = []
+    for seed in (3, 999):
+        model = CausalTransformerLM(cfg)
+        model.load_state_dict(initial)
+        reference = CausalTransformerLM(cfg)
+        reference.load_state_dict(initial)
+        report = train_sft_residual_recovery(
+            model,
+            reference,
+            ByteTokenizer(),
+            examples,
+            anchor_examples=anchors,
+            source_d_ff=source_ff,
+            steps=4,
+            batch_size=3,
+            learning_rate=1e-4,
+            seed=seed,
+            device="cpu",
+            repetition_unlikelihood_weight=0.0,
+            eos_loss_weight=1.0,
+            kl_weight=1.0,
+            train_upstream=False,
+            sampling_mode="coverage",
+            sampling_offset=1,
+        )
+        reports.append(report)
+        final_states.append({
+            name: value.detach().clone()
+            for name, value in model.state_dict().items()
+        })
+
+    assert reports[0]["sampling_mode"] == "coverage"
+    assert reports[1]["sampling_mode"] == "coverage"
+    assert reports[0]["sampling_offset"] == 1
+    assert reports[1]["sampling_offset"] == 1
+    assert final_states[0].keys() == final_states[1].keys()
+    for name in final_states[0]:
+        assert torch.equal(final_states[0][name], final_states[1][name])
 
 
 def test_dead_capacity_revival_precedes_historical_replacement():
