@@ -105,20 +105,22 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
         list(replay.sft_train),
         heldout_sft=(),
     )
-    anchor_rows = [
-        row for row in safe_replay
-        if _sft_row_fingerprint(row) not in elementary_fps
-    ]
+    anchor_rows = sorted(
+        [
+            row for row in safe_replay
+            if _sft_row_fingerprint(row) not in elementary_fps
+        ],
+        key=_sft_row_fingerprint,
+    )
     if not anchor_rows:
         raise RuntimeError("calibration ablation has no protected KL anchors")
 
-    # Pre-registered variance-reduction matrix.  These policies were fixed
-    # before looking at their validation outcomes.  Larger batches reduce
-    # stochastic coverage variance while stronger teacher KL constrains the
-    # revived residual branch against language drift.
+    # Pre-registered deterministic coverage matrix.  Cyclic sampling
+    # removes random-with-replacement variance from the tiny R2 curriculum
+    # while rotating through sorted protected anchors.
     policies = [
         {
-            "policy": "R2_B12_S16_LR1E6_KL5",
+            "policy": "CYCLIC_R2_B12_S16_LR1E6_KL5",
             "rows": r2_rows,
             "steps": 16,
             "batch_size": 12,
@@ -126,27 +128,19 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             "kl_weight": 5.0,
         },
         {
-            "policy": "R2_B24_S12_LR1E6_KL5",
-            "rows": r2_rows,
-            "steps": 12,
-            "batch_size": 24,
-            "learning_rate": 1.0e-6,
-            "kl_weight": 5.0,
-        },
-        {
-            "policy": "R2_B12_S16_LR625E7_KL5",
-            "rows": r2_rows,
-            "steps": 16,
-            "batch_size": 12,
-            "learning_rate": 6.25e-7,
-            "kl_weight": 5.0,
-        },
-        {
-            "policy": "R2_B24_S8_LR125E6_KL5",
+            "policy": "CYCLIC_R2_B24_S8_LR125E6_KL5",
             "rows": r2_rows,
             "steps": 8,
             "batch_size": 24,
             "learning_rate": 1.25e-6,
+            "kl_weight": 5.0,
+        },
+        {
+            "policy": "CYCLIC_R2_B12_S24_LR8E7_KL5",
+            "rows": r2_rows,
+            "steps": 24,
+            "batch_size": 12,
+            "learning_rate": 8.0e-7,
             "kl_weight": 5.0,
         },
     ]
@@ -174,6 +168,7 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 repetition_window=16,
                 kl_weight=float(policy["kl_weight"]),
                 train_upstream=False,
+                sampling_mode="cyclic",
             )
             after = evaluate_phase5_language(runtime)
             after_diversity = _diversity(after)
@@ -204,6 +199,7 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 "batch_size": int(policy["batch_size"]),
                 "learning_rate": float(policy["learning_rate"]),
                 "kl_weight": float(policy["kl_weight"]),
+                "sampling_mode": "cyclic",
                 "calibration_ok": calibration_ok,
                 "passes_unchanged_language_guard": bool(gate_ok),
                 "training": training,
@@ -291,7 +287,7 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
 
     return {
         "schema": 1,
-        "version": "phase5-residual-calibration-ablation-v2",
+        "version": "phase5-residual-calibration-ablation-v3-cyclic",
         "read_only": True,
         "lineage_id": str(progress.get("lineage_id") or ""),
         "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
