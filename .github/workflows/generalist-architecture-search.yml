@@ -38,10 +38,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:
-      run_search: ${{ steps.plan.outputs.run_search }}
-      matrix: ${{ steps.plan.outputs.matrix }}
-      cycle: ${{ steps.plan.outputs.cycle }}
-      base_state_sha: ${{ steps.plan.outputs.base_state_sha }}
+      run_search: ${{ steps.plan.outputs.run_search || steps.writer_window.outputs.run_search }}
+      matrix: ${{ steps.plan.outputs.matrix || steps.writer_window.outputs.matrix }}
+      cycle: ${{ steps.plan.outputs.cycle || steps.writer_window.outputs.cycle }}
+      base_state_sha: ${{ steps.plan.outputs.base_state_sha || steps.writer_window.outputs.base_state_sha }}
+      deferred: ${{ steps.writer_window.outputs.deferred }}
     env:
       PYTHONPATH: computer
       STATE_REPO: /tmp/airi-architecture-state-repo
@@ -66,6 +67,7 @@ jobs:
           python -m pip install --disable-pip-version-check -r computer/mathesis/requirements.txt
 
       - name: Wait for current Generalist state writer
+        id: writer_window
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -94,15 +96,27 @@ jobs:
             done
             if (( active == 0 )); then
               echo "Architecture search owns a clean state snapshot window."
+              {
+                echo "deferred=false"
+                echo "base_state_sha="
+              } >> "${GITHUB_OUTPUT}"
               exit 0
             fi
             echo "Waiting for ${active} active Generalist state-writer run(s)."
             sleep 20
           done
-          echo "Timed out waiting for state-writer window." >&2
-          exit 1
+          echo "Generalist writer remained active; deferring architecture search cleanly."
+          {
+            echo "deferred=true"
+            echo "run_search=false"
+            echo "matrix=[]"
+            echo "cycle=0"
+            echo "base_state_sha="
+          } >> "${GITHUB_OUTPUT}"
+          exit 0
 
       - name: Restore persistent Generalist and MATHESIS state
+        if: steps.writer_window.outputs.deferred != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -123,6 +137,7 @@ jobs:
           fi
 
       - name: Ask meta-controller and build Architecture IR population
+        if: steps.writer_window.outputs.deferred != 'true'
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -200,6 +215,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - uses: actions/upload-artifact@v4
+        if: steps.writer_window.outputs.deferred != 'true'
         with:
           name: architecture-plan
           path: /tmp/architecture-plan
@@ -420,7 +436,7 @@ jobs:
 
   resume-bootstrap:
     needs: [plan, finalize]
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.resume_bootstrap_target != '' }}
+    if: ${{ always() && needs.plan.outputs.deferred != 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.resume_bootstrap_target != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
