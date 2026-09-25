@@ -425,7 +425,7 @@ jobs:
 
   resume-bootstrap:
     needs: [plan, finalize]
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.resume_bootstrap_target != '' }}
+    if: ${{ always() && needs.plan.outputs.run_search == 'true' && needs.finalize.result == 'success' && github.event_name == 'workflow_dispatch' && github.event.inputs.resume_bootstrap_target != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
