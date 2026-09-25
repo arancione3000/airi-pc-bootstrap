@@ -22,6 +22,14 @@ from mathesis.evolution import SelfEvolutionEngine
 from mathesis.experience import ExperienceAnalyzer
 from mathesis.formalizer import FormalizerMesh
 from mathesis.health import health_report
+from mathesis.history import (
+    ACTIVE_HISTORY_MAX_BYTES,
+    ACTIVE_HISTORY_MAX_RECORDS,
+    HISTORY_SCHEMA,
+    append_evolution_history,
+    audit_history_store,
+    normalize_history,
+)
 from mathesis.kernel import IntegrityKernel
 from mathesis.model_writer import render_model_module
 from mathesis.neural_graph import GrowingNeuralRouter
@@ -1221,6 +1229,206 @@ def test_evolution_prefers_gate_eligible_challenger_over_higher_invalid_score(tm
     assert result.promoted is True
     assert result.candidate["genome_id"] == "good-safe-score"
     assert result.benchmark["selected_trial"] == 1
+
+
+def _legacy_history_row(index: int, *, payload_size: int = 0) -> dict:
+    champion = default_genome().to_dict()
+    champion["genome_id"] = "omega-test-champion"
+    candidate = dict(champion)
+    candidate["generation"] = champion["generation"] + 1
+    candidate["parent_id"] = champion["genome_id"]
+    candidate["genome_id"] = f"omega-test-candidate-{index}"
+    benchmark = {
+        "ok": True,
+        "score": 10.0 + index / 1000.0,
+        "capability_score": 1.0,
+        "complexity_penalty": 0.01,
+        "neural_accuracy": 0.9,
+        "critical_failures": [],
+        "weaknesses": [],
+        "tasks": [{"name": "payload", "ok": True, "detail": "x" * payload_size}],
+        "learned_theorems_replayed": [
+            {"statement": "(x+1)^2=x^2+2*x+1", "ok": True}
+        ],
+    }
+    return {
+        "at": float(index),
+        "promoted": False,
+        "reason": "test legacy audit row",
+        "champion": champion,
+        "candidate": candidate,
+        "selected_trial": 0,
+        "learned_theorems": ["(x+1)^2=x^2+2*x+1"],
+        "weakness_hints": [],
+        "trials": [{"trial": 0, "genome": candidate, "benchmark": benchmark}],
+        "champion_benchmark": benchmark,
+        "candidate_benchmark": benchmark,
+        "integrity": {
+            "ok": True,
+            "changed": [],
+            "current": {"kernel.py": "abc", "safe_math.py": "def", "verifiers.py": "ghi"},
+        },
+        "selected": champion,
+        "unused_large_payload": "z" * payload_size,
+    }
+
+
+def test_history_migration_is_compact_idempotent_and_preserves_state(tmp_path: Path):
+    import hashlib
+
+    state_files = {
+        "champion.json": json.dumps(default_genome().to_dict(), sort_keys=True),
+        "router.json": json.dumps({"sentinel": "router"}, sort_keys=True),
+        "discoveries.json": json.dumps({"version": 3, "cycle": 0, "theorems": {}, "discarded": {}}, sort_keys=True),
+        "knowledge.json": json.dumps({"sentinel": "knowledge"}, sort_keys=True),
+        "curriculum.json": json.dumps({"version": 2, "cursor": 7, "studies": [], "retry_counts": {}}, sort_keys=True),
+    }
+    for name, value in state_files.items():
+        (tmp_path / name).write_text(value, encoding="utf-8")
+
+    before_hashes = {
+        name: hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
+        for name in state_files
+    }
+
+    legacy_rows = [_legacy_history_row(i, payload_size=16000) for i in range(40)]
+    raw_lines = [
+        json.dumps(row, sort_keys=True).encode("utf-8")
+        for row in legacy_rows
+    ]
+    raw_history = b"\n".join(raw_lines) + b"\n"
+    (tmp_path / "history.jsonl").write_bytes(raw_history)
+
+    first = normalize_history(tmp_path)
+    assert first["ok"] is True
+    assert first["migrated"] is True
+    assert first["legacy_records"] == len(legacy_rows)
+    assert first["source_bytes"] == len(raw_history)
+    assert (tmp_path / "history.jsonl").stat().st_size < len(raw_history)
+    assert (tmp_path / "history.jsonl").stat().st_size <= ACTIVE_HISTORY_MAX_BYTES
+
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "history.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(rows) == len(legacy_rows)
+    assert all(row["schema"] == HISTORY_SCHEMA for row in rows)
+    assert rows[0]["full_record_sha256"] == hashlib.sha256(raw_lines[0]).hexdigest()
+    assert rows[-1]["full_record_sha256"] == hashlib.sha256(raw_lines[-1]).hexdigest()
+
+    manifest = json.loads((tmp_path / "history-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["legacy_compaction"]["source_sha256"] == hashlib.sha256(raw_history).hexdigest()
+    assert manifest["legacy_compaction"]["source_records"] == len(legacy_rows)
+    assert manifest["active"]["records"] == len(legacy_rows)
+
+    after_hashes = {
+        name: hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
+        for name in state_files
+    }
+    assert after_hashes == before_hashes
+
+    once = (tmp_path / "history.jsonl").read_bytes()
+    second = normalize_history(tmp_path)
+    assert second["migrated"] is False
+    assert (tmp_path / "history.jsonl").read_bytes() == once
+    assert json.loads((tmp_path / "history-manifest.json").read_text())["legacy_compaction"] == manifest["legacy_compaction"]
+
+
+def test_history_migration_bounds_thousands_of_large_legacy_rows(tmp_path: Path):
+    with (tmp_path / "history.jsonl").open("w", encoding="utf-8") as handle:
+        for index in range(ACTIVE_HISTORY_MAX_RECORDS + 128):
+            handle.write(json.dumps(_legacy_history_row(index, payload_size=4096), sort_keys=True) + "\n")
+
+    report = normalize_history(tmp_path)
+    audit = audit_history_store(tmp_path)
+    assert report["ok"] is True
+    assert report["source_records"] == ACTIVE_HISTORY_MAX_RECORDS + 128
+    assert report["dropped_records"] == 128
+    assert audit["ok"] is True
+    assert audit["active"]["records"] == ACTIVE_HISTORY_MAX_RECORDS
+    assert audit["active"]["bytes"] <= ACTIVE_HISTORY_MAX_BYTES
+
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "history.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert rows[0]["at"] == pytest.approx(128.0)
+    assert rows[-1]["at"] == pytest.approx(float(ACTIVE_HISTORY_MAX_RECORDS + 127))
+
+
+def test_history_append_after_migration_stays_bounded_and_manifest_matches(tmp_path: Path):
+    champion = default_genome().to_dict()
+    champion["genome_id"] = "omega-test-champion"
+    (tmp_path / "champion.json").write_text(json.dumps(champion), encoding="utf-8")
+    legacy = _legacy_history_row(1, payload_size=50000)
+    legacy["champion"] = champion
+    legacy["selected"] = champion
+    (tmp_path / "history.jsonl").write_text(json.dumps(legacy, sort_keys=True) + "\n", encoding="utf-8")
+
+    normalize_history(tmp_path)
+    row = _legacy_history_row(2, payload_size=75000)
+    row["champion"] = champion
+    row["selected"] = champion
+    result = append_evolution_history(tmp_path, row)
+
+    assert result["ok"] is True
+    audit = audit_history_store(tmp_path)
+    assert audit["ok"] is True
+    assert audit["active"]["records"] == 2
+    assert audit["active"]["bytes"] <= ACTIVE_HISTORY_MAX_BYTES
+    assert audit["manifest"]["active"]["sha256"] == audit["active"]["sha256"]
+    assert audit["manifest"]["active"]["bytes"] == audit["active"]["bytes"]
+
+
+def test_history_compaction_does_not_change_antiforgetting_inputs(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    first = discovery.discover_once()
+    assert first["ok"] is True
+    before = ExperienceAnalyzer(tmp_path).replayable_theorems()
+
+    (tmp_path / "history.jsonl").write_text(
+        json.dumps(_legacy_history_row(1, payload_size=100000), sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    normalize_history(tmp_path)
+    after = ExperienceAnalyzer(tmp_path).replayable_theorems()
+    assert after == before
+
+
+def test_health_gate_rejects_corrupt_or_oversized_history(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    assert discovery.discover_once()["ok"] is True
+    SelfEvolutionEngine(tmp_path).evolve_once()
+
+    (tmp_path / "history.jsonl").write_text("{broken-json\n", encoding="utf-8")
+    corrupt = health_report(tmp_path)
+    assert corrupt["ok"] is False
+    assert any(
+        row["name"] == "history:parseable_compact_jsonl"
+        for row in corrupt["failed"]
+    )
+
+    (tmp_path / "history.jsonl").write_bytes(b"x" * (ACTIVE_HISTORY_MAX_BYTES + 1))
+    oversized = health_report(tmp_path)
+    assert oversized["ok"] is False
+    assert any(row["name"] == "history:byte_budget" for row in oversized["failed"])
+
+
+def test_continuum_persists_verified_state_before_handoff():
+    workflow = (ROOT / ".github" / "workflows" / "mathesis-continuum.yml").read_text(encoding="utf-8")
+    normalize_pos = workflow.index("Normalize bounded MATHESIS audit history")
+    cycle_pos = workflow.index("Run bounded self-evolution cycle")
+    health_pos = workflow.index("python -m mathesis.health")
+    persist_pos = workflow.index("Persist and verify state heartbeat")
+    remote_verify_pos = workflow.index('test "$local_sha" = "$remote_sha"')
+    handoff_pos = workflow.index("Hand off to the next autonomous cycle")
+    assert normalize_pos < cycle_pos < health_pos < persist_pos < remote_verify_pos < handoff_pos
+    assert 'id: persist' in workflow
+    assert 'echo "persisted=true" >> "$GITHUB_OUTPUT"' in workflow
+    assert "steps.persist.outputs.persisted == 'true'" in workflow
+    assert "if: always() && github.ref == 'refs/heads/main'" not in workflow
 
 
 def test_continuum_serializes_state_writers_without_force_push():
