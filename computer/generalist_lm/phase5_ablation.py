@@ -505,9 +505,36 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
         raise RuntimeError("replay ablation requires elementary and general replay pools")
 
     validation_seed_indices = list(range(0, 8))
+    group_policies = [
+        {
+            "policy": "CURRENT_GROUPS",
+            "embedding_multiplier": 0.25,
+            "attention_multiplier": 0.35,
+            "ffn_multiplier": 1.0,
+        },
+        {
+            "policy": "FFN_ONLY",
+            "embedding_multiplier": 0.0,
+            "attention_multiplier": 0.0,
+            "ffn_multiplier": 1.0,
+        },
+        {
+            "policy": "FFN_PLUS_ATTENTION",
+            "embedding_multiplier": 0.0,
+            "attention_multiplier": 0.35,
+            "ffn_multiplier": 1.0,
+        },
+        {
+            "policy": "FFN_PLUS_EMBEDDINGS",
+            "embedding_multiplier": 0.25,
+            "attention_multiplier": 0.0,
+            "ffn_multiplier": 1.0,
+        },
+    ]
     variants = [
         {
-            "name": f"POST_ACCEPT_LR_HALF_SEED_{seed_index}",
+            "name": f"{policy['policy']}_SEED_{seed_index}",
+            "policy": policy["policy"],
             "optimizer_state": "reset",
             "steps": 1,
             "retry_rejection_index": seed_index,
@@ -515,7 +542,11 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             "replay_batch_size": 2,
             "replay_sampling": "elementary",
             "replay_loss_weight": 4.00,
+            "embedding_multiplier": policy["embedding_multiplier"],
+            "attention_multiplier": policy["attention_multiplier"],
+            "ffn_multiplier": policy["ffn_multiplier"],
         }
+        for policy in group_policies
         for seed_index in validation_seed_indices
     ]
 
