@@ -9,6 +9,7 @@ from typing import Any
 from .architecture import architecture_report, default_genome, generate_challengers
 from .benchmark import TRAINING_PHRASES, evaluate_genome
 from .experience import ExperienceAnalyzer
+from .history import append_evolution_history
 from .kernel import IntegrityKernel, atomic_json
 from .knowledge import default_state_dir
 from .model_writer import write_model_module
@@ -79,15 +80,7 @@ class SelfEvolutionEngine:
         return router
 
     def _append_history(self, row: dict[str, Any]) -> None:
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-        with self.history_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(row, sort_keys=True) + "\n")
-        try:
-            lines = self.history_path.read_text(encoding="utf-8").splitlines()
-            if len(lines) > 2000:
-                self.history_path.write_text("\n".join(lines[-2000:]) + "\n", encoding="utf-8")
-        except Exception:
-            pass
+        append_evolution_history(self.state_dir, row)
 
     def evolve_once(self, *, extra_weaknesses: list[str] | None = None) -> EvolutionResult:
         before = self.kernel.snapshot()
