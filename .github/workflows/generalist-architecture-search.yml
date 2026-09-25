@@ -70,6 +70,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          echo "ARCHITECTURE_WINDOW_AVAILABLE=false" >> "${GITHUB_ENV}"
           for _ in $(seq 1 120); do
             active=0
             for workflow in generalist-bootstrap.yml generalist-continuum.yml generalist-incumbent-recovery.yml; do
@@ -93,16 +94,18 @@ jobs:
               active="$((active + count))"
             done
             if (( active == 0 )); then
+              echo "ARCHITECTURE_WINDOW_AVAILABLE=true" >> "${GITHUB_ENV}"
               echo "Architecture search owns a clean state snapshot window."
               exit 0
             fi
             echo "Waiting for ${active} active Generalist state-writer run(s)."
             sleep 20
           done
-          echo "Timed out waiting for state-writer window." >&2
-          exit 1
+          echo "Architecture search deferred: a Generalist state writer still owns the live lineage."
+          echo "The scheduled workflow or an explicit lineage handoff will retry later."
 
       - name: Restore persistent Generalist and MATHESIS state
+        if: env.ARCHITECTURE_WINDOW_AVAILABLE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -123,6 +126,7 @@ jobs:
           fi
 
       - name: Ask meta-controller and build Architecture IR population
+        if: env.ARCHITECTURE_WINDOW_AVAILABLE == 'true'
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -200,6 +204,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - uses: actions/upload-artifact@v4
+        if: env.ARCHITECTURE_WINDOW_AVAILABLE == 'true'
         with:
           name: architecture-plan
           path: /tmp/architecture-plan
