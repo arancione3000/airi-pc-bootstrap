@@ -4768,17 +4768,17 @@
   "last_train_loss": 1.3835361003875732,
   "last_validation_loss": 2.0343909660975137,
   "learning_efficiency": {
-    "acceptance_rate": 0.03278688524590164,
+    "acceptance_rate": 0.03225806451612903,
     "accepted_segments": 2,
     "accepted_tokens": 16256,
-    "accepted_tokens_per_hour": 15308.722095950994,
-    "attempted_segments": 61,
-    "attempted_tokens": 1154176,
-    "attempted_tokens_per_hour": 1087608.0652233101,
+    "accepted_tokens_per_hour": 15192.677680555891,
+    "attempted_segments": 62,
+    "attempted_tokens": 1162304,
+    "attempted_tokens_per_hour": 1086959.6217454255,
     "checkpoint_persist_seconds": 2.421005121000235,
     "cumulative_language_quality_gain": 0.044359240450248305,
     "effective_new_tokens": 16256,
-    "elapsed_training_seconds": 3820.3409232229988,
+    "elapsed_training_seconds": 3849.539869089999,
     "history": [
       {
         "accepted": false,
@@ -5694,6 +5694,21 @@
         "replay_fraction": 0.2,
         "replay_tokens": 440,
         "updated_at_unix": 1790311429
+      },
+      {
+        "accepted": false,
+        "accepted_tokens": 0,
+        "attempted_tokens": 8128,
+        "checkpoint_persist_seconds": 0.0,
+        "elapsed_training_seconds": 29.19894586700002,
+        "language_nll_delta": -0.013017267705648816,
+        "language_quality_gain": 0.0,
+        "multiword_delta": 0.0,
+        "reference_kl_weight": 0.5,
+        "repetition_delta": 0.12695358147993674,
+        "replay_fraction": 0.2,
+        "replay_tokens": 402,
+        "updated_at_unix": 1790312396
       }
     ],
     "learning_gain_per_100k_tokens": 0.2728791858406023,
@@ -5743,12 +5758,12 @@
     },
     "reference_kl_weight": 0.5,
     "replay_fraction": 0.2,
-    "replay_tokens": 58337,
-    "rollback_rate": 0.9672131147540983,
-    "rollback_segments": 59,
+    "replay_tokens": 58739,
+    "rollback_rate": 0.967741935483871,
+    "rollback_segments": 60,
     "started_tokens_processed": 32815853,
     "unique_data_fraction": 0.32,
-    "updated_at_unix": 1790311429,
+    "updated_at_unix": 1790312396,
     "version": "phase5-learning-efficiency-v1"
   },
   "learning_rate": 1.8327486696247453e-06,
@@ -6008,7 +6023,7 @@
       "tokens_processed": 32832109
     }
   ],
-  "segment_guard_consecutive_rejections": 29,
+  "segment_guard_consecutive_rejections": 30,
   "segment_guard_effective_budget_tokens": 8000,
   "segment_guard_last_accepted": false,
   "segment_guard_last_attempted_steps": 2,
@@ -6020,19 +6035,6 @@
   "segment_guard_recovery_hold": false,
   "segment_guard_recovery_mode": false,
   "segment_guard_rejections": [
-    {
-      "after_quality": -0.8050592785458035,
-      "attempted_steps": 2,
-      "attempted_tokens": 8128,
-      "before_quality": -0.778518547347597,
-      "learning_rate_scale": 0.015625,
-      "reasons": [
-        "lineage is below its durable language anchor and this segment did not measurably recover quality",
-        "repetition rate exceeds durable anchor by more than 0.08"
-      ],
-      "recovery_mode": true,
-      "tokens_processed": 32823981
-    },
     {
       "after_quality": -0.7773018215280334,
       "attempted_steps": 2,
@@ -6423,6 +6425,19 @@
     },
     {
       "after_quality": -0.875016782961671,
+      "attempted_steps": 2,
+      "attempted_tokens": 8128,
+      "before_quality": -0.7547908831456025,
+      "learning_rate_scale": 0.015625,
+      "reasons": [
+        "segment repetition rate regressed by more than 0.06",
+        "repetition rate exceeds durable anchor by more than 0.08"
+      ],
+      "recovery_mode": false,
+      "tokens_processed": 32832109
+    },
+    {
+      "after_quality": -0.9780121728911664,
       "attempted_steps": 2,
       "attempted_tokens": 8128,
       "before_quality": -0.7547908831456025,
@@ -18562,7 +18577,7 @@
     "protected_replay_micro_batch_size": 2
   },
   "unique_corpus_target_tokens": 32000000,
-  "updated_at_unix": 1790311429,
+  "updated_at_unix": 1790312396,
   "valid_tokens_processed": 32837763,
   "version": "phase5-language-bootstrap-v3"
 }
