@@ -79,7 +79,7 @@ PHASE5_100M_UNIQUE_CORPUS_TOKENS = 32_000_000
 PHASE5_250M_UNIQUE_CORPUS_TOKENS = 40_000_000
 PHASE5_500M_UNIQUE_CORPUS_TOKENS = 60_000_000
 PHASE5_1B_UNIQUE_CORPUS_TOKENS = 100_000_000
-PHASE5_PROTECTED_CAUSAL_VERSION = "phase5-protected-causal-v1"
+PHASE5_PROTECTED_CAUSAL_VERSION = "phase5-protected-causal-v2"
 PHASE5_LEARNING_EFFICIENCY_VERSION = "phase5-learning-efficiency-v1"
 
 # One-time human-assisted capacity gift for the current AIRI lineage only.
@@ -1233,7 +1233,18 @@ def _phase5_recovery_plan(
     )
     if micro_recovery:
         stable_fast_lane = False
-        micro_cap = 8_000 if accepted_streak < 2 else 16_000 if accepted_streak == 2 else 32_000
+        # At the current 50M checkpoint a two-step (~8k) transaction can cross
+        # the greedy-decoding repetition cliff even when NLL improves.  Use a
+        # one-step transaction while stalled, then grow only after real
+        # accepted checkpoints.
+        if accepted_streak <= 0:
+            micro_cap = 4_000
+        elif accepted_streak == 1:
+            micro_cap = 8_000
+        elif accepted_streak == 2:
+            micro_cap = 16_000
+        else:
+            micro_cap = 32_000
         segment_budget = min(int(segment_budget), micro_cap)
 
     if rejected <= 0:
@@ -1276,6 +1287,7 @@ def _protected_continual_plan(
     *,
     consecutive_rejections: int,
     success_streak: int,
+    parameters: int | None = None,
 ) -> dict[str, Any]:
     """Bound replay/KL pressure from live quality headroom.
 
@@ -1294,6 +1306,11 @@ def _protected_continual_plan(
         or repetition >= anchor_repetition + 0.05
         or multiword < 0.80
     )
+    parameter_count_value = max(0, int(parameters or 0))
+    stall_language_rescue = bool(
+        rejected >= 2
+        and 40_000_000 <= parameter_count_value < 64_000_000
+    )
     if fragile:
         replay_fraction = 0.20
         kl_weight = 0.50
@@ -1306,12 +1323,28 @@ def _protected_continual_plan(
         replay_fraction = 0.15
         kl_weight = 0.30
         anti_repetition_weight = 0.01
+
+    # During a sustained 50M stall, uniform replay almost never samples the
+    # small bilingual elementary subset that demonstrably preserves greedy
+    # token diversity.  Keep normal continual training unchanged, but make the
+    # rescue transaction explicitly elementary and strong enough to act as a
+    # trust region around those basic language behaviours.
+    replay_sampling = "elementary" if stall_language_rescue else "uniform"
+    replay_batch_size = 2
+    replay_loss_weight = (
+        4.0
+        if stall_language_rescue
+        else replay_fraction / (1.0 - replay_fraction)
+    )
     return {
         "version": PHASE5_PROTECTED_CAUSAL_VERSION,
         "enabled": True,
         "fragile_language_state": fragile,
         "replay_fraction": float(replay_fraction),
-        "replay_loss_weight": float(replay_fraction / (1.0 - replay_fraction)),
+        "replay_loss_weight": float(replay_loss_weight),
+        "replay_sampling": replay_sampling,
+        "replay_batch_size": int(replay_batch_size),
+        "stall_language_rescue": bool(stall_language_rescue),
         "reference_kl_weight": float(kl_weight),
         "reference_kl_temperature": 1.0,
         "anti_repetition_weight": float(anti_repetition_weight),
@@ -1432,6 +1465,20 @@ def _protected_causal_replay_rows(
     }
 
 
+def _elementary_protected_replay_indices(rows) -> list[int]:
+    elementary = []
+    for stage in PHASE5_LANGUAGE_REHABILITATION_STAGES:
+        stage_rows = _elementary_rehabilitation_rows()[stage]
+        elementary.extend(stage_rows["it"])
+        elementary.extend(stage_rows["en"])
+    fingerprints = {_sft_row_fingerprint(row) for row in elementary}
+    return [
+        index
+        for index, row in enumerate(rows)
+        if _sft_row_fingerprint(row) in fingerprints
+    ]
+
+
 def _sft_training_batch(runtime, rows, indices):
     import torch
 
@@ -1526,6 +1573,18 @@ def _record_learning_efficiency(
             min(1.0, int(unique_corpus_target_tokens) / max(1, int(target_tokens)))
         ),
         "replay_fraction": float(protected_plan["replay_fraction"]),
+        "replay_loss_weight": float(
+            protected_plan.get(
+                "replay_loss_weight",
+                float(protected_plan.get("replay_fraction", 0.0) or 0.0)
+                / max(
+                    1e-9,
+                    1.0 - float(protected_plan.get("replay_fraction", 0.0) or 0.0),
+                ),
+            )
+        ),
+        "replay_sampling": str(protected_plan.get("replay_sampling") or "uniform"),
+        "replay_batch_size": int(protected_plan.get("replay_batch_size", 2) or 2),
         "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
         "optimizer": optimizer_report,
         "learning_gain_per_100k_tokens": float(
@@ -1550,6 +1609,18 @@ def _record_learning_efficiency(
         - float(before.get("multiword_output_rate", 0.0) or 0.0),
         "language_quality_gain": float(quality_gain),
         "replay_fraction": float(protected_plan["replay_fraction"]),
+        "replay_loss_weight": float(
+            protected_plan.get(
+                "replay_loss_weight",
+                float(protected_plan.get("replay_fraction", 0.0) or 0.0)
+                / max(
+                    1e-9,
+                    1.0 - float(protected_plan.get("replay_fraction", 0.0) or 0.0),
+                ),
+            )
+        ),
+        "replay_sampling": str(protected_plan.get("replay_sampling") or "uniform"),
+        "replay_batch_size": int(protected_plan.get("replay_batch_size", 2) or 2),
         "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
         "updated_at_unix": int(time.time()),
     }
@@ -3774,11 +3845,22 @@ def run_segment(
         guard_anchor,
         consecutive_rejections=consecutive_rejections,
         success_streak=success_streak,
+        parameters=int(parameter_count(runtime.model)),
     )
     protected_rows, protected_row_counts = _protected_causal_replay_rows(
         protected_replay.sft_train,
         heldout_sft=bundle.sft_validation,
     )
+    elementary_replay_indices = _elementary_protected_replay_indices(
+        protected_rows
+    )
+    if (
+        str(protected_plan.get("replay_sampling") or "uniform") == "elementary"
+        and not elementary_replay_indices
+    ):
+        raise RuntimeError(
+            "stall language rescue has no safe elementary replay rows"
+        )
     protected_migration = (
         previous_protected_version != PHASE5_PROTECTED_CAUSAL_VERSION
     )
@@ -3938,10 +4020,25 @@ def run_segment(
         replay_rng = random.Random(
             9_000_000 + step * 97 + retry_seed_offset
         )
-        replay_indices = [
-            replay_rng.randrange(len(protected_rows))
-            for _ in range(2)
-        ]
+        replay_batch_size = max(
+            1,
+            int(protected_plan.get("replay_batch_size", 2) or 2),
+        )
+        replay_sampling = str(
+            protected_plan.get("replay_sampling") or "uniform"
+        )
+        if replay_sampling == "elementary":
+            replay_indices = [
+                elementary_replay_indices[
+                    replay_rng.randrange(len(elementary_replay_indices))
+                ]
+                for _ in range(replay_batch_size)
+            ]
+        else:
+            replay_indices = [
+                replay_rng.randrange(len(protected_rows))
+                for _ in range(replay_batch_size)
+            ]
         replay_ids, replay_labels = _sft_training_batch(
             runtime,
             protected_rows,
@@ -3986,6 +4083,8 @@ def run_segment(
             "protected_replay_fraction": float(
                 protected_plan["replay_fraction"]
             ),
+            "protected_replay_sampling": replay_sampling,
+            "protected_replay_batch_size": int(replay_batch_size),
             "protected_replay_supervised_tokens": int(replay_supervised),
             "protected_reference_kl_loss": float(kl_loss.detach().cpu()),
             "protected_reference_kl_weight": float(
@@ -4069,6 +4168,18 @@ def run_segment(
         "new_supervised_tokens": int(attempted_tokens),
         "replay_supervised_tokens": int(replay_tokens_trained),
         "replay_fraction": float(protected_plan["replay_fraction"]),
+        "replay_loss_weight": float(
+            protected_plan.get(
+                "replay_loss_weight",
+                float(protected_plan.get("replay_fraction", 0.0) or 0.0)
+                / max(
+                    1e-9,
+                    1.0 - float(protected_plan.get("replay_fraction", 0.0) or 0.0),
+                ),
+            )
+        ),
+        "replay_sampling": str(protected_plan.get("replay_sampling") or "uniform"),
+        "replay_batch_size": int(protected_plan.get("replay_batch_size", 2) or 2),
         "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
         "protected_causal_version": PHASE5_PROTECTED_CAUSAL_VERSION,
         "optimizer": optimizer_report,
