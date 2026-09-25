@@ -112,33 +112,45 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
     if not anchor_rows:
         raise RuntimeError("calibration ablation has no protected KL anchors")
 
+    # Pre-registered variance-reduction matrix.  These policies were fixed
+    # before looking at their validation outcomes.  Larger batches reduce
+    # stochastic coverage variance while stronger teacher KL constrains the
+    # revived residual branch against language drift.
     policies = [
         {
-            "policy": "R2_DOWN_32_LR625E7",
+            "policy": "R2_B12_S16_LR1E6_KL5",
             "rows": r2_rows,
-            "steps": 32,
-            "learning_rate": 6.25e-7,
+            "steps": 16,
+            "batch_size": 12,
+            "learning_rate": 1.0e-6,
+            "kl_weight": 5.0,
         },
         {
-            "policy": "R2_DOWN_64_LR625E7",
+            "policy": "R2_B24_S12_LR1E6_KL5",
             "rows": r2_rows,
-            "steps": 64,
-            "learning_rate": 6.25e-7,
+            "steps": 12,
+            "batch_size": 24,
+            "learning_rate": 1.0e-6,
+            "kl_weight": 5.0,
         },
         {
-            "policy": "ALL_DOWN_32_LR625E7",
-            "rows": all_elementary,
-            "steps": 32,
+            "policy": "R2_B12_S16_LR625E7_KL5",
+            "rows": r2_rows,
+            "steps": 16,
+            "batch_size": 12,
             "learning_rate": 6.25e-7,
+            "kl_weight": 5.0,
         },
         {
-            "policy": "R2_DOWN_32_LR125E6",
+            "policy": "R2_B24_S8_LR125E6_KL5",
             "rows": r2_rows,
-            "steps": 32,
+            "steps": 8,
+            "batch_size": 24,
             "learning_rate": 1.25e-6,
+            "kl_weight": 5.0,
         },
     ]
-    seeds = [0, 1]
+    seeds = [0, 1, 2, 3]
     results: list[dict[str, Any]] = []
 
     for policy in policies:
@@ -153,14 +165,14 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 anchor_examples=anchor_rows,
                 source_d_ff=source_d_ff,
                 steps=int(policy["steps"]),
-                batch_size=4,
+                batch_size=int(policy["batch_size"]),
                 learning_rate=float(policy["learning_rate"]),
                 seed=70_000 + int(seed),
                 device="cpu",
                 repetition_unlikelihood_weight=0.02,
                 eos_loss_weight=1.10,
                 repetition_window=16,
-                kl_weight=2.50,
+                kl_weight=float(policy["kl_weight"]),
                 train_upstream=False,
             )
             after = evaluate_phase5_language(runtime)
@@ -188,6 +200,10 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 "name": f"{policy['policy']}_SEED_{seed}",
                 "policy": policy["policy"],
                 "seed": seed,
+                "steps": int(policy["steps"]),
+                "batch_size": int(policy["batch_size"]),
+                "learning_rate": float(policy["learning_rate"]),
+                "kl_weight": float(policy["kl_weight"]),
                 "calibration_ok": calibration_ok,
                 "passes_unchanged_language_guard": bool(gate_ok),
                 "training": training,
@@ -236,9 +252,46 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             })
             del runtime, reference
 
+    policy_summaries: list[dict[str, Any]] = []
+    for policy in policies:
+        name = str(policy["policy"])
+        rows = [row for row in results if row["policy"] == name]
+        headroom_gains = [float(row["headroom"]["gain"]) for row in rows]
+        nll_deltas = [float(row["delta"]["language_nll"]) for row in rows]
+        guard_passes = sum(int(row["passes_unchanged_language_guard"]) for row in rows)
+        calibration_passes = sum(int(row["calibration_ok"]) for row in rows)
+        duplicate_deltas = [
+            float(
+                row["cross_prompt_diversity"]["after"]["exact_duplicate_rate"]
+                - row["cross_prompt_diversity"]["before"]["exact_duplicate_rate"]
+            )
+            for row in rows
+        ]
+        policy_summaries.append({
+            "policy": name,
+            "trials": len(rows),
+            "guard_passes": guard_passes,
+            "calibration_passes": calibration_passes,
+            "guard_pass_rate": guard_passes / max(1, len(rows)),
+            "calibration_pass_rate": calibration_passes / max(1, len(rows)),
+            "mean_headroom_gain": sum(headroom_gains) / max(1, len(headroom_gains)),
+            "worst_headroom_gain": min(headroom_gains) if headroom_gains else 0.0,
+            "best_headroom_gain": max(headroom_gains) if headroom_gains else 0.0,
+            "mean_nll_delta": sum(nll_deltas) / max(1, len(nll_deltas)),
+            "worst_nll_delta": max(nll_deltas) if nll_deltas else 0.0,
+            "worst_duplicate_rate_delta": max(duplicate_deltas) if duplicate_deltas else 0.0,
+            "stable_candidate": bool(
+                len(rows) == len(seeds)
+                and guard_passes == len(rows)
+                and min(headroom_gains, default=-1.0) > 0.0
+                and max(nll_deltas, default=1.0) <= 0.015
+                and max(duplicate_deltas, default=1.0) <= 1e-12
+            ),
+        })
+
     return {
         "schema": 1,
-        "version": "phase5-residual-calibration-ablation-v1",
+        "version": "phase5-residual-calibration-ablation-v2",
         "read_only": True,
         "lineage_id": str(progress.get("lineage_id") or ""),
         "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
@@ -250,6 +303,7 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
         "baseline_diversity": before_diversity,
         "protected_anchor_rows": len(anchor_rows),
         "protected_rows_filtered": int(filtered),
+        "policy_summaries": policy_summaries,
         "results": results,
     }
 
@@ -273,6 +327,7 @@ def main() -> None:
         "source_d_ff": report["source_d_ff"],
         "target_d_ff": report["target_d_ff"],
         "baseline_headroom": report["baseline_headroom"],
+        "policy_summaries": report["policy_summaries"],
         "variants": [
             {
                 "name": row["name"],
