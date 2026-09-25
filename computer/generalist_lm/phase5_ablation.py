@@ -22,7 +22,101 @@ from .bootstrap_training import (
 from .phase5_diagnostics import evaluate_phase5_language
 from .pretraining import _batch as causal_batch, pack_causal_blocks
 from .runtime import GeneralistRuntime
+from .tokenizer import BYTE_OFFSET
 from .training import causal_training_objective, reference_kl_loss
+
+
+def _mass_unlikelihood_objective(
+    logits,
+    labels,
+    input_ids,
+    *,
+    eos_loss_weight: float,
+    repetition_unlikelihood_weight: float,
+    repetition_window: int = 16,
+):
+    """Experimental sequence-aware UL used only by this read-only ablation.
+
+    The production objective averages over every individual negative token.
+    This variant instead penalizes the total probability mass assigned to any
+    recently seen non-target token at each supervised position, so the signal
+    does not vanish as the negative set grows.
+    """
+    import torch
+    from torch.nn import functional as F
+
+    base, stats = causal_training_objective(
+        logits,
+        labels,
+        input_ids,
+        eos_loss_weight=eos_loss_weight,
+        repetition_unlikelihood_weight=0.0,
+        repetition_window=repetition_window,
+    )
+    weight = max(0.0, float(repetition_unlikelihood_weight))
+    if weight <= 0.0:
+        return base, stats
+
+    shifted_logits = logits[:, :-1, :]
+    targets = labels[:, 1:]
+    valid = targets != -100
+    window = max(1, min(int(repetition_window), int(input_ids.shape[1])))
+    negative_mask = torch.zeros_like(shifted_logits, dtype=torch.bool)
+    for position in range(int(shifted_logits.shape[1])):
+        start = max(0, position - window + 1)
+        recent = input_ids[:, start:position + 1]
+        negative_mask[:, position, :].scatter_(1, recent, True)
+    floor = max(0, min(int(BYTE_OFFSET), int(shifted_logits.shape[-1])))
+    if floor:
+        negative_mask[:, :, :floor] = False
+    safe_targets = targets.clamp_min(0).unsqueeze(-1)
+    negative_mask.scatter_(2, safe_targets, False)
+    negative_mask &= valid.unsqueeze(-1)
+
+    probs = torch.softmax(shifted_logits, dim=-1)
+    negative_mass = (probs * negative_mask.to(probs.dtype)).sum(dim=-1)
+    negative_mass = negative_mass.clamp(min=0.0, max=1.0 - 1e-6)
+    if int(valid.sum().item()) > 0:
+        ul_loss = -torch.log1p(-negative_mass).masked_select(valid).mean()
+    else:
+        ul_loss = shifted_logits.sum() * 0.0
+    total = base + weight * ul_loss
+    return total, {
+        **stats,
+        "repetition_unlikelihood_loss": float(ul_loss.detach().cpu()),
+        "repetition_unlikelihood_weight": weight,
+        "repetition_unlikelihood_aggregation": "recent_probability_mass",
+        "repetition_negative_count": int(negative_mask.sum().item()),
+    }
+
+
+def _training_objective(
+    logits,
+    labels,
+    ids,
+    *,
+    eos_loss_weight: float,
+    repetition_unlikelihood_weight: float,
+    repetition_window: int,
+    aggregation: str,
+):
+    if aggregation == "recent_probability_mass":
+        return _mass_unlikelihood_objective(
+            logits,
+            labels,
+            ids,
+            eos_loss_weight=eos_loss_weight,
+            repetition_unlikelihood_weight=repetition_unlikelihood_weight,
+            repetition_window=repetition_window,
+        )
+    return causal_training_objective(
+        logits,
+        labels,
+        ids,
+        eos_loss_weight=eos_loss_weight,
+        repetition_unlikelihood_weight=repetition_unlikelihood_weight,
+        repetition_window=repetition_window,
+    )
 
 
 def _group_for_name(name: str) -> str:
@@ -395,66 +489,54 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             "ffn_multiplier": 1.0,
         },
         {
-            "name": "PERSIST_current",
+            "name": "I_ffn_eighth_persisted",
             "optimizer_state": "persisted",
             "lr_factor": 1.0,
-            "ffn_multiplier": 1.0,
+            "ffn_multiplier": 0.125,
         },
         {
-            "name": "A_lower_lr_persisted",
+            "name": "J_ffn_sixteenth_persisted",
             "optimizer_state": "persisted",
-            "lr_factor": 0.5,
-            "ffn_multiplier": 1.0,
+            "lr_factor": 1.0,
+            "ffn_multiplier": 0.0625,
         },
         {
-            "name": "B_lower_lr_reset",
-            "optimizer_state": "reset",
-            "lr_factor": 0.5,
-            "ffn_multiplier": 1.0,
+            "name": "K_ffn_frozen_persisted",
+            "optimizer_state": "persisted",
+            "lr_factor": 1.0,
+            "ffn_multiplier": 0.0,
         },
         {
-            "name": "C_lower_lr_selective_ffn_reset",
-            "optimizer_state": "selective_ffn_reset",
-            "lr_factor": 0.5,
-            "ffn_multiplier": 1.0,
-        },
-        {
-            "name": "D_ffn_quarter_persisted",
+            "name": "L_mass_ul_ffn_quarter",
             "optimizer_state": "persisted",
             "lr_factor": 1.0,
             "ffn_multiplier": 0.25,
+            "anti_repetition_weight": 0.02,
+            "anti_repetition_aggregation": "recent_probability_mass",
         },
         {
-            "name": "E_group_clip_persisted",
+            "name": "M_mass_ul_ffn_eighth",
             "optimizer_state": "persisted",
             "lr_factor": 1.0,
-            "ffn_multiplier": 1.0,
-            "group_clip": {"ffn": 0.25, "attention_and_norm": 0.50, "embeddings": 0.50},
+            "ffn_multiplier": 0.125,
+            "anti_repetition_weight": 0.02,
+            "anti_repetition_aggregation": "recent_probability_mass",
         },
         {
-            "name": "F_replay_pressure_persisted",
+            "name": "N_mass_ul_ffn_eighth_strong",
             "optimizer_state": "persisted",
             "lr_factor": 1.0,
-            "ffn_multiplier": 1.0,
-            "replay_loss_weight": 0.50,
-            "kl_weight": 0.75,
-        },
-        {
-            "name": "G_anti_repetition_persisted",
-            "optimizer_state": "persisted",
-            "lr_factor": 1.0,
-            "ffn_multiplier": 1.0,
-            "anti_repetition_weight": 0.08,
-        },
-        {
-            "name": "H_combined_ffn_quarter",
-            "optimizer_state": "persisted",
-            "lr_factor": 1.0,
-            "ffn_multiplier": 0.25,
-            "replay_loss_weight": 0.50,
-            "kl_weight": 0.75,
+            "ffn_multiplier": 0.125,
             "anti_repetition_weight": 0.05,
-            "group_clip": {"ffn": 0.50, "attention_and_norm": 0.75, "embeddings": 0.75},
+            "anti_repetition_aggregation": "recent_probability_mass",
+        },
+        {
+            "name": "O_mass_ul_global_half",
+            "optimizer_state": "persisted",
+            "lr_factor": 0.5,
+            "ffn_multiplier": 0.25,
+            "anti_repetition_weight": 0.02,
+            "anti_repetition_aggregation": "recent_probability_mass",
         },
     ]
 
@@ -539,13 +621,14 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             objective = {}
             for ids, labels, count in prepared:
                 result = model(ids)
-                loss, objective = causal_training_objective(
+                loss, objective = _training_objective(
                     result["logits"],
                     labels,
                     ids,
                     eos_loss_weight=eos_weight,
                     repetition_unlikelihood_weight=anti_weight,
                     repetition_window=16,
+                    aggregation=str(variant.get("anti_repetition_aggregation", "mean_negative")),
                 )
                 (loss * (count / max(1, supervised))).backward()
 
@@ -555,13 +638,14 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             replay_count = int((replay_labels[:, 1:] != -100).sum().item())
             replay_supervised_total += replay_count
             replay_result = model(replay_ids)
-            replay_loss, _ = causal_training_objective(
+            replay_loss, _ = _training_objective(
                 replay_result["logits"],
                 replay_labels,
                 replay_ids,
                 eos_loss_weight=1.0,
                 repetition_unlikelihood_weight=anti_weight,
                 repetition_window=16,
+                aggregation=str(variant.get("anti_repetition_aggregation", "mean_negative")),
             )
             with torch.no_grad():
                 ref_logits = reference.model(replay_ids)["logits"]
@@ -617,6 +701,9 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             "replay_loss_weight": replay_loss_weight,
             "reference_kl_weight": kl_weight,
             "anti_repetition_floor": anti_floor,
+            "anti_repetition_aggregation": str(
+                variant.get("anti_repetition_aggregation", "mean_negative")
+            ),
             "group_clip": group_clip_caps,
             "before": {
                 "language_nll": before["language_nll"],
