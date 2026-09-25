@@ -86,6 +86,57 @@ def _mean(values: Iterable[float]) -> float:
     return float(sum(values) / len(values)) if values else 0.0
 
 
+def _cross_prompt_diversity(traces: list[dict[str, Any]]) -> dict[str, float | int]:
+    """Measure output collapse across distinct held-out prompts."""
+    outputs = [
+        _norm(str(row.get("raw_output") or row.get("output") or ""))
+        for row in traces
+    ]
+    counts: dict[str, int] = {}
+    for output in outputs:
+        counts[output] = counts.get(output, 0) + 1
+
+    pair_count = 0
+    jaccard_sum = 0.0
+    sequence_sum = 0.0
+    for left in range(len(outputs)):
+        for right in range(left + 1, len(outputs)):
+            pair_count += 1
+            sequence_sum += SequenceMatcher(
+                None,
+                outputs[left],
+                outputs[right],
+                autojunk=False,
+            ).ratio()
+            left_tokens = set(_word_tokens(outputs[left]))
+            right_tokens = set(_word_tokens(outputs[right]))
+            union = left_tokens | right_tokens
+            jaccard_sum += (
+                len(left_tokens & right_tokens) / len(union)
+                if union
+                else 1.0
+            )
+
+    unique_count = len(set(outputs))
+    dominant_count = max(counts.values(), default=0)
+    prompt_count = len(outputs)
+    return {
+        "unique_generation_count": int(unique_count),
+        "exact_duplicate_rate": float(
+            1.0 - unique_count / prompt_count if prompt_count else 0.0
+        ),
+        "dominant_generation_fraction": float(
+            dominant_count / prompt_count if prompt_count else 0.0
+        ),
+        "mean_pairwise_token_jaccard": float(
+            jaccard_sum / pair_count if pair_count else 0.0
+        ),
+        "mean_pairwise_sequence_similarity": float(
+            sequence_sum / pair_count if pair_count else 0.0
+        ),
+    }
+
+
 def _single_greedy_trace_messages(
     runtime,
     messages: list[dict[str, str]],
@@ -271,6 +322,19 @@ def evaluate_sft_validation(
         "unique_token_ratio": float(avg_unique),
         "dominant_token_fraction": float(dominant_fraction),
         "pathological_repetition": pathological,
+        "unique_generation_count": int(cross_prompt["unique_generation_count"]),
+        "exact_duplicate_generation_rate": float(
+            cross_prompt["exact_duplicate_rate"]
+        ),
+        "dominant_generation_fraction": float(
+            cross_prompt["dominant_generation_fraction"]
+        ),
+        "mean_pairwise_token_jaccard": float(
+            cross_prompt["mean_pairwise_token_jaccard"]
+        ),
+        "mean_pairwise_sequence_similarity": float(
+            cross_prompt["mean_pairwise_sequence_similarity"]
+        ),
         "traces": traces,
     }
 
@@ -384,6 +448,7 @@ def evaluate_phase5_language(runtime, *, max_new_tokens: int = 48) -> dict[str, 
     if len(all_ids) >= 12 and dominant_fraction >= 0.55:
         pathological = True
 
+    cross_prompt = _cross_prompt_diversity(traces)
     return {
         "schema": 1,
         "suite": PHASE5_LANGUAGE_SUITE_VERSION,
