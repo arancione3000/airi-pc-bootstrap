@@ -1144,6 +1144,31 @@ def _phase5_recovery_segment_budget(
     return max(62_500, min(requested, int(math.ceil(requested / divisor))))
 
 
+def _phase5_language_fragile_state(
+    before: dict[str, Any],
+    anchor: dict[str, Any],
+    *,
+    consecutive_rejections: int = 0,
+) -> bool:
+    """Return the existing Phase-5 language-fragility classification.
+
+    This deliberately mirrors the protected replay plan.  Recovery rung
+    promotion must not be driven by acceptance streak alone while the live
+    checkpoint still satisfies the same conditions that require fragile-mode
+    replay/KL protection.
+    """
+    rejected = max(0, int(consecutive_rejections))
+    repetition = float(before.get("repetition_rate", 1.0) or 1.0)
+    anchor_repetition = float(anchor.get("repetition_rate", 1.0) or 1.0)
+    multiword = float(before.get("multiword_output_rate", 0.0) or 0.0)
+    return bool(
+        rejected > 0
+        or bool(before.get("pathological_repetition"))
+        or repetition >= anchor_repetition + 0.05
+        or multiword < 0.80
+    )
+
+
 def _phase5_recovery_plan(
     requested_tokens: int,
     *,
@@ -1154,6 +1179,7 @@ def _phase5_recovery_plan(
     recovery_hold: bool = False,
     last_segment_accepted: bool = False,
     success_streak: int = 0,
+    fragile_language_state: bool = False,
 ) -> dict[str, Any]:
     """Return a bounded rescue plan that cannot livelock at the old LR floor.
 
@@ -1170,8 +1196,10 @@ def _phase5_recovery_plan(
         context_length=int(context_length),
     )
     accepted_streak = max(0, int(success_streak))
+    fragile_language_state = bool(fragile_language_state)
     stable_fast_lane = bool(
-        int(consecutive_rejections) == 0
+        not fragile_language_state
+        and int(consecutive_rejections) == 0
         and bool(last_segment_accepted)
         and accepted_streak >= 3
         and not bool(recovery_hold)
@@ -1228,7 +1256,8 @@ def _phase5_recovery_plan(
             or (
                 persisted_scale <= (1.0 / 128.0)
                 and (
-                    rejected >= 1
+                    fragile_language_state
+                    or rejected >= 1
                     or bool(recovery_hold)
                     or (
                         bool(last_segment_accepted)
@@ -1292,6 +1321,7 @@ def _phase5_recovery_plan(
         "stable_fast_lane": bool(stable_fast_lane),
         "micro_recovery": micro_recovery,
         "trust_region_recovery": bool(trust_region_recovery),
+        "fragile_language_state": bool(fragile_language_state),
         # The measured trust-region regime was validated with fresh AdamW
         # state on every proposal.  Keep that property even immediately after
         # an accepted ~4k segment; outside trust-region recovery preserve the
@@ -1329,14 +1359,10 @@ def _protected_continual_plan(
     """
     rejected = max(0, int(consecutive_rejections))
     streak = max(0, int(success_streak))
-    repetition = float(before.get("repetition_rate", 1.0) or 1.0)
-    anchor_repetition = float(anchor.get("repetition_rate", 1.0) or 1.0)
-    multiword = float(before.get("multiword_output_rate", 0.0) or 0.0)
-    fragile = bool(
-        rejected > 0
-        or bool(before.get("pathological_repetition"))
-        or repetition >= anchor_repetition + 0.05
-        or multiword < 0.80
+    fragile = _phase5_language_fragile_state(
+        before,
+        anchor,
+        consecutive_rejections=rejected,
     )
     if trust_region_recovery:
         # Read-only live ablations on the 50M checkpoint isolated a very
@@ -3811,6 +3837,11 @@ def run_segment(
         progress.get("segment_guard_consecutive_rejections", 0) or 0
     )
     success_streak = int(progress.get("segment_guard_success_streak", 0) or 0)
+    fragile_language_state = _phase5_language_fragile_state(
+        segment_language_before,
+        guard_anchor,
+        consecutive_rejections=consecutive_rejections,
+    )
     recovery_plan = _phase5_recovery_plan(
         segment_tokens,
         parameters=int(parameter_count(runtime.model)),
@@ -3822,6 +3853,7 @@ def run_segment(
         recovery_hold=bool(progress.get("segment_guard_recovery_hold", False)),
         last_segment_accepted=bool(progress.get("segment_guard_last_accepted", False)),
         success_streak=success_streak,
+        fragile_language_state=fragile_language_state,
     )
     previous_protected_version = str(
         (progress.get("protected_continual_training") or {}).get("version") or ""
@@ -3875,6 +3907,12 @@ def run_segment(
         recovery_plan.get("stable_fast_lane", False)
     )
     progress["segment_guard_rescue_stage"] = recovery_plan["forced_stage"]
+    progress["segment_guard_fragile_language_state"] = bool(
+        recovery_plan.get("fragile_language_state", False)
+    )
+    progress["segment_guard_rung_promotion_eligible"] = bool(
+        not recovery_plan.get("fragile_language_state", False)
+    )
 
     optimizer, optimizer_report = _protected_optimizer(
         runtime.model,
