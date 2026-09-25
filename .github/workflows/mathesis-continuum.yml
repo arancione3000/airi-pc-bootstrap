@@ -69,7 +69,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git clone --quiet \
+          git clone --quiet --depth 1 --branch main --single-branch \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             "$STATE_REPO"
           cd "$STATE_REPO"
@@ -77,8 +77,13 @@ jobs:
           git config user.email "mathesis-omega@users.noreply.github.com"
 
           if git ls-remote --exit-code --heads origin mathesis-state >/dev/null 2>&1; then
-            git fetch --quiet origin mathesis-state:mathesis-state
-            git checkout --quiet mathesis-state
+            # Restore only the current persistent checkpoint.  Historical
+            # audit blobs can be very large and are not needed to evolve from
+            # the last known-good state.  The new commit remains a direct child
+            # of this fetched tip, so the later push is still a normal
+            # fast-forward; no force update is used.
+            git fetch --quiet --depth 1 origin mathesis-state
+            git checkout --quiet -B mathesis-state FETCH_HEAD
           else
             git checkout --orphan mathesis-state
             git rm -rf . >/dev/null 2>&1 || true

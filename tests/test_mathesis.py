@@ -1451,6 +1451,9 @@ def test_continuum_serializes_state_writers_without_force_push():
     workflow = (ROOT / ".github" / "workflows" / "mathesis-continuum.yml").read_text(encoding="utf-8")
     assert "group: mathesis-omega-continuum" in workflow
     assert "cancel-in-progress: false" in workflow
+    assert "git clone --quiet --depth 1 --branch main --single-branch" in workflow
+    assert "git fetch --quiet --depth 1 origin mathesis-state" in workflow
+    assert "git checkout --quiet -B mathesis-state FETCH_HEAD" in workflow
     assert "git push --quiet origin HEAD:mathesis-state" in workflow
     assert "git push --force" not in workflow
     assert "git push -f" not in workflow
