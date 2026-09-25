@@ -11,12 +11,15 @@ from typing import Any
 from .bootstrap_data import load_bootstrap_replay
 from .bootstrap_training import (
     _anti_collapse_weights,
+    _elementary_rehabilitation_rows,
+    _filter_protected_replay,
     _learning_rate,
     _load_optimizer_checkpoint,
     _protected_causal_replay_rows,
     _protected_continual_plan,
     _protected_optimizer,
     _segment_language_gate,
+    _sft_row_fingerprint,
     _sft_training_batch,
 )
 from .phase5_diagnostics import evaluate_phase5_language
@@ -481,74 +484,62 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
     )
     del pressure_runtime
 
+    elementary_source = []
+    for stage in ("R1_bilingual_foundations", "R2_simple_responses", "R3_short_dialogue"):
+        stage_rows = _elementary_rehabilitation_rows()[stage]
+        elementary_source.extend(stage_rows["it"])
+        elementary_source.extend(stage_rows["en"])
+    elementary_safe, _ = _filter_protected_replay(elementary_source, heldout_sft=())
+    elementary_fingerprints = {
+        _sft_row_fingerprint(row) for row in elementary_safe
+    }
+    elementary_indices = [
+        index for index, row in enumerate(protected_rows)
+        if _sft_row_fingerprint(row) in elementary_fingerprints
+    ]
+    general_indices = [
+        index for index, row in enumerate(protected_rows)
+        if _sft_row_fingerprint(row) not in elementary_fingerprints
+    ]
+    if not elementary_indices or not general_indices:
+        raise RuntimeError("replay ablation requires elementary and general replay pools")
+
     variants = [
         {
-            "name": "EOS_BASE_current",
+            "name": "REPLAY_BASE_2",
             "optimizer_state": "reset",
-            "lr_factor": 1.0,
+            "replay_batch_size": 2,
+            "replay_sampling": "uniform",
         },
         {
-            "name": "EOS_replay_1_6",
+            "name": "REPLAY_UNIFORM_8",
             "optimizer_state": "reset",
-            "lr_factor": 1.0,
-            "replay_eos_weight": 1.6,
+            "replay_batch_size": 8,
+            "replay_sampling": "uniform",
         },
         {
-            "name": "EOS_replay_2",
+            "name": "REPLAY_BALANCED_2",
             "optimizer_state": "reset",
-            "lr_factor": 1.0,
-            "replay_eos_weight": 2.0,
+            "replay_batch_size": 2,
+            "replay_sampling": "balanced",
         },
         {
-            "name": "EOS_replay_3",
+            "name": "REPLAY_BALANCED_4",
             "optimizer_state": "reset",
-            "lr_factor": 1.0,
-            "replay_eos_weight": 3.0,
+            "replay_batch_size": 4,
+            "replay_sampling": "balanced",
         },
         {
-            "name": "EOS_replay_4",
+            "name": "REPLAY_BALANCED_8",
             "optimizer_state": "reset",
-            "lr_factor": 1.0,
-            "replay_eos_weight": 4.0,
+            "replay_batch_size": 8,
+            "replay_sampling": "balanced",
         },
         {
-            "name": "EOS_causal_2",
+            "name": "REPLAY_ELEMENTARY_2",
             "optimizer_state": "reset",
-            "lr_factor": 1.0,
-            "causal_eos_weight": 2.0,
-        },
-        {
-            "name": "EOS_causal_3",
-            "optimizer_state": "reset",
-            "lr_factor": 1.0,
-            "causal_eos_weight": 3.0,
-        },
-        {
-            "name": "EOS_causal_4",
-            "optimizer_state": "reset",
-            "lr_factor": 1.0,
-            "causal_eos_weight": 4.0,
-        },
-        {
-            "name": "EOS_causal2_replay2",
-            "optimizer_state": "reset",
-            "lr_factor": 1.0,
-            "causal_eos_weight": 2.0,
-            "replay_eos_weight": 2.0,
-        },
-        {
-            "name": "EOS_causal2_replay4",
-            "optimizer_state": "reset",
-            "lr_factor": 1.0,
-            "causal_eos_weight": 2.0,
-            "replay_eos_weight": 4.0,
-        },
-        {
-            "name": "EOS_causal3_replay4",
-            "optimizer_state": "reset",
-            "lr_factor": 1.0,
-            "causal_eos_weight": 3.0,
-            "replay_eos_weight": 4.0,
+            "replay_batch_size": 2,
+            "replay_sampling": "elementary",
         },
     ]
 
@@ -599,6 +590,8 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
         group_clip_caps = variant.get("group_clip")
         grad_rows = []
         replay_supervised_total = 0
+        replay_elementary_total = 0
+        replay_rows_total = 0
 
         local_steps = max(1, int(variant.get("steps", 2)))
         variant_retry_index = int(
@@ -658,10 +651,37 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             replay_rng = random.Random(
                 9_000_000 + step * 97 + variant_retry_seed_offset
             )
-            replay_indices = [replay_rng.randrange(len(protected_rows)) for _ in range(2)]
+            replay_batch_size = max(2, int(variant.get("replay_batch_size", 2)))
+            replay_sampling = str(variant.get("replay_sampling", "uniform"))
+            if replay_sampling == "balanced":
+                elementary_count = replay_batch_size // 2
+                general_count = replay_batch_size - elementary_count
+                replay_indices = [
+                    elementary_indices[replay_rng.randrange(len(elementary_indices))]
+                    for _ in range(elementary_count)
+                ] + [
+                    general_indices[replay_rng.randrange(len(general_indices))]
+                    for _ in range(general_count)
+                ]
+                replay_rng.shuffle(replay_indices)
+            elif replay_sampling == "elementary":
+                replay_indices = [
+                    elementary_indices[replay_rng.randrange(len(elementary_indices))]
+                    for _ in range(replay_batch_size)
+                ]
+            else:
+                replay_indices = [
+                    replay_rng.randrange(len(protected_rows))
+                    for _ in range(replay_batch_size)
+                ]
+            replay_elementary_count = sum(
+                int(index in elementary_indices) for index in replay_indices
+            )
             replay_ids, replay_labels = _sft_training_batch(runtime, protected_rows, replay_indices)
             replay_count = int((replay_labels[:, 1:] != -100).sum().item())
             replay_supervised_total += replay_count
+            replay_elementary_total += replay_elementary_count
+            replay_rows_total += len(replay_indices)
             replay_result = model(replay_ids)
             replay_loss, _ = _training_objective(
                 replay_result["logits"],
@@ -730,6 +750,8 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             "replay_eos_weight": float(
                 variant.get("replay_eos_weight", 1.0)
             ),
+            "replay_batch_size": int(variant.get("replay_batch_size", 2)),
+            "replay_sampling": str(variant.get("replay_sampling", "uniform")),
             "optimizer_storage": storage,
             "effective_scale": effective_scale,
             "steps": local_steps,
@@ -781,6 +803,11 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 "after_anchor_violations": gate["after_anchor_violations"],
             },
             "replay_supervised_tokens": replay_supervised_total,
+            "replay_rows_sampled": replay_rows_total,
+            "replay_elementary_rows_sampled": replay_elementary_total,
+            "replay_elementary_fraction": (
+                replay_elementary_total / max(1, replay_rows_total)
+            ),
             "gradient_steps": grad_rows,
             "parameter_updates": update,
             "optimizer_before": optimizer_before,
