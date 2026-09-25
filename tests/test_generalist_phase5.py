@@ -170,7 +170,7 @@ def test_phase5_recovery_plan_escapes_old_lr_floor_and_resets_momentum():
         persisted_lr_scale=0.001,
         consecutive_rejections=9,
     )
-    assert floor["learning_rate_scale"] == pytest.approx(1.0 / 64.0)
+    assert floor["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
 
 
 def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
@@ -197,7 +197,7 @@ def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
         last_segment_accepted=True,
         success_streak=2,
     )
-    assert second["effective_budget_tokens"] == 16_000
+    assert second["effective_budget_tokens"] == 8_000
 
     plan = _phase5_recovery_plan(
         1_000_000,
@@ -209,10 +209,22 @@ def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
         last_segment_accepted=True,
         success_streak=3,
     )
-    assert plan["effective_budget_tokens"] == 32_000
+    assert plan["effective_budget_tokens"] == 16_000
     assert plan["parameter_cap_tokens"] == 250_000
     assert plan["stable_fast_lane"] is False
     assert plan["stall_recovery"] is False
+
+    fourth = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=0.0625,
+        consecutive_rejections=0,
+        recovery_hold=False,
+        last_segment_accepted=True,
+        success_streak=4,
+    )
+    assert fourth["effective_budget_tokens"] == 32_000
 
     rejected = _phase5_recovery_plan(
         1_000_000,
@@ -2544,11 +2556,11 @@ def test_sampling_controls_preserve_raw_greedy_default():
 def test_sustained_stall_uses_measured_short_update_and_grows_only_after_successes():
     common = dict(parameters=50_041_536, context_length=128, persisted_lr_scale=1/64)
     stalled = _phase5_recovery_plan(1_000_000, consecutive_rejections=27, **common)
-    assert stalled["effective_budget_tokens"] == 8_000
+    assert stalled["effective_budget_tokens"] == 4_000
     assert stalled["reset_optimizer"] is True
-    for streak, budget in ((1,8_000),(2,16_000),(3,32_000)):
+    for streak, budget in ((1,8_000),(2,8_000),(3,16_000),(4,32_000)):
         accepted = _phase5_recovery_plan(1_000_000, consecutive_rejections=0,
             last_segment_accepted=True, success_streak=streak, **common)
         assert accepted["effective_budget_tokens"] == budget
     retry = _phase5_recovery_plan(1_000_000, consecutive_rejections=4, success_streak=0, **common)
-    assert retry["effective_budget_tokens"] == 8_000
+    assert retry["effective_budget_tokens"] == 4_000
