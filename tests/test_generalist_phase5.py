@@ -45,6 +45,7 @@ from generalist_lm.bootstrap_training import (
     _rehabilitation_strategy_rejection_count,
     _residual_language_rehabilitation_attempts,
     _phase5_memory_safe_batch_plan,
+    _phase5_language_fragile,
     _phase5_parameter_segment_cap,
     _phase5_recovery_plan,
     _phase5_recovery_segment_budget,
@@ -284,6 +285,70 @@ def test_phase5_recovery_plan_does_not_penalize_healthy_training():
     assert plan["reset_optimizer"] is False
     assert plan["forced_stage"] is None
 
+
+
+def test_phase5_language_fragility_reuses_existing_protected_boundary():
+    anchor = {
+        "repetition_rate": 0.15772057959235905,
+    }
+    cliff = {
+        "repetition_rate": 0.23689803620537267,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    recovered = {
+        "repetition_rate": 0.20,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+
+    assert _phase5_language_fragile(
+        cliff,
+        anchor,
+        consecutive_rejections=0,
+    ) is True
+    assert _phase5_language_fragile(
+        recovered,
+        anchor,
+        consecutive_rejections=0,
+    ) is False
+    assert _phase5_language_fragile(
+        recovered,
+        anchor,
+        consecutive_rejections=1,
+    ) is True
+
+
+def test_phase5_two_acceptances_do_not_leave_4k_while_language_is_fragile():
+    common = {
+        "parameters": 50_041_536,
+        "context_length": 128,
+        "persisted_lr_scale": 1.0 / 128.0,
+        "recovery_hold": False,
+        "last_segment_accepted": True,
+        "success_streak": 2,
+    }
+    fragile = _phase5_recovery_plan(
+        1_000_000,
+        consecutive_rejections=0,
+        language_fragile=True,
+        **common,
+    )
+    healthy = _phase5_recovery_plan(
+        1_000_000,
+        consecutive_rejections=0,
+        language_fragile=False,
+        **common,
+    )
+
+    assert fragile["trust_region_recovery"] is True
+    assert fragile["language_fragile"] is True
+    assert fragile["effective_budget_tokens"] == 4_000
+    assert fragile["reset_optimizer"] is True
+
+    assert healthy["trust_region_recovery"] is False
+    assert healthy["language_fragile"] is False
+    assert healthy["effective_budget_tokens"] == 8_000
 
 
 def test_phase5_sustained_50m_stall_enters_elementary_trust_region():
