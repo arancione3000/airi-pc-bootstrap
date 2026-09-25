@@ -76,7 +76,11 @@ def _elementary_rows() -> tuple[list[Any], list[Any]]:
     return r2, all_rows
 
 
-def run_ablation(state_dir: str | Path) -> dict[str, Any]:
+def run_ablation(
+    state_dir: str | Path,
+    *,
+    policy_filter: str | None = None,
+) -> dict[str, Any]:
     state = Path(state_dir).expanduser().resolve()
     bootstrap = state / "bootstrap-data"
     candidate = bootstrap / "candidate"
@@ -151,6 +155,13 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
         },
     ]
     seeds = [0, 1, 2, 3]
+    if policy_filter:
+        policies = [
+            policy for policy in policies
+            if str(policy["policy"]) == str(policy_filter)
+        ]
+        if not policies:
+            raise ValueError(f"unknown calibration policy: {policy_filter}")
     results: list[dict[str, Any]] = []
 
     for policy in policies:
@@ -314,8 +325,9 @@ def main() -> None:
     )
     parser.add_argument("--state-dir", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--policy", default=None)
     args = parser.parse_args()
-    report = run_ablation(args.state_dir)
+    report = run_ablation(args.state_dir, policy_filter=args.policy)
     target = Path(args.output)
     target.write_text(
         json.dumps(report, indent=2, sort_keys=True),
