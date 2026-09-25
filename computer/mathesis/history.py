@@ -238,6 +238,7 @@ def normalize_history(state_dir: str | Path | None = None) -> dict[str, Any]:
     previous_legacy = (
         existing_manifest.get("legacy_compaction")
         if isinstance(existing_manifest, dict)
+        and isinstance(existing_manifest.get("legacy_compaction"), dict)
         else None
     )
 
@@ -412,20 +413,34 @@ def audit_history_store(state_dir: str | Path | None = None) -> dict[str, Any]:
         check("history:parseable_compact_jsonl", True, metadata)
 
     manifest = _read_json(manifest_path, None)
+    manifest_version = -1
+    if isinstance(manifest, dict):
+        try:
+            manifest_version = int(manifest.get("version", 0) or 0)
+        except Exception:
+            manifest_version = -1
     manifest_ok = (
         isinstance(manifest, dict)
-        and int(manifest.get("version", 0) or 0) == HISTORY_MANIFEST_VERSION
+        and manifest_version == HISTORY_MANIFEST_VERSION
         and manifest.get("active_schema") == HISTORY_SCHEMA
+        and isinstance(manifest.get("active"), dict)
+        and isinstance(manifest.get("policy"), dict)
     )
     check("history:manifest_valid", manifest_ok, manifest)
 
     if manifest_ok and metadata is not None:
         recorded = manifest.get("active") or {}
+        try:
+            recorded_bytes = int(recorded.get("bytes", -1))
+            recorded_records = int(recorded.get("records", -1))
+        except Exception:
+            recorded_bytes = -1
+            recorded_records = -1
         check(
             "history:manifest_matches_active",
             recorded.get("sha256") == metadata.get("sha256")
-            and int(recorded.get("bytes", -1)) == metadata.get("bytes")
-            and int(recorded.get("records", -1)) == metadata.get("records"),
+            and recorded_bytes == metadata.get("bytes")
+            and recorded_records == metadata.get("records"),
             {"recorded": recorded, "actual": metadata},
         )
 
