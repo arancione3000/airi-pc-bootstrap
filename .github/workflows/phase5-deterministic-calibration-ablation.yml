@@ -16,7 +16,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    outputs:
+      state_sha: ${{ steps.pin.outputs.state_sha }}
+    steps:
+      - name: Pin one immutable Generalist state
+        id: pin
+        run: |
+          set -euo pipefail
+          state_sha="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/generalist-state | awk '{print $1}')"
+          test -n "${state_sha}"
+          echo "state_sha=${state_sha}" >> "${GITHUB_OUTPUT}"
+          echo "Pinned generalist-state ${state_sha}"
+
   ablation:
+    needs: snapshot
     strategy:
       fail-fast: false
       matrix:
@@ -29,6 +44,7 @@ jobs:
     timeout-minutes: 30
     env:
       PYTHONPATH: computer
+      PINNED_STATE_SHA: ${{ needs.snapshot.outputs.state_sha }}
       STATE_REPO: /tmp/airi-phase5-det-state
       STATE_DIR: /tmp/airi-phase5-det-state/generalist-state
     steps:
@@ -43,8 +59,10 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf "${STATE_REPO}"
-          git clone --quiet --depth 1 --branch generalist-state --single-branch \
+          git clone --quiet --no-checkout --filter=blob:none \
             "https://github.com/${GITHUB_REPOSITORY}.git" "${STATE_REPO}"
+          git -C "${STATE_REPO}" fetch --quiet --depth 1 origin "${PINNED_STATE_SHA}"
+          git -C "${STATE_REPO}" checkout --quiet --detach "${PINNED_STATE_SHA}"
           test -f "${STATE_DIR}/bootstrap-data/candidate/model.pt"
       - name: Run deterministic calibration
         run: |
