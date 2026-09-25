@@ -673,6 +673,19 @@ def test_generic_architecture_yields_to_active_explicit_lineage_handoff():
     assert "matrix=[]" in workflow
 
 
+def test_architecture_search_defers_cleanly_when_writer_stays_busy():
+    workflow = Path(".github/workflows/generalist-architecture-search.yml").read_text(
+        encoding="utf-8"
+    )
+    assert 'echo "ARCHITECTURE_WINDOW_AVAILABLE=false" >> "${GITHUB_ENV}"' in workflow
+    assert 'echo "ARCHITECTURE_WINDOW_AVAILABLE=true" >> "${GITHUB_ENV}"' in workflow
+    assert "Architecture search deferred: a Generalist state writer still owns the live lineage." in workflow
+    assert "Timed out waiting for state-writer window." not in workflow
+    assert "if: env.ARCHITECTURE_WINDOW_AVAILABLE == 'true'" in workflow
+    assert "needs.plan.outputs.run_search == 'true'" in workflow
+    assert "needs.finalize.result == 'success'" in workflow
+
+
 def test_bootstrap_janitor_preserves_old_worker_without_replacement():
     workflow = Path(
         ".github/workflows/generalist-state-writer-janitor.yml"
