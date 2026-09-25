@@ -1761,6 +1761,24 @@ def _anti_collapse_weights(
     return 0.100, 2.00
 
 
+def _phase5_causal_objective_weights(
+    stage: str,
+    current_language: dict[str, Any],
+    protected_plan: dict[str, Any],
+) -> tuple[float, float]:
+    """Derive causal anti-collapse weights from the current live language state.
+
+    before.json is a historical Phase-5 baseline and may use an older probe
+    suite.  It must never drive the objective for a later live checkpoint.
+    """
+    anti_weight, eos_weight = _anti_collapse_weights(stage, current_language)
+    anti_weight = max(
+        float(anti_weight),
+        float(protected_plan.get("anti_repetition_weight", 0.0) or 0.0),
+    )
+    return float(anti_weight), float(eos_weight)
+
+
 def _anti_collapse_rescue_gate(
     before: dict[str, Any],
     after: dict[str, Any],
@@ -3959,10 +3977,10 @@ def run_segment(
         for group in optimizer.param_groups:
             group["lr"] = lr * float(group.get("lr_multiplier", 1.0) or 1.0)
 
-        anti_weight, eos_weight = _anti_collapse_weights(stage, before)
-        anti_weight = max(
-            float(anti_weight),
-            float(protected_plan.get("anti_repetition_weight", 0.0) or 0.0),
+        anti_weight, eos_weight = _phase5_causal_objective_weights(
+            stage,
+            segment_language_before,
+            protected_plan,
         )
         supervised = 0
         weighted_loss = 0.0
@@ -4056,6 +4074,18 @@ def run_segment(
             ),
             "protected_reference_tokens": int(kl_tokens),
             "segment_warmup_factor": float(segment_warmup_factor),
+            "anti_collapse_diagnostics_suite": str(
+                segment_language_before.get("suite") or ""
+            ),
+            "anti_collapse_diagnostics_prompt_count": int(
+                segment_language_before.get("prompt_count", 0) or 0
+            ),
+            "anti_collapse_diagnostics_repetition_rate": float(
+                segment_language_before.get("repetition_rate", 0.0) or 0.0
+            ),
+            "anti_collapse_diagnostics_pathological_repetition": bool(
+                segment_language_before.get("pathological_repetition")
+            ),
         }
 
         torch.nn.utils.clip_grad_norm_(runtime.model.parameters(), 1.0)
