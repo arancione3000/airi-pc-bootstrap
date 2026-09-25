@@ -2,6 +2,8 @@ name: AIRI Phase 5 Repetition Ablation
 
 on:
   workflow_dispatch:
+  push:
+    branches: [diag/phase5-gradient-conflict]
   pull_request:
     branches: [main]
     paths:
@@ -14,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: airi-phase5-repetition-ablation
+  group: airi-phase5-gradient-conflict-ablation
   cancel-in-progress: true
 
 jobs:
