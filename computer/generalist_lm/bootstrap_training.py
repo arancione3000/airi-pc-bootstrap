@@ -1573,7 +1573,16 @@ def _record_learning_efficiency(
             min(1.0, int(unique_corpus_target_tokens) / max(1, int(target_tokens)))
         ),
         "replay_fraction": float(protected_plan["replay_fraction"]),
-        "replay_loss_weight": float(protected_plan["replay_loss_weight"]),
+        "replay_loss_weight": float(
+            protected_plan.get(
+                "replay_loss_weight",
+                float(protected_plan.get("replay_fraction", 0.0) or 0.0)
+                / max(
+                    1e-9,
+                    1.0 - float(protected_plan.get("replay_fraction", 0.0) or 0.0),
+                ),
+            )
+        ),
         "replay_sampling": str(protected_plan.get("replay_sampling") or "uniform"),
         "replay_batch_size": int(protected_plan.get("replay_batch_size", 2) or 2),
         "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
@@ -1600,7 +1609,16 @@ def _record_learning_efficiency(
         - float(before.get("multiword_output_rate", 0.0) or 0.0),
         "language_quality_gain": float(quality_gain),
         "replay_fraction": float(protected_plan["replay_fraction"]),
-        "replay_loss_weight": float(protected_plan["replay_loss_weight"]),
+        "replay_loss_weight": float(
+            protected_plan.get(
+                "replay_loss_weight",
+                float(protected_plan.get("replay_fraction", 0.0) or 0.0)
+                / max(
+                    1e-9,
+                    1.0 - float(protected_plan.get("replay_fraction", 0.0) or 0.0),
+                ),
+            )
+        ),
         "replay_sampling": str(protected_plan.get("replay_sampling") or "uniform"),
         "replay_batch_size": int(protected_plan.get("replay_batch_size", 2) or 2),
         "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
@@ -4150,7 +4168,16 @@ def run_segment(
         "new_supervised_tokens": int(attempted_tokens),
         "replay_supervised_tokens": int(replay_tokens_trained),
         "replay_fraction": float(protected_plan["replay_fraction"]),
-        "replay_loss_weight": float(protected_plan["replay_loss_weight"]),
+        "replay_loss_weight": float(
+            protected_plan.get(
+                "replay_loss_weight",
+                float(protected_plan.get("replay_fraction", 0.0) or 0.0)
+                / max(
+                    1e-9,
+                    1.0 - float(protected_plan.get("replay_fraction", 0.0) or 0.0),
+                ),
+            )
+        ),
         "replay_sampling": str(protected_plan.get("replay_sampling") or "uniform"),
         "replay_batch_size": int(protected_plan.get("replay_batch_size", 2) or 2),
         "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
