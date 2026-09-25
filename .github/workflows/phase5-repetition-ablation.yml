@@ -1,4 +1,4 @@
-name: AIRI Phase 5 Stable Recovery Ablation
+name: AIRI Phase 5 Root Cause Diagnostics
 
 on:
   workflow_dispatch:
@@ -25,6 +25,9 @@ jobs:
       PYTHONPATH: computer
       STATE_REPO: /tmp/airi-phase5-ablation-state
       STATE_DIR: /tmp/airi-phase5-ablation-state/generalist-state
+      OLD_REPO: /tmp/airi-phase5-r2-state
+      OLD_DIR: /tmp/airi-phase5-r2-state/generalist-state/bootstrap-data/candidate
+      R2_SHA: e7c2c14de4359dfab952f903a17e65fdf3877899
     steps:
       - uses: actions/checkout@v4
 
@@ -45,19 +48,37 @@ jobs:
           test -f "${STATE_DIR}/bootstrap-data/candidate/model.pt"
           test -f "${STATE_DIR}/bootstrap-data/progress.json"
           test -f "${STATE_DIR}/bootstrap-data/optimizer.pt"
+          rm -rf "${OLD_REPO}"
+          git clone --quiet --no-checkout --filter=blob:none \
+            "https://github.com/${GITHUB_REPOSITORY}.git" "${OLD_REPO}"
+          git -C "${OLD_REPO}" fetch --quiet --depth 1 origin "${R2_SHA}"
+          git -C "${OLD_REPO}" checkout --quiet --detach "${R2_SHA}"
+          test -f "${OLD_DIR}/model.pt"
 
-      - name: Run read-only ablation matrix
+      - name: Measure residual objective gradients
         run: |
           set -euo pipefail
-          python -m generalist_lm.phase5_ablation \
+          python -m generalist_lm.phase5_residual_gradient_diagnostic \
             --state-dir "${STATE_DIR}" \
-            --output /tmp/phase5-ablation.json \
-            | tee /tmp/phase5-ablation.stdout.json
+            --output /tmp/phase5-residual-gradient.json \
+            | tee /tmp/phase5-residual-gradient.stdout.json
 
-      - name: Upload ablation evidence
+      - name: Compare current and accepted R2 checkpoint
+        run: |
+          set -euo pipefail
+          python -m generalist_lm.phase5_historical_r2_diff \
+            --current "${STATE_DIR}/bootstrap-data/candidate" \
+            --historical "${OLD_DIR}" \
+            --source-d-ff 1888 \
+            --output /tmp/phase5-r2-diff.json \
+            | tee /tmp/phase5-r2-diff.stdout.json
+
+      - name: Upload root-cause evidence
         uses: actions/upload-artifact@v4
         with:
-          name: AIRI-Phase5-Stable-Recovery-Ablation-${{ github.run_number }}
-          path: /tmp/phase5-ablation.json
+          name: AIRI-Phase5-Root-Cause-${{ github.run_number }}
+          path: |
+            /tmp/phase5-residual-gradient.json
+            /tmp/phase5-r2-diff.json
           if-no-files-found: error
           retention-days: 7
