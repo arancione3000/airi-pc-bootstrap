@@ -1166,6 +1166,90 @@ def test_residual_kl_recovery_keeps_legacy_weights_bit_stable():
     assert report["trainable_coordinate_count"] > 0
 
 
+def test_residual_coverage_sampling_is_seed_independent():
+    torch = pytest.importorskip("torch")
+    source_ff = 32
+    target_ff = 48
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=48,
+        d_model=24,
+        n_heads=4,
+        n_layers=1,
+        d_ff=target_ff,
+        dropout=0.0,
+        tokenizer_version="byte-v1",
+        ff_variant="swiglu",
+    ).validate()
+    base = CausalTransformerLM(cfg)
+    with torch.no_grad():
+        for block in base.blocks:
+            block.ff.up.weight[source_ff:target_ff].zero_()
+            block.ff.up.weight[target_ff + source_ff : 2 * target_ff].zero_()
+            block.ff.down.weight[:, source_ff:target_ff].zero_()
+    runtime = GeneralistRuntime(base, cfg, tokenizer=ByteTokenizer(), device="cpu")
+    _revive_dead_ffn_model_capacity(runtime, source_d_ff=source_ff, seed=123)
+
+    initial = {
+        name: value.detach().clone()
+        for name, value in runtime.model.state_dict().items()
+    }
+    examples = [
+        SFTExample([
+            {"role": "user", "content": f"Prompt {index}"},
+            {"role": "assistant", "content": f"Answer {index}."},
+        ])
+        for index in range(6)
+    ]
+    anchors = [
+        SFTExample([
+            {"role": "user", "content": f"Anchor {index}"},
+            {"role": "assistant", "content": f"Stable {index}."},
+        ])
+        for index in range(8)
+    ]
+
+    final_states = []
+    reports = []
+    for seed in (3, 999):
+        model = CausalTransformerLM(cfg)
+        model.load_state_dict(initial)
+        reference = CausalTransformerLM(cfg)
+        reference.load_state_dict(initial)
+        report = train_sft_residual_recovery(
+            model,
+            reference,
+            ByteTokenizer(),
+            examples,
+            anchor_examples=anchors,
+            source_d_ff=source_ff,
+            steps=4,
+            batch_size=3,
+            learning_rate=1e-4,
+            seed=seed,
+            device="cpu",
+            repetition_unlikelihood_weight=0.0,
+            eos_loss_weight=1.0,
+            kl_weight=1.0,
+            train_upstream=False,
+            sampling_mode="coverage",
+            sampling_offset=1,
+        )
+        reports.append(report)
+        final_states.append({
+            name: value.detach().clone()
+            for name, value in model.state_dict().items()
+        })
+
+    assert reports[0]["sampling_mode"] == "coverage"
+    assert reports[1]["sampling_mode"] == "coverage"
+    assert reports[0]["sampling_offset"] == 1
+    assert reports[1]["sampling_offset"] == 1
+    assert final_states[0].keys() == final_states[1].keys()
+    for name in final_states[0]:
+        assert torch.equal(final_states[0][name], final_states[1][name])
+
+
 def test_dead_capacity_revival_precedes_historical_replacement():
     progress = {
         "lineage_id": "airi-5d3d25177d2e83f7",
