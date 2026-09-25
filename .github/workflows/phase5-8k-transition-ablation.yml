@@ -1,0 +1,54 @@
+name: AIRI Phase 5 8k Transition Ablation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/phase5_8k_transition_ablation.py'
+      - '.github/workflows/phase5-8k-transition-ablation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: airi-phase5-8k-transition-ablation
+  cancel-in-progress: true
+
+jobs:
+  ablation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: computer
+      STATE_REPO: /tmp/airi-phase5-8k-state
+      STATE_DIR: /tmp/airi-phase5-8k-state/generalist-state
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+      - name: Clone immutable live state
+        run: |
+          set -euo pipefail
+          rm -rf "${STATE_REPO}"
+          git clone --quiet --depth 1 --branch generalist-state --single-branch \
+            "https://github.com/${GITHUB_REPOSITORY}.git" "${STATE_REPO}"
+          test -f "${STATE_DIR}/bootstrap-data/candidate/model.pt"
+          test -f "${STATE_DIR}/bootstrap-data/progress.json"
+      - name: Run 8k transition matrix
+        run: |
+          set -euo pipefail
+          python -m generalist_lm.phase5_8k_transition_ablation \
+            --state-dir "${STATE_DIR}" \
+            --output /tmp/phase5-8k.json \
+            | tee /tmp/phase5-8k.stdout.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AIRI-Phase5-8k-Transition-${{ github.run_number }}
+          path: /tmp/phase5-8k.json
+          if-no-files-found: error
+          retention-days: 7
