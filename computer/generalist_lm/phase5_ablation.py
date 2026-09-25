@@ -748,6 +748,8 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 "unique_token_ratio": before["unique_token_ratio"],
                 "dominant_token_fraction": before["dominant_token_fraction"],
                 "token_entropy": before["token_entropy"],
+                "eos_probability": before["eos_probability"],
+                "generation_length": before["generation_length"],
                 "longest_repeated_token_run": before["longest_repeated_token_run"],
             },
             "after": {
@@ -756,6 +758,8 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 "unique_token_ratio": after["unique_token_ratio"],
                 "dominant_token_fraction": after["dominant_token_fraction"],
                 "token_entropy": after["token_entropy"],
+                "eos_probability": after["eos_probability"],
+                "generation_length": after["generation_length"],
                 "longest_repeated_token_run": after["longest_repeated_token_run"],
             },
             "delta": {
@@ -763,6 +767,12 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 "repetition_rate": float(after["repetition_rate"] - before["repetition_rate"]),
                 "unique_token_ratio": float(after["unique_token_ratio"] - before["unique_token_ratio"]),
                 "token_entropy": float(after["token_entropy"] - before["token_entropy"]),
+                "eos_probability": float(
+                    after["eos_probability"] - before["eos_probability"]
+                ),
+                "generation_length": float(
+                    after["generation_length"] - before["generation_length"]
+                ),
             },
             "gate": {
                 "before_quality": gate["before_quality"],
