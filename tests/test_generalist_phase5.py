@@ -327,6 +327,7 @@ def test_protected_continual_plan_strengthens_replay_near_anchor_cliff():
         anchor,
         consecutive_rejections=3,
         success_streak=0,
+        parameters=50_041_536,
     )
     assert plan["replay_fraction"] == pytest.approx(0.20)
     assert plan["replay_loss_weight"] == pytest.approx(4.0)
@@ -344,12 +345,36 @@ def test_protected_continual_plan_strengthens_replay_near_anchor_cliff():
         anchor,
         consecutive_rejections=0,
         success_streak=5,
+        parameters=50_041_536,
     )
     assert plan["replay_fraction"] == pytest.approx(0.10)
     assert plan["replay_sampling"] == "uniform"
     assert plan["replay_loss_weight"] == pytest.approx(1.0 / 9.0)
     assert plan["stall_language_rescue"] is False
     assert plan["reference_kl_weight"] < 0.50
+
+
+def test_protected_continual_plan_does_not_apply_50m_rescue_to_small_model():
+    anchor = {
+        "repetition_rate": 0.19,
+        "multiword_output_rate": 0.86,
+        "pathological_repetition": False,
+    }
+    fragile = {
+        "repetition_rate": 0.27,
+        "multiword_output_rate": 0.71,
+        "pathological_repetition": False,
+    }
+    plan = _protected_continual_plan(
+        fragile,
+        anchor,
+        consecutive_rejections=5,
+        success_streak=0,
+        parameters=7_021_248,
+    )
+    assert plan["stall_language_rescue"] is False
+    assert plan["replay_sampling"] == "uniform"
+    assert plan["replay_loss_weight"] == pytest.approx(0.25)
 
 
 def test_protected_optimizer_covers_model_once_and_favors_ffn():
