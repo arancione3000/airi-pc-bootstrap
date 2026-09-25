@@ -1287,6 +1287,7 @@ def _protected_continual_plan(
     *,
     consecutive_rejections: int,
     success_streak: int,
+    parameters: int | None = None,
 ) -> dict[str, Any]:
     """Bound replay/KL pressure from live quality headroom.
 
@@ -1305,7 +1306,11 @@ def _protected_continual_plan(
         or repetition >= anchor_repetition + 0.05
         or multiword < 0.80
     )
-    stall_language_rescue = bool(rejected >= 2)
+    parameter_count_value = max(0, int(parameters or 0))
+    stall_language_rescue = bool(
+        rejected >= 2
+        and 40_000_000 <= parameter_count_value < 64_000_000
+    )
     if fragile:
         replay_fraction = 0.20
         kl_weight = 0.50
@@ -3822,6 +3827,7 @@ def run_segment(
         guard_anchor,
         consecutive_rejections=consecutive_rejections,
         success_streak=success_streak,
+        parameters=int(parameter_count(runtime.model)),
     )
     protected_rows, protected_row_counts = _protected_causal_replay_rows(
         protected_replay.sft_train,
