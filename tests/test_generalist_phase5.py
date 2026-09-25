@@ -1109,6 +1109,81 @@ def test_residual_kl_recovery_keeps_legacy_weights_bit_stable():
     assert report["anchor_example_count"] == 1
     assert report["mean_teacher_kl_loss"] >= 0.0
     assert report["trainable_coordinate_count"] > 0
+    assert report["sampling_mode"] == "random"
+
+
+def test_residual_recovery_cyclic_sampling_is_reproducible():
+    torch = pytest.importorskip("torch")
+    cfg = GeneralistLMConfig(
+        vocab_size=264,
+        context_length=48,
+        d_model=24,
+        n_heads=4,
+        n_layers=1,
+        d_ff=48,
+        dropout=0.0,
+        tokenizer_version="byte-v1",
+        ff_variant="swiglu",
+    ).validate()
+    source_ff = 32
+    base = CausalTransformerLM(cfg)
+    with torch.no_grad():
+        for block in base.blocks:
+            block.ff.up.weight[source_ff:48].zero_()
+            block.ff.up.weight[48 + source_ff : 96].zero_()
+            block.ff.down.weight[:, source_ff:48].zero_()
+    runtime = GeneralistRuntime(base, cfg, tokenizer=ByteTokenizer(), device="cpu")
+    _revive_dead_ffn_model_capacity(runtime, source_d_ff=source_ff, seed=321)
+    initial = {k: v.detach().clone() for k, v in base.state_dict().items()}
+
+    examples = [
+        SFTExample([
+            {"role": "user", "content": f"Prompt {index}"},
+            {"role": "assistant", "content": f"Answer {index}"},
+        ])
+        for index in range(4)
+    ]
+    anchors = [
+        SFTExample([
+            {"role": "user", "content": f"Anchor {index}"},
+            {"role": "assistant", "content": f"Stable {index}"},
+        ])
+        for index in range(6)
+    ]
+
+    states = []
+    reports = []
+    for _ in range(2):
+        model = CausalTransformerLM(cfg)
+        model.load_state_dict(initial)
+        reference = CausalTransformerLM(cfg)
+        reference.load_state_dict(initial)
+        report = train_sft_residual_recovery(
+            model,
+            reference,
+            ByteTokenizer(),
+            examples,
+            anchor_examples=anchors,
+            source_d_ff=source_ff,
+            steps=4,
+            batch_size=4,
+            learning_rate=1e-5,
+            seed=2,
+            device="cpu",
+            repetition_unlikelihood_weight=0.0,
+            eos_loss_weight=1.0,
+            kl_weight=1.0,
+            train_upstream=False,
+            sampling_mode="cyclic",
+        )
+        states.append({k: v.detach().clone() for k, v in model.state_dict().items()})
+        reports.append(report)
+
+    assert reports[0]["sampling_mode"] == "cyclic"
+    assert reports[1]["sampling_mode"] == "cyclic"
+    assert reports[0]["supervised_tokens"] == reports[1]["supervised_tokens"]
+    for name in states[0]:
+        assert torch.equal(states[0][name], states[1][name])
 
 
 def test_dead_capacity_revival_precedes_historical_replacement():
