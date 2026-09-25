@@ -504,89 +504,18 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
     if not elementary_indices or not general_indices:
         raise RuntimeError("replay ablation requires elementary and general replay pools")
 
+    seed_indices = [0, 1, 2, 3, 4, 5, 6, 7, 16, 24, 32, 38, 39, 40, 46, 63]
     variants = [
         {
-            "name": "ELEM2_W200",
-            "optimizer_state": "reset",
-            "replay_batch_size": 2,
-            "replay_sampling": "elementary",
-            "replay_loss_weight": 2.00,
-        },
-        {
-            "name": "ELEM2_W400",
-            "optimizer_state": "reset",
-            "replay_batch_size": 2,
-            "replay_sampling": "elementary",
-            "replay_loss_weight": 4.00,
-        },
-        {
-            "name": "ELEM2_W800",
-            "optimizer_state": "reset",
-            "replay_batch_size": 2,
-            "replay_sampling": "elementary",
-            "replay_loss_weight": 8.00,
-        },
-        {
-            "name": "ELEM2_W1600",
-            "optimizer_state": "reset",
-            "replay_batch_size": 2,
-            "replay_sampling": "elementary",
-            "replay_loss_weight": 16.00,
-        },
-        {
-            "name": "ELEM4_W200",
-            "optimizer_state": "reset",
-            "replay_batch_size": 4,
-            "replay_sampling": "elementary",
-            "replay_loss_weight": 2.00,
-        },
-        {
-            "name": "ELEM8_W200",
-            "optimizer_state": "reset",
-            "replay_batch_size": 8,
-            "replay_sampling": "elementary",
-            "replay_loss_weight": 2.00,
-        },
-        {
-            "name": "ELEM2_W200_LRHALF",
-            "optimizer_state": "reset",
-            "lr_factor": 0.50,
-            "replay_batch_size": 2,
-            "replay_sampling": "elementary",
-            "replay_loss_weight": 2.00,
-        },
-        {
-            "name": "ELEM2_W400_LRHALF",
-            "optimizer_state": "reset",
-            "lr_factor": 0.50,
-            "replay_batch_size": 2,
-            "replay_sampling": "elementary",
-            "replay_loss_weight": 4.00,
-        },
-        {
-            "name": "ELEM2_W800_LRHALF",
-            "optimizer_state": "reset",
-            "lr_factor": 0.50,
-            "replay_batch_size": 2,
-            "replay_sampling": "elementary",
-            "replay_loss_weight": 8.00,
-        },
-        {
-            "name": "ELEM2_W400_ONE_STEP",
+            "name": f"ELEM4_W400_SEED_{seed_index:02d}",
             "optimizer_state": "reset",
             "steps": 1,
-            "replay_batch_size": 2,
-            "replay_sampling": "elementary",
-            "replay_loss_weight": 4.00,
-        },
-        {
-            "name": "ELEM4_W400_ONE_STEP",
-            "optimizer_state": "reset",
-            "steps": 1,
+            "retry_rejection_index": seed_index,
             "replay_batch_size": 4,
             "replay_sampling": "elementary",
             "replay_loss_weight": 4.00,
-        },
+        }
+        for seed_index in seed_indices
     ]
 
     results = []
