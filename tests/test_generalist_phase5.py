@@ -324,6 +324,21 @@ def test_phase5_trust_region_requires_two_acceptances_before_8k_ladder():
     assert second_followup["effective_budget_tokens"] == 8_000
     assert second_followup["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
 
+    failed_ladder_step = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=1,
+        recovery_hold=False,
+        last_segment_accepted=False,
+        success_streak=0,
+    )
+    assert failed_ladder_step["trust_region_recovery"] is True
+    assert failed_ladder_step["effective_budget_tokens"] == 4_000
+    assert failed_ladder_step["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
+    assert failed_ladder_step["reset_optimizer"] is True
+
 
 def test_protected_continual_trust_region_uses_elementary_replay_only():
     anchor = {
