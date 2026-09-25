@@ -45,6 +45,7 @@ from generalist_lm.bootstrap_training import (
     _rehabilitation_strategy_rejection_count,
     _residual_language_rehabilitation_attempts,
     _phase5_memory_safe_batch_plan,
+    _phase5_language_fragile_state,
     _phase5_parameter_segment_cap,
     _phase5_recovery_plan,
     _phase5_recovery_segment_budget,
@@ -171,6 +172,60 @@ def test_phase5_recovery_plan_escapes_old_lr_floor_and_resets_momentum():
         consecutive_rejections=9,
     )
     assert floor["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
+
+
+def test_phase5_language_fragility_reuses_protected_plan_semantics():
+    anchor = {
+        "repetition_rate": 0.15772057959235905,
+        "multiword_output_rate": 1.0,
+    }
+    cliff = {
+        "repetition_rate": 0.23689803620537267,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    healthy = {
+        "repetition_rate": 0.19340917541105512,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    assert _phase5_language_fragile_state(cliff, anchor) is True
+    assert _phase5_language_fragile_state(healthy, anchor) is False
+
+
+def test_phase5_fragile_checkpoint_cannot_promote_to_8k_on_streak_alone():
+    plan = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=0,
+        recovery_hold=False,
+        last_segment_accepted=True,
+        success_streak=2,
+        fragile_language_state=True,
+    )
+    assert plan["fragile_language_state"] is True
+    assert plan["trust_region_recovery"] is True
+    assert plan["effective_budget_tokens"] == 4_000
+    assert plan["reset_optimizer"] is True
+
+
+def test_phase5_nonfragile_checkpoint_can_resume_measured_ladder():
+    plan = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=0,
+        recovery_hold=False,
+        last_segment_accepted=True,
+        success_streak=2,
+        fragile_language_state=False,
+    )
+    assert plan["fragile_language_state"] is False
+    assert plan["trust_region_recovery"] is False
+    assert plan["effective_budget_tokens"] == 8_000
 
 
 def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
