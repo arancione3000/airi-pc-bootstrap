@@ -73,6 +73,17 @@ jobs:
             --output /tmp/phase5-r2-diff.json \
             | tee /tmp/phase5-r2-diff.stdout.json
 
+      - name: Test same-lineage residual projection
+        run: |
+          set -euo pipefail
+          python -m generalist_lm.phase5_historical_residual_projection_ablation \
+            --current "${STATE_DIR}/bootstrap-data/candidate" \
+            --historical "${OLD_DIR}" \
+            --guard "${STATE_DIR}/bootstrap-data/language-guard.json" \
+            --source-d-ff 1888 \
+            --output /tmp/phase5-residual-projection.json \
+            | tee /tmp/phase5-residual-projection.stdout.json
+
       - name: Upload root-cause evidence
         uses: actions/upload-artifact@v4
         with:
@@ -80,5 +91,6 @@ jobs:
           path: |
             /tmp/phase5-residual-gradient.json
             /tmp/phase5-r2-diff.json
+            /tmp/phase5-residual-projection.json
           if-no-files-found: error
           retention-days: 7
