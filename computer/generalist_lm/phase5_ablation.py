@@ -481,31 +481,76 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
     )
     del pressure_runtime
 
-    seed_indices = [
-        0, 1, 2, 3, 4, 5, 6, 7,
-        8, 12, 16, 24, 31, 32, 33, 34,
-        35, 36, 37, 38, 39, 40, 48, 56, 63,
-    ]
     variants = [
         {
-            "name": f"SEED2_{seed_index:02d}",
+            "name": "EOS_BASE_current",
             "optimizer_state": "reset",
             "lr_factor": 1.0,
-            "retry_rejection_index": seed_index,
-            "steps": 2,
-        }
-        for seed_index in seed_indices
-    ]
-    variants.extend([
+        },
         {
-            "name": f"SEED1_{seed_index:02d}",
+            "name": "EOS_replay_1_6",
             "optimizer_state": "reset",
             "lr_factor": 1.0,
-            "retry_rejection_index": seed_index,
-            "steps": 1,
-        }
-        for seed_index in (0, 3, 8, 16, 31, 38, 48, 63)
-    ])
+            "replay_eos_weight": 1.6,
+        },
+        {
+            "name": "EOS_replay_2",
+            "optimizer_state": "reset",
+            "lr_factor": 1.0,
+            "replay_eos_weight": 2.0,
+        },
+        {
+            "name": "EOS_replay_3",
+            "optimizer_state": "reset",
+            "lr_factor": 1.0,
+            "replay_eos_weight": 3.0,
+        },
+        {
+            "name": "EOS_replay_4",
+            "optimizer_state": "reset",
+            "lr_factor": 1.0,
+            "replay_eos_weight": 4.0,
+        },
+        {
+            "name": "EOS_causal_2",
+            "optimizer_state": "reset",
+            "lr_factor": 1.0,
+            "causal_eos_weight": 2.0,
+        },
+        {
+            "name": "EOS_causal_3",
+            "optimizer_state": "reset",
+            "lr_factor": 1.0,
+            "causal_eos_weight": 3.0,
+        },
+        {
+            "name": "EOS_causal_4",
+            "optimizer_state": "reset",
+            "lr_factor": 1.0,
+            "causal_eos_weight": 4.0,
+        },
+        {
+            "name": "EOS_causal2_replay2",
+            "optimizer_state": "reset",
+            "lr_factor": 1.0,
+            "causal_eos_weight": 2.0,
+            "replay_eos_weight": 2.0,
+        },
+        {
+            "name": "EOS_causal2_replay4",
+            "optimizer_state": "reset",
+            "lr_factor": 1.0,
+            "causal_eos_weight": 2.0,
+            "replay_eos_weight": 4.0,
+        },
+        {
+            "name": "EOS_causal3_replay4",
+            "optimizer_state": "reset",
+            "lr_factor": 1.0,
+            "causal_eos_weight": 3.0,
+            "replay_eos_weight": 4.0,
+        },
+    ]
 
     results = []
     for variant in variants:
@@ -583,6 +628,9 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 before,
             )
             anti_weight = max(float(anti_weight), anti_floor)
+            eos_weight = float(
+                variant.get("causal_eos_weight", eos_weight)
+            )
 
             micro_batches = [indices[offset:offset + 2] for offset in range(0, 32, 2)]
             prepared = []
@@ -619,7 +667,9 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
                 replay_result["logits"],
                 replay_labels,
                 replay_ids,
-                eos_loss_weight=1.0,
+                eos_loss_weight=float(
+                    variant.get("replay_eos_weight", 1.0)
+                ),
                 repetition_unlikelihood_weight=anti_weight,
                 repetition_window=16,
                 aggregation=str(variant.get("anti_repetition_aggregation", "mean_negative")),
@@ -674,6 +724,12 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             "optimizer_state": state_mode,
             "retry_rejection_index": variant_retry_index,
             "attempted_steps": local_steps,
+            "causal_eos_weight": float(
+                variant.get("causal_eos_weight", 0.0)
+            ),
+            "replay_eos_weight": float(
+                variant.get("replay_eos_weight", 1.0)
+            ),
             "optimizer_storage": storage,
             "effective_scale": effective_scale,
             "steps": local_steps,
