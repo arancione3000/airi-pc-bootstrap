@@ -94,6 +94,13 @@ jobs:
             cp -a "$STATE_REPO/mathesis-state/." "$MATHESIS_STATE_DIR/" || true
           fi
 
+      - name: Normalize bounded MATHESIS audit history
+        run: |
+          set -euo pipefail
+          python -m mathesis.history --state-dir "$MATHESIS_STATE_DIR"
+          test -f "$MATHESIS_STATE_DIR/history.jsonl"
+          test -f "$MATHESIS_STATE_DIR/history-manifest.json"
+
       - name: Run bounded self-evolution cycle
         run: |
           set -euo pipefail
@@ -105,9 +112,12 @@ jobs:
           test -f "$MATHESIS_STATE_DIR/champion_model.py"
           test -f "$MATHESIS_STATE_DIR/discoveries.json"
           test -f "$MATHESIS_STATE_DIR/discovery-history.jsonl"
+          test -f "$MATHESIS_STATE_DIR/history.jsonl"
+          test -f "$MATHESIS_STATE_DIR/history-manifest.json"
           test -f "$MATHESIS_STATE_DIR/health.json"
 
       - name: Persist and verify state heartbeat
+        id: persist
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -125,10 +135,10 @@ jobs:
           test -n "$remote_sha"
           test "$local_sha" = "$remote_sha"
           echo "MATHESIS state persisted at $remote_sha"
-
+          echo "persisted=true" >> "$GITHUB_OUTPUT"
 
       - name: Hand off to the next autonomous cycle
-        if: always() && github.ref == 'refs/heads/main'
+        if: success() && steps.persist.outputs.persisted == 'true' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

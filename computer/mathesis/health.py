@@ -7,6 +7,7 @@ from typing import Any
 from .architecture import _ALLOWED_EXPERTS, _ALLOWED_STRATEGIES, default_genome
 from .discovery import DISCOVERY_SCHEMA_VERSION, validate_verified_discovery
 from .evolution import SelfEvolutionEngine
+from .history import audit_history_store
 from .knowledge import default_state_dir
 from .neural_graph import INTENTS, GrowingNeuralRouter
 from .safe_math import parse_relation
@@ -188,6 +189,14 @@ def health_report(state_dir: str | Path | None = None) -> dict[str, Any]:
             if domain not in DOMAIN_ATLAS or not isinstance(count, int) or not (1 <= count <= 2)
         }
         check("curriculum:retry_counters_bounded", not bad_retries, bad_retries)
+
+    history_audit = audit_history_store(root)
+    for history_check in history_audit.get("checks", []):
+        check(
+            str(history_check.get("name", "history:unknown")),
+            bool(history_check.get("ok", False)),
+            history_check.get("detail"),
+        )
 
     status = _read_json(root / "status.json", None)
     if isinstance(status, dict):
