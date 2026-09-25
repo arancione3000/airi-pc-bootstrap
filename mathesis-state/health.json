@@ -181,13 +181,111 @@
       "ok": true
     },
     {
-      "detail": 1365,
+      "detail": 1366,
       "name": "curriculum:cursor_nonnegative",
       "ok": true
     },
     {
       "detail": {},
       "name": "curriculum:retry_counters_bounded",
+      "ok": true
+    },
+    {
+      "detail": "/tmp/mathesis-runtime-state/history.jsonl",
+      "name": "history:present",
+      "ok": true
+    },
+    {
+      "detail": {
+        "bytes": 4127755,
+        "max": 8388608
+      },
+      "name": "history:byte_budget",
+      "ok": true
+    },
+    {
+      "detail": {
+        "max": 2048,
+        "records": 1376
+      },
+      "name": "history:record_budget",
+      "ok": true
+    },
+    {
+      "detail": {
+        "bytes": 4127755,
+        "first_at": 1789847955.8046844,
+        "last_at": 1790349929.5680141,
+        "records": 1376,
+        "sha256": "b287280ae3c75a34377377652a60e14631c9da77bebb5baadb3ff19070284d01"
+      },
+      "name": "history:parseable_compact_jsonl",
+      "ok": true
+    },
+    {
+      "detail": {
+        "active": {
+          "bytes": 4127755,
+          "first_at": 1789847955.8046844,
+          "last_at": 1790349929.5680141,
+          "records": 1376,
+          "sha256": "b287280ae3c75a34377377652a60e14631c9da77bebb5baadb3ff19070284d01"
+        },
+        "active_file": "history.jsonl",
+        "active_schema": "mathesis-evolution-history-v2",
+        "legacy_compaction": {
+          "dropped_records": 0,
+          "legacy_records_compacted": 1375,
+          "proof": "each retained compact record stores full_record_sha256 over the exact original JSON record bytes",
+          "retained_records": 1375,
+          "source_bytes": 104812192,
+          "source_format": "legacy-full-evolution-row-jsonl",
+          "source_records": 1375,
+          "source_sha256": "3594ae28803d988c85f1ecdcd278b4babe01afe5d38ee55e8374c77a0d5adab8"
+        },
+        "policy": {
+          "history_is_audit_only": true,
+          "mathematical_memory_files": [
+            "champion.json",
+            "router.json",
+            "discoveries.json",
+            "knowledge.json",
+            "curriculum.json"
+          ],
+          "max_bytes": 8388608,
+          "max_records": 2048
+        },
+        "version": 1
+      },
+      "name": "history:manifest_valid",
+      "ok": true
+    },
+    {
+      "detail": {
+        "actual": {
+          "bytes": 4127755,
+          "first_at": 1789847955.8046844,
+          "last_at": 1790349929.5680141,
+          "records": 1376,
+          "sha256": "b287280ae3c75a34377377652a60e14631c9da77bebb5baadb3ff19070284d01"
+        },
+        "recorded": {
+          "bytes": 4127755,
+          "first_at": 1789847955.8046844,
+          "last_at": 1790349929.5680141,
+          "records": 1376,
+          "sha256": "b287280ae3c75a34377377652a60e14631c9da77bebb5baadb3ff19070284d01"
+        }
+      },
+      "name": "history:manifest_matches_active",
+      "ok": true
+    },
+    {
+      "detail": {
+        "champion": "omega-15-06619f38",
+        "history_selected": "omega-15-06619f38"
+      },
+      "name": "history:latest_selected_matches_champion",
       "ok": true
     },
     {
@@ -236,7 +334,7 @@
       "detail": {
         "changed": [],
         "current": {
-          "kernel.py": "bdd6082550373ea2b0500923bd288b47e504dc18cdaf2f5320b580fe5dec78dc",
+          "kernel.py": "5289e29118fc39ac57e6ccc92215b439b179f6bacfddfc59ecd54d87f954255b",
           "safe_math.py": "b427d6ac86ef5ddeaa560a5f4a03b834987571762117418593bb5ecb96f22741",
           "verifiers.py": "cc123cb352d2e06d190cb16960b2dfd82a620973fb8565bf4d527291b1701c90"
         },
