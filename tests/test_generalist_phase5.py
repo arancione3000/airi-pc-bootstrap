@@ -226,6 +226,24 @@ def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
     assert rejected["effective_budget_tokens"] == 62_500
 
 
+def test_phase5_recovery_plan_uses_one_step_floor_during_hard_stall():
+    plan = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 64.0,
+        consecutive_rejections=46,
+        recovery_hold=False,
+        last_segment_accepted=False,
+        success_streak=0,
+    )
+    assert plan["effective_budget_tokens"] == 4_000
+    assert plan["learning_rate_scale"] == pytest.approx(1.0 / 64.0)
+    assert plan["micro_recovery"] is True
+    assert plan["stall_recovery"] is True
+    assert plan["reset_optimizer"] is True
+
+
 def test_phase5_recovery_plan_keeps_successful_rescue_sticky():
     plan = _phase5_recovery_plan(
         1_000_000,
@@ -234,6 +252,8 @@ def test_phase5_recovery_plan_keeps_successful_rescue_sticky():
         persisted_lr_scale=0.0625,
         consecutive_rejections=0,
         recovery_hold=True,
+        last_segment_accepted=True,
+        success_streak=1,
     )
     assert plan["effective_budget_tokens"] == 8_000
     assert plan["learning_rate_scale"] == pytest.approx(0.0625)
@@ -250,7 +270,7 @@ def test_phase5_recovery_plan_reenters_rescue_after_low_lr_rejection():
         persisted_lr_scale=0.0375,
         consecutive_rejections=1,
     )
-    assert plan["effective_budget_tokens"] == 8_000
+    assert plan["effective_budget_tokens"] == 4_000
     assert plan["learning_rate_scale"] == pytest.approx(0.0375)
     assert plan["stall_recovery"] is True
     assert plan["reset_optimizer"] is True
@@ -309,7 +329,10 @@ def test_protected_continual_plan_strengthens_replay_near_anchor_cliff():
         success_streak=0,
     )
     assert plan["replay_fraction"] == pytest.approx(0.20)
-    assert plan["replay_loss_weight"] == pytest.approx(0.25)
+    assert plan["replay_loss_weight"] == pytest.approx(4.0)
+    assert plan["replay_sampling"] == "elementary"
+    assert plan["replay_batch_size"] == 2
+    assert plan["stall_language_rescue"] is True
     assert plan["reference_kl_weight"] == pytest.approx(0.50)
     assert plan["anti_repetition_weight"] > 0.0
     assert plan["optimizer"]["betas"] == [0.9, 0.95]
@@ -323,6 +346,9 @@ def test_protected_continual_plan_strengthens_replay_near_anchor_cliff():
         success_streak=5,
     )
     assert plan["replay_fraction"] == pytest.approx(0.10)
+    assert plan["replay_sampling"] == "uniform"
+    assert plan["replay_loss_weight"] == pytest.approx(1.0 / 9.0)
+    assert plan["stall_language_rescue"] is False
     assert plan["reference_kl_weight"] < 0.50
 
 
