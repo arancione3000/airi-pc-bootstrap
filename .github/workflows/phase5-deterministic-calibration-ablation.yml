@@ -1,0 +1,62 @@
+name: AIRI Phase 5 Deterministic Calibration Ablation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/phase5_deterministic_calibration_ablation.py'
+      - '.github/workflows/phase5-deterministic-calibration-ablation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: airi-phase5-deterministic-calibration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ablation:
+    strategy:
+      fail-fast: false
+      matrix:
+        policy:
+          - DET_R2_S8_LR625E7_KL5
+          - DET_R2_S12_LR625E7_KL5
+          - DET_R2_S8_LR1E6_KL5
+          - DET_R2_S8_LR625E7_KL10
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: computer
+      STATE_REPO: /tmp/airi-phase5-det-state
+      STATE_DIR: /tmp/airi-phase5-det-state/generalist-state
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+      - name: Clone immutable live state
+        run: |
+          set -euo pipefail
+          rm -rf "${STATE_REPO}"
+          git clone --quiet --depth 1 --branch generalist-state --single-branch \
+            "https://github.com/${GITHUB_REPOSITORY}.git" "${STATE_REPO}"
+          test -f "${STATE_DIR}/bootstrap-data/candidate/model.pt"
+      - name: Run deterministic calibration
+        run: |
+          set -euo pipefail
+          python -m generalist_lm.phase5_deterministic_calibration_ablation \
+            --state-dir "${STATE_DIR}" \
+            --policy "${{ matrix.policy }}" \
+            --output /tmp/phase5-det.json \
+            | tee /tmp/phase5-det.stdout.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AIRI-Phase5-Deterministic-${{ matrix.policy }}-${{ github.run_number }}
+          path: /tmp/phase5-det.json
+          if-no-files-found: error
+          retention-days: 7
