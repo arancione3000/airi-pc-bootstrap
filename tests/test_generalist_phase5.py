@@ -74,6 +74,7 @@ from generalist_lm.pretraining import (
 from generalist_lm.phase5_diagnostics import (
     PHASE5_PROBES,
     _single_greedy_trace,
+    _cross_prompt_diversity,
     _word_tokens,
     degeneration_gate,
     evaluate_phase5_language,
@@ -1042,6 +1043,33 @@ def test_residual_rehabilitation_uses_its_own_rejection_counter():
         pre_revival_progress,
         {"consecutive_rejections": 3},
     ) == 3
+
+
+def test_cross_prompt_diversity_detects_duplicate_generation_collapse():
+    traces = [
+        {"raw_output": "The sun lights the road."},
+        {"raw_output": "The sun lights the road."},
+        {"raw_output": "A dog runs in the park."},
+        {"raw_output": "Water is clear."},
+    ]
+    report = _cross_prompt_diversity(traces)
+    assert report["unique_generation_count"] == 3
+    assert report["exact_duplicate_rate"] == pytest.approx(0.25)
+    assert report["dominant_generation_fraction"] == pytest.approx(0.50)
+    assert 0.0 <= report["mean_pairwise_token_jaccard"] <= 1.0
+    assert 0.0 <= report["mean_pairwise_sequence_similarity"] <= 1.0
+
+
+def test_cross_prompt_diversity_is_clean_for_unique_outputs():
+    traces = [
+        {"raw_output": "Hello there."},
+        {"raw_output": "Red and blue."},
+        {"raw_output": "A dog barks."},
+    ]
+    report = _cross_prompt_diversity(traces)
+    assert report["unique_generation_count"] == 3
+    assert report["exact_duplicate_rate"] == pytest.approx(0.0)
+    assert report["dominant_generation_fraction"] == pytest.approx(1.0 / 3.0)
 
 
 def test_residual_rehabilitation_plan_strengthens_kl_instead_of_unlikelihood():
