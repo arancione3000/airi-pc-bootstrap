@@ -1228,7 +1228,8 @@ def _phase5_recovery_plan(
             or (
                 persisted_scale <= (1.0 / 128.0)
                 and (
-                    bool(recovery_hold)
+                    rejected >= 1
+                    or bool(recovery_hold)
                     or (
                         bool(last_segment_accepted)
                         and 0 < accepted_streak <= 1
