@@ -50,6 +50,7 @@ from generalist_lm.bootstrap_training import (
     _phase5_recovery_segment_budget,
     _phase5_success,
     _protected_continual_plan,
+    _protected_causal_replay_rows,
     _protected_optimizer,
     _record_learning_efficiency,
     _rehabilitation_needed,
@@ -169,7 +170,7 @@ def test_phase5_recovery_plan_escapes_old_lr_floor_and_resets_momentum():
         persisted_lr_scale=0.001,
         consecutive_rejections=9,
     )
-    assert floor["learning_rate_scale"] == pytest.approx(1.0 / 64.0)
+    assert floor["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
 
 
 def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
@@ -196,7 +197,7 @@ def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
         last_segment_accepted=True,
         success_streak=2,
     )
-    assert second["effective_budget_tokens"] == 16_000
+    assert second["effective_budget_tokens"] == 8_000
 
     plan = _phase5_recovery_plan(
         1_000_000,
@@ -208,10 +209,22 @@ def test_phase5_recovery_plan_accelerates_after_stable_acceptance():
         last_segment_accepted=True,
         success_streak=3,
     )
-    assert plan["effective_budget_tokens"] == 32_000
+    assert plan["effective_budget_tokens"] == 16_000
     assert plan["parameter_cap_tokens"] == 250_000
     assert plan["stable_fast_lane"] is False
     assert plan["stall_recovery"] is False
+
+    fourth = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=0.0625,
+        consecutive_rejections=0,
+        recovery_hold=False,
+        last_segment_accepted=True,
+        success_streak=4,
+    )
+    assert fourth["effective_budget_tokens"] == 32_000
 
     rejected = _phase5_recovery_plan(
         1_000_000,
@@ -271,6 +284,118 @@ def test_phase5_recovery_plan_does_not_penalize_healthy_training():
     assert plan["reset_optimizer"] is False
     assert plan["forced_stage"] is None
 
+
+
+def test_phase5_sustained_50m_stall_enters_elementary_trust_region():
+    plan = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 64.0,
+        consecutive_rejections=4,
+        recovery_hold=False,
+        last_segment_accepted=False,
+        success_streak=0,
+    )
+    assert plan["trust_region_recovery"] is True
+    assert plan["micro_recovery"] is True
+    assert plan["effective_budget_tokens"] == 4_000
+    assert plan["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
+    assert plan["reset_optimizer"] is True
+    assert plan["forced_stage"] == "B_short_sentence_completion"
+
+
+def test_phase5_trust_region_requires_two_acceptances_before_8k_ladder():
+    first_followup = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=0,
+        recovery_hold=False,
+        last_segment_accepted=True,
+        success_streak=1,
+    )
+    assert first_followup["trust_region_recovery"] is True
+    assert first_followup["effective_budget_tokens"] == 4_000
+    assert first_followup["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
+    assert first_followup["reset_optimizer"] is True
+
+    second_followup = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=0,
+        recovery_hold=False,
+        last_segment_accepted=True,
+        success_streak=2,
+    )
+    assert second_followup["trust_region_recovery"] is False
+    assert second_followup["micro_recovery"] is True
+    assert second_followup["effective_budget_tokens"] == 8_000
+    assert second_followup["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
+
+    failed_ladder_step = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=1,
+        recovery_hold=False,
+        last_segment_accepted=False,
+        success_streak=0,
+    )
+    assert failed_ladder_step["trust_region_recovery"] is True
+    assert failed_ladder_step["effective_budget_tokens"] == 4_000
+    assert failed_ladder_step["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
+    assert failed_ladder_step["reset_optimizer"] is True
+
+
+def test_protected_continual_trust_region_uses_elementary_replay_only():
+    anchor = {
+        "repetition_rate": 0.15772057959235905,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    before = {
+        "repetition_rate": 0.2310079831116188,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    plan = _protected_continual_plan(
+        before,
+        anchor,
+        consecutive_rejections=46,
+        success_streak=0,
+        trust_region_recovery=True,
+    )
+    assert plan["trust_region_recovery"] is True
+    assert plan["elementary_replay_only"] is True
+    assert plan["replay_fraction"] == pytest.approx(0.80)
+    assert plan["replay_loss_weight"] == pytest.approx(4.0)
+    assert plan["reference_kl_weight"] == pytest.approx(0.50)
+
+
+def test_protected_replay_can_select_only_elementary_rows():
+    external = [
+        SFTExample([
+            {"role": "user", "content": "Explain a checksum."},
+            {"role": "assistant", "content": "A checksum helps detect data changes."},
+        ])
+    ]
+    all_rows, all_counts = _protected_causal_replay_rows(external)
+    elementary_rows, elementary_counts = _protected_causal_replay_rows(
+        external,
+        elementary_only=True,
+    )
+    assert all_counts["elementary_only"] is False
+    assert elementary_counts["elementary_only"] is True
+    assert len(elementary_rows) < len(all_rows)
+    elementary_fingerprints = {
+        _sft_row_fingerprint(row) for row in elementary_rows
+    }
+    assert _sft_row_fingerprint(external[0]) not in elementary_fingerprints
 
 def test_phase5_memory_plan_keeps_7m_fast_and_50m_bounded():
     micro, accumulation = _phase5_memory_safe_batch_plan(
@@ -2431,11 +2556,11 @@ def test_sampling_controls_preserve_raw_greedy_default():
 def test_sustained_stall_uses_measured_short_update_and_grows_only_after_successes():
     common = dict(parameters=50_041_536, context_length=128, persisted_lr_scale=1/64)
     stalled = _phase5_recovery_plan(1_000_000, consecutive_rejections=27, **common)
-    assert stalled["effective_budget_tokens"] == 8_000
+    assert stalled["effective_budget_tokens"] == 4_000
     assert stalled["reset_optimizer"] is True
-    for streak, budget in ((1,8_000),(2,16_000),(3,32_000)):
+    for streak, budget in ((1,8_000),(2,8_000),(3,16_000),(4,32_000)):
         accepted = _phase5_recovery_plan(1_000_000, consecutive_rejections=0,
             last_segment_accepted=True, success_streak=streak, **common)
         assert accepted["effective_budget_tokens"] == budget
     retry = _phase5_recovery_plan(1_000_000, consecutive_rejections=4, success_streak=0, **common)
-    assert retry["effective_budget_tokens"] == 8_000
+    assert retry["effective_budget_tokens"] == 4_000

@@ -79,7 +79,7 @@ PHASE5_100M_UNIQUE_CORPUS_TOKENS = 32_000_000
 PHASE5_250M_UNIQUE_CORPUS_TOKENS = 40_000_000
 PHASE5_500M_UNIQUE_CORPUS_TOKENS = 60_000_000
 PHASE5_1B_UNIQUE_CORPUS_TOKENS = 100_000_000
-PHASE5_PROTECTED_CAUSAL_VERSION = "phase5-protected-causal-v1"
+PHASE5_PROTECTED_CAUSAL_VERSION = "phase5-protected-causal-v2"
 PHASE5_LEARNING_EFFICIENCY_VERSION = "phase5-learning-efficiency-v1"
 
 # One-time human-assisted capacity gift for the current AIRI lineage only.
@@ -1205,8 +1205,13 @@ def _phase5_recovery_plan(
     if parameter_cap is not None:
         segment_budget = min(int(segment_budget), int(parameter_cap))
 
+    recovery_lr_floor = (
+        1.0 / 128.0
+        if 40_000_000 <= int(parameters) < 64_000_000
+        else 1.0 / 64.0
+    )
     persisted_scale = max(
-        1.0 / 64.0,
+        recovery_lr_floor,
         min(1.0, float(persisted_lr_scale or 1.0)),
     )
     # Once a 50M lineage proves that conservative rescue can make progress,
@@ -1216,7 +1221,24 @@ def _phase5_recovery_plan(
     sticky_recovery = bool(recovery_hold) or (
         rejected >= 1 and persisted_scale <= 0.0625
     )
-    stall_recovery = rejected >= 2 or sticky_recovery
+    trust_region_recovery = bool(
+        40_000_000 <= int(parameters) < 64_000_000
+        and (
+            rejected >= 4
+            or (
+                persisted_scale <= (1.0 / 128.0)
+                and (
+                    rejected >= 1
+                    or bool(recovery_hold)
+                    or (
+                        bool(last_segment_accepted)
+                        and 0 < accepted_streak <= 1
+                    )
+                )
+            )
+        )
+    )
+    stall_recovery = rejected >= 2 or sticky_recovery or trust_region_recovery
     if stall_recovery:
         # 50M CPU retries previously sat at ~62.5k forever.  Halving the
         # transaction makes each quality decision faster without counting
@@ -1229,18 +1251,35 @@ def _phase5_recovery_plan(
     micro_recovery = bool(
         40_000_000 <= int(parameters) < 64_000_000
         and persisted_scale <= 0.0625
-        and (rejected >= 1 or recovery_hold or (last_segment_accepted and 0 < accepted_streak <= 3))
+        and (
+            rejected >= 1
+            or recovery_hold
+            or (last_segment_accepted and 0 < accepted_streak <= 4)
+        )
     )
     if micro_recovery:
         stable_fast_lane = False
-        micro_cap = 8_000 if accepted_streak < 2 else 16_000 if accepted_streak == 2 else 32_000
+        if trust_region_recovery:
+            # Live 50M ablation showed that two-step 8k retries cross the
+            # repetition cliff even under very strong replay, while a single
+            # ~4k step can pass the unchanged language guard.  Require two
+            # consecutive trust-region acceptances before resuming 8k/16k/32k.
+            micro_cap = 4_000
+        elif accepted_streak <= 2:
+            micro_cap = 8_000
+        elif accepted_streak == 3:
+            micro_cap = 16_000
+        else:
+            micro_cap = 32_000
         segment_budget = min(int(segment_budget), micro_cap)
 
     if rejected <= 0:
         lr_scale = persisted_scale
     else:
-        scheduled_scale = max(1.0 / 64.0, 0.5 ** (rejected + 1))
+        scheduled_scale = max(recovery_lr_floor, 0.5 ** (rejected + 1))
         lr_scale = min(persisted_scale, scheduled_scale)
+    if trust_region_recovery:
+        lr_scale = min(lr_scale, 1.0 / 128.0)
 
     return {
         "requested_budget_tokens": int(requested),
@@ -1252,10 +1291,14 @@ def _phase5_recovery_plan(
         "stall_recovery": bool(stall_recovery),
         "stable_fast_lane": bool(stable_fast_lane),
         "micro_recovery": micro_recovery,
-        # Reset stale AdamW momentum only when entering rescue because of a
-        # rejection.  After an accepted rescue segment, keep its valid
-        # optimizer state while the sticky hold continues.
-        "reset_optimizer": bool(stall_recovery and rejected > 0),
+        "trust_region_recovery": bool(trust_region_recovery),
+        # The measured trust-region regime was validated with fresh AdamW
+        # state on every proposal.  Keep that property even immediately after
+        # an accepted ~4k segment; outside trust-region recovery preserve the
+        # previous optimizer behavior.
+        "reset_optimizer": bool(
+            (stall_recovery and rejected > 0) or trust_region_recovery
+        ),
         "forced_stage": (
             "B_short_sentence_completion" if stall_recovery else None
         ),
@@ -1276,6 +1319,7 @@ def _protected_continual_plan(
     *,
     consecutive_rejections: int,
     success_streak: int,
+    trust_region_recovery: bool = False,
 ) -> dict[str, Any]:
     """Bound replay/KL pressure from live quality headroom.
 
@@ -1294,7 +1338,15 @@ def _protected_continual_plan(
         or repetition >= anchor_repetition + 0.05
         or multiword < 0.80
     )
-    if fragile:
+    if trust_region_recovery:
+        # Read-only live ablations on the 50M checkpoint isolated a very
+        # narrow safe regime: one causal step plus elementary bilingual replay
+        # with 4x loss weight.  This is a temporary recovery trust region, not
+        # the steady-state continual-learning mix.
+        replay_fraction = 0.80
+        kl_weight = 0.50
+        anti_repetition_weight = 0.02
+    elif fragile:
         replay_fraction = 0.20
         kl_weight = 0.50
         anti_repetition_weight = 0.02
@@ -1310,6 +1362,8 @@ def _protected_continual_plan(
         "version": PHASE5_PROTECTED_CAUSAL_VERSION,
         "enabled": True,
         "fragile_language_state": fragile,
+        "trust_region_recovery": bool(trust_region_recovery),
+        "elementary_replay_only": bool(trust_region_recovery),
         "replay_fraction": float(replay_fraction),
         "replay_loss_weight": float(replay_fraction / (1.0 - replay_fraction)),
         "reference_kl_weight": float(kl_weight),
@@ -1411,14 +1465,16 @@ def _protected_causal_replay_rows(
     protected_sft,
     *,
     heldout_sft=(),
+    elementary_only: bool = False,
 ) -> tuple[list[SFTExample], dict[str, int]]:
     elementary = []
     for stage in PHASE5_LANGUAGE_REHABILITATION_STAGES:
         rows = _elementary_rehabilitation_rows()[stage]
         elementary.extend(rows["it"])
         elementary.extend(rows["en"])
+    replay_source = elementary if elementary_only else elementary + list(protected_sft)
     combined, filtered = _filter_protected_replay(
-        elementary + list(protected_sft),
+        replay_source,
         heldout_sft=heldout_sft,
     )
     combined = sorted(combined, key=_sft_row_fingerprint)
@@ -1428,6 +1484,7 @@ def _protected_causal_replay_rows(
         "elementary_rows": len(elementary),
         "protected_sft_rows": len(protected_sft),
         "held_out_filtered": int(filtered),
+        "elementary_only": bool(elementary_only),
         "total_rows": len(combined),
     }
 
@@ -3774,10 +3831,16 @@ def run_segment(
         guard_anchor,
         consecutive_rejections=consecutive_rejections,
         success_streak=success_streak,
+        trust_region_recovery=bool(
+            recovery_plan.get("trust_region_recovery", False)
+        ),
     )
     protected_rows, protected_row_counts = _protected_causal_replay_rows(
         protected_replay.sft_train,
         heldout_sft=bundle.sft_validation,
+        elementary_only=bool(
+            protected_plan.get("elementary_replay_only", False)
+        ),
     )
     protected_migration = (
         previous_protected_version != PHASE5_PROTECTED_CAUSAL_VERSION
@@ -4069,6 +4132,13 @@ def run_segment(
         "new_supervised_tokens": int(attempted_tokens),
         "replay_supervised_tokens": int(replay_tokens_trained),
         "replay_fraction": float(protected_plan["replay_fraction"]),
+        "replay_loss_weight": float(protected_plan["replay_loss_weight"]),
+        "elementary_replay_only": bool(
+            protected_plan.get("elementary_replay_only", False)
+        ),
+        "trust_region_recovery": bool(
+            recovery_plan.get("trust_region_recovery", False)
+        ),
         "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
         "protected_causal_version": PHASE5_PROTECTED_CAUSAL_VERSION,
         "optimizer": optimizer_report,
@@ -4200,13 +4270,23 @@ def run_segment(
     progress["segment_guard_recovery_accept_streak"] = (
         previous_recovery_streak + 1 if recovery_hold else 0
     )
-    if recovery_hold:
+    if bool(recovery_plan.get("trust_region_recovery", False)):
+        progress["segment_guard_lr_scale"] = min(
+            1.0 / 128.0,
+            max(1.0 / 128.0, float(segment_lr_scale)),
+        )
+    elif recovery_hold:
         # Hold the exact conservative regime that just produced measurable
-        # recovery.  Do not raise LR after one good 31k-token segment while the
+        # recovery.  Do not raise LR after one good rescue segment while the
         # lineage is still below the durable anchor.
         progress["segment_guard_lr_scale"] = min(
             0.0625,
-            max(1.0 / 64.0, float(segment_lr_scale)),
+            max(1.0 / 128.0, float(segment_lr_scale)),
+        )
+    elif bool(recovery_plan.get("micro_recovery", False)):
+        progress["segment_guard_lr_scale"] = min(
+            1.0 / 64.0,
+            max(1.0 / 128.0, float(segment_lr_scale) * 1.20),
         )
     else:
         progress["segment_guard_lr_scale"] = min(
@@ -4215,9 +4295,15 @@ def run_segment(
         )
     progress["segment_guard_last_accepted"] = True
     progress["segment_guard_success_streak"] = int(success_streak + 1)
-    progress["segment_guard_stall_recovery_active"] = recovery_hold
+    progress["segment_guard_stall_recovery_active"] = bool(
+        recovery_hold
+        or recovery_plan.get("trust_region_recovery", False)
+        or recovery_plan.get("micro_recovery", False)
+    )
     progress["segment_guard_rescue_stage"] = (
-        "B_short_sentence_completion" if recovery_hold else None
+        "B_short_sentence_completion"
+        if progress["segment_guard_stall_recovery_active"]
+        else None
     )
     progress["segment_guard_optimizer_reset_for_stall"] = False
     progress["segment_guard_last_attempted_tokens"] = int(attempted_tokens)
@@ -4232,6 +4318,13 @@ def run_segment(
         "recovery_mode": bool(segment_guard["recovery_mode"]),
         "learning_rate_scale": float(segment_lr_scale),
         "replay_fraction": float(protected_plan["replay_fraction"]),
+        "replay_loss_weight": float(protected_plan["replay_loss_weight"]),
+        "elementary_replay_only": bool(
+            protected_plan.get("elementary_replay_only", False)
+        ),
+        "trust_region_recovery": bool(
+            recovery_plan.get("trust_region_recovery", False)
+        ),
         "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
         "replay_tokens": int(replay_tokens_trained),
         "elapsed_training_seconds": float(elapsed_training_seconds),
