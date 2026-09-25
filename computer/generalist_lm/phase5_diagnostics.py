@@ -306,6 +306,7 @@ def evaluate_sft_validation(
         or (len(all_ids) >= 12 and avg_unique <= 0.20)
         or (len(all_ids) >= 12 and dominant_fraction >= 0.55)
     )
+    cross_prompt = _cross_prompt_diversity(traces)
     return {
         "schema": 1,
         "suite": "phase5-sft-heldout-v1",
