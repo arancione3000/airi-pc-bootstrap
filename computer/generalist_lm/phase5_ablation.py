@@ -504,45 +504,21 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
     if not elementary_indices or not general_indices:
         raise RuntimeError("replay ablation requires elementary and general replay pools")
 
-    seed_indices = [0, 1, 2, 3, 4, 5, 6, 7, 16, 24, 32, 38, 39, 40, 46, 63]
-    validation_seed_indices = [
-        max(0, rejected - 6),
-        max(0, rejected - 3),
-        rejected,
-        rejected + 1,
-        rejected + 2,
-        rejected + 3,
-        rejected + 4,
-        rejected + 6,
-        rejected + 8,
-        rejected + 12,
-        rejected + 16,
-        rejected + 24,
-    ]
+    validation_seed_indices = list(range(47, 55))
     variants = [
         {
-            "name": f"BASE1_SEED_{seed_index}",
+            "name": f"TRUST_LR_{lr_factor:g}_SEED_{seed_index}",
             "optimizer_state": "reset",
             "steps": 1,
             "retry_rejection_index": seed_index,
-            "replay_batch_size": 2,
-            "replay_sampling": "uniform",
-            "replay_loss_weight": 0.25,
-        }
-        for seed_index in validation_seed_indices
-    ]
-    variants.extend([
-        {
-            "name": f"ELEM1_W400_SEED_{seed_index}",
-            "optimizer_state": "reset",
-            "steps": 1,
-            "retry_rejection_index": seed_index,
+            "lr_factor": lr_factor,
             "replay_batch_size": 2,
             "replay_sampling": "elementary",
             "replay_loss_weight": 4.00,
         }
+        for lr_factor in (1.0, 0.5, 0.25, 0.125)
         for seed_index in validation_seed_indices
-    ])
+    ]
 
     results = []
     for variant in variants:
