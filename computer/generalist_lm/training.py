@@ -570,7 +570,7 @@ def train_sft_residual_recovery(
         raise RuntimeError("residual recovery has no trainable coordinates")
 
     rng = random.Random(seed)
-    torch.manual_seed(0 if sampling_mode == "coverage" else seed)
+    torch.manual_seed(seed)
     initial_loss = loss_on_examples(model, tokenizer, examples, device=str(device_obj))
     model.train()
     optimizer = torch.optim.AdamW(
