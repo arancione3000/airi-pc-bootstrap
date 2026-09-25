@@ -206,6 +206,7 @@ def causal_training_objective(
     repetition_unlikelihood_weight: float = 0.0,
     repetition_window: int = 16,
     special_token_floor: int = BYTE_OFFSET,
+    repetition_unlikelihood_mode: str = "mean",
 ):
     """Causal LM loss with bounded, target-safe anti-collapse auxiliaries.
 
@@ -245,8 +246,12 @@ def causal_training_objective(
     ce_loss = (token_loss * valid_weights).sum() / valid_weights.sum().clamp_min(1.0)
 
     ul_weight = max(0.0, float(repetition_unlikelihood_weight))
+    ul_mode = str(repetition_unlikelihood_mode).strip().lower()
+    if ul_mode not in {"mean", "mass"}:
+        raise ValueError("repetition_unlikelihood_mode must be 'mean' or 'mass'")
     ul_loss = shifted_logits.sum() * 0.0
     negative_count = 0
+    negative_probability_mass = 0.0
     if ul_weight > 0.0 and shifted_logits.shape[1] > 0:
         window = max(1, min(int(repetition_window), int(input_ids.shape[1])))
         negative_mask = torch.zeros_like(shifted_logits, dtype=torch.bool)
@@ -271,18 +276,42 @@ def causal_training_objective(
         negative_count = int(negative_mask.sum().item())
         if negative_count:
             probs = torch.softmax(shifted_logits, dim=-1)
-            negative_probs = probs.masked_select(negative_mask).clamp(
-                min=0.0,
-                max=1.0 - 1e-6,
-            )
-            ul_loss = -torch.log1p(-negative_probs).mean()
+            if ul_mode == "mass":
+                # Penalize the total probability mass assigned to any recently
+                # seen non-target token at each supervised position.  Averaging
+                # one tiny term per negative token dilutes the anti-repetition
+                # signal as the negative set grows; mass mode keeps the signal
+                # aligned with sequence-level token diversity while remaining
+                # target-safe because the ground-truth token is masked above.
+                negative_mass = probs.masked_fill(~negative_mask, 0.0).sum(dim=-1)
+                eligible = valid & negative_mask.any(dim=-1)
+                if bool(eligible.any().item()):
+                    selected_mass = negative_mass.masked_select(eligible).clamp(
+                        min=0.0,
+                        max=1.0 - 1e-6,
+                    )
+                    negative_probability_mass = float(
+                        selected_mass.detach().mean().cpu()
+                    )
+                    ul_loss = -torch.log1p(-selected_mass).mean()
+            else:
+                negative_probs = probs.masked_select(negative_mask).clamp(
+                    min=0.0,
+                    max=1.0 - 1e-6,
+                )
+                negative_probability_mass = float(
+                    negative_probs.detach().mean().cpu()
+                )
+                ul_loss = -torch.log1p(-negative_probs).mean()
 
     total = ce_loss + ul_weight * ul_loss
     stats = {
         "causal_ce_loss": float(ce_loss.detach().cpu()),
         "repetition_unlikelihood_loss": float(ul_loss.detach().cpu()),
         "repetition_unlikelihood_weight": ul_weight,
+        "repetition_unlikelihood_mode": ul_mode,
         "repetition_negative_count": int(negative_count),
+        "repetition_negative_probability_mass": float(negative_probability_mass),
         "eos_loss_weight": eos_weight,
     }
     return total, stats

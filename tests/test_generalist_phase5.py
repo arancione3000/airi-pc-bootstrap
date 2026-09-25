@@ -1678,6 +1678,60 @@ def test_anti_collapse_objective_penalizes_wrong_recent_token_mass():
     assert torch.isfinite(logits.grad).all()
 
 
+def test_probability_mass_unlikelihood_is_target_safe_and_not_diluted():
+    torch = pytest.importorskip("torch")
+    input_ids = torch.tensor([[8, 9, 10, 11]], dtype=torch.long)
+    labels = input_ids.clone()
+    logits = torch.zeros((1, 4, 32), dtype=torch.float32, requires_grad=True)
+    logits.data[0, 0, 8] = 5.0
+    logits.data[0, 1, 8] = 4.0
+    logits.data[0, 1, 9] = 4.0
+    logits.data[0, 2, 8] = 3.0
+    logits.data[0, 2, 9] = 3.0
+    logits.data[0, 2, 10] = 3.0
+
+    mean_loss, mean_stats = causal_training_objective(
+        logits,
+        labels,
+        input_ids,
+        repetition_unlikelihood_weight=1.0,
+        repetition_window=4,
+        repetition_unlikelihood_mode="mean",
+    )
+    mass_loss, mass_stats = causal_training_objective(
+        logits,
+        labels,
+        input_ids,
+        repetition_unlikelihood_weight=1.0,
+        repetition_window=4,
+        repetition_unlikelihood_mode="mass",
+    )
+    assert mean_stats["repetition_negative_count"] > 0
+    assert mass_stats["repetition_negative_count"] == mean_stats["repetition_negative_count"]
+    assert mass_stats["repetition_unlikelihood_mode"] == "mass"
+    assert mass_stats["repetition_negative_probability_mass"] > 0.0
+    assert mass_stats["repetition_unlikelihood_loss"] > mean_stats["repetition_unlikelihood_loss"]
+    assert float(mass_loss.detach()) > float(mean_loss.detach())
+    mass_loss.backward()
+    assert torch.isfinite(logits.grad).all()
+
+    repeated_target_ids = torch.tensor([[8, 8, 8, 8]], dtype=torch.long)
+    repeated_logits = torch.zeros(
+        (1, 4, 32), dtype=torch.float32, requires_grad=True
+    )
+    repeated_logits.data[:, :, 8] = 5.0
+    _, safe_stats = causal_training_objective(
+        repeated_logits,
+        repeated_target_ids,
+        repeated_target_ids,
+        repetition_unlikelihood_weight=1.0,
+        repetition_window=4,
+        repetition_unlikelihood_mode="mass",
+    )
+    assert safe_stats["repetition_negative_count"] == 0
+    assert safe_stats["repetition_unlikelihood_loss"] == pytest.approx(0.0)
+
+
 def test_reference_kl_is_zero_for_same_model_and_pushes_student_back():
     torch = pytest.importorskip("torch")
     reference = torch.randn(2, 5, 16)
