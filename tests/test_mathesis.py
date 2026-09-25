@@ -1416,6 +1416,22 @@ def test_health_gate_rejects_corrupt_or_oversized_history(tmp_path: Path):
     assert any(row["name"] == "history:byte_budget" for row in oversized["failed"])
 
 
+def test_history_health_fails_closed_on_malformed_manifest(tmp_path: Path):
+    discovery = ConjectureDiscoveryEngine(tmp_path)
+    assert discovery.discover_once()["ok"] is True
+    SelfEvolutionEngine(tmp_path).evolve_once()
+    (tmp_path / "history-manifest.json").write_text(
+        json.dumps({"version": "broken", "active": []}),
+        encoding="utf-8",
+    )
+    report = health_report(tmp_path)
+    assert report["ok"] is False
+    assert any(
+        row["name"] == "history:manifest_valid"
+        for row in report["failed"]
+    )
+
+
 def test_continuum_persists_verified_state_before_handoff():
     workflow = (ROOT / ".github" / "workflows" / "mathesis-continuum.yml").read_text(encoding="utf-8")
     normalize_pos = workflow.index("Normalize bounded MATHESIS audit history")
