@@ -120,22 +120,47 @@ def run_ablation(
     # is traversed systematically rather than sampled with replacement.  Four
     # fixed offsets probe anchor-window sensitivity without selecting lucky
     # validation seeds.
+    # Upstream-residual ablation: causal training has updated both the new
+    # SwiGLU features and their down projection since the accepted historical
+    # R2 checkpoint.  Down-only recalibration is now deterministically harmful,
+    # so test whether allowing only the revived up+down coordinates to co-adapt
+    # can create language headroom without touching the legacy network.
     policies = [
         {
-            "policy": "R2_COVERAGE_B6_S16_LR1E6_KL5",
+            "policy": "UP_COV_B6_S8_LR3125E7_KL5",
             "rows": r2_rows,
-            "steps": 16,
+            "steps": 8,
             "batch_size": 6,
-            "learning_rate": 1.0e-6,
+            "learning_rate": 3.125e-7,
             "kl_weight": 5.0,
+            "train_upstream": True,
         },
         {
-            "policy": "R2_COVERAGE_B6_S16_LR625E7_KL5",
+            "policy": "UP_COV_B6_S12_LR3125E7_KL10",
             "rows": r2_rows,
-            "steps": 16,
+            "steps": 12,
+            "batch_size": 6,
+            "learning_rate": 3.125e-7,
+            "kl_weight": 10.0,
+            "train_upstream": True,
+        },
+        {
+            "policy": "UP_COV_B6_S8_LR625E7_KL10",
+            "rows": r2_rows,
+            "steps": 8,
             "batch_size": 6,
             "learning_rate": 6.25e-7,
-            "kl_weight": 5.0,
+            "kl_weight": 10.0,
+            "train_upstream": True,
+        },
+        {
+            "policy": "UP_COV_B12_S8_LR3125E7_KL10",
+            "rows": r2_rows,
+            "steps": 8,
+            "batch_size": 12,
+            "learning_rate": 3.125e-7,
+            "kl_weight": 10.0,
+            "train_upstream": True,
         },
     ]
     seeds = [0, 1, 2, 3]
@@ -161,7 +186,7 @@ def run_ablation(
                 eos_loss_weight=1.10,
                 repetition_window=16,
                 kl_weight=float(policy["kl_weight"]),
-                train_upstream=False,
+                train_upstream=bool(policy.get("train_upstream", False)),
                 sampling_mode="coverage",
                 sampling_offset=int(seed) * 6,
             )
@@ -196,6 +221,7 @@ def run_ablation(
                 "batch_size": int(policy["batch_size"]),
                 "learning_rate": float(policy["learning_rate"]),
                 "kl_weight": float(policy["kl_weight"]),
+                "train_upstream": bool(policy.get("train_upstream", False)),
                 "calibration_ok": calibration_ok,
                 "passes_unchanged_language_guard": bool(gate_ok),
                 "training": training,
