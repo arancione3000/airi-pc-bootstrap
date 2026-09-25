@@ -116,52 +116,29 @@ def run_ablation(
     if not anchor_rows:
         raise RuntimeError("calibration ablation has no protected KL anchors")
 
-    # Pre-registered variance-reduction matrix.  These policies were fixed
-    # before looking at their validation outcomes.  Larger batches reduce
-    # stochastic coverage variance while stronger teacher KL constrains the
-    # revived residual branch against language drift.
+    # Pre-registered deterministic coverage matrix.  The supervised R2 pool
+    # is traversed systematically rather than sampled with replacement.  Four
+    # fixed offsets probe anchor-window sensitivity without selecting lucky
+    # validation seeds.
     policies = [
         {
-            "policy": "R2_B12_S16_LR1E6_KL5",
+            "policy": "R2_COVERAGE_B6_S16_LR1E6_KL5",
             "rows": r2_rows,
             "steps": 16,
-            "batch_size": 12,
+            "batch_size": 6,
             "learning_rate": 1.0e-6,
             "kl_weight": 5.0,
         },
         {
-            "policy": "R2_B24_S12_LR1E6_KL5",
-            "rows": r2_rows,
-            "steps": 12,
-            "batch_size": 24,
-            "learning_rate": 1.0e-6,
-            "kl_weight": 5.0,
-        },
-        {
-            "policy": "R2_B12_S16_LR625E7_KL5",
+            "policy": "R2_COVERAGE_B6_S16_LR625E7_KL5",
             "rows": r2_rows,
             "steps": 16,
-            "batch_size": 12,
+            "batch_size": 6,
             "learning_rate": 6.25e-7,
-            "kl_weight": 5.0,
-        },
-        {
-            "policy": "R2_B24_S8_LR125E6_KL5",
-            "rows": r2_rows,
-            "steps": 8,
-            "batch_size": 24,
-            "learning_rate": 1.25e-6,
             "kl_weight": 5.0,
         },
     ]
     seeds = [0, 1, 2, 3]
-    if policy_filter:
-        policies = [
-            policy for policy in policies
-            if str(policy["policy"]) == str(policy_filter)
-        ]
-        if not policies:
-            raise ValueError(f"unknown calibration policy: {policy_filter}")
     results: list[dict[str, Any]] = []
 
     for policy in policies:
@@ -185,6 +162,8 @@ def run_ablation(
                 repetition_window=16,
                 kl_weight=float(policy["kl_weight"]),
                 train_upstream=False,
+                sampling_mode="coverage",
+                sampling_offset=int(seed) * 6,
             )
             after = evaluate_phase5_language(runtime)
             after_diversity = _diversity(after)
@@ -211,6 +190,8 @@ def run_ablation(
                 "name": f"{policy['policy']}_SEED_{seed}",
                 "policy": policy["policy"],
                 "seed": seed,
+                "sampling_mode": "coverage",
+                "sampling_offset": int(seed) * 6,
                 "steps": int(policy["steps"]),
                 "batch_size": int(policy["batch_size"]),
                 "learning_rate": float(policy["learning_rate"]),
@@ -302,7 +283,7 @@ def run_ablation(
 
     return {
         "schema": 1,
-        "version": "phase5-residual-calibration-ablation-v2",
+        "version": "phase5-residual-calibration-ablation-v3",
         "read_only": True,
         "lineage_id": str(progress.get("lineage_id") or ""),
         "tokens_processed": int(progress.get("tokens_processed", 0) or 0),
