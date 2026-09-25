@@ -326,6 +326,42 @@ def test_protected_continual_plan_strengthens_replay_near_anchor_cliff():
     assert plan["reference_kl_weight"] < 0.50
 
 
+def test_protected_continual_plan_uses_elementary_trust_region_only_for_deep_stall():
+    anchor = {
+        "repetition_rate": 0.1577,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    current = {
+        "repetition_rate": 0.2310,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    normal = _protected_continual_plan(
+        current,
+        anchor,
+        consecutive_rejections=12,
+        success_streak=0,
+        deep_stall_recovery=False,
+    )
+    assert normal["replay_sampling"] == "uniform"
+    assert normal["replay_loss_weight"] == pytest.approx(0.25)
+    assert normal["elementary_trust_region"] is False
+
+    rescue = _protected_continual_plan(
+        current,
+        anchor,
+        consecutive_rejections=12,
+        success_streak=0,
+        deep_stall_recovery=True,
+    )
+    assert rescue["replay_sampling"] == "elementary"
+    assert rescue["replay_fraction"] == pytest.approx(0.80)
+    assert rescue["replay_loss_weight"] == pytest.approx(4.0)
+    assert rescue["reference_kl_weight"] == pytest.approx(0.50)
+    assert rescue["elementary_trust_region"] is True
+
+
 def test_protected_optimizer_covers_model_once_and_favors_ffn():
     pytest.importorskip("torch")
     cfg = GeneralistLMConfig(
@@ -2431,7 +2467,8 @@ def test_sampling_controls_preserve_raw_greedy_default():
 def test_sustained_stall_uses_measured_short_update_and_grows_only_after_successes():
     common = dict(parameters=50_041_536, context_length=128, persisted_lr_scale=1/64)
     stalled = _phase5_recovery_plan(1_000_000, consecutive_rejections=27, **common)
-    assert stalled["effective_budget_tokens"] == 8_000
+    assert stalled["effective_budget_tokens"] == 4_000
+    assert stalled["deep_stall_micro_recovery"] is True
     assert stalled["reset_optimizer"] is True
     for streak, budget in ((1,8_000),(2,16_000),(3,32_000)):
         accepted = _phase5_recovery_plan(1_000_000, consecutive_rejections=0,
@@ -2439,3 +2476,15 @@ def test_sustained_stall_uses_measured_short_update_and_grows_only_after_success
         assert accepted["effective_budget_tokens"] == budget
     retry = _phase5_recovery_plan(1_000_000, consecutive_rejections=4, success_streak=0, **common)
     assert retry["effective_budget_tokens"] == 8_000
+    assert retry["deep_stall_micro_recovery"] is False
+
+    sticky_deep = _phase5_recovery_plan(
+        1_000_000,
+        consecutive_rejections=0,
+        recovery_hold=True,
+        last_segment_accepted=True,
+        success_streak=1,
+        **common,
+    )
+    assert sticky_deep["effective_budget_tokens"] == 4_000
+    assert sticky_deep["deep_stall_micro_recovery"] is True
