@@ -25,6 +25,7 @@ from generalist_lm.bootstrap_training import (
     PHASE5_LANGUAGE_REHABILITATION_STAGES,
     _anti_collapse_rescue_gate,
     _anti_collapse_weights,
+    _phase5_causal_objective_weights,
     _assisted_capacity_target,
     _bootstrap_capacity_target,
     _bootstrap_corpus_target,
@@ -91,6 +92,38 @@ from generalist_lm.training import (
 )
 
 
+
+
+def test_phase5_causal_objective_uses_current_language_not_legacy_baseline():
+    stale_before = {
+        "suite": "phase5-language-holdout-v1",
+        "prompt_count": 7,
+        "repetition_rate": 0.517,
+        "pathological_repetition": True,
+    }
+    live_before = {
+        "suite": "phase5-language-holdout-v2",
+        "prompt_count": 14,
+        "repetition_rate": 0.2369,
+        "pathological_repetition": False,
+    }
+    protected = {"anti_repetition_weight": 0.02}
+
+    stale_anti, stale_eos = _phase5_causal_objective_weights(
+        "B_short_sentence_completion",
+        stale_before,
+        protected,
+    )
+    live_anti, live_eos = _phase5_causal_objective_weights(
+        "B_short_sentence_completion",
+        live_before,
+        protected,
+    )
+
+    assert stale_anti == pytest.approx(0.05)
+    assert stale_eos == pytest.approx(1.60)
+    assert live_anti == pytest.approx(0.02)
+    assert live_eos == pytest.approx(1.0)
 
 
 def test_phase5_large_models_use_short_transactional_segments():
