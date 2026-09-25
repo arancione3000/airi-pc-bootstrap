@@ -506,40 +506,53 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
 
     variants = [
         {
-            "name": "REPLAY_BASE_2",
-            "optimizer_state": "reset",
-            "replay_batch_size": 2,
-            "replay_sampling": "uniform",
-        },
-        {
-            "name": "REPLAY_UNIFORM_8",
-            "optimizer_state": "reset",
-            "replay_batch_size": 8,
-            "replay_sampling": "uniform",
-        },
-        {
-            "name": "REPLAY_BALANCED_2",
-            "optimizer_state": "reset",
-            "replay_batch_size": 2,
-            "replay_sampling": "balanced",
-        },
-        {
-            "name": "REPLAY_BALANCED_4",
-            "optimizer_state": "reset",
-            "replay_batch_size": 4,
-            "replay_sampling": "balanced",
-        },
-        {
-            "name": "REPLAY_BALANCED_8",
-            "optimizer_state": "reset",
-            "replay_batch_size": 8,
-            "replay_sampling": "balanced",
-        },
-        {
-            "name": "REPLAY_ELEMENTARY_2",
+            "name": "ELEM2_W025",
             "optimizer_state": "reset",
             "replay_batch_size": 2,
             "replay_sampling": "elementary",
+            "replay_loss_weight": 0.25,
+        },
+        {
+            "name": "ELEM2_W050",
+            "optimizer_state": "reset",
+            "replay_batch_size": 2,
+            "replay_sampling": "elementary",
+            "replay_loss_weight": 0.50,
+        },
+        {
+            "name": "ELEM2_W100",
+            "optimizer_state": "reset",
+            "replay_batch_size": 2,
+            "replay_sampling": "elementary",
+            "replay_loss_weight": 1.00,
+        },
+        {
+            "name": "ELEM2_W200",
+            "optimizer_state": "reset",
+            "replay_batch_size": 2,
+            "replay_sampling": "elementary",
+            "replay_loss_weight": 2.00,
+        },
+        {
+            "name": "ELEM4_W050",
+            "optimizer_state": "reset",
+            "replay_batch_size": 4,
+            "replay_sampling": "elementary",
+            "replay_loss_weight": 0.50,
+        },
+        {
+            "name": "ELEM8_W050",
+            "optimizer_state": "reset",
+            "replay_batch_size": 8,
+            "replay_sampling": "elementary",
+            "replay_loss_weight": 0.50,
+        },
+        {
+            "name": "BAL2_W100",
+            "optimizer_state": "reset",
+            "replay_batch_size": 2,
+            "replay_sampling": "balanced",
+            "replay_loss_weight": 1.00,
         },
     ]
 
