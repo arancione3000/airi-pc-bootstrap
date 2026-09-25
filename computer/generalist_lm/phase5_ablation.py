@@ -483,60 +483,76 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
 
     variants = [
         {
-            "name": "BASE_current_reset",
-            "optimizer_state": "reset",
-            "lr_factor": 1.0,
-            "ffn_multiplier": 1.0,
-        },
-        {
-            "name": "I_ffn_eighth_persisted",
+            "name": "Z_zero_update_control",
             "optimizer_state": "persisted",
-            "lr_factor": 1.0,
-            "ffn_multiplier": 0.125,
-        },
-        {
-            "name": "J_ffn_sixteenth_persisted",
-            "optimizer_state": "persisted",
-            "lr_factor": 1.0,
-            "ffn_multiplier": 0.0625,
-        },
-        {
-            "name": "K_ffn_frozen_persisted",
-            "optimizer_state": "persisted",
-            "lr_factor": 1.0,
+            "steps": 2,
+            "attention_multiplier": 0.0,
+            "embedding_multiplier": 0.0,
             "ffn_multiplier": 0.0,
         },
         {
-            "name": "L_mass_ul_ffn_quarter",
+            "name": "P_attention_only",
             "optimizer_state": "persisted",
-            "lr_factor": 1.0,
+            "steps": 2,
+            "attention_multiplier": 0.35,
+            "embedding_multiplier": 0.0,
+            "ffn_multiplier": 0.0,
+        },
+        {
+            "name": "Q_embeddings_only",
+            "optimizer_state": "persisted",
+            "steps": 2,
+            "attention_multiplier": 0.0,
+            "embedding_multiplier": 0.25,
+            "ffn_multiplier": 0.0,
+        },
+        {
+            "name": "R_ffn_only_quarter",
+            "optimizer_state": "persisted",
+            "steps": 2,
+            "attention_multiplier": 0.0,
+            "embedding_multiplier": 0.0,
             "ffn_multiplier": 0.25,
-            "anti_repetition_weight": 0.02,
-            "anti_repetition_aggregation": "recent_probability_mass",
         },
         {
-            "name": "M_mass_ul_ffn_eighth",
+            "name": "S_ffn_only_half",
             "optimizer_state": "persisted",
-            "lr_factor": 1.0,
-            "ffn_multiplier": 0.125,
-            "anti_repetition_weight": 0.02,
-            "anti_repetition_aggregation": "recent_probability_mass",
+            "steps": 2,
+            "attention_multiplier": 0.0,
+            "embedding_multiplier": 0.0,
+            "ffn_multiplier": 0.50,
         },
         {
-            "name": "N_mass_ul_ffn_eighth_strong",
+            "name": "T_protected_backbone",
             "optimizer_state": "persisted",
-            "lr_factor": 1.0,
-            "ffn_multiplier": 0.125,
-            "anti_repetition_weight": 0.05,
-            "anti_repetition_aggregation": "recent_probability_mass",
-        },
-        {
-            "name": "O_mass_ul_global_half",
-            "optimizer_state": "persisted",
-            "lr_factor": 0.5,
+            "steps": 2,
+            "attention_multiplier": 0.05,
+            "embedding_multiplier": 0.025,
             "ffn_multiplier": 0.25,
-            "anti_repetition_weight": 0.02,
-            "anti_repetition_aggregation": "recent_probability_mass",
+        },
+        {
+            "name": "U_one_step_current",
+            "optimizer_state": "persisted",
+            "steps": 1,
+            "attention_multiplier": 0.35,
+            "embedding_multiplier": 0.25,
+            "ffn_multiplier": 1.0,
+        },
+        {
+            "name": "V_one_step_ffn_only_half",
+            "optimizer_state": "persisted",
+            "steps": 1,
+            "attention_multiplier": 0.0,
+            "embedding_multiplier": 0.0,
+            "ffn_multiplier": 0.50,
+        },
+        {
+            "name": "W_one_step_ffn_only_full",
+            "optimizer_state": "persisted",
+            "steps": 1,
+            "attention_multiplier": 0.0,
+            "embedding_multiplier": 0.0,
+            "ffn_multiplier": 1.0,
         },
     ]
 
@@ -562,10 +578,10 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             _damp_optimizer_state(optimizer, 0.25)
 
         multipliers = {
-            "embeddings": 0.25,
-            "attention_and_norm": 0.35,
+            "embeddings": float(variant.get("embedding_multiplier", 0.25)),
+            "attention_and_norm": float(variant.get("attention_multiplier", 0.35)),
             "ffn": float(variant.get("ffn_multiplier", 1.0)),
-            "lm_head": 0.50,
+            "lm_head": float(variant.get("embedding_multiplier", 0.25)),
         }
         _set_optimizer_policy(
             optimizer,
@@ -587,7 +603,8 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
         grad_rows = []
         replay_supervised_total = 0
 
-        for local_step in range(2):
+        local_steps = max(1, int(variant.get("steps", 2)))
+        for local_step in range(local_steps):
             step = start_step + local_step
             rng = random.Random(5_000_000 + step + retry_seed_offset)
             indices = [rng.randrange(len(blocks)) for _ in range(32)]
@@ -684,7 +701,7 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             before,
             after,
             anchor,
-            attempted_tokens=8128,
+            attempted_tokens=4064 * local_steps,
         )
         probe = _activation_probe(model, probe_ids, baseline_activations)
         probe.pop("_activations", None)
@@ -697,6 +714,8 @@ def run_ablation(state_dir: str | Path) -> dict[str, Any]:
             "optimizer_state": state_mode,
             "optimizer_storage": storage,
             "effective_scale": effective_scale,
+            "steps": local_steps,
+            "attempted_tokens": 4064 * local_steps,
             "multipliers": multipliers,
             "replay_loss_weight": replay_loss_weight,
             "reference_kl_weight": kl_weight,
