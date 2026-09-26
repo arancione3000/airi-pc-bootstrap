@@ -672,10 +672,10 @@
       "worst_margin": -0.10716521739959717
     },
     {
-      "active_parameters": 29455.0,
+      "active_parameters": 30479.0,
       "all_seed_wins": false,
-      "candidate_id": "lattice-3-65f583cae407",
-      "cycle": 12,
+      "candidate_id": "lattice-3-8fc4c07a8209",
+      "cycle": 33,
       "genome": {
         "config": {
           "active_experts": 1,
@@ -694,7 +694,7 @@
           "memory_decay_min": 0.25,
           "n_cells": 1,
           "n_experts": 4,
-          "predictive_error_memory": false,
+          "predictive_error_memory": true,
           "rms_eps": 1e-06,
           "surprise_power": 1.5,
           "surprise_threshold": 0.25,
@@ -703,33 +703,35 @@
           "vocab_size": 264
         },
         "generation": 3,
-        "genome_id": "lattice-3-65f583cae407",
-        "learning_rate": 0.0015,
-        "min_learning_rate": 0.00015000000000000001,
+        "genome_id": "lattice-3-8fc4c07a8209",
+        "learning_rate": 0.002,
+        "min_learning_rate": 0.0002,
         "parent_id": "lattice-2-37be191324b0",
         "weight_decay": 0.05
       },
-      "mean_baseline_loss": 5.010225713253021,
-      "mean_loss": 5.105833202600479,
-      "mean_margin": -0.09560748934745789,
+      "mean_baseline_loss": 4.895791858434677,
+      "mean_loss": 4.980674922466278,
+      "mean_margin": -0.08488306403160095,
       "mutation": {
         "changes": {
-          "learning_rate": 0.0015,
-          "min_learning_rate": 0.00015000000000000001
+          "predictive_error_memory": true
         },
-        "family": "optimizer",
-        "mathesis_tags": [],
-        "name": "optimizer-lr-down",
-        "rationale": "favor stability if rapid updates damage held-out loss"
+        "family": "prediction",
+        "mathesis_tags": [
+          "reasoning",
+          "efficiency"
+        ],
+        "name": "prediction-enable-error-memory",
+        "rationale": "store learned latent prediction errors instead of only raw novelty"
       },
-      "mutation_family": "optimizer",
+      "mutation_family": "prediction",
       "seed_count": 2,
       "seed_wins": 0,
       "stage": 3,
       "state_bytes": 384.0,
-      "train_seconds": 3.7064946780000056,
+      "train_seconds": 3.719952191999994,
       "win_fraction": 0.0,
-      "worst_margin": -0.14615166187286377
+      "worst_margin": -0.1289001703262329
     }
   ],
   "summary": {
