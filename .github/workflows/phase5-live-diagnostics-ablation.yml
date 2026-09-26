@@ -1,0 +1,61 @@
+name: AIRI Phase 5 Live Diagnostics Objective Ablation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'computer/generalist_lm/phase5_live_diagnostics_ablation.py'
+      - '.github/workflows/phase5-live-diagnostics-ablation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: airi-phase5-live-diagnostics-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ablation:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [stale, live]
+        seed_index: [0, 1, 2, 3]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: computer
+      STATE_REPO: /tmp/airi-phase5-diagnostics-state
+      STATE_DIR: /tmp/airi-phase5-diagnostics-state/generalist-state
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+      - name: Clone immutable live state
+        run: |
+          set -euo pipefail
+          rm -rf "${STATE_REPO}"
+          git clone --quiet --depth 1 --branch generalist-state --single-branch \
+            "https://github.com/${GITHUB_REPOSITORY}.git" "${STATE_REPO}"
+          test -f "${STATE_DIR}/bootstrap-data/candidate/model.pt"
+          test -f "${STATE_DIR}/bootstrap-data/progress.json"
+          test -f "${STATE_DIR}/bootstrap-data/before.json"
+      - name: Run matched objective ablation
+        run: |
+          set -euo pipefail
+          python -m generalist_lm.phase5_live_diagnostics_ablation \
+            --state-dir "${STATE_DIR}" \
+            --mode "${{ matrix.mode }}" \
+            --seed-index "${{ matrix.seed_index }}" \
+            --output /tmp/phase5-live-diagnostics.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AIRI-Phase5-Live-Diagnostics-${{ matrix.mode }}-${{ matrix.seed_index }}-${{ github.run_number }}
+          path: /tmp/phase5-live-diagnostics.json
+          if-no-files-found: error
+          retention-days: 7
