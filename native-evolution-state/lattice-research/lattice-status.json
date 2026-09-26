@@ -10,7 +10,7 @@
       "deep_write_power": 1.6,
       "dropout": 0.0,
       "init_std": 0.02,
-      "lattice_mix": 0.08000000000000002,
+      "lattice_mix": 0.16000000000000003,
       "local_recurrence": false,
       "max_reasoning_steps": 2,
       "memory_bands": 3,
@@ -26,14 +26,14 @@
       "tokenizer_version": "byte-v1",
       "vocab_size": 264
     },
-    "generation": 14,
-    "genome_id": "lattice-14-f82373b92ab4",
+    "generation": 15,
+    "genome_id": "lattice-15-f5b5716e0428",
     "learning_rate": 0.0015,
     "min_learning_rate": 0.00015000000000000001,
-    "parent_id": "lattice-13-e8e5fb7d4d17",
+    "parent_id": "lattice-14-f82373b92ab4",
     "weight_decay": 0.0125
   },
-  "cycle": 37,
+  "cycle": 38,
   "empirical_candidates": 1,
   "generated_candidates": 8,
   "ok": true,
@@ -60,7 +60,7 @@
           "deep_write_power": 1.6,
           "dropout": 0.0,
           "init_std": 0.02,
-          "lattice_mix": 0.08000000000000002,
+          "lattice_mix": 0.16000000000000003,
           "local_recurrence": false,
           "max_reasoning_steps": 2,
           "memory_bands": 3,
@@ -76,24 +76,24 @@
           "tokenizer_version": "byte-v1",
           "vocab_size": 264
         },
-        "generation": 14,
-        "genome_id": "lattice-14-f82373b92ab4",
+        "generation": 15,
+        "genome_id": "lattice-15-f5b5716e0428",
         "learning_rate": 0.0015,
         "min_learning_rate": 0.00015000000000000001,
-        "parent_id": "lattice-13-e8e5fb7d4d17",
+        "parent_id": "lattice-14-f82373b92ab4",
         "weight_decay": 0.0125
       },
-      "mean_candidate_loss": 5.537758529186249,
+      "mean_candidate_loss": 5.554291188716888,
       "mutation": {
         "changes": {
-          "surprise_threshold": 0.10000000000000002
+          "lattice_mix": 0.16000000000000003
         },
-        "family": "reasoning",
+        "family": "routing",
         "mathesis_tags": [
           "reasoning"
         ],
-        "name": "reasoning-trigger-earlier",
-        "rationale": "spend extra recurrent compute on a broader set of novel tokens"
+        "name": "routing-more-cross-band",
+        "rationale": "increase information exchange among timescales"
       },
       "reports": [
         {
@@ -120,25 +120,25 @@
             "parameters": 20064,
             "state_bytes_at_context": 2048,
             "training": {
-              "best_train_loss": 5.57531213760376,
+              "best_train_loss": 5.535953521728516,
               "final": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.547397553920746
+                  "code": 5.563893795013428
                 },
-                "loss": 5.547397553920746
+                "loss": 5.563893795013428
               },
               "initial": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.549563884735107
+                  "code": 5.566208779811859
                 },
-                "loss": 5.549563884735107
+                "loss": 5.566208779811859
               },
               "steps": 1,
-              "tokens_per_second": 21714.428796787244,
+              "tokens_per_second": 21145.260339244098,
               "tokens_processed": 64,
-              "train_seconds": 0.0029473490000100355
+              "train_seconds": 0.0030266830000300615
             }
           },
           "candidate": {
@@ -152,7 +152,7 @@
               "deep_write_power": 1.6,
               "dropout": 0.0,
               "init_std": 0.02,
-              "lattice_mix": 0.08000000000000002,
+              "lattice_mix": 0.16000000000000003,
               "local_recurrence": false,
               "max_reasoning_steps": 2,
               "memory_bands": 3,
@@ -172,33 +172,33 @@
             "parameters": 23183,
             "state_bytes_at_context": 384,
             "training": {
-              "best_train_loss": 5.561507701873779,
+              "best_train_loss": 5.523393154144287,
               "final": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.537758529186249
+                  "code": 5.554291188716888
                 },
-                "loss": 5.537758529186249,
+                "loss": 5.554291188716888,
                 "model_stats": {
                   "mean_reasoning_steps": 1.0,
-                  "mean_surprise": 0.5097520910203457
+                  "mean_surprise": 0.5179864913225174
                 }
               },
               "initial": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.53975248336792
+                  "code": 5.556516647338867
                 },
-                "loss": 5.53975248336792,
+                "loss": 5.556516647338867,
                 "model_stats": {
                   "mean_reasoning_steps": 1.0,
-                  "mean_surprise": 0.5100957229733467
+                  "mean_surprise": 0.5179884880781174
                 }
               },
               "steps": 1,
-              "tokens_per_second": 372.1754514629932,
+              "tokens_per_second": 358.1418190008119,
               "tokens_processed": 64,
-              "train_seconds": 0.17196190600003547
+              "train_seconds": 0.1787001590000159
             }
           },
           "candidate_wins": true,
@@ -215,16 +215,16 @@
             "max_eval_blocks": 8,
             "min_learning_rate": 0.00015000000000000001,
             "minimum_loss_gain": 0.001,
-            "seed": 703738,
+            "seed": 703839,
             "steps": 1,
             "validation_fraction": 0.2,
             "weight_decay": 0.0125
           },
           "ok": true,
           "research_only": true,
-          "train_blocks": 4559,
+          "train_blocks": 5081,
           "train_documents": 19,
-          "validation_blocks": 1030,
+          "validation_blocks": 508,
           "validation_documents": 5,
           "version": "airi-lattice-lab-v0"
         }
@@ -243,7 +243,7 @@
         "deep_write_power": 1.6,
         "dropout": 0.0,
         "init_std": 0.02,
-        "lattice_mix": 0.08000000000000002,
+        "lattice_mix": 0.16000000000000003,
         "local_recurrence": false,
         "max_reasoning_steps": 2,
         "memory_bands": 3,
@@ -259,24 +259,24 @@
         "tokenizer_version": "byte-v1",
         "vocab_size": 264
       },
-      "generation": 14,
-      "genome_id": "lattice-14-f82373b92ab4",
+      "generation": 15,
+      "genome_id": "lattice-15-f5b5716e0428",
       "learning_rate": 0.0015,
       "min_learning_rate": 0.00015000000000000001,
-      "parent_id": "lattice-13-e8e5fb7d4d17",
+      "parent_id": "lattice-14-f82373b92ab4",
       "weight_decay": 0.0125
     },
-    "mean_candidate_loss": 5.537758529186249,
+    "mean_candidate_loss": 5.554291188716888,
     "mutation": {
       "changes": {
-        "surprise_threshold": 0.10000000000000002
+        "lattice_mix": 0.16000000000000003
       },
-      "family": "reasoning",
+      "family": "routing",
       "mathesis_tags": [
         "reasoning"
       ],
-      "name": "reasoning-trigger-earlier",
-      "rationale": "spend extra recurrent compute on a broader set of novel tokens"
+      "name": "routing-more-cross-band",
+      "rationale": "increase information exchange among timescales"
     }
   }
 }
