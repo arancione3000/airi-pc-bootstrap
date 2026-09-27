@@ -1,164 +1,16 @@
 {
-  "academic_fallback": "openalex",
+  "academic_fallback": null,
   "errors": [
     {
       "error": "HTTPError:HTTP Error 406: Not Acceptable",
       "provider": "arxiv"
+    },
+    {
+      "error": "HTTPError:HTTP Error 429: Too Many Requests",
+      "provider": "openalex"
     }
   ],
   "evidence": [
-    {
-      "digest": "54503246a54bfa5b3173653f73769b66eb06a38be8f2720bcb5cd8ef450c644e",
-      "provider": "openalex",
-      "published": "2026-12-31",
-      "source_id": "https://openalex.org/W7162095276",
-      "summary": "Online neural learning requires models that update after each incoming example, remain calibrated under distributional change, and avoid brittle gradient transmission. The original version of this work used a small static benchmark, a shallow model, few random seeds, and no significance tests. This revision reformulates the problem as genuine prequential online learning and introduces Smooth Online Activation Routing (SOAR), a Hedge-style routing algorithm over smooth activation experts trained by singleinstance adaptive updates. SOAR links activation smoothness with online regret through a prediction-with-expert-advice bound: the mixture incurs only logarithmic-exponential-weight overhead relative to the best activation expert in hindsight, while each expert uses diagonal adaptive online gradients. We evaluate two-hidden-layer online neural networks on eight streams, fourteen methods, thirteen comparators, and eight random seeds, yielding 896 fully reproducible runs. The benchmark includes four real scikit-learn data sets and four synthetic streaming tasks with stationary, nonlinear, gradual-drift, and sudden-drift regimes. Across all dataset-seed blocks, SOAR obtains the best mean final accuracy ( $92.56 \\%$ ), best mean negative log-likelihood ( 0.199 ), and best prequential accuracy ( $86.83 \\%$ ). Paired Wilcoxon and Holm-corrected tests show significant improvements over ReLU, LeakyReLU, ELU, Softplus, Adam, SGD, and the compact ablation; improvements over the strongest fixed TeLU activation are positive but not statistically significant. The results support a nuanced conclusion: adaptive smooth activation routing is a robust online-learning mechanism and the best overall method in this controlled benchmark suite, but fixed smooth activations remain highly competitive on small static data. topics=Data Stream Mining Techniques Domain Adaptation and Few-Shot Learning Stochastic Gradient Optimization Techniques oa=True oa_status=gold",
-      "tags": [
-        "dataset"
-      ],
-      "title": "SOAR: Smooth Online Activation Routing for Stable Neural Learning from Evolving Streams",
-      "url": "https://pub.respai.de/articles/1-2/3sniu.html"
-    },
-    {
-      "digest": "784184d3e830a08fb87e432cb71a909a2b29f9a03a4abc5dde126cda4cc6a379",
-      "provider": "openalex",
-      "published": "2026-12-31",
-      "source_id": "https://openalex.org/W7164183113",
-      "summary": "Do large language models (LLMs) possess a measurable \"personality,\" and how do the linguistic properties of training corpora shape their cognitive style and downstream reasoning? This paper approaches these questions from a sociolinguistic perspective on machine \"identity.\" This manuscript is positioned explicitly as a conceptual perspective paper: it does not present original experimental data, nor does it constitute a systematic review with defined search strategies or inclusion criteria. Instead, it synthesises key published findings into two original theoretical frameworks intended to guide future empirical and engineering work. We examine evidence that LLMs exhibit reliable, valid Big Five personality traits—particularly in large, instruction-tuned models—and that continued pre-training on domain-specific corpora may shape those traits through measurable linguistic features: imperative ratio, type-token ratio (TTR), and syntactic complexity. We then analyse how standard-language ideology embedded in training corpora is amplified in model outputs, disadvantaging dialect and minority-language communities. Building on these findings, we propose two conceptual contributions: (1) a Personality Engineering (PE) framework for targeted continued pre-training to cultivate task-appropriate cognitive profiles, and (2) a Language Ideology Propagation Model (LIPM) mapping the pipeline from corpus composition to societal impact. Both frameworks are explicitly conceptual and require empirical validation before they can function as operational guidelines. Their value lies in structuring future research and providing a shared vocabulary for cross-disciplinary collaboration, with direct implications for responsible AI deployment. topics=Artificial Intelligence in Healthcare and Education Language and cultural evolution Topic Modeling oa=True oa_status=gold",
-      "tags": [
-        "dataset",
-        "long-context",
-        "reasoning",
-        "tokenizer"
-      ],
-      "title": "The Sociolinguistics of Machine Identity: LLM Personality and Ideology Propagation",
-      "url": "https://pub.respai.de/articles/1-2/4gli.html"
-    },
-    {
-      "digest": "f9748eed553d4a6b48cc57f1b09523066d865c72fbf692be23339847900360b5",
-      "provider": "openalex",
-      "published": "2026-12-10",
-      "source_id": "https://openalex.org/W7197044566",
-      "summary": "Adeno-associated virus (AAV) vectors have demonstrated strong clinical efficacy across multiple monogenic disorders, yet neutralizing antibodies (NAbs) remain major barriers to vector redosing and durable transduction. To address this limitation, we developed a sequence-based artificial intelligence framework integrating Bidirectional Encoder Representations from Transformers (BERT) and Evolutionary Scale Modeling with Low-Rank Adaptation (ESM-LoRA) to identify human-tolerant, virus-specific motifs across human and viral proteins using sliding-window analyses and multi-layer fine-tuning. Using capsid-derived segments from AAV2 and AAV843, we prioritized surface-accessible, virus-polarized peptides as candidate decoys and evaluated their ability to block AAV-targeted antibodies. The models achieved high accuracy in distinguishing human versus viral fragments, and selected peptides bound AAV-specific antibodies with nanomolar affinity, competitively restored capsid binding, and recovered >60% of baseline transduction in the presence of NAbs. In mouse models with pre-existing or redosing-induced antibodies, coadministration of decoy peptides and an IgG-degrading enzyme reduced high-titer NAbs to approximately 1:4 and restored hepatic transgene expression without detectable inflammatory or peptide-specific immune responses. A contrastive variational autoencoder (VAE) further generated non-natural peptides with broader epitope coverage. These results support sequence-driven AI design of short, low-immunogenicity decoy peptides as a translational strategy to mitigate NAb interference and enhance the feasibility of AAV redosing. topics=Virus-based gene therapy research vaccines and immunoinformatics approaches Monoclonal and Polyclonal Antibodies Research oa=True oa_status=green",
-      "tags": [],
-      "title": "Sequence-based artificial intelligence-guided inhibitory peptides to counteract AAV neutralizing antibodies in gene therapy.",
-      "url": "https://pubmed.ncbi.nlm.nih.gov/42740894"
-    },
-    {
-      "digest": "cc1a986044f6e4fa44d113a2faf091dd6f3870798222fb9b03238c2c8c3a0790",
-      "provider": "openalex",
-      "published": "2026-09-26",
-      "source_id": "https://openalex.org/W7164934891",
-      "summary": "topics=Advanced Neural Network Applications Domain Adaptation and Few-Shot Learning Radiomics and Machine Learning in Medical Imaging oa=True oa_status=green",
-      "tags": [],
-      "title": "Attention-Based Prototype Calibration for Multi-rater Few-Shot Medical Image Segmentation",
-      "url": "https://doi.org/10.1007/978-3-032-38085-2_4"
-    },
-    {
-      "digest": "908bc0e7c48924356ad78a8b77f22efc7d44fdae86fdb0b51ff0993e503a6a73",
-      "provider": "openalex",
-      "published": "2026-09-25",
-      "source_id": "https://openalex.org/W7165122250",
-      "summary": "topics=Advanced Neural Network Applications Domain Adaptation and Few-Shot Learning 3D Shape Modeling and Analysis oa=True oa_status=green",
-      "tags": [],
-      "title": "DINO-Med3D: Bridging Dimension and Domain Gaps in Volumetric Segmentation via Progressive Adaptation",
-      "url": "https://doi.org/10.1007/978-3-032-38072-2_14"
-    },
-    {
-      "digest": "6c4dcbba59c02e4be5fc2df1c0ea404dfc29b1029ed9d171cc834119bcb02874",
-      "provider": "openalex",
-      "published": "2026-09-25",
-      "source_id": "https://openalex.org/W7167898863",
-      "summary": "topics=EEG and Brain-Computer Interfaces Obstructive Sleep Apnea Research Sleep and Wakefulness Research oa=True oa_status=green",
-      "tags": [],
-      "title": "Omni-Sleep: A Sleep Foundation Model via Hierarchical Contrastive Learning of CNS–ANS Dynamics",
-      "url": "https://doi.org/10.1007/978-3-032-38239-9_42"
-    },
-    {
-      "digest": "67d2990589b928b0ce3b90dd3cca188c36aea7e43c2f44a9f77bce78372aa3d9",
-      "provider": "openalex",
-      "published": "2026-09-25",
-      "source_id": "https://openalex.org/W7161110553",
-      "summary": "topics=Functional Brain Connectivity Studies Advanced Neural Network Applications Glioma Diagnosis and Treatment oa=True oa_status=green",
-      "tags": [],
-      "title": "BrainAnytime: Anatomy-Aware Cross-Modal Pretraining for Brain Image Analysis with Arbitrary Modality Availability",
-      "url": "https://doi.org/10.1007/978-3-032-38069-2_6"
-    },
-    {
-      "digest": "5f16dc498648c0f0ac4ed0ba789b027087b789476e7762739018130777a7fc82",
-      "provider": "openalex",
-      "published": "2026-09-24",
-      "source_id": "https://openalex.org/W4415269708",
-      "summary": "Abstract As Large Language Models (LLMs) evolve, parallel reasoning has emerged as a vital inference paradigm that enhances robustness by concurrently exploring multiple thought trajectories. Unlike fragile sequential methods, parallel reasoning expands inference breadth to significantly improve problem-solving performance. This paper provides a comprehensive survey of the progress and challenges in this burgeoning field. We first formally define parallel reasoning and distinguish it from sequential paradigms like Chain-of-Thought. Then, we propose a novel taxonomy to categorize advanced techniques into non-interactive reasoning, interactive collaboration, and efficiency-oriented decoding strategies. Furthermore, we examine diverse application scenarios, including complex problem-solving and reliability enhancement. Finally, we identify core challenges and outline future research directions. This work serves as a strategic roadmap to foster further innovation in parallel reasoning. topics=Semantic Web and Ontologies Logic, Reasoning, and Knowledge Multi-Agent Systems and Negotiation oa=True oa_status=gold",
-      "tags": [
-        "code",
-        "efficiency",
-        "reasoning"
-      ],
-      "title": "A Survey on Parallel Reasoning",
-      "url": "https://doi.org/10.1093/nsr/nwag599"
-    },
-    {
-      "digest": "4849aee87b5abe90915e3f0ebafbbb647235a09de2d36764a325a7d9e0c5e6a0",
-      "provider": "openalex",
-      "published": "2026-09-25",
-      "source_id": "https://openalex.org/W4403322150",
-      "summary": "The rising prevalence of eye diseases poses a growing public health burden. Large language models (LLMs) offer a promising path to reduce documentation workload and support clinical decision-making. However, few have been tailored for ophthalmology, and most evaluations focus mainly on knowledge-based QA without clinically relevant benchmarks or real-world validation. Here, we present LEME, a suite of open-weight LLMs developed through a two-stage process: (1) instruction tuning on 200,000 samples from clinical guidelines, textbooks, and case reports to enhance reasoning and task-following, and (2) reinforcement learning with ~30,000 preference labels to enhance accuracy and informativeness. LEME was evaluated on five curated zero-shot benchmarks spanning tasks such as patient QA, consultation, and treatment planning. It outperformed all seven baselines (all p < 0.004), exceeding GPT-4o by 3.32% (absolute ROUGE-L gain). It was further evaluated on three downstream tasks using deidentified patient data, reviewed by clinicians. In patient QA, LEME received the highest ratings from attending clinicians in 3 out of 4 criteria, with scores of 4.67 for factuality, 4.77 for specificity, 4.79 for completeness, and 4.88 for safety (1-5 scale). Its completeness score surpassed that of expert-written answers (4.79 vs. 4.56; p = 0.015). In visual acuity extraction, LEME achieved the highest F1, outperforming LLaMA-3 by 14.1% and Eye-LLaMA by 59.0%. In a pilot evaluation on assessment and treatment planning for diabetic retinopathy, AMD, and glaucoma, LEME received scores of 4.36 for factuality, 4.55 for specificity, 4.42 for completeness, and 4.36 for safety, approaching attending-level performance. All models, data, and code will be released to support further development and clinical translation, laying the groundwork for improved efficiency and patient care topics=Artificial Intelligence in Healthcare and Education Ophthalmology and Visual Health Research Cerebral Venous Sinus Thrombosis oa=True oa_status=gold",
-      "tags": [
-        "efficiency",
-        "reasoning"
-      ],
-      "title": "LEME: open large language models for ophthalmology with advanced reasoning and clinical validation",
-      "url": "https://doi.org/10.1038/s41746-026-03104-4"
-    },
-    {
-      "digest": "308bcaa54d020e0af97cd705cb98d41343c1ffe1975430203ec619250984a527",
-      "provider": "openalex",
-      "published": "2026-09-25",
-      "source_id": "https://openalex.org/W7162438926",
-      "summary": "Abstract We measure cross-boundary collaboration in an open-source software (OSS) ecosystem by reconstructing the bipartite contributor–repository graph of 464 cybersecurity-focused projects and $11{,}372$ 11 , 372 contributor identities active over October 2001–May 2022, seeded from the curated Rawsec Cybersecurity Inventory. Louvain community detection identifies 163 non-singleton communities; per-community contributor count scales superlinearly with repository count ( $n_{\\mathrm{contributors}}\\sim {n_{\\mathrm{repos}}}^{1.4}$ n contributors ∼ n repos 1.4 ), and community formation follows a logistic trajectory whose inflection falls in 2018. Three patterns support a recognition & repeat-relationship account of cross-boundary work. First , cross-community work concentrates in a thin carrier layer : only nine contributors span seven or more communities at the commit level, authoring 14% of 4015 inter-community merged pull-request records; the top-50 cross-community contributors produce 54%, and half of all cross-boundary work comes from 36 contributors (0.34% of the population). Second , boundary friction is relationship-specific rather than a fixed property of the boundary: under repository and author fixed effects, prior write access in the destination repository raises the odds of a cross-community pull-request being merged 2.3-fold and cuts integration latency by 66%, whereas the breadth of a contributor across other communities buys nothing. Third , community survival is cohort-structured: per-cohort residualisation hazard rises an order of magnitude between pre-2010 and 2018 cohorts, and external community reach predicts survival mainly through community size, leaving late-cohort communities under-served. The corpus closes just before large-language-model coding assistants entered mainstream use, so these measurements form a pre-AI baseline for a system now changing fast. Their joint implication is sharp: the cross-boundary work holding this ecosystem together is carried by very few people and priced by relationships that take years to accumulate – a dependency invisible to aggregate activity metrics, and erodible without any of them moving. Whether it generalises beyond one curated cybersecurity corpus is untested; this baseline is what makes that testable. topics=Open Source Software Innovations Ethics and Social Impacts of AI Wikis in Education and Collaboration oa=True oa_status=gold",
-      "tags": [
-        "code",
-        "dataset",
-        "long-context"
-      ],
-      "title": "Building digital societies as ecosystems: how recognition and repeat relationships sustain cross-community work in open source",
-      "url": "https://doi.org/10.1140/epjds/s13688-026-00701-x"
-    },
-    {
-      "digest": "94bf75b3e1b3bc2cdb730da44a5634fa27b1deb48b9797d329a57683f94319a6",
-      "provider": "openalex",
-      "published": "2026-10-01",
-      "source_id": "https://openalex.org/W7202008909",
-      "summary": "Modern software systems evolve rapidly under CI/CD practices, where tests are critical for quality. However, substantial code changes often render existing test cases obsolete, causing pipeline disruptions, reduced productivity, and compromised quality. Recent automatic test update approaches leverage LLMs to refine test cases via execution feedback and exact-matching context retrieval, prioritizing executability and line coverage but suffering three limitations: (1) neglecting test assertion adequacy, weakening fault detection; (2) relying on coarse line coverage instead of specific uncovered lines/branches; (3) using exact-matching retrieval, which fails for LLM hallucinated queries. To address these, we propose MuMuTestUp, a mutation-guided multi-agent framework with three specialized agents: Mutation Analysis (strengthens assertions via surviving mutants), Coverage Analysis (generates targeted repair instructions for uncovered lines/branches), and Semantic Retrieval (handles hallucinations via semantic-similarity search). We also construct PRBENCH, a 571-sample pull-request-level dataset from 10 open-source Java projects (validated for cross-commit update scenarios). Evaluations against state-of-the-art baselines use both open-source (Deepseek-V3.2) and closed-source (GPT-4.1) LLMs. topics=Software Testing and Debugging Techniques Software Engineering Research Software System Performance and Reliability oa=True oa_status=green",
-      "tags": [
-        "dataset"
-      ],
-      "title": "Mutation-based multi-agent test case update",
-      "url": "https://ink.library.smu.edu.sg/sis_research/11196"
-    },
-    {
-      "digest": "3be09d61ee742fcfdac83881a14bd41199818230e2231db220678e8738dc5207",
-      "provider": "openalex",
-      "published": "2026-09-25",
-      "source_id": "https://openalex.org/W4415962910",
-      "summary": "topics=Information Retrieval and Search Behavior Topic Modeling Semantic Web and Ontologies oa=True oa_status=green",
-      "tags": [
-        "dataset"
-      ],
-      "title": "DSEBench: A Test Collection for Explainable Dataset Search with Examples",
-      "url": "https://doi.org/10.1007/978-981-92-5693-8_7"
-    },
-    {
-      "digest": "b5a766de1788b5f14be3d6cf0cc06571c646e5eeb91069755ecdfdf08bd13847",
-      "provider": "openalex",
-      "published": "2026-09-25",
-      "source_id": "https://openalex.org/W4406794439",
-      "summary": "topics=Numerical methods for differential equations Civil and Structural Engineering Research oa=True oa_status=green",
-      "tags": [],
-      "title": "Parameter-Efficient Fine-Tuning for Foundation Models",
-      "url": "https://doi.org/10.1007/s11263-026-03004-w"
-    },
     {
       "digest": "631067e4656eaf4b370530e3197343c3ad158193d44a26378c10f7f90e0c672a",
       "provider": "github",
@@ -293,22 +145,21 @@
       "url": "https://github.com/deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System"
     }
   ],
-  "evidence_digest": "f0b21c27b91eca7f5d2b1530a41d2f6cf801845f2868a6dde3832237a69e46e0",
+  "evidence_digest": "2ce1237ee74c168595540e0ab64eba9b6efb4a60a943081b0ed7b8e9c1554f0d",
   "ok": true,
   "policy": "online material is untrusted evidence; only bounded local mutation families may consume derived tags; OpenAlex is used when arXiv research metadata is unavailable",
-  "queried_at": "2026-09-26T22:54:31.082528+00:00",
+  "queried_at": "2026-09-27T01:33:05.696789+00:00",
   "remote_code_execution": false,
   "remote_content_trusted": false,
   "source_candidates": [],
   "tag_counts": {
-    "code": 3,
+    "code": 1,
     "curriculum": 1,
-    "dataset": 5,
-    "efficiency": 4,
+    "efficiency": 2,
     "gqa": 3,
-    "long-context": 5,
-    "reasoning": 5,
-    "tokenizer": 2
+    "long-context": 3,
+    "reasoning": 2,
+    "tokenizer": 1
   },
   "topics": [
     "language model optimizer training",
