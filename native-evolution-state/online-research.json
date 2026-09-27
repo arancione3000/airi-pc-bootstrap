@@ -1,16 +1,157 @@
 {
-  "academic_fallback": null,
+  "academic_fallback": "openalex",
   "errors": [
     {
       "error": "HTTPError:HTTP Error 406: Not Acceptable",
       "provider": "arxiv"
-    },
-    {
-      "error": "HTTPError:HTTP Error 429: Too Many Requests",
-      "provider": "openalex"
     }
   ],
   "evidence": [
+    {
+      "digest": "54503246a54bfa5b3173653f73769b66eb06a38be8f2720bcb5cd8ef450c644e",
+      "provider": "openalex",
+      "published": "2026-12-31",
+      "source_id": "https://openalex.org/W7162095276",
+      "summary": "Online neural learning requires models that update after each incoming example, remain calibrated under distributional change, and avoid brittle gradient transmission. The original version of this work used a small static benchmark, a shallow model, few random seeds, and no significance tests. This revision reformulates the problem as genuine prequential online learning and introduces Smooth Online Activation Routing (SOAR), a Hedge-style routing algorithm over smooth activation experts trained by singleinstance adaptive updates. SOAR links activation smoothness with online regret through a prediction-with-expert-advice bound: the mixture incurs only logarithmic-exponential-weight overhead relative to the best activation expert in hindsight, while each expert uses diagonal adaptive online gradients. We evaluate two-hidden-layer online neural networks on eight streams, fourteen methods, thirteen comparators, and eight random seeds, yielding 896 fully reproducible runs. The benchmark includes four real scikit-learn data sets and four synthetic streaming tasks with stationary, nonlinear, gradual-drift, and sudden-drift regimes. Across all dataset-seed blocks, SOAR obtains the best mean final accuracy ( $92.56 \\%$ ), best mean negative log-likelihood ( 0.199 ), and best prequential accuracy ( $86.83 \\%$ ). Paired Wilcoxon and Holm-corrected tests show significant improvements over ReLU, LeakyReLU, ELU, Softplus, Adam, SGD, and the compact ablation; improvements over the strongest fixed TeLU activation are positive but not statistically significant. The results support a nuanced conclusion: adaptive smooth activation routing is a robust online-learning mechanism and the best overall method in this controlled benchmark suite, but fixed smooth activations remain highly competitive on small static data. topics=Data Stream Mining Techniques Domain Adaptation and Few-Shot Learning Stochastic Gradient Optimization Techniques oa=True oa_status=gold",
+      "tags": [
+        "dataset"
+      ],
+      "title": "SOAR: Smooth Online Activation Routing for Stable Neural Learning from Evolving Streams",
+      "url": "https://pub.respai.de/articles/1-2/3sniu.html"
+    },
+    {
+      "digest": "784184d3e830a08fb87e432cb71a909a2b29f9a03a4abc5dde126cda4cc6a379",
+      "provider": "openalex",
+      "published": "2026-12-31",
+      "source_id": "https://openalex.org/W7164183113",
+      "summary": "Do large language models (LLMs) possess a measurable \"personality,\" and how do the linguistic properties of training corpora shape their cognitive style and downstream reasoning? This paper approaches these questions from a sociolinguistic perspective on machine \"identity.\" This manuscript is positioned explicitly as a conceptual perspective paper: it does not present original experimental data, nor does it constitute a systematic review with defined search strategies or inclusion criteria. Instead, it synthesises key published findings into two original theoretical frameworks intended to guide future empirical and engineering work. We examine evidence that LLMs exhibit reliable, valid Big Five personality traits—particularly in large, instruction-tuned models—and that continued pre-training on domain-specific corpora may shape those traits through measurable linguistic features: imperative ratio, type-token ratio (TTR), and syntactic complexity. We then analyse how standard-language ideology embedded in training corpora is amplified in model outputs, disadvantaging dialect and minority-language communities. Building on these findings, we propose two conceptual contributions: (1) a Personality Engineering (PE) framework for targeted continued pre-training to cultivate task-appropriate cognitive profiles, and (2) a Language Ideology Propagation Model (LIPM) mapping the pipeline from corpus composition to societal impact. Both frameworks are explicitly conceptual and require empirical validation before they can function as operational guidelines. Their value lies in structuring future research and providing a shared vocabulary for cross-disciplinary collaboration, with direct implications for responsible AI deployment. topics=Artificial Intelligence in Healthcare and Education Language and cultural evolution Topic Modeling oa=True oa_status=gold",
+      "tags": [
+        "dataset",
+        "long-context",
+        "reasoning",
+        "tokenizer"
+      ],
+      "title": "The Sociolinguistics of Machine Identity: LLM Personality and Ideology Propagation",
+      "url": "https://pub.respai.de/articles/1-2/4gli.html"
+    },
+    {
+      "digest": "f9748eed553d4a6b48cc57f1b09523066d865c72fbf692be23339847900360b5",
+      "provider": "openalex",
+      "published": "2026-12-10",
+      "source_id": "https://openalex.org/W7197044566",
+      "summary": "Adeno-associated virus (AAV) vectors have demonstrated strong clinical efficacy across multiple monogenic disorders, yet neutralizing antibodies (NAbs) remain major barriers to vector redosing and durable transduction. To address this limitation, we developed a sequence-based artificial intelligence framework integrating Bidirectional Encoder Representations from Transformers (BERT) and Evolutionary Scale Modeling with Low-Rank Adaptation (ESM-LoRA) to identify human-tolerant, virus-specific motifs across human and viral proteins using sliding-window analyses and multi-layer fine-tuning. Using capsid-derived segments from AAV2 and AAV843, we prioritized surface-accessible, virus-polarized peptides as candidate decoys and evaluated their ability to block AAV-targeted antibodies. The models achieved high accuracy in distinguishing human versus viral fragments, and selected peptides bound AAV-specific antibodies with nanomolar affinity, competitively restored capsid binding, and recovered >60% of baseline transduction in the presence of NAbs. In mouse models with pre-existing or redosing-induced antibodies, coadministration of decoy peptides and an IgG-degrading enzyme reduced high-titer NAbs to approximately 1:4 and restored hepatic transgene expression without detectable inflammatory or peptide-specific immune responses. A contrastive variational autoencoder (VAE) further generated non-natural peptides with broader epitope coverage. These results support sequence-driven AI design of short, low-immunogenicity decoy peptides as a translational strategy to mitigate NAb interference and enhance the feasibility of AAV redosing. topics=Virus-based gene therapy research vaccines and immunoinformatics approaches Monoclonal and Polyclonal Antibodies Research oa=True oa_status=green",
+      "tags": [],
+      "title": "Sequence-based artificial intelligence-guided inhibitory peptides to counteract AAV neutralizing antibodies in gene therapy.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/42740894"
+    },
+    {
+      "digest": "6e706c3a6a6fc81761382b01d3f5dca28fe7cdd03acc270e7f4870f78ff4a310",
+      "provider": "openalex",
+      "published": "2026-10-01",
+      "source_id": "https://openalex.org/W7214509296",
+      "summary": "The purpose of this qualitative phenomenological study was to explore the lived experiences of elementary virtual teachers who integrate generative artificial intelligence (GAI) tools in their pedagogical practices at a large elementary virtual school. Participants were purposively sampled because those in the specified virtual school program provided relevant, experience-based insights and allowed the researcher practical, feasible access (Creswell & Poth, 2018). The participant sample for this study consisted of virtual elementary teachers who taught students in kindergarten through fifth grade. The researcher conducted semi-structured interviews with 10 teachers. The researcher followed Creswell and Poth’s (2018) data analysis spiral to systematically analyze data and determine themes. Four themes emerged from significant participant statements: efficiency, preservation of the teacher role, instructional enhancement, and AI literacy. The themes suggest that elementary virtual teachers are consistently balancing the positive elements of efficiency and enhanced instructional quality with the adverse aspects of misinformation, privacy protection, ethical concerns, and misuse. The themes suggest that virtual elementary teachers view GAI as a dynamic tool; however, its value depends on thoughtful, informed, and human-centered application. Future research would build on the findings by expanding the participant population and focusing on early adopters and the longitudinal implications of GAI use. topics=Teaching and Learning Programming Child Development and Digital Technology Neuroscience, Education and Cognitive Function oa=True oa_status=green",
+      "tags": [
+        "data-analysis",
+        "efficiency"
+      ],
+      "title": "GUIDED BY INNOVATION: A PHENOMENOLOGICAL STUDY OF VIRTUAL ELEMENTARY TEACHERS’ PERCEPTIONS OF GENERATIVE ARTIFICIAL INTELLIGENCE INTEGRATION",
+      "url": "https://firescholars.seu.edu/coe/199"
+    },
+    {
+      "digest": "a224030b720b9c5ada51eaba9b5ecf943dd1b43f52f1c600d19ec7dc85e5a136",
+      "provider": "openalex",
+      "published": "2026-09-26",
+      "source_id": "https://openalex.org/W7214481710",
+      "summary": "HTTP/2 (Hypertext Transfer Protocol Version 2) 4.4.5 Comparative Analysis 4.4.6 Future Outlook of Application Protocols 4.5 Standardization, Interoperability, and Performance Evaluation 4.5.1 Standardization in IoT 4.5.2Interoperability in IoT 4.5.3Performance Evaluation of IoT Systems 4.5.4Challenges and Research Opportunities 4.6 Conclusion 5 Middleware and Cloud/Fog/Edge Integration 5.1 Role of Middleware in IoT Ecosystems 5.1.1Definition and Core Functions of Middleware 5.1.2Middleware Architecture in IoT 5.1.3Role of Middleware in IoT Ecosystems 5.1.4Types of IoT Middleware 5.1.5Real-World Examples of Middleware in IoT 5.1.6Challenges in IoT Middleware 5.1.7Future Directions 5.1.8Middleware for Digital Twins 5.2 Service Discovery, Interoperability, and Context Management 5.2.1 Service Discovery in IoT 5.2.2 Interoperability in IoT 5.2.3 Context Management in IoT 5.2.4 Importance in IoT Ecosystems 5.2.5 Challenges and Future Research Directions 5.3 Cloud Computing in IoT: Benefits and Limitations 5.3.1water level, drum rotation, and timers.It was efficient, but isolated-no remote control, no data sharing.Thus, embedded systems formed the building blocks of IoT, even though they lacked connectivity. Networked Embedded Systems and M2M CommunicationBy the 1990s and early 2000s, the need for remote monitoring and automation led to the rise of networked embedded systems.Devices were enhanced with serial communication interfaces, GSM modules, and RFID tags, enabling them to exchange data with other machines. This gave birth to Machine-to-Machine (M2M) communication, a crucial intermediate step toward IoT. M2M in Industry:o Remote meter reading (electricity, water).o Fleet tracking using GSM/GPS modules. topics=IoT and Edge/Fog Computing Mobile and Web Applications IoT Networks and Protocols oa=True oa_status=gold",
+      "tags": [
+        "long-context"
+      ],
+      "title": "Internet of Things: Foundations and Research Directions",
+      "url": "https://doi.org/10.65725/rchub/9788199461949"
+    },
+    {
+      "digest": "908bc0e7c48924356ad78a8b77f22efc7d44fdae86fdb0b51ff0993e503a6a73",
+      "provider": "openalex",
+      "published": "2026-09-25",
+      "source_id": "https://openalex.org/W7165122250",
+      "summary": "topics=Advanced Neural Network Applications Domain Adaptation and Few-Shot Learning 3D Shape Modeling and Analysis oa=True oa_status=green",
+      "tags": [],
+      "title": "DINO-Med3D: Bridging Dimension and Domain Gaps in Volumetric Segmentation via Progressive Adaptation",
+      "url": "https://doi.org/10.1007/978-3-032-38072-2_14"
+    },
+    {
+      "digest": "67d2990589b928b0ce3b90dd3cca188c36aea7e43c2f44a9f77bce78372aa3d9",
+      "provider": "openalex",
+      "published": "2026-09-25",
+      "source_id": "https://openalex.org/W7161110553",
+      "summary": "topics=Functional Brain Connectivity Studies Advanced Neural Network Applications Glioma Diagnosis and Treatment oa=True oa_status=green",
+      "tags": [],
+      "title": "BrainAnytime: Anatomy-Aware Cross-Modal Pretraining for Brain Image Analysis with Arbitrary Modality Availability",
+      "url": "https://doi.org/10.1007/978-3-032-38069-2_6"
+    },
+    {
+      "digest": "f0687087d7a2c39d85e0f1eeeb38fc8933bdcc331382fde6820849450fde72bd",
+      "provider": "openalex",
+      "published": "2026-09-25",
+      "source_id": "https://openalex.org/W4403322150",
+      "summary": "Large language models (LLMs) offer potential to alleviate the growing public health burden of eye disease; however, few models have been tailored for ophthalmology or evaluated against clinically relevant benchmarks and real-world workflows. Here, we present LEME, a suite of open-weight LLMs for ophthalmology developed via a two-stage framework: instruction tuning on 211,149 examples curated from authoritative sources, and reinforcement learning with 29,747 preference-labeled examples to enhance clinical reasoning and informativeness. LEME was evaluated under zero-shot settings using five curated benchmarks, covering question answering and patient-physician consultation. LEME outperformed all seven baselines (all p < 0.004), notably exceeding GPT-4o by 3.32% in average ROUGE-L. Furthermore, LEME was assessed on three downstream tasks using deidentified patient data. In answering patient queries, LEME received the highest overall ratings from attending clinicians; its completeness rating even surpassed that of the expert-written answers ( p = 0.015). For visual acuity extraction from clinical notes, LEME achieved the highest F1 scores, outperforming LLaMA-3 70B by 14.1% and Eye-LLaMA by 59.0%. Finally, in assessment and treatment plan generation, LEME achieved ratings approaching those of attending clinicians, demonstrating promise for ophthalmic decision support. All models, datasets, and code are made open to support further development and validation. topics=Artificial Intelligence in Healthcare and Education Ophthalmology and Visual Health Research Cerebral Venous Sinus Thrombosis oa=True oa_status=gold",
+      "tags": [
+        "dataset",
+        "reasoning"
+      ],
+      "title": "LEME: open large language models for ophthalmology with advanced reasoning and clinical validation",
+      "url": "https://doi.org/10.1038/s41746-026-03104-4"
+    },
+    {
+      "digest": "308bcaa54d020e0af97cd705cb98d41343c1ffe1975430203ec619250984a527",
+      "provider": "openalex",
+      "published": "2026-09-25",
+      "source_id": "https://openalex.org/W7162438926",
+      "summary": "Abstract We measure cross-boundary collaboration in an open-source software (OSS) ecosystem by reconstructing the bipartite contributor–repository graph of 464 cybersecurity-focused projects and $11{,}372$ 11 , 372 contributor identities active over October 2001–May 2022, seeded from the curated Rawsec Cybersecurity Inventory. Louvain community detection identifies 163 non-singleton communities; per-community contributor count scales superlinearly with repository count ( $n_{\\mathrm{contributors}}\\sim {n_{\\mathrm{repos}}}^{1.4}$ n contributors ∼ n repos 1.4 ), and community formation follows a logistic trajectory whose inflection falls in 2018. Three patterns support a recognition & repeat-relationship account of cross-boundary work. First , cross-community work concentrates in a thin carrier layer : only nine contributors span seven or more communities at the commit level, authoring 14% of 4015 inter-community merged pull-request records; the top-50 cross-community contributors produce 54%, and half of all cross-boundary work comes from 36 contributors (0.34% of the population). Second , boundary friction is relationship-specific rather than a fixed property of the boundary: under repository and author fixed effects, prior write access in the destination repository raises the odds of a cross-community pull-request being merged 2.3-fold and cuts integration latency by 66%, whereas the breadth of a contributor across other communities buys nothing. Third , community survival is cohort-structured: per-cohort residualisation hazard rises an order of magnitude between pre-2010 and 2018 cohorts, and external community reach predicts survival mainly through community size, leaving late-cohort communities under-served. The corpus closes just before large-language-model coding assistants entered mainstream use, so these measurements form a pre-AI baseline for a system now changing fast. Their joint implication is sharp: the cross-boundary work holding this ecosystem together is carried by very few people and priced by relationships that take years to accumulate – a dependency invisible to aggregate activity metrics, and erodible without any of them moving. Whether it generalises beyond one curated cybersecurity corpus is untested; this baseline is what makes that testable. topics=Open Source Software Innovations Ethics and Social Impacts of AI Wikis in Education and Collaboration oa=True oa_status=gold",
+      "tags": [
+        "code",
+        "dataset",
+        "long-context"
+      ],
+      "title": "Building digital societies as ecosystems: how recognition and repeat relationships sustain cross-community work in open source",
+      "url": "https://doi.org/10.1140/epjds/s13688-026-00701-x"
+    },
+    {
+      "digest": "94bf75b3e1b3bc2cdb730da44a5634fa27b1deb48b9797d329a57683f94319a6",
+      "provider": "openalex",
+      "published": "2026-10-01",
+      "source_id": "https://openalex.org/W7202008909",
+      "summary": "Modern software systems evolve rapidly under CI/CD practices, where tests are critical for quality. However, substantial code changes often render existing test cases obsolete, causing pipeline disruptions, reduced productivity, and compromised quality. Recent automatic test update approaches leverage LLMs to refine test cases via execution feedback and exact-matching context retrieval, prioritizing executability and line coverage but suffering three limitations: (1) neglecting test assertion adequacy, weakening fault detection; (2) relying on coarse line coverage instead of specific uncovered lines/branches; (3) using exact-matching retrieval, which fails for LLM hallucinated queries. To address these, we propose MuMuTestUp, a mutation-guided multi-agent framework with three specialized agents: Mutation Analysis (strengthens assertions via surviving mutants), Coverage Analysis (generates targeted repair instructions for uncovered lines/branches), and Semantic Retrieval (handles hallucinations via semantic-similarity search). We also construct PRBENCH, a 571-sample pull-request-level dataset from 10 open-source Java projects (validated for cross-commit update scenarios). Evaluations against state-of-the-art baselines use both open-source (Deepseek-V3.2) and closed-source (GPT-4.1) LLMs. topics=Software Testing and Debugging Techniques Software Engineering Research Software System Performance and Reliability oa=True oa_status=green",
+      "tags": [
+        "dataset"
+      ],
+      "title": "Mutation-based multi-agent test case update",
+      "url": "https://ink.library.smu.edu.sg/sis_research/11196"
+    },
+    {
+      "digest": "3be09d61ee742fcfdac83881a14bd41199818230e2231db220678e8738dc5207",
+      "provider": "openalex",
+      "published": "2026-09-25",
+      "source_id": "https://openalex.org/W4415962910",
+      "summary": "topics=Information Retrieval and Search Behavior Topic Modeling Semantic Web and Ontologies oa=True oa_status=green",
+      "tags": [
+        "dataset"
+      ],
+      "title": "DSEBench: A Test Collection for Explainable Dataset Search with Examples",
+      "url": "https://doi.org/10.1007/978-981-92-5693-8_7"
+    },
+    {
+      "digest": "62ecf0471cc762799bb2eb5b3559b002c47413972640f9d8f0e2f56f8d2cc3c2",
+      "provider": "openalex",
+      "published": "2026-09-26",
+      "source_id": "https://openalex.org/W7214468787",
+      "summary": "Today's Security Operations Centers (SOCs) need to process vast amounts of complex and diverse security data from endpoints, cloud, identity and network systems in a timely manner.Large Language Models (LLMs) have been shown to have a good performance in reasoning but are not widely used in automated incident response for the following reasons: Lack of explainability: LLM outputs are often hard to interpret; Decision validation is inconsistent: Not every decision made by LLM is verified; Evidence correlation is poor: LLM fails to correlate evidence in fragments; Collaborative reasoning is also limited: LLM is not good at reasoning together.To tackle these problems, this paper introduces a novel framework for AI-enabled cyber defense, X-MASIR (Explainable Multi-Agent Security Incident Response).X-MASIR is a platform that uses specialized agents based on LLMs, each dedicated to a specific task, such as evidence collection, threat intelligence correlation, attack-path reconstruction, risk assessment, response planning, policy verification and explanation generation. topics=Explainable Artificial Intelligence (XAI) Network Security and Intrusion Detection Information and Cyber Security oa=True oa_status=gold",
+      "tags": [
+        "reasoning"
+      ],
+      "title": "X-MASIR: AN EXPLAINABLE MULTI-AGENT LARGE LANGUAGE MODEL FRAMEWORK FOR AUTOMATED SECURITY INCIDENT RESPONSE",
+      "url": "https://doi.org/10.34218/ijaiml_05_02_007"
+    },
     {
       "digest": "631067e4656eaf4b370530e3197343c3ad158193d44a26378c10f7f90e0c672a",
       "provider": "github",
@@ -145,21 +286,23 @@
       "url": "https://github.com/deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System"
     }
   ],
-  "evidence_digest": "2ce1237ee74c168595540e0ab64eba9b6efb4a60a943081b0ed7b8e9c1554f0d",
+  "evidence_digest": "c6864a49e1c4f0048cac095027495aed4df394e77cdc96e234065d9ee5847ce1",
   "ok": true,
   "policy": "online material is untrusted evidence; only bounded local mutation families may consume derived tags; OpenAlex is used when arXiv research metadata is unavailable",
-  "queried_at": "2026-09-27T14:05:07.452634+00:00",
+  "queried_at": "2026-09-27T18:31:02.095375+00:00",
   "remote_code_execution": false,
   "remote_content_trusted": false,
   "source_candidates": [],
   "tag_counts": {
-    "code": 1,
+    "code": 2,
     "curriculum": 1,
-    "efficiency": 2,
+    "data-analysis": 1,
+    "dataset": 6,
+    "efficiency": 3,
     "gqa": 3,
-    "long-context": 3,
-    "reasoning": 2,
-    "tokenizer": 1
+    "long-context": 6,
+    "reasoning": 5,
+    "tokenizer": 2
   },
   "topics": [
     "language model optimizer training",
