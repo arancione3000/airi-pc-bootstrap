@@ -1,20 +1,93 @@
 {
   "academic_fallback": null,
-  "errors": [
-    {
-      "error": "TimeoutError:The read operation timed out",
-      "provider": "arxiv"
-    },
-    {
-      "error": "HTTPError:HTTP Error 429: Too Many Requests",
-      "provider": "openalex"
-    }
-  ],
+  "errors": [],
   "evidence": [
     {
-      "digest": "9c8c7f23c6c930224e6ede649fa12a440fc462012653524f385862e6abfbbbb5",
+      "digest": "730c912f97c36a61ed8bfdc7f7ac026438d046cda362d1daa4f425a7aefe553b",
+      "provider": "arxiv",
+      "published": "2026-09-28T17:59:59Z",
+      "source_id": "http://arxiv.org/abs/2609.35771v1",
+      "summary": "Astrophysical black holes (BHs) are not isolated vacuum objects but are expected to reside within complex environments, such as dark matter (DM) halos and baryonic distributions. Such environments can modify the spacetime geometry surrounding the BH and leave observable imprints on gravitational-wave (GW) signals, including shifts in the quasinormal mode (QNM) spectrum, tidal Love numbers (TLNs), and the inspiral dynamics of extreme-mass-ratio inspirals (EMRIs). We develop a general framework for describing DM-dressed BH spacetimes by parameterizing the geometry directly in terms of the enclosed mass function, rather than the traditional density-based profile. This mass-based formulation is naturally connected to the total gravitational field, accommodates several common halo profiles as limiting cases, and incorporates basic physical consistency requirements such as regularity, causality, and appropriate asymptotic behavior. Within this framework, we investigate the environmental imprints on QNMs, TLNs, and GW fluxes from EMRIs. We find a complementary sensitivity to the halo structure: QNMs predominantly probe the inner regions of the environment, whereas static TLNs are more sensitive to its outer structure. EMRI fluxes, in contrast, probe the matter distribution through its influence on the orbital motion and GW propagation. Our results establish the enclosed-mass formulation as a flexible and physically controlled framework for connecting astrophysical environment models with precision GW observables.",
+      "tags": [],
+      "title": "From Density to Mass: A New Parametrized Framework for Dark Matter Environment Around Black Holes",
+      "url": "https://arxiv.org/abs/2609.35771v1"
+    },
+    {
+      "digest": "f71344301a104be72e35c22ce04514bbc757be5b69ad8ae35546b239506a0599",
+      "provider": "arxiv",
+      "published": "2026-09-28T17:59:58Z",
+      "source_id": "http://arxiv.org/abs/2609.35770v1",
+      "summary": "Realistic and editable animal fur reconstruction from multi-view images is challenging due to fine-scale detail, self-occlusion and obfuscation, and, unlike human hair, the lack of animal-fur datasets. Fur usually covers most of an animal's body, with large inter-species and intra-species variability. We present FurE, an efficient strand-based animal fur reconstruction method that recovers a per-strand, editable groom by optimizing a root-conditioned latent field, decoded into strand geometry via a PCA-based decoder. We reconstruct a defurred animal body using local fur-thickness cues from a surface-constrained Gaussian Frosting representation together with part-based priors. We further show that a PCA-based decoder learned from human-hair strand data can alleviate animal-data scarcity while enabling substantially faster optimization. FurE achieves a 10x speedup in strand training over current SOTA dense per-strand optimization while retaining strand fidelity and generalizing across synthetic and real-world sequences, with quantitative and qualitative validation despite the reduction in training time.",
+      "tags": [
+        "dataset"
+      ],
+      "title": "FurE: Efficient Instance-Specific 3D Fur Reconstruction without Animal-Fur Datasets",
+      "url": "https://arxiv.org/abs/2609.35770v1"
+    },
+    {
+      "digest": "90ebf3ee4b02fbb02b875b0da97da2a2fcf93ee61849c5b3662372e42a68225c",
+      "provider": "arxiv",
+      "published": "2026-09-28T17:59:53Z",
+      "source_id": "http://arxiv.org/abs/2609.35769v1",
+      "summary": "One deployed language model must often serve many compute budgets, yet serving each budget still means a separate training or compression run per point. We train a Telescopic Language Model (TLM) to be that continuum: a nested-capacity Transformer supervised by stochastic prefix supervision with a full anchor. At every step, one randomly truncated prefix of the capacity axis is trained against the full next-token target, alongside one full-capacity pass, so the trained artifact is a valid language model at every depth. Two forward-backward passes per step, no architectural change, nothing extra at inference. Fixed-exit suites such as Matryoshka Language Model Suites (MLMS) occupy one point in this design space, and the point has a cost: supervising only a few fixed exits leaves the nested model at chance level everywhere else (perplexity 10^2-10^5 in our baselines). On a 200M proxy suite (20B FineWeb-Edu tokens, identical data stream for all methods), a single TLM run is a valid language model at every one of its twenty layer prefixes, in perplexity and on perplexity-sensitive downstream tasks, reducing the area under the quality-budget curve by 43-44% relative to the fixed-exit suites while matching them at full capacity, at ~12% lower GPU cost per run. The prefix sampling density is a dial: concentrating it on a few depths recovers fixed-exit quality there at the price of the continuum, so the operating points become a training-time choice rather than an architectural one. These results indicate that the training objective, not the nesting itself, is what makes a model elastic.",
+      "tags": [],
+      "title": "Telescopic Language Models",
+      "url": "https://arxiv.org/abs/2609.35769v1"
+    },
+    {
+      "digest": "228ea27dcbf044e4e9da088431def2d8f83ab125d2a042ca2504d5b555ee45a3",
+      "provider": "arxiv",
+      "published": "2026-09-28T17:59:52Z",
+      "source_id": "http://arxiv.org/abs/2609.35768v1",
+      "summary": "Modern video diffusion models require tens of denoising evaluations over long spatiotemporal token sequences. Distribution Matching Distillation (DMD) reduces the number of function evaluations (NFE) to just a few. However, DMD samples can degrade during training, exhibiting progressive oversaturation and artifacts. We trace this instability to critic errors, which enter successive student updates and accumulate over time. We introduce Projected Distribution Matching Distillation (PDMD) to filter critic errors. PDMD projects out the component of the DMD update parallel to the student-critic endpoint residual. At a fixed noisy query, we prove that this residual is an unbiased estimate of the critic's endpoint error. Under high-dimensional assumptions, this projection removes a constant fraction of critic error while discarding only a vanishing fraction of ideal DMD signal. Empirically, the projection stabilizes training and improves sample quality where DMD degrades and develops unnatural textures. PDMD requires only a one-line code change to DMD, with no extra loss, network, data, model pass, or multi-stage training. With Wan2.1, PDMD achieves a VBench total score of 83.73 at 4 NFE, surpassing matched DMD by 1.03 points. On MiniMax-H3 joint video-audio generation, PDMD achieves a VideoGen-Eval visual total score of 83.17, 0.41 points above the strongest distilled baseline. PDMD also achieves the best performance on all six audio metrics among the compared 4-NFE models. Qualitative comparisons and user studies favor PDMD over the distilled baselines in visual quality, motion, and audio quality. Code and models are available at https://pdmd2026.github.io/.",
+      "tags": [],
+      "title": "PDMD: Projected Distribution Matching Distillation for Video Diffusion Models",
+      "url": "https://arxiv.org/abs/2609.35768v1"
+    },
+    {
+      "digest": "eafe6e04a8f1341ca3bd0fa617d7b872a4fd71c7d197083c280f35e8fe523d16",
+      "provider": "arxiv",
+      "published": "2026-09-28T17:59:09Z",
+      "source_id": "http://arxiv.org/abs/2609.35759v1",
+      "summary": "LLMs have demonstrated strong capabilities in creative writing. However, scaling them to full-length novels remains challenging, as maintaining narrative consistency becomes increasingly difficult. Existing story-generation methods typically focus on stories of up to about ten thousand words, leaving their ability to scale to full-length novels underexplored. In this work, we introduce Narrative State Tracking Agent (NstAgent), a training-free agentic framework that allows LLMs to track a structured narrative state including characters, past events and future requirements. We extend an existing benchmark to compare narrative consistency across lengths, and use it together with a writing-quality benchmark to systematically evaluate stories ranging from 10K to 100K words. We show that NstAgent achieves better narrative consistency and writing quality as stories grow longer, and neither of them degrades noticeably as length increases, suggesting that it provides an effective approach to scaling story generation toward full-length novels.",
+      "tags": [],
+      "title": "Scaling Long-Form Story Generation via Narrative State Tracking",
+      "url": "https://arxiv.org/abs/2609.35759v1"
+    },
+    {
+      "digest": "757b10ffc1e65836acc5e214fe41ed0a574bf65d45c16a964c64b557dd3c720b",
+      "provider": "arxiv",
+      "published": "2026-09-28T17:59:36Z",
+      "source_id": "http://arxiv.org/abs/2609.35767v1",
+      "summary": "Unified multimodal models can both look at and render images, so in principle they can repair their own generations: diagnose what an image gets wrong, revise it, observe the result, and diagnose again. Whether a revision helps is known only after it is rendered, so the reflection text and the image generation must be learned jointly, over the whole loop. Supervised fine-tuning (SFT) on reflection trajectories gives a cold start but does not find the high-success repair paths, and naive RL that optimizes only the renderer or only one head leaves most of the gain untapped. We introduce UMM-Reflection, which applies reinforcement learning (RL) to complete reflection trajectories inside one unified model: sibling trajectories share one initial image, so the group-relative advantage compares reflection strategies, and one trajectory-level advantage updates both the reflection tokens and the flow-based revisions, avoiding the combinatorial blow-up of per-round credit assignment. Unlike single-round editing or pipelines with an external critic, credit flows across rounds and to both roles of the same model, and no verifier is needed at inference. On BAGEL, UMM-Reflection improves GenEval by 12.05 points over SFT, and the gains transfer to WISE (+10.97), OneIG-Bench (+3.48), and T2I-CompBench++ (+4.63), none of which is used in training.",
+      "tags": [],
+      "title": "Learning Native Reflection in Unified Models with Interleaved Reinforcement Learning",
+      "url": "https://arxiv.org/abs/2609.35767v1"
+    },
+    {
+      "digest": "d21a8d6900dd28afe12c94ab683daffe6c6de6be140e714b0a8943bc1af3c96b",
+      "provider": "arxiv",
+      "published": "2026-09-28T17:59:27Z",
+      "source_id": "http://arxiv.org/abs/2609.35765v1",
+      "summary": "Identifying intertextual references is central to literary scholarship, but computationally difficult when source material is transformed through paraphrase, allusion, historical language, and translation. We investigate this problem through biblical intertextuality in Karen Blixen's Seven Gothic Tales. Drawing on the commentary to a critical edition, we construct a benchmark of 189 annotated references and evaluate retrieval against all 31,170 verses of historically plausible Danish Old and New Testament translations. We compare TF-IDF and BM25 with multilingual and Danish sentence encoders, examine the effect of linguistic normalization, and fine-tune a Danish encoder using hard negatives and five-fold cross-validation. We analyze performance across automatically derived lexical-overlap strata representing quotations, paraphrases, and allusions. Linguistically normalized BM25 provides a strong zero-shot baseline, attaining an overall R@10 of 0.365 and retrieving every quotation within its ten highest-ranked verses. The best zero-shot dense model achieves a comparable overall score of 0.360 while performing better on allusions. Fine-tuning DFM-large raises its overall R@10 from 0.265 to 0.508 and more than doubles its performance on allusions, from 0.138 to 0.339. However, evaluation against editorial annotations alone understates the model's scholarly usefulness: a literary scholar judged seven of 30 selected rank-one predictions counted as false positives to be meaningful additional references. These findings show both the potential and the epistemic limits of computational intertextual retrieval. Rather than treating scholarly annotations as exhaustive or model outputs as discoveries, we propose retrieval models as heuristic co-readers that recover documented references and generate candidates for expert-led close reading.",
+      "tags": [],
+      "title": "Retrieving Biblical Intertextual References in Karen Blixen's Seven Gothic Tales",
+      "url": "https://arxiv.org/abs/2609.35765v1"
+    },
+    {
+      "digest": "3d0c654340663fee57e1e7c1744ea96ffe68385ea49939f55e5af821a72fd603",
       "provider": "github",
-      "published": "2026-09-29T02:00:32Z",
+      "published": "2026-09-29T07:27:16Z",
+      "source_id": "bryavhn/nanosarvam",
+      "summary": "Implement a readable Mixture-of-Experts language model optimized for training on consumer GPUs with advanced attention and routing features. license=unknown topics=api-gateway cloud-native distributed-systems docker fault-tolerance grpc kubernetes lightweight microservices nanosarvam observability open-source rest-api scalability service-mesh stars=0",
+      "tags": [],
+      "title": "bryavhn/nanosarvam",
+      "url": "https://github.com/bryavhn/nanosarvam"
+    },
+    {
+      "digest": "71db08b67ed660684ebb5764c5a63fe6b7f12c60283349ea79e21c82fb62258b",
+      "provider": "github",
+      "published": "2026-09-29T07:05:53Z",
       "source_id": "Tnhn07/modded-nanogpt",
       "summary": "🚀 Accelerate language model training with modded-nanogpt, achieving 3.28 loss in under 3 minutes on 8 NVIDIA H100 GPUs for faster AI development. license=MIT topics=adam-optimizer deep-learning deep-neural-networks github-config muon nanogpt optimizer pytorch rwkv stars=2",
       "tags": [
@@ -22,16 +95,6 @@
       ],
       "title": "Tnhn07/modded-nanogpt",
       "url": "https://github.com/Tnhn07/modded-nanogpt"
-    },
-    {
-      "digest": "17963ce07215d0427b44c9704c986bbd667fd6dc30d8ac5e4be3ea08d8e4ef26",
-      "provider": "github",
-      "published": "2026-09-28T23:09:51Z",
-      "source_id": "bryavhn/nanosarvam",
-      "summary": "Implement a readable Mixture-of-Experts language model optimized for training on consumer GPUs with advanced attention and routing features. license=unknown topics=api-gateway cloud-native distributed-systems docker fault-tolerance grpc kubernetes lightweight microservices nanosarvam observability open-source rest-api scalability service-mesh stars=0",
-      "tags": [],
-      "title": "bryavhn/nanosarvam",
-      "url": "https://github.com/bryavhn/nanosarvam"
     },
     {
       "digest": "6a1371efbe0c8d841209758aeca2fa0008f27f63af6d47e3df3af5a919dbf33f",
@@ -145,16 +208,17 @@
       "url": "https://github.com/deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System"
     }
   ],
-  "evidence_digest": "dca655b4c9a7b3e5be7303646b12889fc1ee9593acff74c43685ec3ddd07b91d",
+  "evidence_digest": "f2654d5b6f990eb20d120e59318ccc6f7a98677f049428ad208f12667828188d",
   "ok": true,
   "policy": "online material is untrusted evidence; only bounded local mutation families may consume derived tags; OpenAlex is used when arXiv research metadata is unavailable",
-  "queried_at": "2026-09-29T02:07:05.877935+00:00",
+  "queried_at": "2026-09-29T09:02:30.179016+00:00",
   "remote_code_execution": false,
   "remote_content_trusted": false,
   "source_candidates": [],
   "tag_counts": {
     "code": 1,
     "curriculum": 1,
+    "dataset": 1,
     "efficiency": 2,
     "gqa": 1,
     "long-context": 4,
