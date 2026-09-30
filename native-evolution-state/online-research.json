@@ -3,76 +3,105 @@
   "errors": [],
   "evidence": [
     {
-      "digest": "730c912f97c36a61ed8bfdc7f7ac026438d046cda362d1daa4f425a7aefe553b",
+      "digest": "c1ba7e4da811312d0514b9b4d6385cccc68f0679af027a8dbc4cb752e7ac4291",
       "provider": "arxiv",
-      "published": "2026-09-28T17:59:59Z",
-      "source_id": "http://arxiv.org/abs/2609.35771v1",
-      "summary": "Astrophysical black holes (BHs) are not isolated vacuum objects but are expected to reside within complex environments, such as dark matter (DM) halos and baryonic distributions. Such environments can modify the spacetime geometry surrounding the BH and leave observable imprints on gravitational-wave (GW) signals, including shifts in the quasinormal mode (QNM) spectrum, tidal Love numbers (TLNs), and the inspiral dynamics of extreme-mass-ratio inspirals (EMRIs). We develop a general framework for describing DM-dressed BH spacetimes by parameterizing the geometry directly in terms of the enclosed mass function, rather than the traditional density-based profile. This mass-based formulation is naturally connected to the total gravitational field, accommodates several common halo profiles as limiting cases, and incorporates basic physical consistency requirements such as regularity, causality, and appropriate asymptotic behavior. Within this framework, we investigate the environmental imprints on QNMs, TLNs, and GW fluxes from EMRIs. We find a complementary sensitivity to the halo structure: QNMs predominantly probe the inner regions of the environment, whereas static TLNs are more sensitive to its outer structure. EMRI fluxes, in contrast, probe the matter distribution through its influence on the orbital motion and GW propagation. Our results establish the enclosed-mass formulation as a flexible and physically controlled framework for connecting astrophysical environment models with precision GW observables.",
+      "published": "2026-09-29T17:59:58Z",
+      "source_id": "http://arxiv.org/abs/2609.38180v1",
+      "summary": "Existing 3D part decomposition methods do not necessarily partition the original shape into non-overlapping parts that collectively cover the entire shape, allowing overlaps or gaps that hinder downstream part-level applications. We instead formulate part decomposition as a joint partitioning of the entire shape, where the predicted parts are non-overlapping and jointly recover the entire shape. Our key insight is that part decomposition should consider all desired parts jointly, rather than modeling each part independently. To this end, we develop a promptable model for 3D part decomposition from images or meshes. Users can specify desired parts through 3D point prompts for controllable decomposition. Given one point prompt per desired part, our model produces the corresponding parts as a complete partition of the entire shape. We build on a pretrained 3D generation model and first obtain a shape latent from either an input image or mesh. We then introduce a prompt encoder that maps each 3D point prompt to a part token while attending to the shape latent. To decode the desired parts, we propose a novel part decoder jointly scoring the entire shape against all part tokens in a coarse-to-fine manner, assigning every position within the shape volume to exactly one part. We perform part decomposition in this shared shape latent space, enabling a unified model for image-to-part generation, mesh-to-part generation, and part segmentation. Our method outperforms existing works on all part-quality metrics across all three tasks, and improves compatibility among parts by an order of magnitude over previous SOTA methods. Code and models will be released.",
       "tags": [],
-      "title": "From Density to Mass: A New Parametrized Framework for Dark Matter Environment Around Black Holes",
-      "url": "https://arxiv.org/abs/2609.35771v1"
+      "title": "Point2Part: Unified 3D Partitioning from Point Prompts",
+      "url": "https://arxiv.org/abs/2609.38180v1"
     },
     {
-      "digest": "f71344301a104be72e35c22ce04514bbc757be5b69ad8ae35546b239506a0599",
+      "digest": "97d823bebfc17ffba05b7c9838d438a44206ac865661f08b8d352180abd3dd7c",
       "provider": "arxiv",
-      "published": "2026-09-28T17:59:58Z",
-      "source_id": "http://arxiv.org/abs/2609.35770v1",
-      "summary": "Realistic and editable animal fur reconstruction from multi-view images is challenging due to fine-scale detail, self-occlusion and obfuscation, and, unlike human hair, the lack of animal-fur datasets. Fur usually covers most of an animal's body, with large inter-species and intra-species variability. We present FurE, an efficient strand-based animal fur reconstruction method that recovers a per-strand, editable groom by optimizing a root-conditioned latent field, decoded into strand geometry via a PCA-based decoder. We reconstruct a defurred animal body using local fur-thickness cues from a surface-constrained Gaussian Frosting representation together with part-based priors. We further show that a PCA-based decoder learned from human-hair strand data can alleviate animal-data scarcity while enabling substantially faster optimization. FurE achieves a 10x speedup in strand training over current SOTA dense per-strand optimization while retaining strand fidelity and generalizing across synthetic and real-world sequences, with quantitative and qualitative validation despite the reduction in training time.",
+      "published": "2026-09-29T17:59:55Z",
+      "source_id": "http://arxiv.org/abs/2609.38178v1",
+      "summary": "Robots deployed in the physical world must be able to improve beyond their initial training as they encounter new situations and failures. For this improvement to scale across tasks, it must make effective use of experience without requiring human demonstration of each correction. Recent agentic systems offer a way to reduce this reliance on human effort by using foundation models to autonomously compose learned behaviors to complete tasks. Yet completing tasks this way does not itself teach a task policy to overcome its own failures; that requires turning these behaviors into learnable corrections for the policy. Our insight is that many such corrections are familiar short behaviors, or skills: they recur across tasks and describe actions that foundation models can reason about from a scene. We introduce skill-space shooting, which uses foundation model guidance to explore corrections through these reusable skills and turn successful trials into policy improvement. Real-world experiments show repeated improvement in policies acting autonomously, while skills can also be shared to reduce the teaching needed to improve on new tasks. By making reusable skills a source of corrective supervision, skill-space shooting enables scalable and generalizable policy improvement within and across tasks. Additional results and videos at https://skill-space-shooting.github.io.",
+      "tags": [],
+      "title": "Skill-Space Shooting for Autonomous Robot Policy Improvement",
+      "url": "https://arxiv.org/abs/2609.38178v1"
+    },
+    {
+      "digest": "91174cb30b0cf088cdebbc42879d803024bd4bd2534193c7de453ea74cbe8932",
+      "provider": "arxiv",
+      "published": "2026-09-29T17:59:52Z",
+      "source_id": "http://arxiv.org/abs/2609.38177v1",
+      "summary": "Reasoning about the 3D world from multi-view images remains a fundamental challenge for Multimodal Large Language Models (MLLMs). While modern MLLMs handle single-image inputs effectively, they struggle to integrate evidence across viewpoints into a coherent 3D understanding. A growing body of work attempts to close this gap by injecting 3D awareness into MLLMs, either by boosting fine-grained pixel-level cross-view correspondence or by fusing features from 3D geometry foundation models, yet a substantial gap to human reasoning persists. In this work, we revisit human spatial reasoning, which suggests that rather than relying on fine-grained geometry cues, humans roughly identify common objects across views, infer the relative geometry between viewpoints, and assemble a coarse 3D layout of the scene. Inspired by this process, we introduce Imagine3D-LLM, an MLLM that learns to assemble a similar compact 3D representation of the scene and conditions its answer on this representation. Concretely, we append a small set of learnable summary tokens after the image tokens, decode them into a compact 3D Gaussian Splatting representation supervised by a photometric reconstruction loss, and train jointly with the standard next-token prediction objective. Notably, although only the summary tokens receive direct reconstruction supervision, this objective also induces stronger cross-frame correspondence within the LLM's underlying image features, suggesting that learning to reconstruct propagates 3D-aware signals throughout the model. As a result, Imagine3D-LLM consistently outperforms prior approaches across multiple spatial reasoning and 3D understanding benchmarks, suggesting that imagining the scene can be more effective than being told its pixel-wise geometry.",
+      "tags": [
+        "reasoning"
+      ],
+      "title": "Imagine3D-LLM: Teaching MLLMs to Imagine 3D Scenes Before Answering",
+      "url": "https://arxiv.org/abs/2609.38177v1"
+    },
+    {
+      "digest": "f198190ff1673f5875e98795696c5ba513ca4dbf73c0e6c04896dec788d61065",
+      "provider": "arxiv",
+      "published": "2026-09-29T17:59:43Z",
+      "source_id": "http://arxiv.org/abs/2609.38171v1",
+      "summary": "Topological phases of matter support edge states protected from noise and perturbations, and the classification of which symmetry and dimension support such phases was developed for quantum systems and analogous platforms. While topological phases have also been discovered in stochastic systems and posited as mechanisms for biochemical processes, a classification consistent with their Markovian constraints remains lacking, impeding generalization to new scenarios. These constraints alter the matrix space preventing the application of previous classification methods, while hosting new properties such as the necessity of non-Hermiticity for non-trivial topological phases. We introduce new methods including a new homotopy approach and redefinition of the point gap and find that only two symmetry classes remain robust: no symmetry and pseudo-Hermiticity. In these symmetry classes, we identify the dimensions with topologically non-trivial phases and their group structure, creating a rigorous framework for predicting robust behavior in active and living matter.",
+      "tags": [
+        "long-context"
+      ],
+      "title": "Classification of topological phases of matter in stochastic systems",
+      "url": "https://arxiv.org/abs/2609.38171v1"
+    },
+    {
+      "digest": "d17103720c00b14ede8d00744f9850cfdf8b67f19ccf3a57c63c30d88dd4b2e4",
+      "provider": "arxiv",
+      "published": "2026-09-29T17:59:40Z",
+      "source_id": "http://arxiv.org/abs/2609.38169v1",
+      "summary": "Linear attention replaces growing KV caches with fixed-size recurrent states, yet these persistent states can become a substantial memory bottleneck under concurrent serving. Directly quantizing recurrent states to low precision often leads to severe accuracy degradation, as quantization errors propagate through successive state updates. We discover that the impact of these errors depends on two complementary dimensions: temporally, errors in long-lived memory can persist across many decoding steps; spatially, errors in different key rows affect model outputs differently, while state magnitudes vary substantially along both rows and columns. Motivated by these observations, we propose STEPQuant, a spatial-temporal post-training quantization framework for Delta-rule recurrent states. STEPQuant allocates precision according to error magnitude and memory lifetime, and jointly fits key-row and value-column scales based on state distributions and key-row impact on output error. Experiments on Qwen3.8-27B and Kimi-Linear-48B-A3B-Instruct across both long- and short-generation benchmarks show that STEPQuant closely matches FP32-state accuracy under a nominal 6-bit budget and outperforms uniform INT8 in its 4-bit configuration. Integrated into SGLang with optimized GPU kernels, 6-bit STEPQuant achieves over 5x recurrent-state compression and reduces total serving memory by up to 68.7%. Our code is available at https://github.com/Dreamer-Toby/STEPQuant.",
+      "tags": [
+        "code",
+        "efficiency"
+      ],
+      "title": "STEPQuant: When and Where Errors Matter in Delta-Rule Recurrent State Quantization",
+      "url": "https://arxiv.org/abs/2609.38169v1"
+    },
+    {
+      "digest": "9e49abcdede983a6763b3f79f979e9416e5c5023fab8b61835b7e78de25c9a70",
+      "provider": "arxiv",
+      "published": "2026-09-29T17:59:50Z",
+      "source_id": "http://arxiv.org/abs/2609.38176v1",
+      "summary": "The dynamics of generative models exhibit two apparently distinct temporal windows: a speciation window, in which a sample commits to a semantic class, and a nonlocality window, in which local context windows become insufficient for generation. Motivated by evidence of their near-concurrence in a variety of frontier models, we investigate their relationship through the spatial distribution of semantic information. Under a \"common cause\" hypothesis, we prove that the nonlocality window must lie in the speciation window. This hypothesis postulates that semantic labels explain a fraction of the correlations between distant tokens, a condition that is natural for many real datasets. We further give conditions under which both windows shrink to a single limiting time as system size grows, defining a \"phase transition\", and verify this behavior analytically in Gaussian mixtures. Together, these results identify conditions under which semantic information explains the concurrence of speciation and nonlocality, connecting two complementary perspectives on the emergence of semantic structure in generative modeling.",
       "tags": [
         "dataset"
       ],
-      "title": "FurE: Efficient Instance-Specific 3D Fur Reconstruction without Animal-Fur Datasets",
-      "url": "https://arxiv.org/abs/2609.35770v1"
+      "title": "Breakdown of Local Denoising as Semantic Speciation",
+      "url": "https://arxiv.org/abs/2609.38176v1"
     },
     {
-      "digest": "90ebf3ee4b02fbb02b875b0da97da2a2fcf93ee61849c5b3662372e42a68225c",
+      "digest": "6a56e307002def56b72e74e5ca88f920bdf1f9b53fd8e7e61f7f1536f86fcdba",
       "provider": "arxiv",
-      "published": "2026-09-28T17:59:53Z",
-      "source_id": "http://arxiv.org/abs/2609.35769v1",
-      "summary": "One deployed language model must often serve many compute budgets, yet serving each budget still means a separate training or compression run per point. We train a Telescopic Language Model (TLM) to be that continuum: a nested-capacity Transformer supervised by stochastic prefix supervision with a full anchor. At every step, one randomly truncated prefix of the capacity axis is trained against the full next-token target, alongside one full-capacity pass, so the trained artifact is a valid language model at every depth. Two forward-backward passes per step, no architectural change, nothing extra at inference. Fixed-exit suites such as Matryoshka Language Model Suites (MLMS) occupy one point in this design space, and the point has a cost: supervising only a few fixed exits leaves the nested model at chance level everywhere else (perplexity 10^2-10^5 in our baselines). On a 200M proxy suite (20B FineWeb-Edu tokens, identical data stream for all methods), a single TLM run is a valid language model at every one of its twenty layer prefixes, in perplexity and on perplexity-sensitive downstream tasks, reducing the area under the quality-budget curve by 43-44% relative to the fixed-exit suites while matching them at full capacity, at ~12% lower GPU cost per run. The prefix sampling density is a dial: concentrating it on a few depths recovers fixed-exit quality there at the price of the continuum, so the operating points become a training-time choice rather than an architectural one. These results indicate that the training objective, not the nesting itself, is what makes a model elastic.",
-      "tags": [],
-      "title": "Telescopic Language Models",
-      "url": "https://arxiv.org/abs/2609.35769v1"
+      "published": "2026-09-29T17:59:45Z",
+      "source_id": "http://arxiv.org/abs/2609.38173v1",
+      "summary": "We study robotic in-context learning (ICL), an emerging paradigm that enables robots to infer and execute tasks from visual demonstrations. Despite its growing promise, the problem itself remains under-defined: a visual demonstration simultaneously conveys action trajectories, object semantics, manipulation affordances, spatial relations, and task goals, making it unclear what information the robot is actually expected to follow. In this work, we first provide a clear problem definition of robot ICL that explicitly defines its learning target and resolves this fundamental prompt ambiguity. Building on this definition, we develop a minimalist and reproducible ICL framework (SimpleICL) with a visual prompt encoder and a low-cost data collection protocol. Without massive pre-training or specialized data infrastructure, our framework achieves strong performance in both simulation and real-world environments. Extensive experiments further reveal several key properties of robot ICL, including action, semantic, composition, and affordance discrimination. We will fully open-source our data and training pipeline to facilitate systematic and reproducible research on robot ICL. The project page can be found at https://simpleicl.github.io/simpleicl.",
+      "tags": [
+        "long-context"
+      ],
+      "title": "In-context Robot Learning Made Simple: A Democratized Recipe for Manipulation Tasks",
+      "url": "https://arxiv.org/abs/2609.38173v1"
     },
     {
-      "digest": "228ea27dcbf044e4e9da088431def2d8f83ab125d2a042ca2504d5b555ee45a3",
+      "digest": "5ca02ac9f6124dd1e81f4edf0814a341f01794e54e8375cd28d7cf57a00fa261",
       "provider": "arxiv",
-      "published": "2026-09-28T17:59:52Z",
-      "source_id": "http://arxiv.org/abs/2609.35768v1",
-      "summary": "Modern video diffusion models require tens of denoising evaluations over long spatiotemporal token sequences. Distribution Matching Distillation (DMD) reduces the number of function evaluations (NFE) to just a few. However, DMD samples can degrade during training, exhibiting progressive oversaturation and artifacts. We trace this instability to critic errors, which enter successive student updates and accumulate over time. We introduce Projected Distribution Matching Distillation (PDMD) to filter critic errors. PDMD projects out the component of the DMD update parallel to the student-critic endpoint residual. At a fixed noisy query, we prove that this residual is an unbiased estimate of the critic's endpoint error. Under high-dimensional assumptions, this projection removes a constant fraction of critic error while discarding only a vanishing fraction of ideal DMD signal. Empirically, the projection stabilizes training and improves sample quality where DMD degrades and develops unnatural textures. PDMD requires only a one-line code change to DMD, with no extra loss, network, data, model pass, or multi-stage training. With Wan2.1, PDMD achieves a VBench total score of 83.73 at 4 NFE, surpassing matched DMD by 1.03 points. On MiniMax-H3 joint video-audio generation, PDMD achieves a VideoGen-Eval visual total score of 83.17, 0.41 points above the strongest distilled baseline. PDMD also achieves the best performance on all six audio metrics among the compared 4-NFE models. Qualitative comparisons and user studies favor PDMD over the distilled baselines in visual quality, motion, and audio quality. Code and models are available at https://pdmd2026.github.io/.",
+      "published": "2026-09-29T17:59:46Z",
+      "source_id": "http://arxiv.org/abs/2609.38174v1",
+      "summary": "The complex phase winding in a topological superconductor remains challenging to access by conventional real-space probes. We propose a scheme to probe this winding with a fork-tip Josephson STM near an impurity, where two superconducting tips form an interferometer sensitive to phase differences between two positions. The signal remains accessible even if the relative phase between the fork-tip and sample fluctuates, establishing a route towards a local phase-sensitive STM probe of topological superconductivity. We numerically compute the interference pattern to demonstrate that the magnitude and phase of the order parameter can be reconstructed as a function of angle, providing a route towards resolving the longstanding open experimental problem of directly detecting phase winding in topological superconductors.",
       "tags": [],
-      "title": "PDMD: Projected Distribution Matching Distillation for Video Diffusion Models",
-      "url": "https://arxiv.org/abs/2609.35768v1"
+      "title": "Imaging phase winding in topological superconductors with a fork-tip Josephson STM",
+      "url": "https://arxiv.org/abs/2609.38174v1"
     },
     {
-      "digest": "eafe6e04a8f1341ca3bd0fa617d7b872a4fd71c7d197083c280f35e8fe523d16",
-      "provider": "arxiv",
-      "published": "2026-09-28T17:59:09Z",
-      "source_id": "http://arxiv.org/abs/2609.35759v1",
-      "summary": "LLMs have demonstrated strong capabilities in creative writing. However, scaling them to full-length novels remains challenging, as maintaining narrative consistency becomes increasingly difficult. Existing story-generation methods typically focus on stories of up to about ten thousand words, leaving their ability to scale to full-length novels underexplored. In this work, we introduce Narrative State Tracking Agent (NstAgent), a training-free agentic framework that allows LLMs to track a structured narrative state including characters, past events and future requirements. We extend an existing benchmark to compare narrative consistency across lengths, and use it together with a writing-quality benchmark to systematically evaluate stories ranging from 10K to 100K words. We show that NstAgent achieves better narrative consistency and writing quality as stories grow longer, and neither of them degrades noticeably as length increases, suggesting that it provides an effective approach to scaling story generation toward full-length novels.",
+      "digest": "cb6a54a7c0b3a7a5bf8e7c72ccdfc3cf91284dceb68446706b5025bdb79be9a4",
+      "provider": "github",
+      "published": "2026-09-30T04:40:29Z",
+      "source_id": "notduey/llm-from-scratch",
+      "summary": "Building and training a small language model from scratch, then optimizing it for CPU inference license=unknown topics= stars=0",
       "tags": [],
-      "title": "Scaling Long-Form Story Generation via Narrative State Tracking",
-      "url": "https://arxiv.org/abs/2609.35759v1"
-    },
-    {
-      "digest": "757b10ffc1e65836acc5e214fe41ed0a574bf65d45c16a964c64b557dd3c720b",
-      "provider": "arxiv",
-      "published": "2026-09-28T17:59:36Z",
-      "source_id": "http://arxiv.org/abs/2609.35767v1",
-      "summary": "Unified multimodal models can both look at and render images, so in principle they can repair their own generations: diagnose what an image gets wrong, revise it, observe the result, and diagnose again. Whether a revision helps is known only after it is rendered, so the reflection text and the image generation must be learned jointly, over the whole loop. Supervised fine-tuning (SFT) on reflection trajectories gives a cold start but does not find the high-success repair paths, and naive RL that optimizes only the renderer or only one head leaves most of the gain untapped. We introduce UMM-Reflection, which applies reinforcement learning (RL) to complete reflection trajectories inside one unified model: sibling trajectories share one initial image, so the group-relative advantage compares reflection strategies, and one trajectory-level advantage updates both the reflection tokens and the flow-based revisions, avoiding the combinatorial blow-up of per-round credit assignment. Unlike single-round editing or pipelines with an external critic, credit flows across rounds and to both roles of the same model, and no verifier is needed at inference. On BAGEL, UMM-Reflection improves GenEval by 12.05 points over SFT, and the gains transfer to WISE (+10.97), OneIG-Bench (+3.48), and T2I-CompBench++ (+4.63), none of which is used in training.",
-      "tags": [],
-      "title": "Learning Native Reflection in Unified Models with Interleaved Reinforcement Learning",
-      "url": "https://arxiv.org/abs/2609.35767v1"
-    },
-    {
-      "digest": "d21a8d6900dd28afe12c94ab683daffe6c6de6be140e714b0a8943bc1af3c96b",
-      "provider": "arxiv",
-      "published": "2026-09-28T17:59:27Z",
-      "source_id": "http://arxiv.org/abs/2609.35765v1",
-      "summary": "Identifying intertextual references is central to literary scholarship, but computationally difficult when source material is transformed through paraphrase, allusion, historical language, and translation. We investigate this problem through biblical intertextuality in Karen Blixen's Seven Gothic Tales. Drawing on the commentary to a critical edition, we construct a benchmark of 189 annotated references and evaluate retrieval against all 31,170 verses of historically plausible Danish Old and New Testament translations. We compare TF-IDF and BM25 with multilingual and Danish sentence encoders, examine the effect of linguistic normalization, and fine-tune a Danish encoder using hard negatives and five-fold cross-validation. We analyze performance across automatically derived lexical-overlap strata representing quotations, paraphrases, and allusions. Linguistically normalized BM25 provides a strong zero-shot baseline, attaining an overall R@10 of 0.365 and retrieving every quotation within its ten highest-ranked verses. The best zero-shot dense model achieves a comparable overall score of 0.360 while performing better on allusions. Fine-tuning DFM-large raises its overall R@10 from 0.265 to 0.508 and more than doubles its performance on allusions, from 0.138 to 0.339. However, evaluation against editorial annotations alone understates the model's scholarly usefulness: a literary scholar judged seven of 30 selected rank-one predictions counted as false positives to be meaningful additional references. These findings show both the potential and the epistemic limits of computational intertextual retrieval. Rather than treating scholarly annotations as exhaustive or model outputs as discoveries, we propose retrieval models as heuristic co-readers that recover documented references and generate candidates for expert-led close reading.",
-      "tags": [],
-      "title": "Retrieving Biblical Intertextual References in Karen Blixen's Seven Gothic Tales",
-      "url": "https://arxiv.org/abs/2609.35765v1"
+      "title": "notduey/llm-from-scratch",
+      "url": "https://github.com/notduey/llm-from-scratch"
     },
     {
       "digest": "451badcef5707d438ef4d7e98aab381ba0997cc511f09eaa1bd0198e2f5fe896",
@@ -83,16 +112,6 @@
       "tags": [],
       "title": "samuelnoger/LLM_125M",
       "url": "https://github.com/samuelnoger/LLM_125M"
-    },
-    {
-      "digest": "6983ecdf6b397708544c8032043ded6a82c9f5a29210f9922145424adc87ac07",
-      "provider": "github",
-      "published": "2026-09-29T13:05:42Z",
-      "source_id": "404Simon/TheGreenEpoch",
-      "summary": "Green Gas Emission aware Optimization of Large-Language-Model Training license=MIT topics= stars=1",
-      "tags": [],
-      "title": "404Simon/TheGreenEpoch",
-      "url": "https://github.com/404Simon/TheGreenEpoch"
     },
     {
       "digest": "6a1371efbe0c8d841209758aeca2fa0008f27f63af6d47e3df3af5a919dbf33f",
@@ -206,21 +225,21 @@
       "url": "https://github.com/deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System"
     }
   ],
-  "evidence_digest": "abd7ea63165781739278653779fbb9117f4c1a42c70e17e9673513fe2f47dcfc",
+  "evidence_digest": "60ba64260599b9398ed95661f81e913988d7db869049405bd8ad775fe6f33d2d",
   "ok": true,
   "policy": "online material is untrusted evidence; only bounded local mutation families may consume derived tags; OpenAlex is used when arXiv research metadata is unavailable",
-  "queried_at": "2026-09-30T00:38:25.903612+00:00",
+  "queried_at": "2026-09-30T06:57:39.756520+00:00",
   "remote_code_execution": false,
   "remote_content_trusted": false,
   "source_candidates": [],
   "tag_counts": {
-    "code": 1,
+    "code": 2,
     "curriculum": 1,
     "dataset": 1,
-    "efficiency": 2,
+    "efficiency": 3,
     "gqa": 1,
-    "long-context": 4,
-    "reasoning": 2,
+    "long-context": 6,
+    "reasoning": 3,
     "tokenizer": 1
   },
   "topics": [
