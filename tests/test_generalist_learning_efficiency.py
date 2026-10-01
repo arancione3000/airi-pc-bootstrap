@@ -187,6 +187,10 @@ def test_wide_effective_batch_maps_to_one_8k_or_16k_optimizer_update():
     matrix = {trial.name: trial for trial in trial_matrix(16256)}
     assert matrix["wide64"].effective_batch_size == 64
     assert matrix["wide128"].effective_batch_size == 128
+    assert matrix["wide256_causal20_ar"].effective_batch_size == 256
+    assert causal_tokens_per_optimizer_update(
+        matrix["wide256_causal20_ar"], 128
+    ) == 32512
     assert matrix["wide64_embeddings"].parameter_policy == "embeddings"
     assert matrix["wide64_causal20_ar"].replay_token_fraction == pytest.approx(0.20)
 
