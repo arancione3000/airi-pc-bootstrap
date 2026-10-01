@@ -13,6 +13,7 @@ pytest.importorskip("torch", reason="Generalist learning-efficiency tests requir
 from generalist_lm.learning_efficiency_audit import dataset_audit, forensic_rollbacks
 from generalist_lm.learning_efficiency_benchmark import (
     Trial,
+    causal_tokens_per_optimizer_update,
     grad_relation,
     replay_selection,
     slice_hash,
@@ -171,6 +172,23 @@ def test_source_digest_detects_checkpoint_or_metadata_mutation(tmp_path):
 def test_slice_hash_changes_with_data_not_global_seed():
     assert slice_hash([[1, 2, 3]], rows()) == slice_hash([[1, 2, 3]], rows())
     assert slice_hash([[1, 2, 3]], rows()) != slice_hash([[1, 2, 4]], rows())
+
+
+def test_wide_effective_batch_maps_to_one_8k_or_16k_optimizer_update():
+    assert causal_tokens_per_optimizer_update(
+        Trial(effective_batch_size=64), 128
+    ) == 8128
+    assert causal_tokens_per_optimizer_update(
+        Trial(effective_batch_size=128), 128
+    ) == 16256
+    with pytest.raises(ValueError):
+        causal_tokens_per_optimizer_update(Trial(effective_batch_size=0), 128)
+
+    matrix = {trial.name: trial for trial in trial_matrix(16256)}
+    assert matrix["wide64"].effective_batch_size == 64
+    assert matrix["wide128"].effective_batch_size == 128
+    assert matrix["wide64_embeddings"].parameter_policy == "embeddings"
+    assert matrix["wide64_causal20_ar"].replay_token_fraction == pytest.approx(0.20)
 
 
 def test_ablation_matrix_keeps_baseline_and_explicit_optimizer_policy():
