@@ -35,7 +35,7 @@ jobs:
       - name: Restore the production bootstrap source cache
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/airi-wide-batch-shadow/cache
+          path: /tmp/airi-generalist-phase5-cache
           key: airi-generalist-phase5-data-v2-${{ runner.os }}-100000000-shadow-${{ github.run_id }}
           restore-keys: |
             airi-generalist-phase5-data-v2-${{ runner.os }}-100000000
@@ -44,7 +44,7 @@ jobs:
       - name: Restore the production packed-token cache
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/airi-wide-batch-shadow/cache/phase5-packed-blocks-v1
+          path: /tmp/airi-generalist-phase5-cache/phase5-packed-blocks-v1
           key: airi-generalist-phase5-packed-v1-${{ runner.os }}-100000000-shadow-${{ github.run_id }}
           restore-keys: |
             airi-generalist-phase5-packed-v1-${{ runner.os }}-100000000-
@@ -59,7 +59,7 @@ jobs:
           ROOT="$RUNNER_TEMP/airi-wide-batch-shadow"
           STATE_REPO="$ROOT/state-repo"
           STATE_DIR="$STATE_REPO/generalist-state"
-          CACHE_DIR="$ROOT/cache"
+          CACHE_DIR="/tmp/airi-generalist-phase5-cache"
           mkdir -p "$ROOT" "$CACHE_DIR"
 
           REMOTE_BEFORE="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/generalist-state | awk '{print $1}')"
@@ -165,6 +165,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AIRI-wide-batch-production-shadow-${{ github.run_id }}
-          path: ${{ runner.temp }}/airi-wide-batch-shadow
+          path: |
+            ${{ runner.temp }}/airi-wide-batch-shadow/production-shadow-summary.json
+            ${{ runner.temp }}/airi-wide-batch-shadow/result.json
+            ${{ runner.temp }}/airi-wide-batch-shadow/state-repo/generalist-state/bootstrap-data/segment-guard-last.json
           if-no-files-found: warn
           retention-days: 14
