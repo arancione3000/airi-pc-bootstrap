@@ -17,6 +17,7 @@ on:
       - 'tests/test_generalist_architecture.py'
       - 'tests/test_generalist_single_lineage.py'
       - 'tests/test_generalist_efficiency_engine.py'
+      - 'tests/test_generalist_learning_efficiency.py'
       - '.github/workflows/generalist-architecture-search.yml'
       - '.github/workflows/generalist-incumbent-recovery.yml'
       - '.github/workflows/generalist-state-writer-janitor.yml'
@@ -57,6 +58,7 @@ on:
       - 'tests/test_generalist_architecture.py'
       - 'tests/test_generalist_single_lineage.py'
       - 'tests/test_generalist_efficiency_engine.py'
+      - 'tests/test_generalist_learning_efficiency.py'
       - '.github/workflows/generalist-architecture-search.yml'
       - '.github/workflows/generalist-incumbent-recovery.yml'
       - '.github/workflows/generalist-state-writer-janitor.yml'
@@ -89,7 +91,7 @@ permissions:
 jobs:
   generalist-lm:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -145,13 +147,134 @@ jobs:
 
       - name: Compile generalist LM
         run: |
-          .venv/bin/python -m compileall -q computer/generalist_lm computer/control_plane/generalist_provider.py computer/control_plane/model_router.py computer/control_plane/local_agent.py computer/control_plane/model_gateway.py computer/control_plane/generalist_agent_bridge.py computer/code_agent.py tests/test_generalist_phase5.py tests/test_generalist_architecture.py tests/test_generalist_single_lineage.py tests/test_generalist_efficiency_engine.py tests/test_generalist_lm.py tests/test_generalist_scalable_learning.py tests/test_generalist_grounded_learning.py tests/test_generalist_bpe.py tests/test_generalist_bpe_evolution.py tests/test_generalist_retention.py tests/test_generalist_provider.py tests/test_generalist_foundation.py tests/test_native_foundation.py tests/test_native_training.py tests/test_native_acquisition.py tests/test_native_evolution.py tests/test_model_gateway.py tests/test_local_agent.py tests/test_openrouter_provider.py
+          .venv/bin/python -m compileall -q computer/generalist_lm computer/control_plane/generalist_provider.py computer/control_plane/model_router.py computer/control_plane/local_agent.py computer/control_plane/model_gateway.py computer/control_plane/generalist_agent_bridge.py computer/code_agent.py tests/test_generalist_phase5.py tests/test_generalist_architecture.py tests/test_generalist_single_lineage.py tests/test_generalist_efficiency_engine.py tests/test_generalist_learning_efficiency.py tests/test_generalist_lm.py tests/test_generalist_scalable_learning.py tests/test_generalist_grounded_learning.py tests/test_generalist_bpe.py tests/test_generalist_bpe_evolution.py tests/test_generalist_retention.py tests/test_generalist_provider.py tests/test_generalist_foundation.py tests/test_native_foundation.py tests/test_native_training.py tests/test_native_acquisition.py tests/test_native_evolution.py tests/test_model_gateway.py tests/test_local_agent.py tests/test_openrouter_provider.py
 
       - name: Run generalist LM regressions and learning smoke
         env:
           PYTHONPATH: ${{ github.workspace }}/computer
         run: |
-          .venv/bin/python -m pytest -q tests/test_generalist_phase5.py tests/test_generalist_architecture.py tests/test_generalist_single_lineage.py tests/test_generalist_efficiency_engine.py tests/test_generalist_lm.py tests/test_generalist_scalable_learning.py tests/test_generalist_grounded_learning.py tests/test_generalist_bpe.py tests/test_generalist_bpe_evolution.py tests/test_generalist_retention.py tests/test_generalist_provider.py tests/test_generalist_foundation.py tests/test_native_foundation.py tests/test_native_training.py tests/test_native_acquisition.py tests/test_native_evolution.py tests/test_model_gateway.py tests/test_local_agent.py tests/test_openrouter_provider.py
+          .venv/bin/python -m pytest -q tests/test_generalist_phase5.py tests/test_generalist_architecture.py tests/test_generalist_single_lineage.py tests/test_generalist_efficiency_engine.py tests/test_generalist_learning_efficiency.py tests/test_generalist_lm.py tests/test_generalist_scalable_learning.py tests/test_generalist_grounded_learning.py tests/test_generalist_bpe.py tests/test_generalist_bpe_evolution.py tests/test_generalist_retention.py tests/test_generalist_provider.py tests/test_generalist_foundation.py tests/test_native_foundation.py tests/test_native_training.py tests/test_native_acquisition.py tests/test_native_evolution.py tests/test_model_gateway.py tests/test_local_agent.py tests/test_openrouter_provider.py
+
+      - name: Offline wide-batch AIRI stability experiment
+        if: github.event_name == 'pull_request' && github.head_ref == 'feature/generalist-learning-efficiency-v3'
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          STATE_REPO="$RUNNER_TEMP/airi-generalist-state"
+          RESULTS="$RUNNER_TEMP/airi-wide-batch-results"
+          rm -rf "$STATE_REPO" "$RESULTS"
+          git clone --quiet --depth 1 --branch generalist-state --single-branch \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$STATE_REPO"
+          STATE_DIR="$STATE_REPO/generalist-state"
+          mkdir -p "$RESULTS"
+
+          .venv/bin/python -m generalist_lm.learning_efficiency_benchmark \
+            --state-dir "$STATE_DIR" \
+            --output "$RESULTS/wide64.jsonl" \
+            --segments 8128 \
+            --seeds 5000000 \
+            --threads 4 \
+            --trials wide64,wide64_embeddings,wide64_causal20_ar
+
+          .venv/bin/python -m generalist_lm.learning_efficiency_benchmark \
+            --state-dir "$STATE_DIR" \
+            --output "$RESULTS/wide128.jsonl" \
+            --segments 16256 \
+            --seeds 5000000 \
+            --threads 4 \
+            --trials wide128,wide128_embeddings,wide128_causal20_ar
+
+          STATE_DIR="$STATE_DIR" RESULTS="$RESULTS" .venv/bin/python - <<'PY'
+          import json
+          import os
+          from dataclasses import replace
+          from pathlib import Path
+
+          from generalist_lm.learning_efficiency_benchmark import (
+              Trial,
+              run_sequence,
+              summarize_trials,
+              trial_matrix,
+          )
+
+          root = Path(os.environ["STATE_DIR"])
+          results = Path(os.environ["RESULTS"])
+
+          rows = []
+          for name in ("wide64.jsonl", "wide128.jsonl"):
+              rows.extend(
+                  json.loads(line)
+                  for line in (results / name).read_text(encoding="utf-8").splitlines()
+                  if line.strip()
+              )
+          summary = summarize_trials(rows)
+          (results / "screen-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print("WIDE_BATCH_SCREEN_SUMMARY")
+          print(json.dumps(summary, indent=2, sort_keys=True))
+
+          accepted = [row for row in rows if row["accepted"]]
+          by_family = {"wide64": [], "wide128": []}
+          for row in accepted:
+              family = "wide128" if row["trial"]["effective_batch_size"] == 128 else "wide64"
+              by_family[family].append(row)
+
+          for family, candidates in by_family.items():
+              if not candidates:
+                  print(f"{family}: no accepted screen candidate; sustained sequence skipped")
+                  continue
+              best = max(
+                  candidates,
+                  key=lambda row: (
+                      row["headroom_after"],
+                      row["language_quality_after"],
+                      -row["training_evaluation_seconds"],
+                  ),
+              )
+              trial = Trial(**best["trial"])
+              sizes = (
+                  [16256, 16256, 16256]
+                  if family == "wide128"
+                  else [8128, 8128, 16256, 16256]
+              )
+              sequence = run_sequence(
+                  root,
+                  trial,
+                  sizes,
+                  seed=5000000,
+              )
+              path = results / f"{family}-best-sequence.json"
+              path.write_text(
+                  json.dumps(sequence, indent=2, sort_keys=True) + "\n",
+                  encoding="utf-8",
+              )
+              compact = [
+                  {
+                      "size": segment["trial"]["segment_tokens"],
+                      "accepted": segment["accepted"],
+                      "repetition": segment["after"]["repetition_rate"],
+                      "headroom": segment["headroom_after"],
+                      "accepted_h": segment["accepted_equivalent_tokens_per_hour"],
+                  }
+                  for segment in sequence["segments"]
+              ]
+              print(f"{family.upper()}_SUSTAINED_SEQUENCE")
+              print(json.dumps(compact, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload wide-batch experiment evidence
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'feature/generalist-learning-efficiency-v3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AIRI-wide-batch-learning-efficiency-${{ github.run_id }}
+          path: ${{ runner.temp }}/airi-wide-batch-results
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Qualified local gateway end-to-end smoke
         env:
