@@ -32,24 +32,6 @@ jobs:
           python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --disable-pip-version-check 'datasets>=3.6,<5'
 
-      - name: Restore the production bootstrap source cache
-        uses: actions/cache@v4
-        with:
-          path: /tmp/airi-generalist-phase5-cache
-          key: airi-generalist-phase5-data-v2-${{ runner.os }}-100000000-shadow-${{ github.run_id }}
-          restore-keys: |
-            airi-generalist-phase5-data-v2-${{ runner.os }}-100000000
-            airi-generalist-phase5-data-v2-${{ runner.os }}-
-
-      - name: Restore the production packed-token cache
-        uses: actions/cache@v4
-        with:
-          path: /tmp/airi-generalist-phase5-cache/phase5-packed-blocks-v1
-          key: airi-generalist-phase5-packed-v1-${{ runner.os }}-100000000-shadow-${{ github.run_id }}
-          restore-keys: |
-            airi-generalist-phase5-packed-v1-${{ runner.os }}-100000000-
-            airi-generalist-phase5-packed-v1-${{ runner.os }}-
-
       - name: Run one real production segment against an isolated live-state clone
         env:
           PYTHONPATH: ${{ github.workspace }}/computer
@@ -73,16 +55,96 @@ jobs:
           BEFORE_TOKENS="$(jq -r '.tokens_processed // 0' "$STATE_DIR/bootstrap-data/progress.json")"
           BEFORE_MODEL_SHA="$(sha256sum "$STATE_DIR/bootstrap-data/candidate/model.pt" | awk '{print $1}')"
 
-          python -m generalist_lm.bootstrap_training \
+          # The live manifest intentionally pins rolling Tatoeba bytes. A PR
+          # runner cannot depend on an ephemeral historical Actions cache, so
+          # recover the immutable benchmark corpus (pinned English Tatoeba +
+          # immutable OASST1) and inject only the data loader in this shadow.
+          # The actual run_segment training/optimizer/gate/rollback path below
+          # is production code and the persisted live replay remains unchanged.
+          python \
+            reports/generalist-learning-efficiency-v3/resume-2026-10-01/recover_pinned_corpus.py \
             --state-dir "$STATE_DIR" \
-            --repo-root "$GITHUB_WORKSPACE" \
-            --cache-dir "$CACHE_DIR" \
-            --target-tokens "$TARGET" \
-            --segment-tokens 1000000 \
-            --batch-size 32 \
-            --learning-rate 0.0003 \
-            --wide-batch-recovery \
-            | tee "$ROOT/result.json"
+            --output-dir "$ROOT/pinned-corpus"
+
+          STATE_DIR="$STATE_DIR" CACHE_DIR="$CACHE_DIR" TARGET="$TARGET" ROOT="$ROOT" \
+          python - <<'PY' | tee "$ROOT/result.json"
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          import generalist_lm.bootstrap_training as bt
+          from generalist_lm.bootstrap_data import (
+              BootstrapDataBundle,
+              load_bootstrap_replay,
+          )
+          from generalist_lm.learning_efficiency_benchmark import (
+              read_split_documents,
+          )
+          from generalist_lm.runtime import GeneralistRuntime
+
+          state = Path(os.environ["STATE_DIR"])
+          root = Path(os.environ["ROOT"])
+          train = read_split_documents(
+              root / "pinned-corpus" / "pinned-train.jsonl", "train"
+          )
+          validation = read_split_documents(
+              root / "pinned-corpus" / "pinned-validation.jsonl", "validation"
+          )
+          runtime = GeneralistRuntime.from_checkpoint(
+              state / "bootstrap-data" / "candidate", device="cpu"
+          )
+          corpus_tokens = sum(
+              len(runtime.tokenizer.encode(row.text)) + 1
+              for row in train + validation
+          )
+          if corpus_tokens <= 100_000:
+              raise SystemExit("recovered pinned corpus is unexpectedly small")
+
+          replay = load_bootstrap_replay(state / "bootstrap-data")
+          live_manifest = json.loads(
+              (state / "bootstrap-data" / "manifest.json").read_text()
+          )
+          shadow_manifest = dict(live_manifest)
+          shadow_manifest["actual_selected_tokens"] = int(corpus_tokens)
+          identity = hashlib.sha256(
+              json.dumps(
+                  {
+                      "train": [row.sha256 for row in train],
+                      "validation": [row.sha256 for row in validation],
+                  },
+                  sort_keys=True,
+              ).encode()
+          ).hexdigest()
+          shadow_manifest["manifest_content_sha256"] = identity
+          shadow_manifest["shadow_scope"] = (
+              "immutable pinned English Tatoeba + OASST1; data-loader override "
+              "only, production training path unchanged"
+          )
+          bundle = BootstrapDataBundle(
+              train_documents=train,
+              validation_documents=validation,
+              sft_train=list(replay.sft_train),
+              sft_validation=[],
+              manifest=shadow_manifest,
+          )
+
+          bt.build_bootstrap_bundle = lambda *args, **kwargs: bundle
+          bt._bootstrap_corpus_target = lambda target: int(corpus_tokens)
+          bt.write_bootstrap_replay = lambda *args, **kwargs: dict(replay.manifest)
+
+          result = bt.run_segment(
+              state,
+              os.environ["GITHUB_WORKSPACE"],
+              os.environ["CACHE_DIR"],
+              target_tokens=int(os.environ["TARGET"]),
+              segment_tokens=1_000_000,
+              batch_size=32,
+              base_learning_rate=3e-4,
+              enable_wide_batch_recovery=True,
+          )
+          print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+          PY
 
           AFTER_TOKENS="$(jq -r '.tokens_processed // 0' "$STATE_DIR/bootstrap-data/progress.json")"
           SEGMENT_PROCESSED="$(jq -r '.segment_tokens_processed // 0' "$ROOT/result.json")"
@@ -114,7 +176,7 @@ jobs:
             --arg before_model_sha "$BEFORE_MODEL_SHA" \
             '{
               schema: 1,
-              scope: "production run_segment on isolated clone; no live writes",
+              scope: "production run_segment/optimizer/gate/rollback on isolated clone with immutable pinned benchmark corpus; no live writes",
               snapshot_sha: $snapshot_sha,
               before_tokens: $before_tokens,
               after_tokens: $after_tokens,
