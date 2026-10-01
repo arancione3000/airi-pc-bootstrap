@@ -80,12 +80,47 @@ class Trial:
     replay_format: str = "sft"
     autoregressive_prefixes: int = 2
     anchor_decay: float = 0.0
+    effective_batch_size: int = 32
 
 
 def trial_matrix(segment_tokens=4064):
     base = asdict(Trial(segment_tokens=segment_tokens))
     variants = [
         ("baseline", {}),
+        ("wide64", {"effective_batch_size": 64}),
+        ("wide128", {"effective_batch_size": 128}),
+        (
+            "wide64_embeddings",
+            {"effective_batch_size": 64, "parameter_policy": "embeddings"},
+        ),
+        (
+            "wide128_embeddings",
+            {"effective_batch_size": 128, "parameter_policy": "embeddings"},
+        ),
+        (
+            "wide64_causal20_ar",
+            {
+                "effective_batch_size": 64,
+                "replay_format": "causal",
+                "replay_examples": 8,
+                "replay_token_fraction": 0.20,
+                "replay_weight": 0.25,
+                "autoregressive_ul_weight": 0.1,
+                "autoregressive_prefixes": 8,
+            },
+        ),
+        (
+            "wide128_causal20_ar",
+            {
+                "effective_batch_size": 128,
+                "replay_format": "causal",
+                "replay_examples": 8,
+                "replay_token_fraction": 0.20,
+                "replay_weight": 0.25,
+                "autoregressive_ul_weight": 0.1,
+                "autoregressive_prefixes": 8,
+            },
+        ),
         ("eos4", {"eos_weight": 4.0}),
         ("eos16", {"eos_weight": 16.0}),
         ("eos64", {"eos_weight": 64.0}),
@@ -1087,6 +1122,21 @@ def evaluate_corpus_subset(runtime, documents, max_blocks=32):
     }
 
 
+def causal_tokens_per_optimizer_update(trial, context_length):
+    """Nominal new causal labels averaged into one optimizer update.
+
+    The benchmark already microbatches the effective batch in pairs, so raising
+    this batch size increases data diversity per update without increasing the
+    peak activation batch. It is an offline ablation only.
+    """
+    batch = int(trial.effective_batch_size)
+    if batch < 1:
+        raise ValueError("effective batch size must be positive")
+    if context_length < 2:
+        raise ValueError("context length must be at least 2")
+    return batch * (int(context_length) - 1)
+
+
 def run_trial(
     root,
     trial,
@@ -1261,16 +1311,19 @@ def run_trial(
     prefix = None
     train_started = time.perf_counter()
     runtime.model.train()
-    expected_steps = math.ceil(
-        trial.segment_tokens / (32 * (runtime.config.context_length - 1))
+    nominal_tokens_per_update = causal_tokens_per_optimizer_update(
+        trial, runtime.config.context_length
     )
+    expected_steps = math.ceil(trial.segment_tokens / nominal_tokens_per_update)
     while attempted < trial.segment_tokens:
         step = len(steps)
         rng = random.Random(seed + step)
-        indices = [rng.randrange(len(blocks)) for _ in range(32)]
+        indices = [
+            rng.randrange(len(blocks)) for _ in range(trial.effective_batch_size)
+        ]
         selected_blocks.extend(blocks[i] for i in indices)
         prepared = []
-        for offset in range(0, 32, 2):
+        for offset in range(0, trial.effective_batch_size, 2):
             ids, labels = _batch(
                 blocks, indices[offset : offset + 2], device=runtime.device
             )
@@ -1475,6 +1528,10 @@ def run_trial(
         replay_tokens += replay_count
         event = {
             "step": step,
+            "effective_batch_size": int(trial.effective_batch_size),
+            "nominal_causal_tokens_per_optimizer_update": int(
+                nominal_tokens_per_update
+            ),
             "effective_lr": lr,
             "effective_group_lrs": {
                 g["group_name"]: g["lr"] for g in optimizer.param_groups
