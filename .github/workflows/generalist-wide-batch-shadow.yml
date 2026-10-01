@@ -1,0 +1,235 @@
+name: AIRI wide-batch production shadow
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/generalist-wide-batch-shadow.yml'
+      - 'computer/generalist_lm/bootstrap_training.py'
+      - 'computer/generalist_lm/training.py'
+      - 'computer/generalist_lm/bootstrap_data.py'
+      - 'computer/generalist_lm/phase5_diagnostics.py'
+      - 'tests/test_generalist_phase5.py'
+      - 'tests/test_generalist_learning_efficiency.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install exact Phase-5 runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check 'datasets>=3.6,<5'
+
+      - name: Run one real production segment against an isolated live-state clone
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/airi-wide-batch-shadow"
+          STATE_REPO="$ROOT/state-repo"
+          STATE_DIR="$STATE_REPO/generalist-state"
+          CACHE_DIR="/tmp/airi-generalist-phase5-cache"
+          mkdir -p "$ROOT" "$CACHE_DIR"
+
+          REMOTE_BEFORE="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/generalist-state | awk '{print $1}')"
+          git clone --quiet --depth 1 --branch generalist-state --single-branch \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$STATE_REPO"
+          SNAPSHOT_SHA="$(git -C "$STATE_REPO" rev-parse HEAD)"
+          test "$REMOTE_BEFORE" = "$SNAPSHOT_SHA"
+
+          TARGET="$(jq -r '.target_tokens // 100000000' "$STATE_DIR/bootstrap-data/progress.json")"
+          BEFORE_TOKENS="$(jq -r '.tokens_processed // 0' "$STATE_DIR/bootstrap-data/progress.json")"
+          BEFORE_MODEL_SHA="$(sha256sum "$STATE_DIR/bootstrap-data/candidate/model.pt" | awk '{print $1}')"
+
+          # The live manifest intentionally pins rolling Tatoeba bytes. A PR
+          # runner cannot depend on an ephemeral historical Actions cache, so
+          # recover the immutable benchmark corpus (pinned English Tatoeba +
+          # immutable OASST1) and inject only the data loader in this shadow.
+          # The actual run_segment training/optimizer/gate/rollback path below
+          # is production code and the persisted live replay remains unchanged.
+          python \
+            reports/generalist-learning-efficiency-v3/resume-2026-10-01/recover_pinned_corpus.py \
+            --state-dir "$STATE_DIR" \
+            --output-dir "$ROOT/pinned-corpus"
+
+          STATE_DIR="$STATE_DIR" CACHE_DIR="$CACHE_DIR" TARGET="$TARGET" ROOT="$ROOT" \
+          python - <<'PY' | tee "$ROOT/result.json"
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          import generalist_lm.bootstrap_training as bt
+          from generalist_lm.bootstrap_data import (
+              BootstrapDataBundle,
+              load_bootstrap_replay,
+          )
+          from generalist_lm.learning_efficiency_benchmark import (
+              read_split_documents,
+          )
+          from generalist_lm.runtime import GeneralistRuntime
+
+          state = Path(os.environ["STATE_DIR"])
+          root = Path(os.environ["ROOT"])
+          train = read_split_documents(
+              root / "pinned-corpus" / "pinned-train.jsonl", "train"
+          )
+          validation = read_split_documents(
+              root / "pinned-corpus" / "pinned-validation.jsonl", "validation"
+          )
+          runtime = GeneralistRuntime.from_checkpoint(
+              state / "bootstrap-data" / "candidate", device="cpu"
+          )
+          corpus_tokens = sum(
+              len(runtime.tokenizer.encode(row.text)) + 1
+              for row in train + validation
+          )
+          if corpus_tokens <= 100_000:
+              raise SystemExit("recovered pinned corpus is unexpectedly small")
+
+          replay = load_bootstrap_replay(state / "bootstrap-data")
+          live_manifest = json.loads(
+              (state / "bootstrap-data" / "manifest.json").read_text()
+          )
+          shadow_manifest = dict(live_manifest)
+          shadow_manifest["actual_selected_tokens"] = int(corpus_tokens)
+          identity = hashlib.sha256(
+              json.dumps(
+                  {
+                      "train": [row.sha256 for row in train],
+                      "validation": [row.sha256 for row in validation],
+                  },
+                  sort_keys=True,
+              ).encode()
+          ).hexdigest()
+          shadow_manifest["manifest_content_sha256"] = identity
+          shadow_manifest["shadow_scope"] = (
+              "immutable pinned English Tatoeba + OASST1; data-loader override "
+              "only, production training path unchanged"
+          )
+          bundle = BootstrapDataBundle(
+              train_documents=train,
+              validation_documents=validation,
+              sft_train=list(replay.sft_train),
+              sft_validation=[],
+              manifest=shadow_manifest,
+          )
+
+          bt.build_bootstrap_bundle = lambda *args, **kwargs: bundle
+          bt._bootstrap_corpus_target = lambda target: int(corpus_tokens)
+          bt.write_bootstrap_replay = lambda *args, **kwargs: dict(replay.manifest)
+
+          result = bt.run_segment(
+              state,
+              os.environ["GITHUB_WORKSPACE"],
+              os.environ["CACHE_DIR"],
+              target_tokens=int(os.environ["TARGET"]),
+              segment_tokens=1_000_000,
+              batch_size=32,
+              base_learning_rate=3e-4,
+              enable_wide_batch_recovery=True,
+          )
+          print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+          PY
+
+          AFTER_TOKENS="$(jq -r '.tokens_processed // 0' "$STATE_DIR/bootstrap-data/progress.json")"
+          SEGMENT_PROCESSED="$(jq -r '.segment_tokens_processed // 0' "$ROOT/result.json")"
+          ACCEPTED="$(jq -r '.accepted // .segment_rejected | if . == true then false else true end' "$STATE_DIR/bootstrap-data/segment-guard-last.json" 2>/dev/null || true)"
+          GUARD_ACCEPTED="$(jq -r '.accepted // false' "$STATE_DIR/bootstrap-data/segment-guard-last.json")"
+          WIDE="$(jq -r '.wide_batch_recovery // false' "$STATE_DIR/bootstrap-data/segment-guard-last.json")"
+          BATCH="$(jq -r '.effective_batch_size // 0' "$STATE_DIR/bootstrap-data/segment-guard-last.json")"
+          REPLAY_FORMAT="$(jq -r '.replay_format // empty' "$STATE_DIR/bootstrap-data/segment-guard-last.json")"
+          REPLAY_FRACTION="$(jq -r '.actual_replay_token_fraction // 0' "$STATE_DIR/bootstrap-data/segment-guard-last.json")"
+          REP_BEFORE="$(jq -r '.validation_before.repetition_rate' "$STATE_DIR/bootstrap-data/segment-guard-last.json")"
+          REP_AFTER="$(jq -r '.validation_after.repetition_rate' "$STATE_DIR/bootstrap-data/segment-guard-last.json")"
+          NLL_BEFORE="$(jq -r '.validation_before.language_nll' "$STATE_DIR/bootstrap-data/segment-guard-last.json")"
+          NLL_AFTER="$(jq -r '.validation_after.language_nll' "$STATE_DIR/bootstrap-data/segment-guard-last.json")"
+
+          jq -n \
+            --arg snapshot_sha "$SNAPSHOT_SHA" \
+            --argjson before_tokens "$BEFORE_TOKENS" \
+            --argjson after_tokens "$AFTER_TOKENS" \
+            --argjson segment_processed "$SEGMENT_PROCESSED" \
+            --argjson guard_accepted "$GUARD_ACCEPTED" \
+            --argjson wide_batch_recovery "$WIDE" \
+            --argjson effective_batch_size "$BATCH" \
+            --arg replay_format "$REPLAY_FORMAT" \
+            --argjson actual_replay_fraction "$REPLAY_FRACTION" \
+            --argjson repetition_before "$REP_BEFORE" \
+            --argjson repetition_after "$REP_AFTER" \
+            --argjson nll_before "$NLL_BEFORE" \
+            --argjson nll_after "$NLL_AFTER" \
+            --arg before_model_sha "$BEFORE_MODEL_SHA" \
+            '{
+              schema: 1,
+              scope: "production run_segment/optimizer/gate/rollback on isolated clone with immutable pinned benchmark corpus; no live writes",
+              snapshot_sha: $snapshot_sha,
+              before_tokens: $before_tokens,
+              after_tokens: $after_tokens,
+              segment_processed: $segment_processed,
+              accepted: $guard_accepted,
+              wide_batch_recovery: $wide_batch_recovery,
+              effective_batch_size: $effective_batch_size,
+              replay_format: $replay_format,
+              actual_replay_fraction: $actual_replay_fraction,
+              repetition_before: $repetition_before,
+              repetition_after: $repetition_after,
+              nll_before: $nll_before,
+              nll_after: $nll_after,
+              before_model_sha: $before_model_sha
+            }' | tee "$ROOT/production-shadow-summary.json"
+
+          test "$WIDE" = "true"
+          test "$BATCH" = "128"
+          test "$REPLAY_FORMAT" = "causal"
+
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "airi-wide-batch-shadow"
+          row = json.loads((root / "production-shadow-summary.json").read_text())
+          frac = float(row["actual_replay_fraction"])
+          if not 0.18 <= frac <= 0.22:
+              raise SystemExit(f"physical replay fraction outside validated band: {frac}")
+          if row["accepted"]:
+              if row["segment_processed"] < 16000:
+                  raise SystemExit(f"accepted wide-batch segment too small: {row['segment_processed']}")
+              if row["repetition_after"] > row["repetition_before"] + 0.08:
+                  raise SystemExit("accepted candidate violates unchanged repetition bound")
+          else:
+              if row["after_tokens"] != row["before_tokens"]:
+                  raise SystemExit("rejected shadow segment incorrectly persisted causal tokens")
+          PY
+
+          REMOTE_AFTER="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/generalist-state | awk '{print $1}')"
+          echo "generalist-state remote before=$REMOTE_BEFORE after=$REMOTE_AFTER"
+          # A concurrent legitimate live trainer may advance the branch. This
+          # shadow job has read-only permissions and never pushes; record but
+          # do not require equality between before/after remote refs.
+          test -n "$REMOTE_AFTER"
+
+      - name: Upload production-shadow evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AIRI-wide-batch-production-shadow-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/airi-wide-batch-shadow/production-shadow-summary.json
+            ${{ runner.temp }}/airi-wide-batch-shadow/result.json
+            ${{ runner.temp }}/airi-wide-batch-shadow/state-repo/generalist-state/bootstrap-data/segment-guard-last.json
+          if-no-files-found: warn
+          retention-days: 14

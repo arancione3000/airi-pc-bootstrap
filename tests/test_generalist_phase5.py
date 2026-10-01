@@ -4,6 +4,7 @@ import gzip
 import io
 import json
 from pathlib import Path
+import random
 
 import pytest
 import generalist_lm.bootstrap_training as bootstrap_training
@@ -18,6 +19,7 @@ from generalist_lm.bootstrap_data import (
     _quality_web_text,
     _read_streaming_cache,
     _web_chunks,
+    _exclude_validation_response_overlap,
     load_bootstrap_replay,
     write_bootstrap_replay,
 )
@@ -44,6 +46,7 @@ from generalist_lm.bootstrap_training import (
     _rehabilitation_replay_limit,
     _rehabilitation_strategy_rejection_count,
     _residual_language_rehabilitation_attempts,
+    _phase5_causal_replay_selection,
     _phase5_memory_safe_batch_plan,
     _phase5_language_fragile,
     _phase5_parameter_segment_cap,
@@ -2642,3 +2645,162 @@ def test_sustained_stall_uses_measured_short_update_and_grows_only_after_success
         assert accepted["effective_budget_tokens"] == budget
     retry = _phase5_recovery_plan(1_000_000, consecutive_rejections=4, success_streak=0, **common)
     assert retry["effective_budget_tokens"] == 4_000
+
+
+def test_cross_format_response_filter_preserves_validation_and_is_idempotent():
+    import hashlib
+    from generalist_lm.pretraining import CorpusDocument
+
+    def doc(text):
+        return CorpusDocument(
+            source="reviewed-human", text=text,
+            sha256=hashlib.sha256(text.encode()).hexdigest(), bytes=len(text.encode()),
+        )
+
+    def dialogue(text, prompt="A training-only request."):
+        return SFTExample([
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": text},
+        ])
+
+    corpus_validation = [doc("A reserved corpus answer.")]
+    sft_validation = [dialogue("A reserved dialogue answer.")]
+    corpus_before = list(corpus_validation)
+    dialogue_before = list(sft_validation)
+    corpus_train = [
+        doc("A RESERVED CORPUS ANSWER."),
+        doc("A  reserved dialogue answer."),
+        doc("A useful training sentence."),
+    ]
+    sft_train = [
+        dialogue("A reserved corpus answer."),
+        dialogue("A RESERVED DIALOGUE ANSWER."),
+        dialogue("Another response.", prompt=corpus_validation[0].text),
+        dialogue("A different training response."),
+    ]
+    documents, rows, report = _exclude_validation_response_overlap(
+        corpus_train, corpus_validation, sft_train, sft_validation
+    )
+    assert documents == [corpus_train[-1]]
+    assert rows == [sft_train[-1]]
+    assert corpus_validation == corpus_before
+    assert sft_validation == dialogue_before
+    assert report["validation_rows_changed"] == 0
+    assert report["corpus_training_documents_excluded"] == 2
+    assert report["sft_training_conversations_excluded"] == 3
+    docs_again, rows_again, second = _exclude_validation_response_overlap(
+        documents, corpus_validation, rows, sft_validation
+    )
+    assert docs_again == documents and rows_again == rows
+    assert second["corpus_training_documents_excluded"] == 0
+    assert second["sft_training_conversations_excluded"] == 0
+
+
+def test_response_filter_never_reassigns_excluded_training_rows_to_validation():
+    row = SFTExample([
+        {"role": "user", "content": "A harmless prompt."},
+        {"role": "assistant", "content": "An answer reserved for validation."},
+    ])
+    heldout = [row]
+    documents, training, report = _exclude_validation_response_overlap([], [], [row], heldout)
+    assert documents == [] and training == []
+    assert heldout == [row]
+    assert report["validation_rows_changed"] == 0
+
+
+def test_phase5_wide_batch_recovery_is_opt_in_and_preserves_legacy_default():
+    kwargs = dict(
+        requested_tokens=1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=1,
+        recovery_hold=False,
+        last_segment_accepted=False,
+        success_streak=0,
+        language_fragile=True,
+    )
+    legacy = _phase5_recovery_plan(**kwargs)
+    assert legacy["wide_batch_recovery"] is False
+    assert legacy["effective_budget_tokens"] == 4_000
+    assert legacy["wide_batch_effective_batch_size"] is None
+
+    candidate = _phase5_recovery_plan(
+        **kwargs,
+        wide_batch_recovery_enabled=True,
+    )
+    assert candidate["trust_region_recovery"] is True
+    assert candidate["wide_batch_recovery"] is True
+    assert candidate["effective_budget_tokens"] == 16_256
+    assert candidate["wide_batch_effective_batch_size"] == 128
+    assert candidate["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
+    assert candidate["reset_optimizer"] is True
+    assert candidate["forced_stage"] == "B_short_sentence_completion"
+
+
+def test_phase5_wide_batch_protected_plan_matches_validated_candidate():
+    before = {
+        "repetition_rate": 0.23615752577876778,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    anchor = {
+        "repetition_rate": 0.15772057959235905,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    candidate = _protected_continual_plan(
+        before,
+        anchor,
+        consecutive_rejections=1,
+        success_streak=0,
+        trust_region_recovery=True,
+        wide_batch_recovery=True,
+    )
+    assert candidate["replay_format"] == "causal"
+    assert candidate["replay_fraction"] == pytest.approx(0.20)
+    assert candidate["replay_loss_weight"] == pytest.approx(0.25)
+    assert candidate["reference_kl_weight"] == pytest.approx(0.50)
+    assert candidate["anti_repetition_weight"] == pytest.approx(0.05)
+    assert candidate["autoregressive_unlikelihood_weight"] == pytest.approx(0.10)
+    assert candidate["autoregressive_prefixes"] == 8
+    assert candidate["causal_eos_weight_override"] == pytest.approx(1.60)
+    assert candidate["elementary_replay_only"] is False
+
+    legacy = _protected_continual_plan(
+        before,
+        anchor,
+        consecutive_rejections=1,
+        success_streak=0,
+        trust_region_recovery=True,
+        wide_batch_recovery=False,
+    )
+    assert legacy["replay_format"] == "sft"
+    assert legacy["replay_fraction"] == pytest.approx(0.80)
+    assert legacy["replay_loss_weight"] == pytest.approx(4.0)
+    assert legacy["autoregressive_unlikelihood_weight"] == 0.0
+    assert legacy["causal_eos_weight_override"] is None
+
+
+def test_phase5_causal_replay_selection_hits_physical_20_percent_budget():
+    blocks = [list(range(1, 129)) for _ in range(64)]
+    indices, replay_tokens = _phase5_causal_replay_selection(
+        blocks,
+        rng=random.Random(7),
+        token_fraction=0.20,
+        causal_tokens=16_256,
+    )
+    assert len(indices) == 32
+    assert replay_tokens == 4_064
+    assert replay_tokens / (16_256 + replay_tokens) == pytest.approx(0.20)
+    assert len(set(indices)) == len(indices)
+
+
+def test_phase5_wide_batch_mode_rejects_invalid_causal_replay_fraction():
+    with pytest.raises(ValueError):
+        _phase5_causal_replay_selection(
+            [[1, 2, 3]],
+            rng=random.Random(1),
+            token_fraction=0.0,
+            causal_tokens=100,
+        )

@@ -609,6 +609,46 @@ def _split_sft(rows: list[SFTExample]) -> tuple[list[SFTExample], list[SFTExampl
     return train, validation
 
 
+def _exclude_validation_response_overlap(
+    train_documents: list[CorpusDocument],
+    validation_documents: list[CorpusDocument],
+    sft_train: list[SFTExample],
+    sft_validation: list[SFTExample],
+) -> tuple[list[CorpusDocument], list[SFTExample], dict[str, Any]]:
+    """Preserve all validation rows; exclude their response identities from training.
+
+    A whole conversation and its final assistant answer have different hashes.
+    Independent SFT/corpus splits can therefore put one supervised response in
+    both partitions. Matching training targets and SFT contexts are excluded;
+    validation prompts alone do not become supervised response identities.
+    """
+    heldout_responses = {_normal(row.text) for row in validation_documents}
+    heldout_responses.update(
+        _normal(message["content"])
+        for row in sft_validation
+        for message in row.messages
+        if message.get("role") == "assistant"
+    )
+    heldout_responses.discard("")
+    corpus_train = [
+        row for row in train_documents if _normal(row.text) not in heldout_responses
+    ]
+    dialogue_train = [
+        row
+        for row in sft_train
+        if not any(
+            _normal(message["content"]) in heldout_responses
+            for message in row.messages
+        )
+    ]
+    return corpus_train, dialogue_train, {
+        "policy": "normalized response identity across causal and SFT validation",
+        "validation_rows_changed": 0,
+        "corpus_training_documents_excluded": len(train_documents) - len(corpus_train),
+        "sft_training_conversations_excluded": len(sft_train) - len(dialogue_train),
+    }
+
+
 def _replay_bucket(document: CorpusDocument) -> str:
     source = str(document.source)
     if source.startswith("tatoeba-en-"):
@@ -994,6 +1034,9 @@ def build_bootstrap_bundle(
 
     train_docs, val_docs = _split_documents(all_documents)
     sft_train, sft_validation = _split_sft(sft_rows)
+    train_docs, sft_train, overlap_exclusion = _exclude_validation_response_overlap(
+        train_docs, val_docs, sft_train, sft_validation
+    )
 
     manifest = {
         "schema": 1,
@@ -1018,6 +1061,7 @@ def build_bootstrap_bundle(
         "validation_documents": len(val_docs),
         "sft_training_conversations": len(sft_train),
         "sft_validation_conversations": len(sft_validation),
+        "validation_response_overlap_exclusion": overlap_exclusion,
         "attribution": {
             "tatoeba": "Some bootstrap sentences are from Tatoeba (https://tatoeba.org), CC-BY 2.0 FR unless explicitly marked CC0.",
             "italian_contributor_count": len(attribution_authors),

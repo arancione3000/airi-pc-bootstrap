@@ -1,0 +1,194 @@
+name: AIRI learning-efficiency paired stress
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/generalist-learning-efficiency-stress.yml'
+      - 'computer/generalist_lm/learning_efficiency_benchmark.py'
+      - 'reports/generalist-learning-efficiency-v3/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paired-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build isolated benchmark environment
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+          .venv/bin/pip install --disable-pip-version-check pytest
+
+      - name: Equal-data 4k versus 16k paired screen
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          STATE_REPO="$RUNNER_TEMP/airi-generalist-state"
+          RESULTS="$RUNNER_TEMP/airi-paired-stress"
+          rm -rf "$STATE_REPO" "$RESULTS"
+          git clone --quiet --depth 1 --branch generalist-state --single-branch \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$STATE_REPO"
+          STATE_DIR="$STATE_REPO/generalist-state"
+          mkdir -p "$RESULTS"
+
+          .venv/bin/python \
+            reports/generalist-learning-efficiency-v3/resume-2026-10-01/recover_pinned_corpus.py \
+            --state-dir "$STATE_DIR" \
+            --output-dir "$RESULTS/corpus"
+
+          STATE_DIR="$STATE_DIR" RESULTS="$RESULTS" \
+          TRAIN="$RESULTS/corpus/pinned-train.jsonl" \
+          VALIDATION="$RESULTS/corpus/pinned-validation.jsonl" \
+          .venv/bin/python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          from generalist_lm.learning_efficiency_benchmark import (
+              Trial,
+              read_split_documents,
+              run_sequence,
+              trial_matrix,
+          )
+
+          root = Path(os.environ["STATE_DIR"])
+          out = Path(os.environ["RESULTS"])
+          train = read_split_documents(os.environ["TRAIN"], "train")
+          validation = read_split_documents(os.environ["VALIDATION"], "validation")
+
+          baseline = Trial(
+              segment_tokens=4064,
+              replay_weight=4.0,
+              elementary_only=True,
+              kl_weight=0.5,
+              anti_weight=0.02,
+              eos_weight=1.0,
+              warmup_steps=4,
+              effective_batch_size=32,
+          )
+          wide = next(
+              t for t in trial_matrix(16256)
+              if t.name == "wide128_causal20_ar"
+          )
+
+          experiments = []
+          for seed in (5300000, 5400000, 5500000):
+              for label, trial, sizes in (
+                  ("baseline4k", baseline, [4064] * 4),
+                  ("wide16k", wide, [16256]),
+              ):
+                  sequence = run_sequence(
+                      root,
+                      trial,
+                      sizes,
+                      seed=seed,
+                      causal_documents=train,
+                      validation_documents=validation,
+                  )
+                  path = out / f"{label}-{seed}.json"
+                  path.write_text(
+                      json.dumps(sequence, indent=2, sort_keys=True) + "\n",
+                      encoding="utf-8",
+                  )
+                  segments = sequence["segments"]
+                  accepted = [s for s in segments if s["accepted"]]
+                  first = segments[0]
+                  final = accepted[-1] if accepted else first
+                  elapsed = sum(
+                      s["total_wall_seconds"] for s in segments
+                  )
+                  attempted = sum(
+                      s["attempted_causal_tokens"] for s in segments
+                  )
+                  accepted_tokens = sum(
+                      s["accepted_equivalent_tokens"] for s in segments
+                  )
+                  vb0 = first["corpus_subset_validation_before"]
+                  vaf = final["corpus_subset_validation_after"]
+                  row = {
+                      "label": label,
+                      "seed": seed,
+                      "segments": len(segments),
+                      "accepted_segments": len(accepted),
+                      "rollback_segments": len(segments) - len(accepted),
+                      "acceptance_rate": len(accepted) / len(segments),
+                      "attempted_tokens": attempted,
+                      "accepted_tokens": accepted_tokens,
+                      "accepted_tokens_per_end_to_end_hour": (
+                          accepted_tokens / max(elapsed, 1e-9) * 3600
+                      ),
+                      "nll_start": first["before"]["language_nll"],
+                      "nll_final": final["after"]["language_nll"],
+                      "nll_gain": (
+                          first["before"]["language_nll"]
+                          - final["after"]["language_nll"]
+                      ),
+                      "validation_start": vb0["loss"] if vb0 else None,
+                      "validation_final": vaf["loss"] if vaf else None,
+                      "validation_gain": (
+                          vb0["loss"] - vaf["loss"]
+                          if vb0 and vaf else None
+                      ),
+                      "repetition_start": first["before"]["repetition_rate"],
+                      "repetition_final": final["after"]["repetition_rate"],
+                      "headroom_final": final["headroom_after"],
+                      "final_language_quality": final["language_quality_after"],
+                  }
+                  experiments.append(row)
+                  print("PAIRED_STRESS_RESULT")
+                  print(json.dumps(row, sort_keys=True))
+
+          grouped = {}
+          for row in experiments:
+              grouped.setdefault(row["label"], []).append(row)
+          aggregate = {}
+          for label, rows in grouped.items():
+              aggregate[label] = {
+                  "runs": len(rows),
+                  "mean_acceptance_rate": sum(r["acceptance_rate"] for r in rows) / len(rows),
+                  "mean_accepted_tokens_per_end_to_end_hour": sum(
+                      r["accepted_tokens_per_end_to_end_hour"] for r in rows
+                  ) / len(rows),
+                  "mean_nll_gain": sum(r["nll_gain"] for r in rows) / len(rows),
+                  "mean_validation_gain": sum(r["validation_gain"] for r in rows) / len(rows),
+                  "all_final_repetition": [r["repetition_final"] for r in rows],
+                  "all_final_headroom": [r["headroom_final"] for r in rows],
+              }
+          comparison = {
+              "equal_attempted_data_per_run": 16256,
+              "experiments": experiments,
+              "aggregate": aggregate,
+              "wide_to_baseline_throughput_ratio": (
+                  aggregate["wide16k"]["mean_accepted_tokens_per_end_to_end_hour"]
+                  / max(
+                      aggregate["baseline4k"]["mean_accepted_tokens_per_end_to_end_hour"],
+                      1e-9,
+                  )
+              ),
+              "scope": "offline equal-data paired comparison: four legacy 4,064-token proposals versus one validated 16,256-token proposal on the same immutable checkpoint/corpus; no live state writes",
+          }
+          (out / "paired-comparison.json").write_text(
+              json.dumps(comparison, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print("PAIRED_STRESS_COMPARISON")
+          print(json.dumps(comparison, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload paired stress evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AIRI-learning-efficiency-paired-stress-${{ github.run_id }}
+          path: ${{ runner.temp }}/airi-paired-stress
+          if-no-files-found: warn
+          retention-days: 14

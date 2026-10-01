@@ -53,7 +53,7 @@ from .research_cycle import (
 )
 from .runtime import GeneralistRuntime
 from .lineage_migration import refresh_live_lineage_manifest
-from .tokenizer import PAD
+from .tokenizer import BYTE_OFFSET, PAD
 from .training import (
     SFTExample,
     causal_training_objective,
@@ -1178,6 +1178,7 @@ def _phase5_recovery_plan(
     last_segment_accepted: bool = False,
     success_streak: int = 0,
     language_fragile: bool = False,
+    wide_batch_recovery_enabled: bool = False,
 ) -> dict[str, Any]:
     """Return a bounded rescue plan that cannot livelock at the old LR floor.
 
@@ -1265,6 +1266,11 @@ def _phase5_recovery_plan(
             )
         )
     )
+    wide_batch_recovery = bool(
+        wide_batch_recovery_enabled
+        and trust_region_recovery
+        and int(context_length) <= 128
+    )
     stall_recovery = rejected >= 2 or sticky_recovery or trust_region_recovery
     if stall_recovery:
         # 50M CPU retries previously sat at ~62.5k forever.  Halving the
@@ -1287,11 +1293,17 @@ def _phase5_recovery_plan(
     if micro_recovery:
         stable_fast_lane = False
         if trust_region_recovery:
-            # Live 50M ablation showed that two-step 8k retries cross the
-            # repetition cliff even under very strong replay, while a single
-            # ~4k step can pass the unchanged language guard.  Require two
-            # consecutive trust-region acceptances before resuming 8k/16k/32k.
-            micro_cap = 4_000
+            if wide_batch_recovery:
+                # Learning-efficiency v3 validates one 128-example accumulated
+                # update (~16,256 supervised labels at context 128), rather
+                # than four noisy 32-example optimizer updates over the same
+                # amount of data. The quality gate and durable anchor remain
+                # unchanged and rejected work is still rolled back.
+                micro_cap = 128 * max(1, int(context_length) - 1)
+            else:
+                # Legacy trust-region fallback retained as the default until
+                # wide-batch recovery is explicitly enabled by rollout.
+                micro_cap = 4_000
         elif accepted_streak <= 2:
             micro_cap = 8_000
         elif accepted_streak == 3:
@@ -1319,6 +1331,8 @@ def _phase5_recovery_plan(
         "stable_fast_lane": bool(stable_fast_lane),
         "micro_recovery": micro_recovery,
         "trust_region_recovery": bool(trust_region_recovery),
+        "wide_batch_recovery": bool(wide_batch_recovery),
+        "wide_batch_effective_batch_size": 128 if wide_batch_recovery else None,
         "language_fragile": bool(language_fragile),
         # The measured trust-region regime was validated with fresh AdamW
         # state on every proposal.  Keep that property even immediately after
@@ -1348,6 +1362,7 @@ def _protected_continual_plan(
     consecutive_rejections: int,
     success_streak: int,
     trust_region_recovery: bool = False,
+    wide_batch_recovery: bool = False,
 ) -> dict[str, Any]:
     """Bound replay/KL pressure from live quality headroom.
 
@@ -1362,11 +1377,16 @@ def _protected_continual_plan(
         anchor,
         consecutive_rejections=rejected,
     )
-    if trust_region_recovery:
-        # Read-only live ablations on the 50M checkpoint isolated a very
-        # narrow safe regime: one causal step plus elementary bilingual replay
-        # with 4x loss weight.  This is a temporary recovery trust region, not
-        # the steady-state continual-learning mix.
+    if wide_batch_recovery:
+        # Validated offline candidate: one large accumulated causal update,
+        # physical causal replay at 20% of supervised labels, and a small
+        # negative-only autoregressive repetition objective. This does not
+        # relax any language gate or import any teacher targets.
+        replay_fraction = 0.20
+        kl_weight = 0.50
+        anti_repetition_weight = 0.05
+    elif trust_region_recovery:
+        # Legacy protected trust region retained for default/off rollout.
         replay_fraction = 0.80
         kl_weight = 0.50
         anti_repetition_weight = 0.02
@@ -1387,7 +1407,16 @@ def _protected_continual_plan(
         "enabled": True,
         "fragile_language_state": fragile,
         "trust_region_recovery": bool(trust_region_recovery),
-        "elementary_replay_only": bool(trust_region_recovery),
+        "wide_batch_recovery": bool(wide_batch_recovery),
+        "elementary_replay_only": bool(
+            trust_region_recovery and not wide_batch_recovery
+        ),
+        "replay_format": "causal" if wide_batch_recovery else "sft",
+        "autoregressive_unlikelihood_weight": (
+            0.10 if wide_batch_recovery else 0.0
+        ),
+        "autoregressive_prefixes": 8 if wide_batch_recovery else 0,
+        "causal_eos_weight_override": 1.60 if wide_batch_recovery else None,
         "replay_fraction": float(replay_fraction),
         "replay_loss_weight": float(replay_fraction / (1.0 - replay_fraction)),
         "reference_kl_weight": float(kl_weight),
@@ -1407,6 +1436,145 @@ def _protected_continual_plan(
             },
         },
     }
+
+
+
+def _phase5_causal_replay_selection(
+    blocks,
+    *,
+    rng: random.Random,
+    token_fraction: float,
+    causal_tokens: int,
+) -> tuple[list[int], int]:
+    """Select physical causal replay labels for the validated recovery mode."""
+    if not 0.0 < float(token_fraction) < 1.0:
+        raise ValueError("causal replay fraction must be in (0, 1)")
+    target = int(math.ceil(
+        int(causal_tokens) * float(token_fraction) / (1.0 - float(token_fraction))
+    ))
+    if target <= 0 or not blocks:
+        raise ValueError("causal replay requires non-empty blocks and budget")
+    selected: list[int] = []
+    supervised = 0
+    order = list(range(len(blocks)))
+    while supervised < target:
+        rng.shuffle(order)
+        advanced = False
+        for index in order:
+            count = sum(token != PAD for token in blocks[index][1:])
+            if count <= 0:
+                continue
+            selected.append(index)
+            supervised += int(count)
+            advanced = True
+            if supervised >= target:
+                break
+        if not advanced:
+            raise ValueError("causal replay blocks contain no supervised labels")
+    return selected, int(supervised)
+
+
+def _phase5_generated_repetition_objective(
+    logits,
+    input_ids,
+    *,
+    prompt_tokens: int,
+    ngram: int = 4,
+):
+    """Negative-only loss on repeated generated byte ngrams."""
+    import torch
+
+    if logits.ndim != 3 or input_ids.ndim != 2 or logits.shape[:2] != input_ids.shape:
+        raise ValueError("unexpected generated objective tensor shapes")
+    if ngram < 2 or prompt_tokens < 1 or prompt_tokens > input_ids.shape[1]:
+        raise ValueError("invalid generated objective prompt/ngram length")
+    coordinates: list[tuple[int, int, int]] = []
+    for row_index, row in enumerate(input_ids.detach().cpu().tolist()):
+        seen: set[tuple[int, ...]] = set()
+        for end in range(ngram - 1, len(row)):
+            gram = tuple(row[end - ngram + 1 : end + 1])
+            if (
+                end >= prompt_tokens
+                and gram in seen
+                and all(token >= BYTE_OFFSET for token in gram)
+            ):
+                coordinates.append((row_index, end - 1, row[end]))
+            seen.add(gram)
+    if not coordinates:
+        return logits.sum() * 0.0, {
+            "negative_positions": 0,
+            "generated_tokens": int(
+                input_ids.shape[0] * (input_ids.shape[1] - prompt_tokens)
+            ),
+        }
+    probabilities = logits.softmax(-1)
+    negative = torch.stack(
+        [probabilities[b, t, v] for b, t, v in coordinates]
+    ).clamp(max=1.0 - 1.0e-6)
+    return -torch.log1p(-negative).mean(), {
+        "negative_positions": len(coordinates),
+        "generated_tokens": int(
+            input_ids.shape[0] * (input_ids.shape[1] - prompt_tokens)
+        ),
+    }
+
+
+def _phase5_training_prefix_generated_objective(
+    runtime: GeneralistRuntime,
+    prefixes: list[list[int]],
+):
+    """Differentiate only repeated generated continuations of training prefixes."""
+    import torch
+
+    original_mode = runtime.model.training
+    terms = []
+    stats = {
+        "negative_positions": 0,
+        "generated_tokens": 0,
+        "holdout_filtered_trajectories": 0,
+    }
+    protected = protected_bootstrap_texts()
+    try:
+        for prompt in prefixes:
+            generated = runtime._generate_ids(
+                list(prompt),
+                max_new_tokens=40,
+                temperature=0.0,
+                repetition_penalty=1.0,
+            )
+            stats["generated_tokens"] += len(generated)
+            normalized = " ".join(
+                runtime.tokenizer.decode(list(prompt) + generated)
+                .casefold()
+                .split()
+            )
+            if any(text and text in normalized for text in protected):
+                stats["holdout_filtered_trajectories"] += 1
+                continue
+            ids = torch.tensor(
+                [list(prompt) + generated],
+                dtype=torch.long,
+                device=runtime.device,
+            )
+            runtime.model.train(original_mode)
+            logits = runtime.model(ids)["logits"]
+            loss, report = _phase5_generated_repetition_objective(
+                logits,
+                ids,
+                prompt_tokens=len(prompt),
+            )
+            terms.append(loss * report["negative_positions"])
+            stats["negative_positions"] += int(report["negative_positions"])
+    finally:
+        runtime.model.train(original_mode)
+    if not terms:
+        zero = next(
+            parameter
+            for parameter in runtime.model.parameters()
+            if parameter.requires_grad
+        ).sum() * 0.0
+        return zero, stats
+    return sum(terms) / max(1, stats["negative_positions"]), stats
 
 
 def _protected_optimizer(model, *, learning_rate: float):
@@ -3148,6 +3316,7 @@ def run_segment(
     base_learning_rate: float = 3e-4,
     eval_every_steps: int = 32,
     historical_recovery_source: str | Path | None = None,
+    enable_wide_batch_recovery: bool = False,
 ) -> dict[str, Any]:
     import torch
 
@@ -3852,6 +4021,7 @@ def run_segment(
         last_segment_accepted=bool(progress.get("segment_guard_last_accepted", False)),
         success_streak=success_streak,
         language_fragile=language_fragile,
+        wide_batch_recovery_enabled=bool(enable_wide_batch_recovery),
     )
     previous_protected_version = str(
         (progress.get("protected_continual_training") or {}).get("version") or ""
@@ -3863,6 +4033,9 @@ def run_segment(
         success_streak=success_streak,
         trust_region_recovery=bool(
             recovery_plan.get("trust_region_recovery", False)
+        ),
+        wide_batch_recovery=bool(
+            recovery_plan.get("wide_batch_recovery", False)
         ),
     )
     protected_rows, protected_row_counts = _protected_causal_replay_rows(
@@ -3928,7 +4101,13 @@ def run_segment(
     last_train_loss = None
     last_validation_loss = None
 
-    effective_batch_size = max(1, int(batch_size))
+    effective_batch_size = max(
+        1,
+        int(
+            recovery_plan.get("wide_batch_effective_batch_size")
+            or batch_size
+        ),
+    )
     micro_batch_size, gradient_accumulation_steps = _phase5_memory_safe_batch_plan(
         parameters=int(parameter_count(runtime.model)),
         context_length=int(runtime.config.context_length),
@@ -3941,7 +4120,30 @@ def run_segment(
         "micro_batch_size": int(micro_batch_size),
         "gradient_accumulation_steps": int(gradient_accumulation_steps),
         "protected_replay_micro_batch_size": 2,
+        "wide_batch_recovery": bool(
+            recovery_plan.get("wide_batch_recovery", False)
+        ),
     }
+
+    protected_causal_blocks = None
+    if bool(recovery_plan.get("wide_batch_recovery", False)):
+        protected_texts = protected_bootstrap_texts()
+        replay_documents = [
+            document
+            for document in protected_replay.documents
+            if not any(
+                text
+                and text in " ".join(document.text.casefold().split())
+                for text in protected_texts
+            )
+        ]
+        protected_causal_blocks = pack_causal_blocks(
+            replay_documents,
+            runtime.tokenizer,
+            context_length=runtime.config.context_length,
+        )
+        if not protected_causal_blocks:
+            raise RuntimeError("wide-batch recovery has no protected causal replay")
 
     reference_model = copy.deepcopy(runtime.model).to(runtime.device)
     reference_model.eval()
@@ -3997,6 +4199,12 @@ def run_segment(
             float(anti_weight),
             float(protected_plan.get("anti_repetition_weight", 0.0) or 0.0),
         )
+        eos_override = protected_plan.get("causal_eos_weight_override")
+        if eos_override is not None:
+            # Match the validated offline wide128_causal20_ar objective exactly.
+            # The legacy helper returns EOS=1.0 for non-pathological repetition,
+            # even though the winning candidate used 1.6.
+            eos_weight = float(eos_override)
         supervised = 0
         weighted_loss = 0.0
         objective_stats = {}
@@ -4034,60 +4242,137 @@ def run_segment(
         replay_rng = random.Random(
             9_000_000 + step * 97 + retry_seed_offset
         )
-        replay_indices = [
-            replay_rng.randrange(len(protected_rows))
-            for _ in range(2)
-        ]
-        replay_ids, replay_labels = _sft_training_batch(
-            runtime,
-            protected_rows,
-            replay_indices,
-        )
-        replay_supervised = int((replay_labels[:, 1:] != -100).sum().item())
+        replay_batches = []
+        replay_format = str(protected_plan.get("replay_format") or "sft")
+        if replay_format == "causal":
+            if protected_causal_blocks is None:
+                raise RuntimeError("causal replay requested without packed blocks")
+            replay_indices, replay_supervised = _phase5_causal_replay_selection(
+                protected_causal_blocks,
+                rng=replay_rng,
+                token_fraction=float(protected_plan["replay_fraction"]),
+                causal_tokens=supervised,
+            )
+            for offset in range(0, len(replay_indices), 2):
+                replay_ids, replay_labels = _batch(
+                    protected_causal_blocks,
+                    replay_indices[offset : offset + 2],
+                    device=runtime.device,
+                )
+                count = int((replay_labels[:, 1:] != -100).sum().item())
+                replay_batches.append((replay_ids, replay_labels, count))
+        elif replay_format == "sft":
+            replay_indices = [
+                replay_rng.randrange(len(protected_rows))
+                for _ in range(2)
+            ]
+            replay_ids, replay_labels = _sft_training_batch(
+                runtime,
+                protected_rows,
+                replay_indices,
+            )
+            replay_supervised = int(
+                (replay_labels[:, 1:] != -100).sum().item()
+            )
+            replay_batches.append(
+                (replay_ids, replay_labels, replay_supervised)
+            )
+        else:
+            raise RuntimeError(f"unknown protected replay format: {replay_format}")
+
         if replay_supervised <= 0:
             raise RuntimeError("protected replay batch has no supervised tokens")
-        replay_result = runtime.model(replay_ids)
-        replay_loss, _replay_objective = causal_training_objective(
-            replay_result["logits"],
-            replay_labels,
-            replay_ids,
-            eos_loss_weight=1.0,
-            repetition_unlikelihood_weight=anti_weight,
-            repetition_window=16,
+
+        replay_loss_value = 0.0
+        kl_value = 0.0
+        kl_tokens = 0
+        for replay_ids, replay_labels, replay_count in replay_batches:
+            replay_result = runtime.model(replay_ids)
+            replay_loss, _replay_objective = causal_training_objective(
+                replay_result["logits"],
+                replay_labels,
+                replay_ids,
+                eos_loss_weight=1.0,
+                repetition_unlikelihood_weight=anti_weight,
+                repetition_window=16,
+            )
+            with torch.no_grad():
+                reference_logits = reference_model(replay_ids)["logits"]
+            kl_loss, batch_kl_tokens = reference_kl_loss(
+                replay_result["logits"],
+                reference_logits,
+                replay_labels,
+                temperature=float(
+                    protected_plan.get("reference_kl_temperature", 1.0) or 1.0
+                ),
+            )
+            scale = float(replay_count) / float(replay_supervised)
+            protected_loss = (
+                float(protected_plan["replay_loss_weight"])
+                * replay_loss
+                * scale
+                + float(protected_plan["reference_kl_weight"])
+                * kl_loss
+                * scale
+            )
+            if not torch.isfinite(protected_loss):
+                raise RuntimeError("non-finite protected continual loss")
+            protected_loss.backward()
+            replay_loss_value += float(replay_loss.detach().cpu()) * scale
+            kl_value += float(kl_loss.detach().cpu()) * scale
+            kl_tokens += int(batch_kl_tokens)
+        replay_tokens_trained += int(replay_supervised)
+
+        autoregressive_report = None
+        autoregressive_weight = float(
+            protected_plan.get("autoregressive_unlikelihood_weight", 0.0)
+            or 0.0
         )
-        with torch.no_grad():
-            reference_logits = reference_model(replay_ids)["logits"]
-        kl_loss, kl_tokens = reference_kl_loss(
-            replay_result["logits"],
-            reference_logits,
-            replay_labels,
-            temperature=float(
-                protected_plan.get("reference_kl_temperature", 1.0) or 1.0
-            ),
-        )
-        protected_loss = (
-            float(protected_plan["replay_loss_weight"]) * replay_loss
-            + float(protected_plan["reference_kl_weight"]) * kl_loss
-        )
-        if not torch.isfinite(protected_loss):
-            raise RuntimeError("non-finite protected continual loss")
-        protected_loss.backward()
-        replay_tokens_trained += replay_supervised
+        if autoregressive_weight > 0.0:
+            requested_prefixes = int(
+                protected_plan.get("autoregressive_prefixes", 0) or 0
+            )
+            prefixes = [
+                row[:8].detach().cpu().tolist()
+                for ids, _labels, _count in prepared_micro_batches
+                for row in ids
+            ][:requested_prefixes]
+            if not prefixes:
+                raise RuntimeError(
+                    "autoregressive repetition objective has no training prefixes"
+                )
+            autoregressive_loss, autoregressive_report = (
+                _phase5_training_prefix_generated_objective(
+                    runtime,
+                    prefixes,
+                )
+            )
+            (autoregressive_weight * autoregressive_loss).backward()
+            autoregressive_report = {
+                **autoregressive_report,
+                "raw_loss": float(autoregressive_loss.detach().cpu()),
+                "weight": float(autoregressive_weight),
+                "prefixes": int(len(prefixes)),
+                "new_supervised_causal_tokens_counted": 0,
+            }
+
         objective_stats = {
             **objective_stats,
-            "protected_replay_loss": float(replay_loss.detach().cpu()),
+            "protected_replay_loss": float(replay_loss_value),
             "protected_replay_loss_weight": float(
                 protected_plan["replay_loss_weight"]
             ),
             "protected_replay_fraction": float(
                 protected_plan["replay_fraction"]
             ),
+            "protected_replay_format": replay_format,
             "protected_replay_supervised_tokens": int(replay_supervised),
-            "protected_reference_kl_loss": float(kl_loss.detach().cpu()),
+            "protected_reference_kl_loss": float(kl_value),
             "protected_reference_kl_weight": float(
                 protected_plan["reference_kl_weight"]
             ),
             "protected_reference_tokens": int(kl_tokens),
+            "autoregressive_repetition": autoregressive_report,
             "segment_warmup_factor": float(segment_warmup_factor),
         }
 
@@ -4166,6 +4451,15 @@ def run_segment(
         "replay_supervised_tokens": int(replay_tokens_trained),
         "replay_fraction": float(protected_plan["replay_fraction"]),
         "replay_loss_weight": float(protected_plan["replay_loss_weight"]),
+        "replay_format": str(protected_plan.get("replay_format") or "sft"),
+        "effective_batch_size": int(effective_batch_size),
+        "wide_batch_recovery": bool(
+            recovery_plan.get("wide_batch_recovery", False)
+        ),
+        "autoregressive_unlikelihood_weight": float(
+            protected_plan.get("autoregressive_unlikelihood_weight", 0.0)
+            or 0.0
+        ),
         "elementary_replay_only": bool(
             protected_plan.get("elementary_replay_only", False)
         ),
@@ -4789,6 +5083,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--historical-recovery-source")
+    parser.add_argument(
+        "--wide-batch-recovery",
+        action="store_true",
+        help=(
+            "Enable the experimentally validated 50M trust-region candidate: "
+            "128-example accumulated causal update, 20% causal replay and "
+            "negative-only autoregressive repetition objective."
+        ),
+    )
     args = parser.parse_args(argv)
     result = run_segment(
         args.state_dir,
@@ -4799,6 +5102,7 @@ def main(argv: list[str] | None = None) -> int:
         batch_size=args.batch_size,
         base_learning_rate=args.learning_rate,
         historical_recovery_source=args.historical_recovery_source,
+        enable_wide_batch_recovery=args.wide_batch_recovery,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
