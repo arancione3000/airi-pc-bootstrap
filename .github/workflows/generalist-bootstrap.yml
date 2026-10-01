@@ -438,7 +438,7 @@ jobs:
           echo "Architecture window dispatched for the same live lineage at target ${TARGET_TOKENS}."
 
       - name: Resume an incomplete rung from its persisted checkpoint
-        if: env.RUNG_COMPLETE != 'true' && env.ARCHITECTURE_HANDOFF != 'true'
+        if: env.RUNG_COMPLETE != 'true' && env.ARCHITECTURE_HANDOFF != 'true' && env.WIDE_BATCH_RECOVERY != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -450,6 +450,12 @@ jobs:
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/generalist-bootstrap.yml/dispatches" \
             -d "{\"ref\":\"main\",\"inputs\":{\"target_tokens\":\"${TARGET_TOKENS}\"}}"
           echo "NEXT_BOOTSTRAP_TARGET=${TARGET_TOKENS}" >> "${GITHUB_ENV}"
+
+      - name: Stop after manual wide-batch canary
+        if: env.RUNG_COMPLETE != 'true' && env.ARCHITECTURE_HANDOFF != 'true' && env.WIDE_BATCH_RECOVERY == 'true'
+        run: |
+          echo "Wide-batch canary completed. Automatic bootstrap continuation is intentionally disabled."
+          echo "Review the persisted segment guard and learning-efficiency telemetry before another manual canary."
 
       - name: Dispatch next in-place language rung
         if: env.RUNG_COMPLETE == 'true'
