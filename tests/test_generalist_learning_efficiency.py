@@ -23,6 +23,8 @@ from generalist_lm.learning_efficiency_benchmark import (
 )
 from generalist_lm.bootstrap_training import (
     _filter_protected_replay,
+    _phase5_recovery_plan,
+    _protected_continual_plan,
     _segment_language_gate,
 )
 from generalist_lm.model import GeneralistLMConfig
@@ -795,3 +797,51 @@ def test_anchored_decay_fails_before_mutation_on_topology_mismatch():
     with pytest.raises(ValueError, match="topology"):
         anchored_parameter_decay(model, anchor, 0.01)
     assert torch.equal(model.weight, before)
+
+
+def test_validated_wide128_trial_matches_opt_in_production_contract():
+    trial = next(
+        row for row in trial_matrix(16_256)
+        if row.name == "wide128_causal20_ar"
+    )
+    recovery = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=1,
+        recovery_hold=False,
+        last_segment_accepted=False,
+        success_streak=0,
+        language_fragile=True,
+        wide_batch_recovery_enabled=True,
+    )
+    protected = _protected_continual_plan(
+        {
+            "repetition_rate": 0.23615752577876778,
+            "multiword_output_rate": 1.0,
+            "pathological_repetition": False,
+        },
+        {
+            "repetition_rate": 0.15772057959235905,
+            "multiword_output_rate": 1.0,
+            "pathological_repetition": False,
+        },
+        consecutive_rejections=1,
+        success_streak=0,
+        trust_region_recovery=recovery["trust_region_recovery"],
+        wide_batch_recovery=recovery["wide_batch_recovery"],
+    )
+
+    assert recovery["effective_budget_tokens"] == trial.segment_tokens
+    assert recovery["wide_batch_effective_batch_size"] == trial.effective_batch_size
+    assert protected["replay_format"] == trial.replay_format
+    assert protected["replay_fraction"] == pytest.approx(trial.replay_token_fraction)
+    assert protected["replay_loss_weight"] == pytest.approx(trial.replay_weight)
+    assert protected["reference_kl_weight"] == pytest.approx(trial.kl_weight)
+    assert protected["anti_repetition_weight"] == pytest.approx(trial.anti_weight)
+    assert protected["causal_eos_weight_override"] == pytest.approx(trial.eos_weight)
+    assert protected["autoregressive_unlikelihood_weight"] == pytest.approx(
+        trial.autoregressive_ul_weight
+    )
+    assert protected["autoregressive_prefixes"] == trial.autoregressive_prefixes
