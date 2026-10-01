@@ -25,7 +25,7 @@ jobs:
           .venv/bin/pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
           .venv/bin/pip install --disable-pip-version-check pytest
 
-      - name: Equal-data 4k versus 16k sustained stress
+      - name: Equal-data 4k versus 16k paired screen
         env:
           PYTHONPATH: ${{ github.workspace }}/computer
           GH_TOKEN: ${{ github.token }}
@@ -65,17 +65,26 @@ jobs:
           train = read_split_documents(os.environ["TRAIN"], "train")
           validation = read_split_documents(os.environ["VALIDATION"], "validation")
 
-          baseline = Trial(segment_tokens=4064)
+          baseline = Trial(
+              segment_tokens=4064,
+              replay_weight=4.0,
+              elementary_only=True,
+              kl_weight=0.5,
+              anti_weight=0.02,
+              eos_weight=1.0,
+              warmup_steps=4,
+              effective_batch_size=32,
+          )
           wide = next(
               t for t in trial_matrix(16256)
               if t.name == "wide128_causal20_ar"
           )
 
           experiments = []
-          for seed in (5300000, 5400000):
+          for seed in (5300000, 5400000, 5500000):
               for label, trial, sizes in (
-                  ("baseline4k", baseline, [4064] * 20),
-                  ("wide16k", wide, [16256] * 5),
+                  ("baseline4k", baseline, [4064] * 4),
+                  ("wide16k", wide, [16256]),
               ):
                   sequence = run_sequence(
                       root,
@@ -155,7 +164,7 @@ jobs:
                   "all_final_headroom": [r["headroom_final"] for r in rows],
               }
           comparison = {
-              "equal_attempted_data_per_run": 81280,
+              "equal_attempted_data_per_run": 16256,
               "experiments": experiments,
               "aggregate": aggregate,
               "wide_to_baseline_throughput_ratio": (
@@ -165,7 +174,7 @@ jobs:
                       1e-9,
                   )
               ),
-              "scope": "offline equal-data sustained comparison on immutable copy; no live state writes",
+              "scope": "offline equal-data paired comparison: four legacy 4,064-token proposals versus one validated 16,256-token proposal on the same immutable checkpoint/corpus; no live state writes",
           }
           (out / "paired-comparison.json").write_text(
               json.dumps(comparison, indent=2, sort_keys=True) + "\n",
