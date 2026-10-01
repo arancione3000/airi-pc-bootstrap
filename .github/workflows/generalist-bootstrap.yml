@@ -328,8 +328,6 @@ jobs:
               "${recovery_args[@]}" \
               | tee /tmp/phase5-segment.json
 
-            persist_state "target ${TARGET_TOKENS} segment ${segment}"
-
             rung_complete="$(jq -r '.rung_complete' /tmp/phase5-segment.json)"
             capacity_growth_only="$(jq -r '.capacity_growth_only // false' /tmp/phase5-segment.json)"
             historical_recovery_only="$(jq -r '.historical_recovery_only // false' /tmp/phase5-segment.json)"
@@ -359,6 +357,11 @@ jobs:
                 echo "Wide-batch canary rejected safely; rollback telemetry will be persisted."
               fi
             fi
+
+            # Persist only after all local wide-batch canary contract checks
+            # succeed. A malformed/misconfigured canary therefore cannot write
+            # candidate state to the authoritative generalist-state branch.
+            persist_state "target ${TARGET_TOKENS} segment ${segment}"
 
             # Rejected rehabilitation attempts are rolled back. Persist their
             # recovery counters, but do not burn another runner exporting an
