@@ -2764,6 +2764,7 @@ def test_phase5_wide_batch_protected_plan_matches_validated_candidate():
     assert candidate["anti_repetition_weight"] == pytest.approx(0.05)
     assert candidate["autoregressive_unlikelihood_weight"] == pytest.approx(0.10)
     assert candidate["autoregressive_prefixes"] == 8
+    assert candidate["causal_eos_weight_override"] == pytest.approx(1.60)
     assert candidate["elementary_replay_only"] is False
 
     legacy = _protected_continual_plan(
@@ -2778,6 +2779,7 @@ def test_phase5_wide_batch_protected_plan_matches_validated_candidate():
     assert legacy["replay_fraction"] == pytest.approx(0.80)
     assert legacy["replay_loss_weight"] == pytest.approx(4.0)
     assert legacy["autoregressive_unlikelihood_weight"] == 0.0
+    assert legacy["causal_eos_weight_override"] is None
 
 
 def test_phase5_causal_replay_selection_hits_physical_20_percent_budget():
