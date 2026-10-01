@@ -4198,6 +4198,11 @@ def run_segment(
             float(anti_weight),
             float(protected_plan.get("anti_repetition_weight", 0.0) or 0.0),
         )
+        if bool(recovery_plan.get("wide_batch_recovery", False)):
+            # Match the validated offline wide128_causal20_ar objective exactly.
+            # The legacy helper returns EOS=1.0 for non-pathological repetition,
+            # even though the winning candidate used 1.6.
+            eos_weight = 1.60
         supervised = 0
         weighted_loss = 0.0
         objective_stats = {}
