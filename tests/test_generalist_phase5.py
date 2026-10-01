@@ -4,6 +4,7 @@ import gzip
 import io
 import json
 from pathlib import Path
+import random
 
 import pytest
 import generalist_lm.bootstrap_training as bootstrap_training
@@ -45,6 +46,7 @@ from generalist_lm.bootstrap_training import (
     _rehabilitation_replay_limit,
     _rehabilitation_strategy_rejection_count,
     _residual_language_rehabilitation_attempts,
+    _phase5_causal_replay_selection,
     _phase5_memory_safe_batch_plan,
     _phase5_language_fragile,
     _phase5_parameter_segment_cap,
@@ -2704,3 +2706,99 @@ def test_response_filter_never_reassigns_excluded_training_rows_to_validation():
     assert documents == [] and training == []
     assert heldout == [row]
     assert report["validation_rows_changed"] == 0
+
+
+def test_phase5_wide_batch_recovery_is_opt_in_and_preserves_legacy_default():
+    kwargs = dict(
+        requested_tokens=1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=1,
+        recovery_hold=False,
+        last_segment_accepted=False,
+        success_streak=0,
+        language_fragile=True,
+    )
+    legacy = _phase5_recovery_plan(**kwargs)
+    assert legacy["wide_batch_recovery"] is False
+    assert legacy["effective_budget_tokens"] == 4_000
+    assert legacy["wide_batch_effective_batch_size"] is None
+
+    candidate = _phase5_recovery_plan(
+        **kwargs,
+        wide_batch_recovery_enabled=True,
+    )
+    assert candidate["trust_region_recovery"] is True
+    assert candidate["wide_batch_recovery"] is True
+    assert candidate["effective_budget_tokens"] == 16_256
+    assert candidate["wide_batch_effective_batch_size"] == 128
+    assert candidate["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
+    assert candidate["reset_optimizer"] is True
+    assert candidate["forced_stage"] == "B_short_sentence_completion"
+
+
+def test_phase5_wide_batch_protected_plan_matches_validated_candidate():
+    before = {
+        "repetition_rate": 0.23615752577876778,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    anchor = {
+        "repetition_rate": 0.15772057959235905,
+        "multiword_output_rate": 1.0,
+        "pathological_repetition": False,
+    }
+    candidate = _protected_continual_plan(
+        before,
+        anchor,
+        consecutive_rejections=1,
+        success_streak=0,
+        trust_region_recovery=True,
+        wide_batch_recovery=True,
+    )
+    assert candidate["replay_format"] == "causal"
+    assert candidate["replay_fraction"] == pytest.approx(0.20)
+    assert candidate["replay_loss_weight"] == pytest.approx(0.25)
+    assert candidate["reference_kl_weight"] == pytest.approx(0.50)
+    assert candidate["anti_repetition_weight"] == pytest.approx(0.05)
+    assert candidate["autoregressive_unlikelihood_weight"] == pytest.approx(0.10)
+    assert candidate["autoregressive_prefixes"] == 8
+    assert candidate["elementary_replay_only"] is False
+
+    legacy = _protected_continual_plan(
+        before,
+        anchor,
+        consecutive_rejections=1,
+        success_streak=0,
+        trust_region_recovery=True,
+        wide_batch_recovery=False,
+    )
+    assert legacy["replay_format"] == "sft"
+    assert legacy["replay_fraction"] == pytest.approx(0.80)
+    assert legacy["replay_loss_weight"] == pytest.approx(4.0)
+    assert legacy["autoregressive_unlikelihood_weight"] == 0.0
+
+
+def test_phase5_causal_replay_selection_hits_physical_20_percent_budget():
+    blocks = [list(range(1, 129)) for _ in range(64)]
+    indices, replay_tokens = _phase5_causal_replay_selection(
+        blocks,
+        rng=random.Random(7),
+        token_fraction=0.20,
+        causal_tokens=16_256,
+    )
+    assert len(indices) == 32
+    assert replay_tokens == 4_064
+    assert replay_tokens / (16_256 + replay_tokens) == pytest.approx(0.20)
+    assert len(set(indices)) == len(indices)
+
+
+def test_phase5_wide_batch_mode_rejects_invalid_causal_replay_fraction():
+    with pytest.raises(ValueError):
+        _phase5_causal_replay_selection(
+            [[1, 2, 3]],
+            rng=random.Random(1),
+            token_fraction=0.0,
+            causal_tokens=100,
+        )
