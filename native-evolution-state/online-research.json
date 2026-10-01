@@ -1,175 +1,64 @@
 {
-  "academic_fallback": "openalex",
-  "errors": [
-    {
-      "error": "HTTPError:HTTP Error 429: Unknown Error",
-      "provider": "arxiv"
-    }
-  ],
+  "academic_fallback": null,
+  "errors": [],
   "evidence": [
     {
-      "digest": "54503246a54bfa5b3173653f73769b66eb06a38be8f2720bcb5cd8ef450c644e",
-      "provider": "openalex",
-      "published": "2026-12-31",
-      "source_id": "https://openalex.org/W7162095276",
-      "summary": "Online neural learning requires models that update after each incoming example, remain calibrated under distributional change, and avoid brittle gradient transmission. The original version of this work used a small static benchmark, a shallow model, few random seeds, and no significance tests. This revision reformulates the problem as genuine prequential online learning and introduces Smooth Online Activation Routing (SOAR), a Hedge-style routing algorithm over smooth activation experts trained by singleinstance adaptive updates. SOAR links activation smoothness with online regret through a prediction-with-expert-advice bound: the mixture incurs only logarithmic-exponential-weight overhead relative to the best activation expert in hindsight, while each expert uses diagonal adaptive online gradients. We evaluate two-hidden-layer online neural networks on eight streams, fourteen methods, thirteen comparators, and eight random seeds, yielding 896 fully reproducible runs. The benchmark includes four real scikit-learn data sets and four synthetic streaming tasks with stationary, nonlinear, gradual-drift, and sudden-drift regimes. Across all dataset-seed blocks, SOAR obtains the best mean final accuracy ( $92.56 \\%$ ), best mean negative log-likelihood ( 0.199 ), and best prequential accuracy ( $86.83 \\%$ ). Paired Wilcoxon and Holm-corrected tests show significant improvements over ReLU, LeakyReLU, ELU, Softplus, Adam, SGD, and the compact ablation; improvements over the strongest fixed TeLU activation are positive but not statistically significant. The results support a nuanced conclusion: adaptive smooth activation routing is a robust online-learning mechanism and the best overall method in this controlled benchmark suite, but fixed smooth activations remain highly competitive on small static data. topics=Data Stream Mining Techniques Domain Adaptation and Few-Shot Learning Stochastic Gradient Optimization Techniques oa=True oa_status=gold",
-      "tags": [
-        "dataset"
-      ],
-      "title": "SOAR: Smooth Online Activation Routing for Stable Neural Learning from Evolving Streams",
-      "url": "https://pub.respai.de/articles/1-2/3sniu.html"
-    },
-    {
-      "digest": "784184d3e830a08fb87e432cb71a909a2b29f9a03a4abc5dde126cda4cc6a379",
-      "provider": "openalex",
-      "published": "2026-12-31",
-      "source_id": "https://openalex.org/W7164183113",
-      "summary": "Do large language models (LLMs) possess a measurable \"personality,\" and how do the linguistic properties of training corpora shape their cognitive style and downstream reasoning? This paper approaches these questions from a sociolinguistic perspective on machine \"identity.\" This manuscript is positioned explicitly as a conceptual perspective paper: it does not present original experimental data, nor does it constitute a systematic review with defined search strategies or inclusion criteria. Instead, it synthesises key published findings into two original theoretical frameworks intended to guide future empirical and engineering work. We examine evidence that LLMs exhibit reliable, valid Big Five personality traits—particularly in large, instruction-tuned models—and that continued pre-training on domain-specific corpora may shape those traits through measurable linguistic features: imperative ratio, type-token ratio (TTR), and syntactic complexity. We then analyse how standard-language ideology embedded in training corpora is amplified in model outputs, disadvantaging dialect and minority-language communities. Building on these findings, we propose two conceptual contributions: (1) a Personality Engineering (PE) framework for targeted continued pre-training to cultivate task-appropriate cognitive profiles, and (2) a Language Ideology Propagation Model (LIPM) mapping the pipeline from corpus composition to societal impact. Both frameworks are explicitly conceptual and require empirical validation before they can function as operational guidelines. Their value lies in structuring future research and providing a shared vocabulary for cross-disciplinary collaboration, with direct implications for responsible AI deployment. topics=Artificial Intelligence in Healthcare and Education Language and cultural evolution Topic Modeling oa=True oa_status=gold",
-      "tags": [
-        "dataset",
-        "long-context",
-        "reasoning",
-        "tokenizer"
-      ],
-      "title": "The Sociolinguistics of Machine Identity: LLM Personality and Ideology Propagation",
-      "url": "https://pub.respai.de/articles/1-2/4gli.html"
-    },
-    {
-      "digest": "f9748eed553d4a6b48cc57f1b09523066d865c72fbf692be23339847900360b5",
-      "provider": "openalex",
-      "published": "2026-12-10",
-      "source_id": "https://openalex.org/W7197044566",
-      "summary": "Adeno-associated virus (AAV) vectors have demonstrated strong clinical efficacy across multiple monogenic disorders, yet neutralizing antibodies (NAbs) remain major barriers to vector redosing and durable transduction. To address this limitation, we developed a sequence-based artificial intelligence framework integrating Bidirectional Encoder Representations from Transformers (BERT) and Evolutionary Scale Modeling with Low-Rank Adaptation (ESM-LoRA) to identify human-tolerant, virus-specific motifs across human and viral proteins using sliding-window analyses and multi-layer fine-tuning. Using capsid-derived segments from AAV2 and AAV843, we prioritized surface-accessible, virus-polarized peptides as candidate decoys and evaluated their ability to block AAV-targeted antibodies. The models achieved high accuracy in distinguishing human versus viral fragments, and selected peptides bound AAV-specific antibodies with nanomolar affinity, competitively restored capsid binding, and recovered >60% of baseline transduction in the presence of NAbs. In mouse models with pre-existing or redosing-induced antibodies, coadministration of decoy peptides and an IgG-degrading enzyme reduced high-titer NAbs to approximately 1:4 and restored hepatic transgene expression without detectable inflammatory or peptide-specific immune responses. A contrastive variational autoencoder (VAE) further generated non-natural peptides with broader epitope coverage. These results support sequence-driven AI design of short, low-immunogenicity decoy peptides as a translational strategy to mitigate NAb interference and enhance the feasibility of AAV redosing. topics=Virus-based gene therapy research vaccines and immunoinformatics approaches Monoclonal and Polyclonal Antibodies Research oa=True oa_status=green",
+      "digest": "d1e673ec62c5eeaf2d1a11b9e082114b5f7b5e351deae38284393521bb8a9532",
+      "provider": "arxiv",
+      "published": "2026-09-30T17:59:59Z",
+      "source_id": "http://arxiv.org/abs/2609.40363v1",
+      "summary": "Recent James Webb Space Telescope (JWST) measurements quantify the fraction of ultraviolet-selected galaxies showing detectable Lyman-alpha (Ly-$α$) lines at $z \\sim 6-14$. These Ly-$α$ fractions are partly shaped by Ly-$α$ scattering from neutral hydrogen in the surrounding intergalactic medium (IGM), and so the observed Ly-$α$ fraction evolution can inform our understanding of the reionization history and the size distribution of ionized bubbles during reionization. We compare the JWST measurements with Ly-$α$ transmission calculations based on both the THESAN reionization simulations and a flexible semi-analytic model. In each case, we calibrate a sub-grid model for the intrinsic Ly-$α$ emission lines emerging from the interstellar medium (ISM) and circumgalactic medium (CGM) of the host galaxies using empirical estimates of the Ly-$α$ equivalent width (EW) distributions at $z \\sim 6$. We find that the reionization history and bubble sizes in THESAN yield good agreement with current JWST Ly-$α$ fraction observations, with a reduced $χ^2_ν= 0.4-1.2$. Our semi-analytic models and THESAN Ly-$α$ transmission calculations agree well, allowing us to explore a wide range of reionization models. We derive $1σ$ bounds on the average mass-weighted neutral fractions of: $\\langle x_{\\mathrm{HI}} \\rangle$ = $0.38^{+0.14}_{-0.38}$ ($0.52^{+0.09}_{-0.21}$), $0.57^{+0.23}_{-0.57}$ ($0.68^{+0.12}_{-0.39}$), and $0.93^{+0.05}_{-0.17}$ ($0.89^{+0.11}_{-0.15}$) at $z \\sim$ 7, 8, and 11, based on the Ly-$α$ fraction measurements with EW $>25\\,\\mathring{\\rm A}$ ($>10\\,\\mathring{\\rm A}$).",
       "tags": [],
-      "title": "Sequence-based artificial intelligence-guided inhibitory peptides to counteract AAV neutralizing antibodies in gene therapy.",
-      "url": "https://pubmed.ncbi.nlm.nih.gov/42740894"
+      "title": "Probing the Reionization History and Bubble Sizes with JWST Lyman-$α$ Fraction Measurements",
+      "url": "https://arxiv.org/abs/2609.40363v1"
     },
     {
-      "digest": "6e706c3a6a6fc81761382b01d3f5dca28fe7cdd03acc270e7f4870f78ff4a310",
-      "provider": "openalex",
-      "published": "2026-10-01",
-      "source_id": "https://openalex.org/W7214509296",
-      "summary": "The purpose of this qualitative phenomenological study was to explore the lived experiences of elementary virtual teachers who integrate generative artificial intelligence (GAI) tools in their pedagogical practices at a large elementary virtual school. Participants were purposively sampled because those in the specified virtual school program provided relevant, experience-based insights and allowed the researcher practical, feasible access (Creswell & Poth, 2018). The participant sample for this study consisted of virtual elementary teachers who taught students in kindergarten through fifth grade. The researcher conducted semi-structured interviews with 10 teachers. The researcher followed Creswell and Poth’s (2018) data analysis spiral to systematically analyze data and determine themes. Four themes emerged from significant participant statements: efficiency, preservation of the teacher role, instructional enhancement, and AI literacy. The themes suggest that elementary virtual teachers are consistently balancing the positive elements of efficiency and enhanced instructional quality with the adverse aspects of misinformation, privacy protection, ethical concerns, and misuse. The themes suggest that virtual elementary teachers view GAI as a dynamic tool; however, its value depends on thoughtful, informed, and human-centered application. Future research would build on the findings by expanding the participant population and focusing on early adopters and the longitudinal implications of GAI use. topics=Teaching and Learning Programming Child Development and Digital Technology Neuroscience, Education and Cognitive Function oa=True oa_status=green",
+      "digest": "ce7d1f887d6fbc7eedc07e6963cc4f25407bd9159c8ea09b9f6c9b8fbbc02153",
+      "provider": "arxiv",
+      "published": "2026-09-30T17:59:57Z",
+      "source_id": "http://arxiv.org/abs/2609.40362v1",
+      "summary": "We present Multimodal Flow, a fully continuous generative model of language and vision. Most unified multimodal models either model both language and quantized images as discrete tokens or combine discrete language prediction with continuous image generation. The former introduces a visual quantization bottleneck. The latter requires modality-dependent objectives and sampling procedures. Fully continuous modeling avoids these trade-offs and enables a shared generative process, but remains underexplored for multimodal pretraining. Multimodal Flow introduces a unified continuous architecture that integrates multimodal continuous representations with a shared chunk-causal flow backbone. It organizes text blocks and images as ordered continuous hyperchunks, preserving textual token order and visual spatial structure. The backbone learns a single vector field over these hyperchunks through Flow Matching. Joint attention enables cross-modal interaction, while modality-specific feed-forward networks process each modality. The model predicts multiple target chunks in parallel during training and generates hyperchunks sequentially at inference. We instantiate MF-1 and pretrain it on multimodal data. Across 0.6B, 1.2B, and 1.6B scales, continued pretraining consistently improves multimodal modeling. With only 150B pretraining tokens, MF-1 achieves an average score of 82.8 across GenEval and DPG-Bench and 75.3 across VQAv2, MMBench, and POPE, remaining competitive with unified models trained on substantially more data. Under matched data, optimization, and parameter budgets, Multimodal Flow further outperforms representative hybrid and discrete models. These results establish continuous chunk-based embedding flow modeling as a new fully continuous paradigm for unified multimodal modeling. The related code and model are publicly released at https://github.com/hustvl/Multimodal-Flow.",
+      "tags": [],
+      "title": "Multimodal Flow: Unified Flow Modeling of Language and Vision in Embedding Spaces",
+      "url": "https://arxiv.org/abs/2609.40362v1"
+    },
+    {
+      "digest": "d40a48cbe1569cc84787f1e39ecbd5d50038d05d7e42a5acac936296d2ae39b5",
+      "provider": "arxiv",
+      "published": "2026-09-30T17:59:56Z",
+      "source_id": "http://arxiv.org/abs/2609.40360v1",
+      "summary": "Reinforcement learning with verifiable rewards (RLVR) has improved the reasoning capabilities of large language models (LLMs), yet their predictions remain sensitive to task-irrelevant prompt features. We investigate this sensitivity through semifactual prompt interventions that preserve the underlying problem and its answer. Our analysis reveals substantial variation in token-level sensitivity and shows that suppressing high-drift token candidates during decoding improves reasoning accuracy without updating model weights. These findings highlight a limitation of Group Relative Policy Optimization (GRPO), which assigns the same outcome-derived advantage to every response token and may reinforce potential spurious dependence alongside useful reasoning. Motivated by this observation, we introduce Semifactual Credit-Augmented Policy Optimization (SCAPO), a causally inspired variant of GRPO that incorporates semifactual stability into token-level credit assignment. SCAPO measures token probability drift for fixed responses under semifactual interventions and uses normalized stability scores to reduce advantages for relatively unstable tokens during early training, while granting no additional credit for stability alone. On Qwen3-4B-Base and Qwen3-1.7B-Base, SCAPO improves AIME 2024-2026 accuracy over GRPO by 5.63 and 4.17 percentage points, respectively. At both model scales, SCAPO achieves the best results on most evaluated mathematics benchmarks and all evaluated out-of-distribution benchmarks among the compared methods. These results suggest that semifactual stability provides an effective training signal for improving reasoning and generalization through finer-grained credit assignment in RLVR. The code is available at https://github.com/DtYXs/SCAPO.",
       "tags": [
-        "data-analysis",
-        "efficiency"
+        "code",
+        "reasoning"
       ],
-      "title": "GUIDED BY INNOVATION: A PHENOMENOLOGICAL STUDY OF VIRTUAL ELEMENTARY TEACHERS’ PERCEPTIONS OF GENERATIVE ARTIFICIAL INTELLIGENCE INTEGRATION",
-      "url": "https://firescholars.seu.edu/coe/199"
+      "title": "Semifactual Credit-Augmented Policy Optimization",
+      "url": "https://arxiv.org/abs/2609.40360v1"
     },
     {
-      "digest": "de9d5559be6dc93cdaf8accdf1c5c430a925e69cd85e9b6622db00523c63b6c4",
-      "provider": "openalex",
-      "published": "2026-09-29",
-      "source_id": "https://openalex.org/W2888842059",
-      "summary": "A new microdialysis sampling method and microfluidic device were developed in vitro. The method consisted of using up to four microdialysis sampling probes connected in series to evaluate the relative recovery (RR) of different model solutes methyl orange, fluorescein isothiocyanate (FITC)-dextran average mol. wt. 4,000 (FITC-4), FITC-10, FITC-20, and FITC-40. Different flow rates (0.8, 1.0, and 1.5 µL/min) were used to compare experimentally observed relative recoveries with theoretical estimations. With increasing the number of probes in series, the relative recovery increases and ~100% (99.7% ± 0.9%) relative recovery for methyl orange was obtained. For larger molecules such as fluorescein isothiocyanate (FITC)-dextran average mol. wt. 4,000 (FITC-4), FITC-10, FITC-20, and FITC-40, RR of 66.3% ± 0.0%, 39.4% ± 0.6%, 18.7% ± 0.1%, and 7.7% ± 0.1%, respectively, were obtained using four microdialysis sampling probes in series at 0.8 µL/min. Using theoretical estimations, the number of microdialysis probes in series needed to achieve 99% RR was determined for each solute. The theoretical estimations started deviating from experiments at mol. wt. 10,000 (FITC-10). For example, the deviations from experiments for FITC-10, FITC-20, and FITC-40 were +52%, +149%, and +179% respectively. On the other hand, methyl orange and FITC-4 theoretical estimations were closer to the experiments (-1%, underestimation, and +15%, overestimation). The method developed for this dissertation was miniaturized in a polydimethylsiloxane (PDMS) microfluidic device having a flat polyethersulfone membrane and seven micro-channels connected in series. Push-pull experiments determined that the optimal setting for this microfluidic device prototype during the collection of methyl orange was 0.2 µL/min-1.0 µL/min. The relative recovery of methyl orange using this setting was 78.8% ± 2.5%. This result indicated that a working microfluidic device prototype was developed. Further optimizations need to be performed to reach the same level as the microdialysis probes in series method. All the work conducted to achieve the development and miniaturization of the microdialysis probes in series approach is presented in this dissertation. topics=Dialysis and Renal Disease Management Central Venous Catheters and Hemodialysis Antibiotics Pharmacokinetics and Efficacy oa=True oa_status=green",
+      "digest": "ff0b63aba50cf91caef71228aa21281ab23561503896e73a7f8d2f186dd98c63",
+      "provider": "arxiv",
+      "published": "2026-09-30T17:59:03Z",
+      "source_id": "http://arxiv.org/abs/2609.40347v1",
+      "summary": "We introduce VideoMSN, a Masked Siamese Network framework for efficient self-supervised spatio-temporal representation learning in videos. Instead of relying on heavy 3D architectures or reconstruction-based autoencoders for learning with unlabeled data, we repurpose standard image Vision Transformers by representing videos as super images which are grids composed of frames sampled from videos. From each super image, we construct two views: one with spatial patch masking and the other with temporal frame masking, ensuring no information leakage across frames. A shared Vision Transformer (ViT) encoder aligns their embeddings using a masked Siamese loss, capturing both motion and appearance cues without reconstruction. Our decoder-free formulation leverages an image foundation model towards efficient video representation learning. Starting from pretrained DINO-v3 and DeiT-v3 image encoders, VideoMSN achieves state-of-the-art performance on Kinetics-400, UCF101, and HMDB51 while requiring up to $32\\times$ fewer and $160\\times$ fewer video pretraining epochs compared to prior video self-supervised learning methods. Our proposed approach also shows strong performance in low-shot classification, confirming the transferability of the learned representations in a label-scarce scenario. Project Page: https://cvir.github.io/projects/videomsn.",
       "tags": [],
-      "title": "Development of Microdialysis Probes in Series Approach Toward Eliminating Microdialysis Sampling Calibration: Miniaturization into a PDMS Microfluidic Device",
-      "url": "https://scholarworks.uark.edu/etd/2720"
+      "title": "Image Classifiers are Efficient Self-Supervised Video Representation Learners",
+      "url": "https://arxiv.org/abs/2609.40347v1"
     },
     {
-      "digest": "6bf49f9f12778eaecce6a0652e69c9720ec4b3cb45d555032a178188d9bafe07",
-      "provider": "openalex",
-      "published": "2026-09-29",
-      "source_id": "https://openalex.org/W7165623272",
-      "summary": "topics=Topic Modeling Text Readability and Simplification Natural Language Processing Techniques oa=True oa_status=green",
+      "digest": "8666a276fdf6e1cd600ae00ca0f3bbebd43e1e31d6e34b29b6edaee4baff981f",
+      "provider": "arxiv",
+      "published": "2026-09-30T17:59:56Z",
+      "source_id": "http://arxiv.org/abs/2609.40361v1",
+      "summary": "Multimodal large language models (MLLMs) are rapidly advancing clinical diagnosis, yet their adaptation pipelines remain anchored to accuracy-based objectives. Clinical data are heavily class-imbalanced: a constant-majority predictor can score above 90% accuracy while being clinically useless. We therefore evaluate and optimize for AUROC, a threshold-free score that ranks positives above negatives and is invariant to class balance. We focus on prompt optimization in MLLMs. Reflective methods such as GEPA use a binary scores matrix with one row per evaluation instance and one column per candidate prompt; cells record per-instance correctness, so the column average is accuracy and drives candidate selection. We introduce pair-level Pareto prompt evolution (Ranking-PE), which replaces each correctness row with a pairwise-ordering row over (positive, negative) instance pairs: the cell is 1 if the candidate scores the positive higher than the paired negative. The column average then equals empirical AUROC (by the Wilcoxon-Mann-Whitney identity). We apply this swap at all three layers the prompt evolution search reads from - the scores matrix that decides Pareto dominance, the per-example feedback to the reflection LM, and final candidate selection - at no extra model calls and with no surrogate loss. Across three diseases on MIMIC, accuracy-based prompt evolution can degrade ranking; Ranking-PE reverses this, beating the accuracy-based recipe by +5.8 AUROC pp on fine-tuned Qwen3-VL-8B and +16.2 pp on MedGemma-4B. Ablations examine each design component and show that a medical-grade visual backbone - via vision-encoder-tuned SFT or medical pretraining - is a prerequisite that prompt search cannot replace - our recipe extends reflective prompt evolution from text-only data to multimodal clinical decision-making.",
       "tags": [],
-      "title": "moBERTo: A Modern Encoder for Portuguese via Continued Pretraining of ModernBERT",
-      "url": "https://doi.org/10.1007/978-3-032-39898-7_19"
+      "title": "Ranking-Aware Prompt Optimization for Multimodal Clinical Diagnosis",
+      "url": "https://arxiv.org/abs/2609.40361v1"
     },
     {
-      "digest": "7e91da75f6e2ab51fd70c6e9d25d9c5c34fb357d117a9ada943b1f061ab11844",
-      "provider": "openalex",
-      "published": "2026-09-29",
-      "source_id": "https://openalex.org/W7171269018",
-      "summary": "Suppose that a Brownian motion can only be observed after a random time τ . We are interested in the distribution of the time T required to record the first visit to a given threshold. The cases when τ has an exponential and an Erlang distribution are considered. A method to approximate the probability density function of T from its moments is also presented. topics=stochastic dynamics and bifurcation Diffusion and Search Dynamics Advanced Queuing Theory Analysis oa=True oa_status=diamond",
-      "tags": [],
-      "title": "First-Passage Time Distributions of a Brownian Motion Observed After a Random Delay",
-      "url": "https://doi.org/10.37394/23202.2026.25.52"
-    },
-    {
-      "digest": "69a9b14eae943c38a679aec3eb3f8c4998bc4ea91565baa2f80d580ba9bd0e09",
-      "provider": "openalex",
-      "published": "2026-09-28",
-      "source_id": "https://openalex.org/W7214601014",
-      "summary": "The cyber infrastructure of Industrial Control Systems (ICSs) that monitor power grids, water treatment facilities, pipelines, and manufacturing lines has become a very com-plex cyber-physical systems, which now face a growing range of cyber threats, such as Stuxnet, Industroyer, TRITON, and Colonial Pipeline incident. In the era of new and sophisticated attacks, such as zero-day exploits, multi-stage intrusions and adversaries taking advantage of the unique ‘availability first' constraints of operational technology (OT), traditional signatures and rule-based defenses are proving less effective. This re-view is systematic, analyzing the use of artificial intelligence (AI) methodologies in ICS cybersecurity from the year 2018 to 2024. According to the guidelines of the PRISMA 2020, from the five scholarly databases, 1578 records were retrieved and 147 studies were included in the qualitative synthesis, and 102 studies were included in the quantitative comparison. The provided literature is categorized in a methodological taxonomy from classical machine learning to deep learning; from graph neural networks (GNNs) to reinforcement learning (RL); from autonomous response to intrusion detection, at-tack-graph analysis, malware analysis and vulnerability prioritization. Overall, the synthesis suggests that graph-based and hybrid methods yield the best detection accuracy (reported from 92% to 99.5% with less than 3% false-positive rates), whereas classical methods still seem to be the most suitable for resource-constrained applications. There are ongoing deficiencies in standardized benchmarking, adversarial robustness, safety–security co-engineering, and real-world validation. A research roadmap is advocated for guiding future research, which focuses on safe RL, federated learning, explainable GNNs, and digital-twin-based security assessment. topics=Smart Grid Security and Resilience Adversarial Robustness in Machine Learning Network Security and Intrusion Detection oa=True oa_status=hybrid",
-      "tags": [],
-      "title": "AI Approaches for Industrial Control System Cybersecurity: A Comprehensive Review of Methodological Contexts",
-      "url": "https://doi.org/10.64189/ict.26318"
-    },
-    {
-      "digest": "9ec74292b96f0cfbe969ac63645ba60d8d0032a1f7039aa4fbcf593acd4fdecf",
-      "provider": "openalex",
-      "published": "2026-09-28",
-      "source_id": "https://openalex.org/W7214678343",
-      "summary": "RNA plays central roles in regulating information flow and provides a versatile substrate for engineering biological functions. While large language models (LLMs) have transformed natural language processing and protein design, a general framework connecting RNA foundation models to functional sequence design remains limited. Here, we present RNASeek, a 1.6-billion-parameter generative foundation model built on a DeepSeek architecture and trained on a cross-phyla transcriptomic corpus for RNA sequence representation and generation. Natural-language tokens enable flexible conditional prediction and sequence design using a unified backbone. RNASeek captures species-specific transcript features and intron–exon boundaries in a zero-shot setting. We then fine-tune RNASeek to predict ribozyme self-cleavage activity and viral mRNA stability, revealing interpretable sequence features associated with function, including ribozyme loop flexibility and stem stability, as well as AU-rich motifs associated with mRNA stability. We use these functional predictors as reward models and apply Group Relative Policy Optimization (GRPO) to update the generation policy of RNASeek toward sequences with desired properties. GRPO-guided generation produces faster-cleaving ribozymes and stability-enhancing 3′ UTRs while satisfying user-specified IUPAC constraints. Experimentally validated RNASeek-generated ribozymes achieve wild-type levels of activity, while RNASeek-generated 3′ UTR sequences exceed the performance of the training data and benchmarked AI-generated 3′ UTRs. Together, RNASeek establishes a unified pretrain–predict–optimize framework that connects learned RNA function to controllable de novo sequence design and provides a general strategy for engineering regulatory RNAs with desired properties. topics=RNA and protein synthesis mechanisms RNA Research and Splicing RNA modifications and cancer oa=True oa_status=green",
-      "tags": [
-        "dataset",
-        "long-context"
-      ],
-      "title": "RNASeek: A Cross-Phyla Generative Foundation Model for Multipurpose RNA Modeling and Reinforcement Learning-Based Design",
-      "url": "https://doi.org/10.64898/2026.09.24.754173"
-    },
-    {
-      "digest": "94bf75b3e1b3bc2cdb730da44a5634fa27b1deb48b9797d329a57683f94319a6",
-      "provider": "openalex",
-      "published": "2026-10-01",
-      "source_id": "https://openalex.org/W7202008909",
-      "summary": "Modern software systems evolve rapidly under CI/CD practices, where tests are critical for quality. However, substantial code changes often render existing test cases obsolete, causing pipeline disruptions, reduced productivity, and compromised quality. Recent automatic test update approaches leverage LLMs to refine test cases via execution feedback and exact-matching context retrieval, prioritizing executability and line coverage but suffering three limitations: (1) neglecting test assertion adequacy, weakening fault detection; (2) relying on coarse line coverage instead of specific uncovered lines/branches; (3) using exact-matching retrieval, which fails for LLM hallucinated queries. To address these, we propose MuMuTestUp, a mutation-guided multi-agent framework with three specialized agents: Mutation Analysis (strengthens assertions via surviving mutants), Coverage Analysis (generates targeted repair instructions for uncovered lines/branches), and Semantic Retrieval (handles hallucinations via semantic-similarity search). We also construct PRBENCH, a 571-sample pull-request-level dataset from 10 open-source Java projects (validated for cross-commit update scenarios). Evaluations against state-of-the-art baselines use both open-source (Deepseek-V3.2) and closed-source (GPT-4.1) LLMs. topics=Software Testing and Debugging Techniques Software Engineering Research Software System Performance and Reliability oa=True oa_status=green",
-      "tags": [
-        "dataset"
-      ],
-      "title": "Mutation-based multi-agent test case update",
-      "url": "https://ink.library.smu.edu.sg/sis_research/11196"
-    },
-    {
-      "digest": "2301c32d30eea161f89e67af3a2e0f5ced11bc8390a714cf26bed2c8e49cc8f1",
-      "provider": "openalex",
-      "published": "2026-09-29",
-      "source_id": "https://openalex.org/W7140311726",
-      "summary": "topics=Natural Language Processing Techniques Text Readability and Simplification Topic Modeling oa=True oa_status=green",
-      "tags": [],
-      "title": "CAPITU: A Benchmark for Evaluating Instruction-Following in Brazilian Portuguese with Literary Context",
-      "url": "https://doi.org/10.1007/978-3-032-39898-7_25"
-    },
-    {
-      "digest": "6d643f80f1089fe28eea3d9a667280cec1a40ba12629af55289e6ee4aa0b65ad",
-      "provider": "openalex",
-      "published": "2026-09-29",
-      "source_id": "https://openalex.org/W7154617627",
-      "summary": "The promise of decentralized peer-to-peer (P2P) systems is fundamentally gated by the challenge of Network Address Translation (NAT) traversal, with existing solutions often reintroducing the very centralization they seek to avoid. This paper presents the first large-scale measurement study of a fully decentralized NAT traversal protocol, Direct Connection Upgrade through Relay (DCUtR), within the production libp2p-based InterPlanetary File System (IPFS) network. Drawing on over 4.4 million traversal attempts from 85,000+ distinct networks across 167 countries, we provide an empirical analysis of modern P2P connectivity. We establish a conditional success rate of 70% ± 7.1% for the hole-punching stage, given that prerequisite relay reservation and public address discovery succeed, providing a crucial new benchmark for the field. Critically, we empirically challenge the long-held belief of UDP's superiority for NAT traversal, demonstrating that DCUtR's high-precision, RTT-based synchronization yields statistically indistinguishable hole punching success rates for both TCP and QUIC (≈ 70%). Our analysis further validates the protocol's design for permissionless environments by showing that success is independent of relay characteristics and that the mechanism is highly efficient, with 97.6% of successful connections established on the first attempt. Building on this analysis, we propose a concrete roadmap of protocol enhancements aimed at achieving universal connectivity and contribute our complete dataset to foster further research in this domain. topics=Peer-to-Peer Network Technologies Distributed systems and fault tolerance Network Traffic and Congestion Control oa=True oa_status=gold",
-      "tags": [
-        "dataset"
-      ],
-      "title": "Large-Scale Measurement of NAT Traversal for the Decentralized Web: A Case Study of DCUtR in IPFS",
-      "url": "https://doi.org/10.1145/3777912.3809138"
-    },
-    {
-      "digest": "ae7a1b6fb99f70844885af806d502ed04fdad71ed3362314e721c821b58b2368",
-      "provider": "openalex",
-      "published": "2026-09-29",
-      "source_id": "https://openalex.org/W7214704146",
-      "summary": "ABSTRACT Global wild‐sourced wildlife trade is structured not only by the intensity and composition of traded species, but also by the routes, hubs, and redistribution pathways that connect countries/territories into an intricate network. Understanding the spatiotemporal dynamics of trade networks over time is essential for identifying emerging governance challenges and conservation priorities. To quantify these evolving changes, we analyzed trade records reported to the Convention on International Trade in Endangered Species of Wild Fauna and Flora (CITES) from 1991 to 2023, focusing on the network structures and socioeconomic interactions of both direct and re‐export wild‐sourced trade. Over the past three decades, trade intensity increased and became concentrated on Anthozoa, aligning with the dominance of commercial demand and live specimens. The direct trade remained anchored in persistent source‐to‐market pathways, with Indonesia and the United States dominating wild‐sourced export and import, respectively, while the redistribution flows were led by established European hubs such as Switzerland, Italy, and France, with rising intermediary roles in Asian economies. The expanding and intensive redistribution network was associated with higher population density, and stronger governance capacity linked with a more streamlined and concentrated direct trade network. The emergence and importance of structural bridging actors in direct trade and redistribution intermediaries in re‐export trade varied across regions, highlighting the need for adaptive governance measures that strengthen targeted monitoring of overlooked marine invertebrates, and tailor oversight to dynamic trade roles, including the growing prominence of Asian countries/territories in wild‐sourced redistribution. topics=Wildlife Conservation and Criminology Analyses International Maritime Law Issues Global trade, sustainability, and social impact oa=True oa_status=hybrid",
-      "tags": [
-        "long-context"
-      ],
-      "title": "Rising Connectivity, Shifting Hubs: The Evolving Network and Governance Challenges of Global Wild‐Sourced Trade",
-      "url": "https://doi.org/10.1111/acv.70106"
-    },
-    {
-      "digest": "6d608aab2d594860cbe828714d3ef8c3fe7a6f7c7c24d75fea66dc402ac3522a",
-      "provider": "openalex",
-      "published": "2026-09-29",
-      "source_id": "https://openalex.org/W7155556133",
-      "summary": "Third-party Large Language Model (LLM) API gateways are rapidly emerging as unified access points to models offered by multiple vendors. However, the internal routing, caching, and billing policies of these gateways are largely undisclosed, leaving users with limited visibility into whether requests are served by the advertised models, whether responses remain faithful to upstream APIs, or whether invoices accurately reflect public pricing policies. To address this gap, we introduce GateScope, a lightweight black-box measurement framework for evaluating behavioral consistency and operational transparency in commercial LLM gateways. GateScope is designed to detect key misbehaviors, including model downgrading or switching, silent truncation, billing inaccuracies, and instability in latency by auditing gateways along four critical dimensions: response content analysis, multi-turn conversation performance, billing accuracy, and latency characteristics. Our measurements across 10 real-world commercial LLM API gateways reveal frequent gaps between expected and actual behaviors, including silent model substitutions, degraded memory retention, deviations from announced pricing, and substantial variation in latency stability across platforms. topics=Topic Modeling Software System Performance and Reliability Big Data and Digital Economy oa=True oa_status=gold",
-      "tags": [],
-      "title": "Behavioral Consistency and Transparency Analysis on Large Language Model API Gateways",
-      "url": "https://doi.org/10.1145/3777912.3809156"
-    },
-    {
-      "digest": "cb6a54a7c0b3a7a5bf8e7c72ccdfc3cf91284dceb68446706b5025bdb79be9a4",
+      "digest": "ca7dad150ddc43d613d29b3494102a9eab364ef7ec934b0c9d3e16c50c7070e4",
       "provider": "github",
-      "published": "2026-09-30T04:40:29Z",
+      "published": "2026-10-01T05:16:31Z",
       "source_id": "notduey/llm-from-scratch",
       "summary": "Building and training a small language model from scratch, then optimizing it for CPU inference license=unknown topics= stars=0",
       "tags": [],
@@ -284,25 +173,35 @@
       ],
       "title": "bcode0127-debug/Compositional-Reasoning-Arithmetic",
       "url": "https://github.com/bcode0127-debug/Compositional-Reasoning-Arithmetic"
+    },
+    {
+      "digest": "18455c5013ecc83bdfeb6c702bf24c0c157221a3dcf0686740ac54b2e1c1d6fd",
+      "provider": "github",
+      "published": "2026-06-16T16:08:29Z",
+      "source_id": "deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System",
+      "summary": "Developed an AI-powered Physics Reasoning (RLHF). The system generates step-by-step solutions for physics problems and automatically converts mathematical expressions into LaTeX format. Built using Python, PyTorch, Hugging Face Transformers, and TRL, with a modular architecture for training, evaluation, and scientific document generation.. license=unknown topics= stars=0",
+      "tags": [
+        "reasoning"
+      ],
+      "title": "deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System",
+      "url": "https://github.com/deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System"
     }
   ],
-  "evidence_digest": "b3f782d0e984f90a76d4078bcbc7e00b9eace0002db1583c0594c0391527ce25",
+  "evidence_digest": "143bf88f01a3b5f566f2597a0e6ad38f87c8f92c084ceb7e69bef53443a6fa59",
   "ok": true,
   "policy": "online material is untrusted evidence; only bounded local mutation families may consume derived tags; OpenAlex is used when arXiv research metadata is unavailable",
-  "queried_at": "2026-10-01T00:17:25.130285+00:00",
+  "queried_at": "2026-10-01T06:05:49.974840+00:00",
   "remote_code_execution": false,
   "remote_content_trusted": false,
   "source_candidates": [],
   "tag_counts": {
-    "code": 1,
+    "code": 2,
     "curriculum": 1,
-    "data-analysis": 1,
-    "dataset": 5,
-    "efficiency": 3,
+    "efficiency": 2,
     "gqa": 1,
-    "long-context": 7,
-    "reasoning": 2,
-    "tokenizer": 2
+    "long-context": 4,
+    "reasoning": 3,
+    "tokenizer": 1
   },
   "topics": [
     "language model optimizer training",
