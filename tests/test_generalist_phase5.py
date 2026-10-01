@@ -18,6 +18,7 @@ from generalist_lm.bootstrap_data import (
     _quality_web_text,
     _read_streaming_cache,
     _web_chunks,
+    _exclude_validation_response_overlap,
     load_bootstrap_replay,
     write_bootstrap_replay,
 )
@@ -2642,3 +2643,64 @@ def test_sustained_stall_uses_measured_short_update_and_grows_only_after_success
         assert accepted["effective_budget_tokens"] == budget
     retry = _phase5_recovery_plan(1_000_000, consecutive_rejections=4, success_streak=0, **common)
     assert retry["effective_budget_tokens"] == 4_000
+
+
+def test_cross_format_response_filter_preserves_validation_and_is_idempotent():
+    import hashlib
+    from generalist_lm.pretraining import CorpusDocument
+
+    def doc(text):
+        return CorpusDocument(
+            source="reviewed-human", text=text,
+            sha256=hashlib.sha256(text.encode()).hexdigest(), bytes=len(text.encode()),
+        )
+
+    def dialogue(text, prompt="A training-only request."):
+        return SFTExample([
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": text},
+        ])
+
+    corpus_validation = [doc("A reserved corpus answer.")]
+    sft_validation = [dialogue("A reserved dialogue answer.")]
+    corpus_before = list(corpus_validation)
+    dialogue_before = list(sft_validation)
+    corpus_train = [
+        doc("A RESERVED CORPUS ANSWER."),
+        doc("A  reserved dialogue answer."),
+        doc("A useful training sentence."),
+    ]
+    sft_train = [
+        dialogue("A reserved corpus answer."),
+        dialogue("A RESERVED DIALOGUE ANSWER."),
+        dialogue("Another response.", prompt=corpus_validation[0].text),
+        dialogue("A different training response."),
+    ]
+    documents, rows, report = _exclude_validation_response_overlap(
+        corpus_train, corpus_validation, sft_train, sft_validation
+    )
+    assert documents == [corpus_train[-1]]
+    assert rows == [sft_train[-1]]
+    assert corpus_validation == corpus_before
+    assert sft_validation == dialogue_before
+    assert report["validation_rows_changed"] == 0
+    assert report["corpus_training_documents_excluded"] == 2
+    assert report["sft_training_conversations_excluded"] == 3
+    docs_again, rows_again, second = _exclude_validation_response_overlap(
+        documents, corpus_validation, rows, sft_validation
+    )
+    assert docs_again == documents and rows_again == rows
+    assert second["corpus_training_documents_excluded"] == 0
+    assert second["sft_training_conversations_excluded"] == 0
+
+
+def test_response_filter_never_reassigns_excluded_training_rows_to_validation():
+    row = SFTExample([
+        {"role": "user", "content": "A harmless prompt."},
+        {"role": "assistant", "content": "An answer reserved for validation."},
+    ])
+    heldout = [row]
+    documents, training, report = _exclude_validation_response_overlap([], [], [row], heldout)
+    assert documents == [] and training == []
+    assert heldout == [row]
+    assert report["validation_rows_changed"] == 0
