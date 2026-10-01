@@ -7,6 +7,15 @@ on:
         description: Cumulative causal tokens for this bootstrap rung
         required: false
         default: '1000000'
+      wide_batch_recovery:
+        description: Enable validated 50M wide-batch recovery for this manual run
+        required: false
+        type: boolean
+        default: false
+      max_segments:
+        description: Maximum resumable segments in this manual run
+        required: false
+        default: '4'
   push:
     branches: [main]
     paths:
@@ -39,6 +48,8 @@ jobs:
       STATE_DIR: /tmp/airi-generalist-phase5-state-repo/generalist-state
       CACHE_DIR: /tmp/airi-generalist-phase5-cache
       TARGET_TOKENS: ${{ github.event.inputs.target_tokens || '1000000' }}
+      WIDE_BATCH_RECOVERY: ${{ github.event.inputs.wide_batch_recovery || 'false' }}
+      MAX_SEGMENTS: ${{ github.event.inputs.max_segments || '4' }}
       ARCHITECTURE_INTERVAL_TOKENS: '5000000'
       ARCHITECTURE_HANDOFF: 'false'
       HISTORICAL_LANGUAGE_RECOVERY_REF: 'e7c2c14de4359dfab952f903a17e65fdf3877899'
@@ -288,11 +299,19 @@ jobs:
             # after every 1M-token unit of work.
             segment_tokens=1000000
           fi
-          for segment in $(seq 1 4); do
-            echo "Phase 5 segment ${segment}; target=${TARGET_TOKENS}; budget=${segment_tokens}"
+          max_segments="${MAX_SEGMENTS:-4}"
+          if ! [[ "${max_segments}" =~ ^[1-4]$ ]]; then
+            echo "max_segments must be an integer in [1,4]" >&2
+            exit 1
+          fi
+          for segment in $(seq 1 "${max_segments}"); do
+            echo "Phase 5 segment ${segment}; target=${TARGET_TOKENS}; budget=${segment_tokens}; wide_batch_recovery=${WIDE_BATCH_RECOVERY}"
             recovery_args=()
             if [[ -n "${HISTORICAL_RECOVERY_SOURCE:-}" ]]; then
               recovery_args+=(--historical-recovery-source "${HISTORICAL_RECOVERY_SOURCE}")
+            fi
+            if [[ "${WIDE_BATCH_RECOVERY:-false}" == "true" ]]; then
+              recovery_args+=(--wide-batch-recovery)
             fi
             python -m generalist_lm.bootstrap_training \
               --state-dir "${STATE_DIR}" \
