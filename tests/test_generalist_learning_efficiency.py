@@ -354,3 +354,418 @@ def test_interrupted_trial_preserves_source_and_resume_starts_at_same_checkpoint
         root / "bootstrap-data/candidate"
     )
     assert source_digest(root) == initial
+
+
+@pytest.mark.parametrize("policy", ["ffn", "embeddings", "attention_and_norm"])
+def test_parameter_localization_freezes_weights_and_excludes_optimizer_moments(policy):
+    import torch
+    from generalist_lm.learning_efficiency_benchmark import (
+        configure_trainable_parameters,
+    )
+    from generalist_lm.bootstrap_training import _protected_optimizer
+
+    r = runtime()
+    report = configure_trainable_parameters(r.model, policy)
+    frozen = {
+        n: p.detach().clone()
+        for n, p in r.model.named_parameters()
+        if not p.requires_grad
+    }
+    optimizer, _ = _protected_optimizer(r.model, learning_rate=0.001)
+    selected = {id(p) for g in optimizer.param_groups for p in g["params"]}
+    assert report["trainable"] + report["frozen"] == sum(
+        p.numel() for p in r.model.parameters()
+    )
+    assert all(p.requires_grad == (id(p) in selected) for p in r.model.parameters())
+    logits = r.model(torch.tensor([[3, 12, 15, 20]]))["logits"]
+    logits.square().mean().backward()
+    optimizer.step()
+    for name, parameter in r.model.named_parameters():
+        if name in frozen:
+            assert torch.equal(parameter.detach(), frozen[name])
+            assert parameter not in optimizer.state
+
+
+def test_unknown_parameter_policy_fails_before_freezing():
+    from generalist_lm.learning_efficiency_benchmark import (
+        configure_trainable_parameters,
+    )
+
+    r = runtime()
+    with pytest.raises(ValueError):
+        configure_trainable_parameters(r.model, "unknown")
+    assert all(p.requires_grad for p in r.model.parameters())
+
+
+def test_document_splits_and_content_hashes_are_checked(tmp_path):
+    import hashlib
+    from generalist_lm.learning_efficiency_benchmark import (
+        read_split_documents,
+        require_disjoint_documents,
+    )
+
+    path = tmp_path / "documents.jsonl"
+    row = dict(
+        source="reviewed:en",
+        text="A sunny morning.",
+        bytes=16,
+        domain="language",
+        split="validation",
+    )
+    row["sha256"] = hashlib.sha256(row["text"].encode()).hexdigest()
+    path.write_text(json.dumps(row) + "\n")
+    val = read_split_documents(path, "validation")
+    with pytest.raises(ValueError, match="explicit train"):
+        read_split_documents(path, "train")
+    with pytest.raises(ValueError, match="overlap"):
+        require_disjoint_documents(val, val)
+    row["text"] += "changed"
+    path.write_text(json.dumps(row) + "\n")
+    with pytest.raises(ValueError, match="hash mismatch"):
+        read_split_documents(path, "validation")
+
+
+def test_corpus_subset_evaluation_is_read_only_and_restores_mode():
+    import hashlib
+    import torch
+    from generalist_lm.learning_efficiency_benchmark import evaluate_corpus_subset
+
+    r = runtime()
+    r.model.train()
+    text = "A sunny morning brings light to the room."
+    doc = CorpusDocument(
+        source="validation:en",
+        text=text,
+        sha256=hashlib.sha256(text.encode()).hexdigest(),
+        bytes=len(text),
+        domain="language",
+    )
+    weights = {n: p.detach().clone() for n, p in r.model.named_parameters()}
+    report = evaluate_corpus_subset(r, [doc], max_blocks=2)
+    assert report["supervised_tokens"] > 0
+    assert report["loss"] > 0
+    assert r.model.training
+    assert all(
+        p.grad is None and torch.equal(weights[n], p)
+        for n, p in r.model.named_parameters()
+    )
+    assert (
+        report["block_sha256"]
+        == evaluate_corpus_subset(r, [doc], max_blocks=2)["block_sha256"]
+    )
+
+
+def test_ffn_down_scaling_changes_only_output_learning_rate_and_keeps_every_parameter():
+    from generalist_lm.learning_efficiency_benchmark import scale_ffn_down_groups
+    from generalist_lm.bootstrap_training import _protected_optimizer
+
+    r = runtime()
+    optimizer, _ = _protected_optimizer(r.model, learning_rate=0.001)
+    names = {id(p): n for n, p in r.model.named_parameters()}
+    original = {id(p): g["lr"] for g in optimizer.param_groups for p in g["params"]}
+    scale_ffn_down_groups(optimizer, r.model, 1 / 64)
+    after = {id(p): g["lr"] for g in optimizer.param_groups for p in g["params"]}
+    assert set(after) == set(original)
+    assert len(after) == sum(len(g["params"]) for g in optimizer.param_groups)
+    for pid, lr in after.items():
+        assert lr == original[pid] * (1 / 64 if ".ff.down." in names[pid] else 1)
+
+
+@pytest.mark.parametrize("scale", [0, -1, 2, float("nan")])
+def test_ffn_down_scaling_rejects_invalid_scale_before_mutating_groups(scale):
+    from generalist_lm.learning_efficiency_benchmark import scale_ffn_down_groups
+    from generalist_lm.bootstrap_training import _protected_optimizer
+
+    r = runtime()
+    optimizer, _ = _protected_optimizer(r.model, learning_rate=0.001)
+    before = [id(g) for g in optimizer.param_groups]
+    with pytest.raises(ValueError):
+        scale_ffn_down_groups(optimizer, r.model, scale)
+    assert before == [id(g) for g in optimizer.param_groups]
+
+
+def test_offline_sequence_reuses_only_accepted_checkpoint_and_never_counts_rejected_tokens(
+    offline_state, monkeypatch
+):
+    import torch
+    import generalist_lm.learning_efficiency_benchmark as bench
+
+    torch.set_num_threads(1)
+    root, health = offline_state
+    original = source_digest(root)
+    monkeypatch.setattr(bench, "evaluate_phase5_language", lambda runtime: dict(health))
+    real_gate = bench._segment_language_gate
+    calls = 0
+
+    def gate(before, after, anchor, **kwargs):
+        nonlocal calls
+        calls += 1
+        ok, report = real_gate(before, after, anchor, **kwargs)
+        return calls != 2, report
+
+    monkeypatch.setattr(bench, "_segment_language_gate", gate)
+    events = []
+    report = bench.run_sequence(
+        root, Trial(), [100, 100, 100], seed=3, on_segment=events.append
+    )
+    first, rejected, last = report["segments"]
+    assert [r["accepted"] for r in events] == [True, False, True]
+    assert rejected["checkpoint_hash"] == first["exported_checkpoint_hash"]
+    assert last["checkpoint_hash"] == first["exported_checkpoint_hash"]
+    assert rejected["exported_checkpoint_hash"] is None
+    assert (
+        last["offline_sequence_prior_accepted_tokens"]
+        == first["accepted_equivalent_tokens"]
+    )
+    assert (
+        report["accepted_equivalent_tokens"]
+        == first["accepted_equivalent_tokens"] + last["accepted_equivalent_tokens"]
+    )
+    assert report["live_tokens_persisted"] == 0
+    assert source_digest(root) == original
+
+
+def test_offline_export_refuses_source_or_existing_directory(offline_state, tmp_path):
+    import generalist_lm.learning_efficiency_benchmark as bench
+
+    root, _ = offline_state
+    with pytest.raises(ValueError):
+        bench.run_trial(
+            root, Trial(), seed=3, export_checkpoint=root / "bootstrap-data/candidate"
+        )
+    existing = tmp_path / "existing"
+    existing.mkdir()
+    with pytest.raises(ValueError, match="must not overwrite"):
+        bench.run_trial(root, Trial(), seed=3, export_checkpoint=existing)
+
+
+def test_generated_unlikelihood_targets_only_repeated_generated_ngrams():
+    import torch
+    from generalist_lm.learning_efficiency_benchmark import (
+        generated_repetition_objective,
+    )
+
+    ids = torch.tensor([[8, 9, 10, 11, 8, 9, 10, 11]])
+    logits = torch.zeros(1, 8, 16, requires_grad=True)
+    loss, report = generated_repetition_objective(logits, ids, prompt_tokens=4)
+    assert report == {"negative_positions": 1, "generated_tokens": 4}
+    loss.backward()
+    assert logits.grad[0, 6, 11] > 0
+    assert logits.grad[0, :6].abs().max() == 0
+    assert logits.grad[0, 7].abs().max() == 0
+
+
+def test_generated_unlikelihood_never_penalizes_structural_or_prompt_tokens():
+    import torch
+    from generalist_lm.learning_efficiency_benchmark import (
+        generated_repetition_objective,
+    )
+
+    ids = torch.tensor([[1, 9, 10, 11, 1, 9, 10, 11]])
+    logits = torch.zeros(1, 8, 16, requires_grad=True)
+    loss, report = generated_repetition_objective(logits, ids, prompt_tokens=4)
+    assert report["negative_positions"] == 0
+    loss.backward()
+    assert logits.grad.abs().max() == 0
+    ids = torch.tensor([[8, 9, 10, 11, 8, 9, 10, 11]])
+    loss, report = generated_repetition_objective(logits, ids, prompt_tokens=8)
+    assert report["negative_positions"] == 0
+
+
+def test_generated_objective_uses_supplied_training_prefix_and_default_decoding():
+    import torch
+    from generalist_lm.learning_efficiency_benchmark import (
+        training_prefix_generated_objective,
+    )
+
+    r = runtime()
+    observed = []
+
+    def generation(prompt, **kwargs):
+        observed.append((prompt, kwargs))
+        return [8, 9, 10, 11]
+
+    r._generate_ids = generation
+    r.model.train()
+    loss, stats = training_prefix_generated_objective(r, [[8, 9, 10, 11]])
+    assert observed == [
+        (
+            [8, 9, 10, 11],
+            {"max_new_tokens": 40, "temperature": 0.0, "repetition_penalty": 1.0},
+        )
+    ]
+    assert stats["generated_tokens"] == 4
+    assert stats["negative_positions"] == 1
+    loss.backward()
+    assert r.model.training
+    assert any(p.grad is not None for p in r.model.parameters())
+
+
+def test_generated_training_trajectory_matching_holdout_is_excluded():
+    from generalist_lm.learning_efficiency_benchmark import (
+        training_prefix_generated_objective,
+    )
+
+    r = runtime()
+    r._generate_ids = lambda prompt, **kwargs: r.tokenizer.encode("Come ti chiami?")
+    r.model.train()
+    loss, stats = training_prefix_generated_objective(
+        r, [r.tokenizer.encode("A sunny morning. ")]
+    )
+    assert stats["holdout_filtered_trajectories"] == 1
+    assert stats["negative_positions"] == 0
+    assert stats["generated_tokens"] > 0
+    assert loss.item() == 0
+    loss.backward()
+    assert r.model.training
+
+
+def test_causal_replay_accounting_excludes_prompt_shift_and_padding():
+    from generalist_lm.learning_efficiency_benchmark import causal_replay_selection
+    from generalist_lm.tokenizer import PAD
+
+    blocks = [[12, 13, 14, PAD, PAD], [20, 21, 22, 23, 24]]
+    selected, count = causal_replay_selection(
+        blocks, rng=random.Random(1), examples=2, token_fraction=None, causal_tokens=16
+    )
+    assert set(selected) == {0, 1}
+    assert count == 6
+    selected, count = causal_replay_selection(
+        blocks, rng=random.Random(1), examples=2, token_fraction=0.25, causal_tokens=12
+    )
+    assert count >= 4
+    assert count == sum(sum(t != PAD for t in blocks[i][1:]) for i in selected)
+
+
+def test_causal_replay_slice_hash_is_separate_from_new_data():
+    assert slice_hash([[12, 13]], [], [[20, 21]]) != slice_hash(
+        [[12, 13]], [], [[20, 22]]
+    )
+    assert slice_hash([[12, 13]], []) == slice_hash([[12, 13]], [], [])
+
+
+def test_offline_causal_protected_replay_records_real_labels_without_changing_new_budget(
+    offline_state, monkeypatch
+):
+    import torch
+    import generalist_lm.learning_efficiency_benchmark as bench
+
+    torch.set_num_threads(1)
+    root, health = offline_state
+    original = source_digest(root)
+    monkeypatch.setattr(bench, "evaluate_phase5_language", lambda runtime: dict(health))
+    result = bench.run_trial(
+        root,
+        Trial(
+            segment_tokens=100,
+            replay_format="causal",
+            replay_examples=8,
+            replay_weight=0.25,
+        ),
+        seed=3,
+    )
+    assert result["replay_tokens"] == sum(s["replay_tokens"] for s in result["steps"])
+    assert result["attempted_causal_tokens"] == sum(
+        s["causal_tokens"] for s in result["steps"]
+    )
+    assert result["accepted_equivalent_tokens"] == result["attempted_causal_tokens"]
+    assert result["replay_tokens"] > 0
+    assert result["actual_replay_token_fraction"] == result["replay_tokens"] / (
+        result["replay_tokens"] + result["attempted_causal_tokens"]
+    )
+    assert source_digest(root) == original
+
+
+def test_generated_auxiliary_tokens_are_not_accepted_causal_tokens(
+    offline_state, monkeypatch
+):
+    import torch
+    import generalist_lm.learning_efficiency_benchmark as bench
+
+    torch.set_num_threads(1)
+    root, health = offline_state
+    original = source_digest(root)
+    monkeypatch.setattr(bench, "evaluate_phase5_language", lambda runtime: dict(health))
+
+    def auxiliary(runtime, prefixes):
+        assert len(prefixes) == 8
+        loss = next(p for p in runtime.model.parameters() if p.requires_grad).sum() * 0
+        return loss, dict(negative_positions=12, generated_tokens=200)
+
+    monkeypatch.setattr(bench, "training_prefix_generated_objective", auxiliary)
+    result = bench.run_trial(
+        root,
+        Trial(
+            segment_tokens=100, autoregressive_ul_weight=1.0, autoregressive_prefixes=8
+        ),
+        seed=3,
+    )
+    assert result["accepted_equivalent_tokens"] == sum(
+        s["causal_tokens"] for s in result["steps"]
+    )
+    assert all(
+        s["autoregressive_unlikelihood"]["new_supervised_causal_tokens_counted"] == 0
+        for s in result["steps"]
+    )
+    assert result["live_tokens_persisted"] == 0
+    assert source_digest(root) == original
+
+
+def test_corpus_validation_is_excluded_from_sft_replay_despite_different_split_hashes():
+    import hashlib
+    from generalist_lm.learning_efficiency_benchmark import (
+        exclude_corpus_validation_replay,
+    )
+
+    text = "The flower is pink."
+    val = CorpusDocument(
+        source="validation:en",
+        text=text,
+        sha256=hashlib.sha256(text.encode()).hexdigest(),
+        bytes=len(text),
+        domain="language",
+    )
+    contaminated = SFTExample(
+        [
+            {"role": "user", "content": "Describe the flower."},
+            {"role": "assistant", "content": " THE flower is pink. "},
+        ]
+    )
+    safe = rows()[0]
+    selected, count = exclude_corpus_validation_replay([contaminated, safe], [val])
+    assert selected == [safe]
+    assert count == 1
+
+
+def test_anchored_decay_preserves_frozen_parameters_and_immutable_anchor():
+    import copy
+    import torch
+    from generalist_lm.learning_efficiency_benchmark import anchored_parameter_decay
+
+    model = torch.nn.Linear(2, 2)
+    anchor = copy.deepcopy(model)
+    with torch.no_grad():
+        for p in model.parameters():
+            p.add_(1)
+    model.bias.requires_grad_(False)
+    bias = model.bias.detach().clone()
+    anchor_weights = {n: p.detach().clone() for n, p in anchor.named_parameters()}
+    before = model.weight.detach().clone()
+    report = anchored_parameter_decay(model, anchor, 0.05)
+    assert torch.allclose(model.weight, before * 0.95 + anchor.weight * 0.05)
+    assert torch.equal(model.bias, bias)
+    assert all(torch.equal(anchor_weights[n], p) for n, p in anchor.named_parameters())
+    assert report["actual_parameter_movement_norm"] > 0
+    assert report["distance_to_anchor_after"] < report["distance_to_anchor_before"]
+
+
+def test_anchored_decay_fails_before_mutation_on_topology_mismatch():
+    import torch
+    from generalist_lm.learning_efficiency_benchmark import anchored_parameter_decay
+
+    model = torch.nn.Linear(2, 2)
+    anchor = torch.nn.Linear(3, 2)
+    before = model.weight.detach().clone()
+    with pytest.raises(ValueError, match="topology"):
+        anchored_parameter_decay(model, anchor, 0.01)
+    assert torch.equal(model.weight, before)

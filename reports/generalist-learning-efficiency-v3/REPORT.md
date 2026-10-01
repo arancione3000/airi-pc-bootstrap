@@ -1,5 +1,7 @@
 # AIRI generalist learning efficiency v3 — audit e risultato negativo
 
+**Aggiornamento della continuazione:** vedere `resume-2026-10-01/REPORT.md`. Nuovo checkpoint live fissato, corpus parzialmente recuperato dalle SHA originali, 38 ulteriori trial indipendenti e tre sequenze. I candidati che passano il primo 8k falliscono successivamente; nessuna policy promossa. Audit aggiuntivo trova sovrapposizione corpus-validation/replay SFT ampio: i precedenti miglioramenti di quella validation subset non sono prova valida.
+
 **Obiettivo non raggiunto. Nessuna nuova policy è approvata per il training live.** Sono stati aggiunti strumenti offline e prove riproducibili, non una presunta ottimizzazione validata. Nei 14 trial al learning rate corretto nessun aggiornamento supera i gate. Non esiste prova di 3x, né di 8k/16k stabili. Questo branch deve restare in draft.
 
 ## 1. Baseline_start dinamica
