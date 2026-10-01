@@ -155,7 +155,7 @@ jobs:
         run: |
           .venv/bin/python -m pytest -q tests/test_generalist_phase5.py tests/test_generalist_architecture.py tests/test_generalist_single_lineage.py tests/test_generalist_efficiency_engine.py tests/test_generalist_learning_efficiency.py tests/test_generalist_lm.py tests/test_generalist_scalable_learning.py tests/test_generalist_grounded_learning.py tests/test_generalist_bpe.py tests/test_generalist_bpe_evolution.py tests/test_generalist_retention.py tests/test_generalist_provider.py tests/test_generalist_foundation.py tests/test_native_foundation.py tests/test_native_training.py tests/test_native_acquisition.py tests/test_native_evolution.py tests/test_model_gateway.py tests/test_local_agent.py tests/test_openrouter_provider.py
 
-      - name: Offline wide-batch AIRI stability experiment
+      - name: Offline validated wide-batch AIRI experiment
         if: github.event_name == 'pull_request' && github.head_ref == 'feature/generalist-learning-efficiency-v3'
         env:
           PYTHONPATH: ${{ github.workspace }}/computer
@@ -171,30 +171,43 @@ jobs:
           STATE_DIR="$STATE_REPO/generalist-state"
           mkdir -p "$RESULTS"
 
-          .venv/bin/python -m generalist_lm.learning_efficiency_benchmark \
+          .venv/bin/python \
+            reports/generalist-learning-efficiency-v3/resume-2026-10-01/recover_pinned_corpus.py \
             --state-dir "$STATE_DIR" \
-            --output "$RESULTS/wide64.jsonl" \
-            --segments 8128 \
-            --seeds 5000000 \
-            --threads 4 \
-            --trials wide64,wide64_embeddings,wide64_causal20_ar
+            --output-dir "$RESULTS/corpus"
+
+          TRAIN="$RESULTS/corpus/pinned-train.jsonl"
+          VALIDATION="$RESULTS/corpus/pinned-validation.jsonl"
 
           .venv/bin/python -m generalist_lm.learning_efficiency_benchmark \
             --state-dir "$STATE_DIR" \
-            --output "$RESULTS/wide128.jsonl" \
+            --output "$RESULTS/wide128-multiseed.jsonl" \
             --segments 16256 \
-            --seeds 5000000 \
+            --seeds 5000000,5000001,5000002 \
             --threads 4 \
-            --trials wide128,wide128_embeddings,wide128_causal20_ar
+            --trials wide128_causal20_ar \
+            --causal-documents "$TRAIN" \
+            --validation-documents "$VALIDATION"
 
-          STATE_DIR="$STATE_DIR" RESULTS="$RESULTS" .venv/bin/python - <<'PY'
+          .venv/bin/python -m generalist_lm.learning_efficiency_benchmark \
+            --state-dir "$STATE_DIR" \
+            --output "$RESULTS/wide256-multiseed.jsonl" \
+            --segments 32512 \
+            --seeds 5000000,5000001 \
+            --threads 4 \
+            --trials wide256_causal20_ar \
+            --causal-documents "$TRAIN" \
+            --validation-documents "$VALIDATION"
+
+          STATE_DIR="$STATE_DIR" RESULTS="$RESULTS" TRAIN="$TRAIN" VALIDATION="$VALIDATION" \
+          .venv/bin/python - <<'PY'
           import json
           import os
-          from dataclasses import replace
           from pathlib import Path
 
           from generalist_lm.learning_efficiency_benchmark import (
               Trial,
+              read_split_documents,
               run_sequence,
               summarize_trials,
               trial_matrix,
@@ -202,68 +215,101 @@ jobs:
 
           root = Path(os.environ["STATE_DIR"])
           results = Path(os.environ["RESULTS"])
+          train_docs = read_split_documents(os.environ["TRAIN"], "train")
+          validation_docs = read_split_documents(
+              os.environ["VALIDATION"], "validation"
+          )
 
-          rows = []
-          for name in ("wide64.jsonl", "wide128.jsonl"):
-              rows.extend(
+          journals = {
+              "wide128": results / "wide128-multiseed.jsonl",
+              "wide256": results / "wide256-multiseed.jsonl",
+          }
+          groups = {}
+          all_rows = []
+          for family, path in journals.items():
+              rows = [
                   json.loads(line)
-                  for line in (results / name).read_text(encoding="utf-8").splitlines()
+                  for line in path.read_text(encoding="utf-8").splitlines()
                   if line.strip()
-              )
-          summary = summarize_trials(rows)
-          (results / "screen-summary.json").write_text(
+              ]
+              groups[family] = rows
+              all_rows.extend(rows)
+
+          summary = summarize_trials(all_rows)
+          (results / "validated-screen-summary.json").write_text(
               json.dumps(summary, indent=2, sort_keys=True) + "\n",
               encoding="utf-8",
           )
-          print("WIDE_BATCH_SCREEN_SUMMARY")
+          print("VALIDATED_WIDE_BATCH_SCREEN")
           print(json.dumps(summary, indent=2, sort_keys=True))
 
-          accepted = [row for row in rows if row["accepted"]]
-          by_family = {"wide64": [], "wide128": []}
-          for row in accepted:
-              family = "wide128" if row["trial"]["effective_batch_size"] == 128 else "wide64"
-              by_family[family].append(row)
-
-          for family, candidates in by_family.items():
-              if not candidates:
-                  print(f"{family}: no accepted screen candidate; sustained sequence skipped")
-                  continue
-              best = max(
-                  candidates,
-                  key=lambda row: (
-                      row["headroom_after"],
-                      row["language_quality_after"],
-                      -row["training_evaluation_seconds"],
+          specs = {
+              "wide128": {
+                  "trial": next(
+                      t for t in trial_matrix(16256)
+                      if t.name == "wide128_causal20_ar"
                   ),
-              )
-              trial = Trial(**best["trial"])
-              sizes = (
-                  [16256, 16256, 16256]
-                  if family == "wide128"
-                  else [8128, 8128, 16256, 16256]
-              )
+                  "sizes": [16256, 16256, 16256, 16256, 16256],
+                  "seed": 5100000,
+              },
+              "wide256": {
+                  "trial": next(
+                      t for t in trial_matrix(32512)
+                      if t.name == "wide256_causal20_ar"
+                  ),
+                  "sizes": [32512, 32512, 32512],
+                  "seed": 5200000,
+              },
+          }
+
+          for family, rows in groups.items():
+              accepted = sum(bool(row["accepted"]) for row in rows)
+              if accepted != len(rows):
+                  print(
+                      f"{family}: multiseed screen {accepted}/{len(rows)} accepted; "
+                      "sustained sequence skipped"
+                  )
+                  continue
+              spec = specs[family]
               sequence = run_sequence(
                   root,
-                  trial,
-                  sizes,
-                  seed=5000000,
+                  spec["trial"],
+                  spec["sizes"],
+                  seed=spec["seed"],
+                  causal_documents=train_docs,
+                  validation_documents=validation_docs,
               )
-              path = results / f"{family}-best-sequence.json"
-              path.write_text(
+              (results / f"{family}-validated-sequence.json").write_text(
                   json.dumps(sequence, indent=2, sort_keys=True) + "\n",
                   encoding="utf-8",
               )
-              compact = [
-                  {
-                      "size": segment["trial"]["segment_tokens"],
-                      "accepted": segment["accepted"],
-                      "repetition": segment["after"]["repetition_rate"],
-                      "headroom": segment["headroom_after"],
-                      "accepted_h": segment["accepted_equivalent_tokens_per_hour"],
-                  }
-                  for segment in sequence["segments"]
-              ]
-              print(f"{family.upper()}_SUSTAINED_SEQUENCE")
+              compact = []
+              for segment in sequence["segments"]:
+                  vb = segment["corpus_subset_validation_before"]
+                  va = segment["corpus_subset_validation_after"]
+                  compact.append(
+                      {
+                          "size": segment["trial"]["segment_tokens"],
+                          "accepted": segment["accepted"],
+                          "nll_before": segment["before"]["language_nll"],
+                          "nll_after": segment["after"]["language_nll"],
+                          "repetition": segment["after"]["repetition_rate"],
+                          "headroom": segment["headroom_after"],
+                          "language_quality_gain": (
+                              segment["language_quality_after"]
+                              - segment["language_quality_before"]
+                          ),
+                          "validation_before": vb["loss"] if vb else None,
+                          "validation_after": va["loss"] if va else None,
+                          "accepted_h": segment[
+                              "accepted_equivalent_tokens_per_hour"
+                          ],
+                          "end_to_end_h": segment[
+                              "end_to_end_equivalent_tokens_per_hour"
+                          ],
+                      }
+                  )
+              print(f"{family.upper()}_VALIDATED_SUSTAINED_SEQUENCE")
               print(json.dumps(compact, indent=2, sort_keys=True))
           PY
 
@@ -271,7 +317,7 @@ jobs:
         if: always() && github.event_name == 'pull_request' && github.head_ref == 'feature/generalist-learning-efficiency-v3'
         uses: actions/upload-artifact@v4
         with:
-          name: AIRI-wide-batch-learning-efficiency-${{ github.run_id }}
+          name: AIRI-wide-batch-validated-${{ github.run_id }}
           path: ${{ runner.temp }}/airi-wide-batch-results
           if-no-files-found: warn
           retention-days: 14
