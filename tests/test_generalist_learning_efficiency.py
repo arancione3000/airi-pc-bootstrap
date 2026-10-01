@@ -6,6 +6,10 @@ import random
 
 import pytest
 
+# PyTorch is optional in the generic Airi-PC runtime CI. The dedicated
+# Generalist-LM workflow installs it and runs this suite fully.
+pytest.importorskip("torch", reason="Generalist learning-efficiency tests require PyTorch")
+
 from generalist_lm.learning_efficiency_audit import dataset_audit, forensic_rollbacks
 from generalist_lm.learning_efficiency_benchmark import (
     Trial,
