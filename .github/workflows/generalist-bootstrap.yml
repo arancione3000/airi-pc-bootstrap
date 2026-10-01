@@ -48,8 +48,8 @@ jobs:
       STATE_DIR: /tmp/airi-generalist-phase5-state-repo/generalist-state
       CACHE_DIR: /tmp/airi-generalist-phase5-cache
       TARGET_TOKENS: ${{ github.event.inputs.target_tokens || '1000000' }}
-      WIDE_BATCH_RECOVERY: ${{ github.event.inputs.wide_batch_recovery || 'false' }}
-      MAX_SEGMENTS: ${{ github.event.inputs.max_segments || '4' }}
+      WIDE_BATCH_RECOVERY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[airi-wide-canary]') && 'true' || (github.event.inputs.wide_batch_recovery || 'false') }}
+      MAX_SEGMENTS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[airi-wide-canary]') && '1' || (github.event.inputs.max_segments || '4') }}
       ARCHITECTURE_INTERVAL_TOKENS: '5000000'
       ARCHITECTURE_HANDOFF: 'false'
       HISTORICAL_LANGUAGE_RECOVERY_REF: 'e7c2c14de4359dfab952f903a17e65fdf3877899'
