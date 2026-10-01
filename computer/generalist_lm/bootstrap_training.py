@@ -1416,6 +1416,7 @@ def _protected_continual_plan(
             0.10 if wide_batch_recovery else 0.0
         ),
         "autoregressive_prefixes": 8 if wide_batch_recovery else 0,
+        "causal_eos_weight_override": 1.60 if wide_batch_recovery else None,
         "replay_fraction": float(replay_fraction),
         "replay_loss_weight": float(replay_fraction / (1.0 - replay_fraction)),
         "reference_kl_weight": float(kl_weight),
@@ -4198,11 +4199,12 @@ def run_segment(
             float(anti_weight),
             float(protected_plan.get("anti_repetition_weight", 0.0) or 0.0),
         )
-        if bool(recovery_plan.get("wide_batch_recovery", False)):
+        eos_override = protected_plan.get("causal_eos_weight_override")
+        if eos_override is not None:
             # Match the validated offline wide128_causal20_ar objective exactly.
             # The legacy helper returns EOS=1.0 for non-pathological repetition,
             # even though the winning candidate used 1.6.
-            eos_weight = 1.60
+            eos_weight = float(eos_override)
         supervised = 0
         weighted_loss = 0.0
         objective_stats = {}
