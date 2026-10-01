@@ -121,6 +121,18 @@ def trial_matrix(segment_tokens=4064):
                 "autoregressive_prefixes": 8,
             },
         ),
+        (
+            "wide256_causal20_ar",
+            {
+                "effective_batch_size": 256,
+                "replay_format": "causal",
+                "replay_examples": 8,
+                "replay_token_fraction": 0.20,
+                "replay_weight": 0.25,
+                "autoregressive_ul_weight": 0.1,
+                "autoregressive_prefixes": 8,
+            },
+        ),
         ("eos4", {"eos_weight": 4.0}),
         ("eos16", {"eos_weight": 16.0}),
         ("eos64", {"eos_weight": 64.0}),
