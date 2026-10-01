@@ -304,6 +304,10 @@ jobs:
             echo "max_segments must be an integer in [1,4]" >&2
             exit 1
           fi
+          if [[ "${WIDE_BATCH_RECOVERY:-false}" == "true" && "${max_segments}" != "1" ]]; then
+            echo "Wide-batch recovery is still in canary mode and requires max_segments=1." >&2
+            exit 1
+          fi
           for segment in $(seq 1 "${max_segments}"); do
             echo "Phase 5 segment ${segment}; target=${TARGET_TOKENS}; budget=${segment_tokens}; wide_batch_recovery=${WIDE_BATCH_RECOVERY}"
             recovery_args=()
@@ -332,6 +336,29 @@ jobs:
             dead_capacity_revival_only="$(jq -r '.dead_capacity_revival_only // false' /tmp/phase5-segment.json)"
             segment_tokens_processed="$(jq -r '.segment_tokens_processed // 0' /tmp/phase5-segment.json)"
             rehabilitation_accepted="$(jq -r '.rehabilitation_accepted // false' /tmp/phase5-segment.json)"
+            segment_rejected="$(jq -r '.segment_rejected // false' /tmp/phase5-segment.json)"
+
+            if [[ "${WIDE_BATCH_RECOVERY:-false}" == "true" ]]; then
+              guard="${STATE_DIR}/bootstrap-data/segment-guard-last.json"
+              test -s "${guard}"
+              jq -e '
+                (.wide_batch_recovery == true)
+                and (.effective_batch_size == 128)
+                and (.replay_format == "causal")
+                and (.actual_replay_token_fraction >= 0.18)
+                and (.actual_replay_token_fraction <= 0.22)
+                and (.autoregressive_unlikelihood_weight == 0.1)
+              ' "${guard}" >/dev/null
+              if [[ "${segment_rejected}" != "true" ]]; then
+                if (( segment_tokens_processed < 16000 )); then
+                  echo "Accepted wide-batch canary processed too few causal tokens: ${segment_tokens_processed}" >&2
+                  exit 1
+                fi
+                echo "Wide-batch canary accepted by the unchanged language guard."
+              else
+                echo "Wide-batch canary rejected safely; rollback telemetry will be persisted."
+              fi
+            fi
 
             # Rejected rehabilitation attempts are rolled back. Persist their
             # recovery counters, but do not burn another runner exporting an
