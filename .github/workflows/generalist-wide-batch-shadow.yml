@@ -32,6 +32,24 @@ jobs:
           python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --disable-pip-version-check 'datasets>=3.6,<5'
 
+      - name: Restore the production bootstrap source cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/airi-wide-batch-shadow/cache
+          key: airi-generalist-phase5-data-v2-${{ runner.os }}-100000000-shadow-${{ github.run_id }}
+          restore-keys: |
+            airi-generalist-phase5-data-v2-${{ runner.os }}-100000000
+            airi-generalist-phase5-data-v2-${{ runner.os }}-
+
+      - name: Restore the production packed-token cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/airi-wide-batch-shadow/cache/phase5-packed-blocks-v1
+          key: airi-generalist-phase5-packed-v1-${{ runner.os }}-100000000-shadow-${{ github.run_id }}
+          restore-keys: |
+            airi-generalist-phase5-packed-v1-${{ runner.os }}-100000000-
+            airi-generalist-phase5-packed-v1-${{ runner.os }}-
+
       - name: Run one real production segment against an isolated live-state clone
         env:
           PYTHONPATH: ${{ github.workspace }}/computer
