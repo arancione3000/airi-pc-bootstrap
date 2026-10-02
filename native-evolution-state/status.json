@@ -87,28 +87,28 @@
   "control": {
     "evaluation": {
       "blocks": 12,
-      "checkpoint_digest": "cd75a82b7c55084ed8a89d1c694520cc26813d8401169992eb7a0d4de837a35d",
+      "checkpoint_digest": "f3b0201388fc84d46e8b58ffa619f4eab6c6ace12dfb8695b562b14dcc3a5217",
       "corpus_digest": "3e2285acb1c90379f9993f5ddb24aa572883f3bfedec31a9807da31be064fa71",
       "domain_loss": {
-        "code": 3.7174285451571145,
-        "data-analysis": 3.1222243905067444,
-        "tool-use": 3.1037285327911377
+        "code": 3.7169352769851685,
+        "data-analysis": 3.123054643472036,
+        "tool-use": 3.0984235604604087
       },
       "external_pretrained": false,
       "integrity_ok": true,
-      "loss": 3.7174285451571145,
+      "loss": 3.7169352769851685,
       "ok": true,
       "parameters": 68208,
-      "perplexity": 41.158420893604536,
+      "perplexity": 41.13812376094647,
       "validation_fraction": 0.2,
       "validation_seed": 431,
       "version": "native-evaluation-v1"
     },
     "training": {
-      "best_train_loss": 1.8070530891418457,
+      "best_train_loss": 2.52040433883667,
       "checkpoint": {
         "architecture_version": "native-foundation-v1",
-        "checkpoint_digest": "cd75a82b7c55084ed8a89d1c694520cc26813d8401169992eb7a0d4de837a35d",
+        "checkpoint_digest": "f3b0201388fc84d46e8b58ffa619f4eab6c6ace12dfb8695b562b14dcc3a5217",
         "config": {
           "architecture_version": "native-foundation-v1",
           "bias": false,
@@ -130,7 +130,7 @@
         "external_pretrained": false,
         "family": "airi-native-foundation",
         "integrity_ok": true,
-        "model_digest": "7f328194abe49dbf6f517055ddea5f09bcf7f3a3ebc288060e3108071a4d4f8e",
+        "model_digest": "f56e4d0e2912bc104c7b67b424b55dec9e0aa1dcf0e5eb33a71ea9f089600d8e",
         "ok": true,
         "parameters": 68208,
         "reason": "verified AIRI Native Foundation checkpoint with no external pretrained weights",
@@ -158,7 +158,7 @@
         "min_learning_rate": 3.993000000000001e-05,
         "precision": "fp32",
         "save_optimizer_state": true,
-        "seed": 1044130773,
+        "seed": 1223164576,
         "validation_fraction": 0.2,
         "warmup_steps": 92,
         "weight_decay": 0.1
@@ -168,30 +168,30 @@
       "documents": 24,
       "effective_batch_size": 1,
       "external_pretrained": false,
-      "final_validation_loss": 3.7174285451571145,
+      "final_validation_loss": 3.262174824873606,
       "global_step": 93,
       "gradient_accumulation_steps": 1,
-      "initial_validation_loss": 3.7071417570114136,
+      "initial_validation_loss": 3.260223925113678,
       "last_learning_rate": 0.0005183999999999999,
-      "last_train_loss": 2.178152561187744,
+      "last_train_loss": 3.0794055461883545,
       "micro_batch_size": 1,
       "ok": false,
       "optimizer_resumed": true,
-      "output": "/tmp/airi-native-evolution/trials/cycle-000063/control",
+      "output": "/tmp/airi-native-evolution/trials/cycle-000064/control",
       "precision": "fp32",
       "source_checkpoint_digest": "88dbd3cce39eeb9bf77902978491bae20850167a1514a123a5043ad6ef78af1b",
       "start_step": 90,
       "steps_run": 3,
-      "train_blocks": 4565,
+      "train_blocks": 4789,
       "train_documents": 19,
       "training_version": "native-training-v1",
-      "validation_blocks": 1053,
+      "validation_blocks": 829,
       "validation_documents": 5,
-      "validation_loss_improvement": -0.010286788145700942,
+      "validation_loss_improvement": -0.0019508997599282374,
       "world_size": 1
     }
   },
-  "cycle": 63,
+  "cycle": 64,
   "engine_version": "native-evolution-v1",
   "lattice_research": {
     "benchmark_steps": 1,
@@ -228,7 +228,7 @@
       "parent_id": "lattice-26-e88d910a7b4f",
       "weight_decay": 0.00625
     },
-    "cycle": 63,
+    "cycle": 64,
     "empirical_candidates": 1,
     "generated_candidates": 8,
     "ok": true,
@@ -239,12 +239,12 @@
       "math_prefilter_is_not_promotion": true,
       "research_only": true
     },
-    "promoted": true,
-    "promotion_reason": "candidate beat matched scratch Transformer on every requested seed",
+    "promoted": false,
+    "promotion_reason": "no Lattice candidate passed every independent scratch benchmark",
     "repeat_seeds": 1,
     "trials": [
       {
-        "all_seed_wins": true,
+        "all_seed_wins": false,
         "genome": {
           "config": {
             "active_experts": 1,
@@ -271,18 +271,18 @@
             "tokenizer_version": "byte-v1",
             "vocab_size": 264
           },
-          "generation": 27,
-          "genome_id": "lattice-27-c29e06c51e49",
-          "learning_rate": 0.00162,
-          "min_learning_rate": 0.00013612500000000004,
-          "parent_id": "lattice-26-e88d910a7b4f",
+          "generation": 28,
+          "genome_id": "lattice-28-7405341b3386",
+          "learning_rate": 0.001215,
+          "min_learning_rate": 0.00010209375000000003,
+          "parent_id": "lattice-27-c29e06c51e49",
           "weight_decay": 0.00625
         },
-        "mean_candidate_loss": 5.535453498363495,
+        "mean_candidate_loss": 5.57935893535614,
         "mutation": {
           "changes": {
-            "learning_rate": 0.00162,
-            "min_learning_rate": 0.00013612500000000004
+            "learning_rate": 0.001215,
+            "min_learning_rate": 0.00010209375000000003
           },
           "family": "optimizer",
           "mathesis_tags": [],
@@ -314,25 +314,25 @@
               "parameters": 20064,
               "state_bytes_at_context": 2048,
               "training": {
-                "best_train_loss": 5.428980827331543,
+                "best_train_loss": 5.556909561157227,
                 "final": {
                   "blocks": 8,
                   "domain_loss": {
-                    "code": 5.545990228652954
+                    "code": 5.5765209794044495
                   },
-                  "loss": 5.545990228652954
+                  "loss": 5.5765209794044495
                 },
                 "initial": {
                   "blocks": 8,
                   "domain_loss": {
-                    "code": 5.546809196472168
+                    "code": 5.577240347862244
                   },
-                  "loss": 5.546809196472168
+                  "loss": 5.577240347862244
                 },
                 "steps": 1,
-                "tokens_per_second": 22517.73623576445,
+                "tokens_per_second": 21267.793084805435,
                 "tokens_processed": 64,
-                "train_seconds": 0.0028422039999895787
+                "train_seconds": 0.0030092449999301607
               }
             },
             "candidate": {
@@ -366,59 +366,59 @@
               "parameters": 23144,
               "state_bytes_at_context": 256,
               "training": {
-                "best_train_loss": 5.459239482879639,
+                "best_train_loss": 5.573780059814453,
                 "final": {
                   "blocks": 8,
                   "domain_loss": {
-                    "code": 5.535453498363495
+                    "code": 5.57935893535614
                   },
-                  "loss": 5.535453498363495,
+                  "loss": 5.57935893535614,
                   "model_stats": {
                     "mean_reasoning_steps": 1.0,
-                    "mean_surprise": 0.49274424090981483
+                    "mean_surprise": 0.4783242680132389
                   }
                 },
                 "initial": {
                   "blocks": 8,
                   "domain_loss": {
-                    "code": 5.536635220050812
+                    "code": 5.579707682132721
                   },
-                  "loss": 5.536635220050812,
+                  "loss": 5.579707682132721,
                   "model_stats": {
                     "mean_reasoning_steps": 1.0,
-                    "mean_surprise": 0.4926307499408722
+                    "mean_surprise": 0.47836635634303093
                   }
                 },
                 "steps": 1,
-                "tokens_per_second": 383.6257937540791,
+                "tokens_per_second": 415.03336715821507,
                 "tokens_processed": 64,
-                "train_seconds": 0.16682924099995944
+                "train_seconds": 0.1542044690002058
               }
             },
-            "candidate_wins": true,
+            "candidate_wins": false,
             "corpus_digest": "3e2285acb1c90379f9993f5ddb24aa572883f3bfedec31a9807da31be064fa71",
-            "decision": "Lattice beat matched Transformer under the research gate",
+            "decision": "Lattice did not beat the matched Transformer loss margin",
             "external_pretrained": false,
             "lab": {
               "batch_size": 1,
               "device": "cpu",
               "grad_clip": 1.0,
-              "learning_rate": 0.00162,
+              "learning_rate": 0.001215,
               "max_active_parameter_ratio": 1.2,
               "max_domain_regression": 0.08,
               "max_eval_blocks": 8,
-              "min_learning_rate": 0.00013612500000000004,
+              "min_learning_rate": 0.00010209375000000003,
               "minimum_loss_gain": 0.001,
-              "seed": 706364,
+              "seed": 706465,
               "steps": 1,
               "validation_fraction": 0.2,
               "weight_decay": 0.00625
             },
             "ok": true,
             "research_only": true,
-            "train_blocks": 5000,
+            "train_blocks": 4828,
             "train_documents": 19,
-            "validation_blocks": 618,
+            "validation_blocks": 790,
             "validation_documents": 5,
             "version": "airi-lattice-lab-v0"
           }
@@ -426,55 +426,10 @@
       }
     ],
     "version": "airi-lattice-research-state-v0",
-    "winner": {
-      "genome": {
-        "config": {
-          "active_experts": 1,
-          "architecture_version": "airi-lattice-v0",
-          "context_length": 64,
-          "d_expert": 32,
-          "d_model": 32,
-          "deep_write_power": 1.564,
-          "dropout": 0.0,
-          "init_std": 0.02,
-          "lattice_mix": 0.10000000000000003,
-          "local_recurrence": false,
-          "max_reasoning_steps": 1,
-          "memory_bands": 2,
-          "memory_decay_max": 0.9975,
-          "memory_decay_min": 0.2,
-          "n_cells": 1,
-          "n_experts": 2,
-          "predictive_error_memory": false,
-          "rms_eps": 1e-06,
-          "surprise_power": 1.2463125,
-          "surprise_threshold": 0.2,
-          "tie_embeddings": true,
-          "tokenizer_version": "byte-v1",
-          "vocab_size": 264
-        },
-        "generation": 27,
-        "genome_id": "lattice-27-c29e06c51e49",
-        "learning_rate": 0.00162,
-        "min_learning_rate": 0.00013612500000000004,
-        "parent_id": "lattice-26-e88d910a7b4f",
-        "weight_decay": 0.00625
-      },
-      "mean_candidate_loss": 5.535453498363495,
-      "mutation": {
-        "changes": {
-          "learning_rate": 0.00162,
-          "min_learning_rate": 0.00013612500000000004
-        },
-        "family": "optimizer",
-        "mathesis_tags": [],
-        "name": "optimizer-lr-down",
-        "rationale": "favor stability if rapid updates damage held-out loss"
-      }
-    }
+    "winner": null
   },
   "mathesis": {
-    "curriculum_cursor": 3105,
+    "curriculum_cursor": 3178,
     "mathesis_generation": 15,
     "ok": true,
     "policy": "persisted MATHESIS metadata is untrusted; current verifier re-proof is required before mathematics may influence generalist curriculum/architecture, and generalist promotion remains independently benchmark-gated",
@@ -489,22 +444,28 @@
   },
   "ok": true,
   "online_research": {
-    "errors": [],
-    "evidence_digest": "ce5bdcec6e40a3371a4d75c2398d13279022c1c2b191553a07fae84ca37e3f43",
+    "errors": [
+      {
+        "error": "HTTPError:HTTP Error 406: Not Acceptable",
+        "provider": "arxiv"
+      }
+    ],
+    "evidence_digest": "da8d092baead6e4eada003787f33711d6ad508bb19873bb448300621b91eb242",
     "ok": true,
     "remote_code_execution": false,
     "remote_content_trusted": false,
     "source_candidates": [],
     "tag_counts": {
-      "code": 3,
+      "code": 1,
       "curriculum": 1,
-      "dataset": 1,
-      "efficiency": 2,
+      "data-analysis": 1,
+      "dataset": 5,
+      "efficiency": 3,
       "gqa": 1,
-      "long-context": 4,
+      "long-context": 7,
       "optimizer": 1,
-      "reasoning": 2,
-      "tokenizer": 1
+      "reasoning": 4,
+      "tokenizer": 2
     },
     "version": "native-online-research-v1"
   },
@@ -524,174 +485,19 @@
       "eligible": false,
       "evaluation": {
         "blocks": 12,
-        "checkpoint_digest": "026bc724e53d71f61655a98b843383b9840716826450f3946492e33df5866166",
+        "checkpoint_digest": "b8d41e4205e6b5c67b2f830333a5bc4ab22a2a07b0f6d18d8059f12763902aef",
         "corpus_digest": "3e2285acb1c90379f9993f5ddb24aa572883f3bfedec31a9807da31be064fa71",
         "domain_loss": {
-          "code": 5.4392668803532915,
-          "data-analysis": 5.348894437154134,
-          "tool-use": 5.4758293231328325
+          "code": 5.516449491182963,
+          "data-analysis": 5.404390732447307,
+          "tool-use": 5.5107801755269366
         },
         "external_pretrained": false,
         "integrity_ok": true,
-        "loss": 5.4392668803532915,
+        "loss": 5.516449491182963,
         "ok": true,
         "parameters": 68208,
-        "perplexity": 230.27330368062294,
-        "validation_fraction": 0.2,
-        "validation_seed": 431,
-        "version": "native-evaluation-v1"
-      },
-      "genome": {
-        "adam_beta1": 0.9,
-        "adam_beta2": 0.95,
-        "adam_eps": 1e-08,
-        "context_length": 128,
-        "d_ff": 144,
-        "d_model": 48,
-        "domain_weights": {
-          "data-analysis": 1.2,
-          "reasoning": 1.35,
-          "tool-use": 1.2
-        },
-        "dropout": 0.0,
-        "generation": 31,
-        "genome_id": "native-31-9a37f43690a2",
-        "grad_clip": 1.0,
-        "init_std": 0.02,
-        "learning_rate": 0.0005183999999999999,
-        "min_learning_rate": 3.993000000000001e-05,
-        "n_heads": 4,
-        "n_kv_heads": 2,
-        "n_layers": 2,
-        "parent_id": "native-30-1a4831a23924",
-        "rms_eps": 1e-06,
-        "rope_theta": 10000.0,
-        "tie_embeddings": true,
-        "tokenizer_version": "byte-v1",
-        "vocab_size": 264,
-        "warmup_steps": 100,
-        "weight_decay": 0.1
-      },
-      "index": 0,
-      "mutation": {
-        "changes": {
-          "context_length": 128
-        },
-        "evidence_tags": [
-          "long-context"
-        ],
-        "kind": "architecture",
-        "name": "architecture-context-grow",
-        "requires_reinit": true,
-        "requires_retokenization": false
-      },
-      "proxy": true,
-      "reason": "scratch challenger completed a proxy experiment but cannot replace a champion trained for a larger cumulative step budget",
-      "scratch_retrain_steps": 4,
-      "training": {
-        "best_train_loss": 5.348056316375732,
-        "checkpoint": {
-          "architecture_version": "native-foundation-v1",
-          "checkpoint_digest": "026bc724e53d71f61655a98b843383b9840716826450f3946492e33df5866166",
-          "config": {
-            "architecture_version": "native-foundation-v1",
-            "bias": false,
-            "context_length": 128,
-            "d_ff": 144,
-            "d_model": 48,
-            "dropout": 0.0,
-            "init_std": 0.02,
-            "n_heads": 4,
-            "n_kv_heads": 2,
-            "n_layers": 2,
-            "rms_eps": 1e-06,
-            "rope_theta": 10000.0,
-            "tie_embeddings": true,
-            "tokenizer_version": "byte-v1",
-            "vocab_size": 264
-          },
-          "config_digest": "8b8968d5a22caf44773a4f44ef76f09eee3b74d4ab4b74bdf3d6955e94664c89",
-          "external_pretrained": false,
-          "family": "airi-native-foundation",
-          "integrity_ok": true,
-          "model_digest": "e91872618dfe71d501eeb956d0e7cf721f50760dbc26dabe85cc90cbd15b1bf8",
-          "ok": true,
-          "parameters": 68208,
-          "reason": "verified AIRI Native Foundation checkpoint with no external pretrained weights",
-          "root_seed": 1120725361,
-          "tokenizer_digest": null,
-          "tokenizer_version": "byte-v1",
-          "weights_origin": "airi-native-descendant"
-        },
-        "config": {
-          "adam_beta1": 0.9,
-          "adam_beta2": 0.95,
-          "adam_eps": 1e-08,
-          "device": "cpu",
-          "domain_weights": {
-            "data-analysis": 1.2,
-            "reasoning": 1.35,
-            "tool-use": 1.2
-          },
-          "grad_clip": 1.0,
-          "gradient_accumulation_steps": 1,
-          "learning_rate": 0.0005183999999999999,
-          "max_eval_blocks": 12,
-          "max_steps": 4,
-          "micro_batch_size": 1,
-          "min_learning_rate": 3.993000000000001e-05,
-          "precision": "fp32",
-          "save_optimizer_state": true,
-          "seed": 533690324,
-          "validation_fraction": 0.2,
-          "warmup_steps": 3,
-          "weight_decay": 0.1
-        },
-        "corpus_digest": "3e2285acb1c90379f9993f5ddb24aa572883f3bfedec31a9807da31be064fa71",
-        "device_type": "cpu",
-        "documents": 24,
-        "effective_batch_size": 1,
-        "external_pretrained": false,
-        "final_validation_loss": 5.4392668803532915,
-        "global_step": 4,
-        "gradient_accumulation_steps": 1,
-        "initial_validation_loss": 5.500624497731526,
-        "last_learning_rate": 0.0005183999999999999,
-        "last_train_loss": 5.374882221221924,
-        "micro_batch_size": 1,
-        "ok": true,
-        "optimizer_resumed": false,
-        "output": "/tmp/airi-native-evolution/trials/cycle-000063/candidate-00/trained",
-        "precision": "fp32",
-        "source_checkpoint_digest": "ba2409dec68ef18491a4d46205e2b2a7174cef3e430155fb46801bb939cf4299",
-        "start_step": 0,
-        "steps_run": 4,
-        "train_blocks": 2243,
-        "train_documents": 19,
-        "training_version": "native-training-v1",
-        "validation_blocks": 573,
-        "validation_documents": 5,
-        "validation_loss_improvement": 0.06135761737823486,
-        "world_size": 1
-      }
-    },
-    {
-      "eligible": false,
-      "evaluation": {
-        "blocks": 12,
-        "checkpoint_digest": "f2c69b983cd96fb7777e41caa2e8446ba71508cf21a11a70839b4b000c18017f",
-        "corpus_digest": "3e2285acb1c90379f9993f5ddb24aa572883f3bfedec31a9807da31be064fa71",
-        "domain_loss": {
-          "code": 5.489114006360372,
-          "data-analysis": 5.373053391774495,
-          "tool-use": 5.499847014745076
-        },
-        "external_pretrained": false,
-        "integrity_ok": true,
-        "loss": 5.489114006360372,
-        "ok": true,
-        "parameters": 68208,
-        "perplexity": 242.0426635695527,
+        "perplexity": 248.75027739228963,
         "validation_fraction": 0.2,
         "validation_seed": 431,
         "version": "native-evaluation-v1"
@@ -727,7 +533,7 @@
         "warmup_steps": 100,
         "weight_decay": 0.1
       },
-      "index": 1,
+      "index": 0,
       "mutation": {
         "changes": {
           "rope_theta": 20000.0
@@ -744,10 +550,10 @@
       "reason": "scratch challenger completed a proxy experiment but cannot replace a champion trained for a larger cumulative step budget",
       "scratch_retrain_steps": 4,
       "training": {
-        "best_train_loss": 5.241674423217773,
+        "best_train_loss": 5.236712455749512,
         "checkpoint": {
           "architecture_version": "native-foundation-v1",
-          "checkpoint_digest": "f2c69b983cd96fb7777e41caa2e8446ba71508cf21a11a70839b4b000c18017f",
+          "checkpoint_digest": "b8d41e4205e6b5c67b2f830333a5bc4ab22a2a07b0f6d18d8059f12763902aef",
           "config": {
             "architecture_version": "native-foundation-v1",
             "bias": false,
@@ -769,11 +575,11 @@
           "external_pretrained": false,
           "family": "airi-native-foundation",
           "integrity_ok": true,
-          "model_digest": "8dac04652b27b82e0cde0387ce000d0311aa1e3a4f3980d2b400dc6fc508aaa7",
+          "model_digest": "88dfb9ac988bf510a52c7198e82dcf6bc3adc456086a2c49af2861bb0d504890",
           "ok": true,
           "parameters": 68208,
           "reason": "verified AIRI Native Foundation checkpoint with no external pretrained weights",
-          "root_seed": 1120725361,
+          "root_seed": 894327409,
           "tokenizer_digest": null,
           "tokenizer_version": "byte-v1",
           "weights_origin": "airi-native-descendant"
@@ -797,7 +603,7 @@
           "min_learning_rate": 3.993000000000001e-05,
           "precision": "fp32",
           "save_optimizer_state": true,
-          "seed": 533690324,
+          "seed": 1635267102,
           "validation_fraction": 0.2,
           "warmup_steps": 3,
           "weight_decay": 0.1
@@ -807,26 +613,192 @@
         "documents": 24,
         "effective_batch_size": 1,
         "external_pretrained": false,
-        "final_validation_loss": 5.489114006360372,
+        "final_validation_loss": 5.500927130381267,
         "global_step": 4,
         "gradient_accumulation_steps": 1,
-        "initial_validation_loss": 5.528630375862122,
+        "initial_validation_loss": 5.544721007347107,
         "last_learning_rate": 0.0005183999999999999,
-        "last_train_loss": 5.521199703216553,
+        "last_train_loss": 5.454627990722656,
         "micro_batch_size": 1,
         "ok": true,
         "optimizer_resumed": false,
-        "output": "/tmp/airi-native-evolution/trials/cycle-000063/candidate-01/trained",
+        "output": "/tmp/airi-native-evolution/trials/cycle-000064/candidate-00/trained",
         "precision": "fp32",
-        "source_checkpoint_digest": "d3c62f89834cfc057b55d4a1099082bb63cc68fa608d0d9ab50b7bd79455cd00",
+        "source_checkpoint_digest": "2556815f9189373e649a056a72c2b2e4ef0c5a049da1c798ef8f9b6b9def1385",
         "start_step": 0,
         "steps_run": 4,
-        "train_blocks": 4474,
+        "train_blocks": 3981,
         "train_documents": 19,
         "training_version": "native-training-v1",
-        "validation_blocks": 1144,
+        "validation_blocks": 1637,
         "validation_documents": 5,
-        "validation_loss_improvement": 0.03951636950174997,
+        "validation_loss_improvement": 0.04379387696584036,
+        "world_size": 1
+      }
+    },
+    {
+      "eligible": false,
+      "evaluation": {
+        "blocks": 12,
+        "checkpoint_digest": "d2181a032d0f3d7e303d22b17867ad7f7ca17f8687b608dd89287508b39504cd",
+        "corpus_digest": "3e2285acb1c90379f9993f5ddb24aa572883f3bfedec31a9807da31be064fa71",
+        "domain_loss": {
+          "code": 6.236619512240092,
+          "data-analysis": 6.235327521959941,
+          "tool-use": 6.256962418556213
+        },
+        "external_pretrained": false,
+        "integrity_ok": true,
+        "loss": 6.236619512240092,
+        "ok": true,
+        "parameters": 80112,
+        "perplexity": 511.12772612071547,
+        "validation_fraction": 0.2,
+        "validation_seed": 431,
+        "version": "native-evaluation-v1"
+      },
+      "genome": {
+        "adam_beta1": 0.9,
+        "adam_beta2": 0.95,
+        "adam_eps": 1e-08,
+        "context_length": 64,
+        "d_ff": 144,
+        "d_model": 48,
+        "domain_weights": {
+          "data-analysis": 1.2,
+          "reasoning": 1.35,
+          "tool-use": 1.2
+        },
+        "dropout": 0.0,
+        "generation": 31,
+        "genome_id": "native-31-d3f1eec117f9",
+        "grad_clip": 1.0,
+        "init_std": 0.02,
+        "learning_rate": 0.0005183999999999999,
+        "min_learning_rate": 3.993000000000001e-05,
+        "n_heads": 4,
+        "n_kv_heads": 2,
+        "n_layers": 2,
+        "parent_id": "native-30-1a4831a23924",
+        "rms_eps": 1e-06,
+        "rope_theta": 10000.0,
+        "tie_embeddings": true,
+        "tokenizer_version": "bpe-v1",
+        "vocab_size": 512,
+        "warmup_steps": 100,
+        "weight_decay": 0.1
+      },
+      "index": 1,
+      "mutation": {
+        "changes": {
+          "tokenizer_version": "bpe-v1",
+          "vocab_size": 512
+        },
+        "evidence_tags": [
+          "tokenizer"
+        ],
+        "kind": "tokenizer",
+        "name": "tokenizer-byte-to-bpe",
+        "requires_reinit": true,
+        "requires_retokenization": true
+      },
+      "proxy": true,
+      "reason": "scratch challenger completed a proxy experiment but cannot replace a champion trained for a larger cumulative step budget",
+      "scratch_retrain_steps": 4,
+      "tokenizer": {
+        "corpus_digest": "3e2285acb1c90379f9993f5ddb24aa572883f3bfedec31a9807da31be064fa71",
+        "external_pretrained": false,
+        "merges": 248,
+        "ok": true,
+        "output": "/tmp/airi-native-evolution/trials/cycle-000064/candidate-01/challenger-tokenizer.json",
+        "tokenizer_digest": "7040d2a87c13730bcf2e392b0a58cf09fa6697df3a9ad1c57c0993dd5a0443c0",
+        "tokenizer_version": "bpe-v1",
+        "vocab_size": 512
+      },
+      "training": {
+        "best_train_loss": 6.226650714874268,
+        "checkpoint": {
+          "architecture_version": "native-foundation-v1",
+          "checkpoint_digest": "d2181a032d0f3d7e303d22b17867ad7f7ca17f8687b608dd89287508b39504cd",
+          "config": {
+            "architecture_version": "native-foundation-v1",
+            "bias": false,
+            "context_length": 64,
+            "d_ff": 144,
+            "d_model": 48,
+            "dropout": 0.0,
+            "init_std": 0.02,
+            "n_heads": 4,
+            "n_kv_heads": 2,
+            "n_layers": 2,
+            "rms_eps": 1e-06,
+            "rope_theta": 10000.0,
+            "tie_embeddings": true,
+            "tokenizer_version": "bpe-v1",
+            "vocab_size": 512
+          },
+          "config_digest": "1e282a9ed62f33028763e5b2de998975eaa1f429953e968b2002b5789ba9a5af",
+          "external_pretrained": false,
+          "family": "airi-native-foundation",
+          "integrity_ok": true,
+          "model_digest": "c1f71f1b188c3ab9c147eadf10244ba9c78b6187f1badd335727b243173bf602",
+          "ok": true,
+          "parameters": 80112,
+          "reason": "verified AIRI Native Foundation checkpoint with no external pretrained weights",
+          "root_seed": 894327409,
+          "tokenizer_digest": "c6f027d08cb125f1f25f9ec30825b310b4ab31aaa9605f7445c08355575038c8",
+          "tokenizer_version": "bpe-v1",
+          "weights_origin": "airi-native-descendant"
+        },
+        "config": {
+          "adam_beta1": 0.9,
+          "adam_beta2": 0.95,
+          "adam_eps": 1e-08,
+          "device": "cpu",
+          "domain_weights": {
+            "data-analysis": 1.2,
+            "reasoning": 1.35,
+            "tool-use": 1.2
+          },
+          "grad_clip": 1.0,
+          "gradient_accumulation_steps": 1,
+          "learning_rate": 0.0005183999999999999,
+          "max_eval_blocks": 12,
+          "max_steps": 4,
+          "micro_batch_size": 1,
+          "min_learning_rate": 3.993000000000001e-05,
+          "precision": "fp32",
+          "save_optimizer_state": true,
+          "seed": 1635267102,
+          "validation_fraction": 0.2,
+          "warmup_steps": 3,
+          "weight_decay": 0.1
+        },
+        "corpus_digest": "3e2285acb1c90379f9993f5ddb24aa572883f3bfedec31a9807da31be064fa71",
+        "device_type": "cpu",
+        "documents": 24,
+        "effective_batch_size": 1,
+        "external_pretrained": false,
+        "final_validation_loss": 6.216235478719075,
+        "global_step": 4,
+        "gradient_accumulation_steps": 1,
+        "initial_validation_loss": 6.217613061269124,
+        "last_learning_rate": 0.0005183999999999999,
+        "last_train_loss": 6.246394157409668,
+        "micro_batch_size": 1,
+        "ok": true,
+        "optimizer_resumed": false,
+        "output": "/tmp/airi-native-evolution/trials/cycle-000064/candidate-01/trained",
+        "precision": "fp32",
+        "source_checkpoint_digest": "7b684c7fe9355d4b736ebabcd656014d24c187f55a38d5397e3b128874c6bd42",
+        "start_step": 0,
+        "steps_run": 4,
+        "train_blocks": 1827,
+        "train_documents": 19,
+        "training_version": "native-training-v1",
+        "validation_blocks": 700,
+        "validation_documents": 5,
+        "validation_loss_improvement": 0.0013775825500488281,
         "world_size": 1
       }
     }

@@ -1,77 +1,177 @@
 {
-  "academic_fallback": null,
-  "errors": [],
+  "academic_fallback": "openalex",
+  "errors": [
+    {
+      "error": "HTTPError:HTTP Error 406: Not Acceptable",
+      "provider": "arxiv"
+    }
+  ],
   "evidence": [
     {
-      "digest": "4ad2b3ae819b7a6a2eaaba3dad8549e7d91c41a4bc06d2f64918d90372f395a7",
-      "provider": "arxiv",
-      "published": "2026-10-01T17:59:59Z",
-      "source_id": "http://arxiv.org/abs/2610.02210v1",
-      "summary": "I don't think I have ever done anything as peculiar in my life. Among other things, it shows a young man looking with interest at a print on the wall of an exhibition that features himself. How can this be? Perhaps I am not far removed from Einstein's curved universe.'' So wrote M.C. Escher about his 1956 lithograph Print Gallery. Nearly half a century later, a mathematical analysis related its geometry to an untwisted source image through a conformal power map $z \\mapsto z^α$, $α\\in \\mathbb{C}$. Building on this construction, we use a frozen text-to-image diffusion model to generate new self-referential scenes. Prompting alone does not enforce the recursion, while a post-hoc transformation can leave structures poorly connected. Applying the transformation during sampling is also insufficient: the denoiser may \"repair\" the intended distortion or drift out of the prescribed geometry. We construct a generalized inverse $T^\\dagger$ of the non-invertible image transformation $T$, adapted to its recursive constraint. In the idealized formulation, the Penrose identity $TT^\\dagger T = T$ makes $TT^\\dagger$ an idempotent projection onto geometrically admissible images. Yet denoising only the transformed image remains an out-of-distribution task, even with projection. We therefore braid denoising steps with $T$ and $T^\\dagger$: source-space steps develop the untwisted scene, while transformed-space steps refine its appearance and connections in the final geometry. We generate Print Gallery-like compositions and explore further transformations. Rather than distorting a finished image, we let the scene and its distortion develop together.",
-      "tags": [],
-      "title": "Moore, Escher, Penrose: A Conformal Golden Braid",
-      "url": "https://arxiv.org/abs/2610.02210v1"
-    },
-    {
-      "digest": "4cd18f5d0061376a49d499a26900e674040236b740c0b816da0eee317ea7f7ff",
-      "provider": "arxiv",
-      "published": "2026-10-01T17:59:58Z",
-      "source_id": "http://arxiv.org/abs/2610.02208v1",
-      "summary": "Sphere Encoder is an autoencoder that generates images by decoding random points from a high-dimensional latent sphere. We identify two limitations of the original formulation that reduce its generation quality. First, random points concentrate near the equator relative to the pole on an encoded latent, but the training rotation never reaches this region, leaving a gap that limits one-step generation. Second, training for generation with pixel-wise reconstruction loss encourages the decoder to average over plausible images, producing blurry images that lack high-frequency details. We present Sphere Encoder 2 to address both limitations, substantially improving image generation quality while maintaining the speed and simplicity of a autoencoder. Models are released at \\href{https://github.com/kaiyuyue/sphere2}{github.com/kaiyuyue/sphere2}.",
-      "tags": [
-        "code"
-      ],
-      "title": "Sphere Encoder 2",
-      "url": "https://arxiv.org/abs/2610.02208v1"
-    },
-    {
-      "digest": "a832746cc75f331f98e1e1c4d2784079ec3e4f7ec6e50d8276a7ab369f334f6f",
-      "provider": "arxiv",
-      "published": "2026-10-01T17:59:58Z",
-      "source_id": "http://arxiv.org/abs/2610.02207v1",
-      "summary": "3D Gaussian avatars support fast rendering, however, their real-time animation is often challenged by the costly neural inference. We address this bottleneck and show that the animation of pretrained avatar models can be closely approximated by a linear combination of identity-independent blendshapes. Building on this finding, we introduce GALA (Gaussian Animation via Linear Approximation), a distillation method that replaces per-frame heavy neural decoding with a shallow coefficient predictor and a linear blend. To improve fidelity and reduce memory requirements, we propose to construct the basis using block-local PCA under a rendering-aware metric and a memory budget. Our method learns a shallow MLP network to predict blendshape coefficients and applies to various animation architectures without retraining original models. We validate GALA by accelerating the inference of three distinct avatar models for 3D animation of facial expressions and full-bodies with clothing dynamics. Across these models, our distillation generalizes to held-out identities and reduces CPU animation cost by up to three orders of magnitude while preserving most of the rendering quality. Excellent results of our method confirm the shared linear structure of learned avatar representations and enable highly efficient and accurate animation at frame rates reaching up to 60fps on mobile devices. Project page: https://ramazan793.github.io/gala/",
-      "tags": [
-        "code"
-      ],
-      "title": "One Basis to Animate Them All: Gaussian Blendshape Distillation for Real-Time Avatars",
-      "url": "https://arxiv.org/abs/2610.02207v1"
-    },
-    {
-      "digest": "eff88d35a663ddf930e0a0e8587bc245f27d1e6f9f1f88fcad920812f3315d2a",
-      "provider": "arxiv",
-      "published": "2026-10-01T17:59:55Z",
-      "source_id": "http://arxiv.org/abs/2610.02206v1",
-      "summary": "LLMs are increasingly applied to cybersecurity workflows, where they are expected to translate analysts' intent into tool invocations. However, existing evaluations focus on knowledge-based assessments or end-to-end agentic tasks, and do not directly measure LLMs' ability to generate executable commands for real-world cybersecurity tools. This gap is critical because cybersecurity operations rely on strict command-line interfaces (CLIs), where minor syntax errors, incorrect flag--value bindings, or argument misordering can invalidate execution. We introduce KaliBench, a fine-grained benchmark and dataset for natural-language--to--CLI translation on Kali Linux, comprising 8,504 query--command pairs spanning 1,642 tools across 23 capability dimensions and 5 security phases. KaliBench is constructed via a manuscript-grounded pipeline with deterministic canonicalization and alias-aware evaluation, enabling precise and reproducible assessment of tool selection and argument construction. To ensure both semantic correctness and practical executability, we develop a multi-stage verification pipeline that combines LLM-based validation, sandboxed terminal execution, and human-in-the-loop refinement. Building on these fine-grained, deterministic signals, KaliBench further enables runtime-free verifiable rewards for training. Across three evaluation modes and 24 configurations of general-purpose and security-focused open-weight models, no open-weight model exceeds 42% exact-command accuracy in the unrestricted setting, highlighting the difficulty of accurate CLI-based cybersecurity tool use without explicit tool hints. We further show that supervised fine-tuning and reinforcement learning with verifiable rewards derived from KaliBench significantly improve an 8B model and achieve performance comparable to a 685B MoE model.",
+      "digest": "54503246a54bfa5b3173653f73769b66eb06a38be8f2720bcb5cd8ef450c644e",
+      "provider": "openalex",
+      "published": "2026-12-31",
+      "source_id": "https://openalex.org/W7162095276",
+      "summary": "Online neural learning requires models that update after each incoming example, remain calibrated under distributional change, and avoid brittle gradient transmission. The original version of this work used a small static benchmark, a shallow model, few random seeds, and no significance tests. This revision reformulates the problem as genuine prequential online learning and introduces Smooth Online Activation Routing (SOAR), a Hedge-style routing algorithm over smooth activation experts trained by singleinstance adaptive updates. SOAR links activation smoothness with online regret through a prediction-with-expert-advice bound: the mixture incurs only logarithmic-exponential-weight overhead relative to the best activation expert in hindsight, while each expert uses diagonal adaptive online gradients. We evaluate two-hidden-layer online neural networks on eight streams, fourteen methods, thirteen comparators, and eight random seeds, yielding 896 fully reproducible runs. The benchmark includes four real scikit-learn data sets and four synthetic streaming tasks with stationary, nonlinear, gradual-drift, and sudden-drift regimes. Across all dataset-seed blocks, SOAR obtains the best mean final accuracy ( $92.56 \\%$ ), best mean negative log-likelihood ( 0.199 ), and best prequential accuracy ( $86.83 \\%$ ). Paired Wilcoxon and Holm-corrected tests show significant improvements over ReLU, LeakyReLU, ELU, Softplus, Adam, SGD, and the compact ablation; improvements over the strongest fixed TeLU activation are positive but not statistically significant. The results support a nuanced conclusion: adaptive smooth activation routing is a robust online-learning mechanism and the best overall method in this controlled benchmark suite, but fixed smooth activations remain highly competitive on small static data. topics=Data Stream Mining Techniques Domain Adaptation and Few-Shot Learning Stochastic Gradient Optimization Techniques oa=True oa_status=gold",
       "tags": [
         "dataset"
       ],
-      "title": "KaliBench: A Fine-Grained Benchmark for Cybersecurity Tool Use on Kali Linux with Runtime-Free Verifiable Rewards",
-      "url": "https://arxiv.org/abs/2610.02206v1"
+      "title": "SOAR: Smooth Online Activation Routing for Stable Neural Learning from Evolving Streams",
+      "url": "https://pub.respai.de/articles/1-2/3sniu.html"
     },
     {
-      "digest": "96b998599d69b2ff8bba80435cb2e60d6b9b39cc650d1b7c6835aadc7f8cf424",
-      "provider": "arxiv",
-      "published": "2026-10-01T17:59:53Z",
-      "source_id": "http://arxiv.org/abs/2610.02205v1",
-      "summary": "Programmable world models separate executable dynamics from visual generation, offering a promising foundation for next-generation game engines. However, their visual adherence to explicit rules and interactions remains insufficiently evaluated. Existing benchmarks assess visual quality, controllability, and instruction or physical adherence, but rarely test fidelity to fine-grained, program-specified world events. We introduce PROWBench, comprising 170 programmatically constructed episodes and 600 proxy videos covering diverse scenes and interactions. PROWBench logs entity states and timestamped events, including those outside the camera's field of view, as replayable world records, from which it renders synchronized views and proxy representations. This enables generated videos to be checked against the observable consequences of program execution. An extensible framework constructs scenes, controls behaviors, and can render each camera view in different representations, such as coarse 3D, and bounding boxes. The benchmark covers first- and third-person perspectives, with synchronized multi-view observations available for a subset of episodes. Grounded in these records, PROWBench evaluates entity control, long-horizon memory, and, with two VLM-based metrics, Logic-Render Alignment and Interaction Success Rate, adherence to the prescribed timeline and the visual realization of timestamped engine-recorded events.",
+      "digest": "784184d3e830a08fb87e432cb71a909a2b29f9a03a4abc5dde126cda4cc6a379",
+      "provider": "openalex",
+      "published": "2026-12-31",
+      "source_id": "https://openalex.org/W7164183113",
+      "summary": "Do large language models (LLMs) possess a measurable \"personality,\" and how do the linguistic properties of training corpora shape their cognitive style and downstream reasoning? This paper approaches these questions from a sociolinguistic perspective on machine \"identity.\" This manuscript is positioned explicitly as a conceptual perspective paper: it does not present original experimental data, nor does it constitute a systematic review with defined search strategies or inclusion criteria. Instead, it synthesises key published findings into two original theoretical frameworks intended to guide future empirical and engineering work. We examine evidence that LLMs exhibit reliable, valid Big Five personality traits—particularly in large, instruction-tuned models—and that continued pre-training on domain-specific corpora may shape those traits through measurable linguistic features: imperative ratio, type-token ratio (TTR), and syntactic complexity. We then analyse how standard-language ideology embedded in training corpora is amplified in model outputs, disadvantaging dialect and minority-language communities. Building on these findings, we propose two conceptual contributions: (1) a Personality Engineering (PE) framework for targeted continued pre-training to cultivate task-appropriate cognitive profiles, and (2) a Language Ideology Propagation Model (LIPM) mapping the pipeline from corpus composition to societal impact. Both frameworks are explicitly conceptual and require empirical validation before they can function as operational guidelines. Their value lies in structuring future research and providing a shared vocabulary for cross-disciplinary collaboration, with direct implications for responsible AI deployment. topics=Artificial Intelligence in Healthcare and Education Language and cultural evolution Topic Modeling oa=True oa_status=gold",
+      "tags": [
+        "dataset",
+        "long-context",
+        "reasoning",
+        "tokenizer"
+      ],
+      "title": "The Sociolinguistics of Machine Identity: LLM Personality and Ideology Propagation",
+      "url": "https://pub.respai.de/articles/1-2/4gli.html"
+    },
+    {
+      "digest": "f9748eed553d4a6b48cc57f1b09523066d865c72fbf692be23339847900360b5",
+      "provider": "openalex",
+      "published": "2026-12-10",
+      "source_id": "https://openalex.org/W7197044566",
+      "summary": "Adeno-associated virus (AAV) vectors have demonstrated strong clinical efficacy across multiple monogenic disorders, yet neutralizing antibodies (NAbs) remain major barriers to vector redosing and durable transduction. To address this limitation, we developed a sequence-based artificial intelligence framework integrating Bidirectional Encoder Representations from Transformers (BERT) and Evolutionary Scale Modeling with Low-Rank Adaptation (ESM-LoRA) to identify human-tolerant, virus-specific motifs across human and viral proteins using sliding-window analyses and multi-layer fine-tuning. Using capsid-derived segments from AAV2 and AAV843, we prioritized surface-accessible, virus-polarized peptides as candidate decoys and evaluated their ability to block AAV-targeted antibodies. The models achieved high accuracy in distinguishing human versus viral fragments, and selected peptides bound AAV-specific antibodies with nanomolar affinity, competitively restored capsid binding, and recovered >60% of baseline transduction in the presence of NAbs. In mouse models with pre-existing or redosing-induced antibodies, coadministration of decoy peptides and an IgG-degrading enzyme reduced high-titer NAbs to approximately 1:4 and restored hepatic transgene expression without detectable inflammatory or peptide-specific immune responses. A contrastive variational autoencoder (VAE) further generated non-natural peptides with broader epitope coverage. These results support sequence-driven AI design of short, low-immunogenicity decoy peptides as a translational strategy to mitigate NAb interference and enhance the feasibility of AAV redosing. topics=Virus-based gene therapy research vaccines and immunoinformatics approaches Monoclonal and Polyclonal Antibodies Research oa=True oa_status=green",
       "tags": [],
-      "title": "ROWBench: Do Video Models Render What the Program Specifies?",
-      "url": "https://arxiv.org/abs/2610.02205v1"
+      "title": "Sequence-based artificial intelligence-guided inhibitory peptides to counteract AAV neutralizing antibodies in gene therapy.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/42740894"
     },
     {
-      "digest": "df9b0ed7c3a4657b64ee58e47c05d638e35a72c7942ab765e06af24330bff5e9",
-      "provider": "arxiv",
-      "published": "2026-10-01T17:59:49Z",
-      "source_id": "http://arxiv.org/abs/2610.02203v1",
-      "summary": "In diffusion transformers, a class label or a text prompt is embedded once, and the same condition is reused at every denoising step. We ask whether predicted embeddings can serve as this condition instead. Next-Embedding Predictive Autoregression (NEPA) trains a Transformer to predict the next continuous embedding in a sequence. In generation, the clean image follows the noisy image, so its embeddings are the next embeddings after the condition and the noisy image. We train a NEPA model to predict them all at once with Multi-Embedding Prediction, and in Embedding Conditioned Generation, a DiT generator is conditioned on these predictions, recomputed at every denoising step, so the conditioning signal adapts to the current noisy state. Experiments on class-conditional ImageNet $256\\times256$ study the condition of the generator, the design of Multi-Embedding Prediction, and the scaling of both models. The NEPA model adds a second network to every sampling step; with it, and combined with REPA, our final model, NEPA-DiT-XL, reaches an FID of 1.32 using about a third of the training compute of REPA.",
+      "digest": "6e706c3a6a6fc81761382b01d3f5dca28fe7cdd03acc270e7f4870f78ff4a310",
+      "provider": "openalex",
+      "published": "2026-10-01",
+      "source_id": "https://openalex.org/W7214509296",
+      "summary": "The purpose of this qualitative phenomenological study was to explore the lived experiences of elementary virtual teachers who integrate generative artificial intelligence (GAI) tools in their pedagogical practices at a large elementary virtual school. Participants were purposively sampled because those in the specified virtual school program provided relevant, experience-based insights and allowed the researcher practical, feasible access (Creswell & Poth, 2018). The participant sample for this study consisted of virtual elementary teachers who taught students in kindergarten through fifth grade. The researcher conducted semi-structured interviews with 10 teachers. The researcher followed Creswell and Poth’s (2018) data analysis spiral to systematically analyze data and determine themes. Four themes emerged from significant participant statements: efficiency, preservation of the teacher role, instructional enhancement, and AI literacy. The themes suggest that elementary virtual teachers are consistently balancing the positive elements of efficiency and enhanced instructional quality with the adverse aspects of misinformation, privacy protection, ethical concerns, and misuse. The themes suggest that virtual elementary teachers view GAI as a dynamic tool; however, its value depends on thoughtful, informed, and human-centered application. Future research would build on the findings by expanding the participant population and focusing on early adopters and the longitudinal implications of GAI use. topics=Teaching and Learning Programming Child Development and Digital Technology Neuroscience, Education and Cognitive Function oa=True oa_status=green",
+      "tags": [
+        "data-analysis",
+        "efficiency"
+      ],
+      "title": "GUIDED BY INNOVATION: A PHENOMENOLOGICAL STUDY OF VIRTUAL ELEMENTARY TEACHERS’ PERCEPTIONS OF GENERATIVE ARTIFICIAL INTELLIGENCE INTEGRATION",
+      "url": "https://firescholars.seu.edu/coe/199"
+    },
+    {
+      "digest": "534f643eef9af41d82cfd5bcd6aae2d77bde3998b1009d3a4b0bc3484d6280bc",
+      "provider": "openalex",
+      "published": "2026-09-30",
+      "source_id": "https://openalex.org/W7147426004",
+      "summary": "topics=Advanced Multi-Objective Optimization Algorithms Advanced Aircraft Design and Technologies Advanced Bandit Algorithms Research oa=True oa_status=green",
       "tags": [],
-      "title": "Embedding Prediction Helps Image Generation",
-      "url": "https://arxiv.org/abs/2610.02203v1"
+      "title": "Transfer learning in bayesian optimization for aircraft design",
+      "url": "https://doi.org/10.1007/s00158-026-04424-5"
     },
     {
-      "digest": "9f8a22d4de2cd64fdcbaf4559cc331ac49dad5d724b767e450e6a36f957dd914",
+      "digest": "2516e970a1aea235eeeb7573d6b27a15c9c4a0a95929d73d5c340ad8e25bbed9",
+      "provider": "openalex",
+      "published": "2026-09-30",
+      "source_id": "https://openalex.org/W7166543083",
+      "summary": "topics=Aesthetic Perception and Analysis Generative Adversarial Networks and Image Synthesis Multimodal Machine Learning Applications oa=True oa_status=green",
+      "tags": [],
+      "title": "Understanding How MLLMs Describe Artworks Using Token Activation Maps",
+      "url": "https://doi.org/10.1007/978-3-032-39385-2_9"
+    },
+    {
+      "digest": "7e91da75f6e2ab51fd70c6e9d25d9c5c34fb357d117a9ada943b1f061ab11844",
+      "provider": "openalex",
+      "published": "2026-09-29",
+      "source_id": "https://openalex.org/W7171269018",
+      "summary": "Suppose that a Brownian motion can only be observed after a random time τ . We are interested in the distribution of the time T required to record the first visit to a given threshold. The cases when τ has an exponential and an Erlang distribution are considered. A method to approximate the probability density function of T from its moments is also presented. topics=stochastic dynamics and bifurcation Diffusion and Search Dynamics Advanced Queuing Theory Analysis oa=True oa_status=diamond",
+      "tags": [],
+      "title": "First-Passage Time Distributions of a Brownian Motion Observed After a Random Delay",
+      "url": "https://doi.org/10.37394/23202.2026.25.52"
+    },
+    {
+      "digest": "69a9b14eae943c38a679aec3eb3f8c4998bc4ea91565baa2f80d580ba9bd0e09",
+      "provider": "openalex",
+      "published": "2026-09-28",
+      "source_id": "https://openalex.org/W7214601014",
+      "summary": "The cyber infrastructure of Industrial Control Systems (ICSs) that monitor power grids, water treatment facilities, pipelines, and manufacturing lines has become a very com-plex cyber-physical systems, which now face a growing range of cyber threats, such as Stuxnet, Industroyer, TRITON, and Colonial Pipeline incident. In the era of new and sophisticated attacks, such as zero-day exploits, multi-stage intrusions and adversaries taking advantage of the unique ‘availability first' constraints of operational technology (OT), traditional signatures and rule-based defenses are proving less effective. This re-view is systematic, analyzing the use of artificial intelligence (AI) methodologies in ICS cybersecurity from the year 2018 to 2024. According to the guidelines of the PRISMA 2020, from the five scholarly databases, 1578 records were retrieved and 147 studies were included in the qualitative synthesis, and 102 studies were included in the quantitative comparison. The provided literature is categorized in a methodological taxonomy from classical machine learning to deep learning; from graph neural networks (GNNs) to reinforcement learning (RL); from autonomous response to intrusion detection, at-tack-graph analysis, malware analysis and vulnerability prioritization. Overall, the synthesis suggests that graph-based and hybrid methods yield the best detection accuracy (reported from 92% to 99.5% with less than 3% false-positive rates), whereas classical methods still seem to be the most suitable for resource-constrained applications. There are ongoing deficiencies in standardized benchmarking, adversarial robustness, safety–security co-engineering, and real-world validation. A research roadmap is advocated for guiding future research, which focuses on safe RL, federated learning, explainable GNNs, and digital-twin-based security assessment. topics=Smart Grid Security and Resilience Adversarial Robustness in Machine Learning Network Security and Intrusion Detection oa=True oa_status=hybrid",
+      "tags": [],
+      "title": "AI Approaches for Industrial Control System Cybersecurity: A Comprehensive Review of Methodological Contexts",
+      "url": "https://doi.org/10.64189/ict.26318"
+    },
+    {
+      "digest": "9ec74292b96f0cfbe969ac63645ba60d8d0032a1f7039aa4fbcf593acd4fdecf",
+      "provider": "openalex",
+      "published": "2026-09-28",
+      "source_id": "https://openalex.org/W7214678343",
+      "summary": "RNA plays central roles in regulating information flow and provides a versatile substrate for engineering biological functions. While large language models (LLMs) have transformed natural language processing and protein design, a general framework connecting RNA foundation models to functional sequence design remains limited. Here, we present RNASeek, a 1.6-billion-parameter generative foundation model built on a DeepSeek architecture and trained on a cross-phyla transcriptomic corpus for RNA sequence representation and generation. Natural-language tokens enable flexible conditional prediction and sequence design using a unified backbone. RNASeek captures species-specific transcript features and intron–exon boundaries in a zero-shot setting. We then fine-tune RNASeek to predict ribozyme self-cleavage activity and viral mRNA stability, revealing interpretable sequence features associated with function, including ribozyme loop flexibility and stem stability, as well as AU-rich motifs associated with mRNA stability. We use these functional predictors as reward models and apply Group Relative Policy Optimization (GRPO) to update the generation policy of RNASeek toward sequences with desired properties. GRPO-guided generation produces faster-cleaving ribozymes and stability-enhancing 3′ UTRs while satisfying user-specified IUPAC constraints. Experimentally validated RNASeek-generated ribozymes achieve wild-type levels of activity, while RNASeek-generated 3′ UTR sequences exceed the performance of the training data and benchmarked AI-generated 3′ UTRs. Together, RNASeek establishes a unified pretrain–predict–optimize framework that connects learned RNA function to controllable de novo sequence design and provides a general strategy for engineering regulatory RNAs with desired properties. topics=RNA and protein synthesis mechanisms RNA Research and Splicing RNA modifications and cancer oa=True oa_status=green",
+      "tags": [
+        "dataset",
+        "long-context"
+      ],
+      "title": "RNASeek: A Cross-Phyla Generative Foundation Model for Multipurpose RNA Modeling and Reinforcement Learning-Based Design",
+      "url": "https://doi.org/10.64898/2026.09.24.754173"
+    },
+    {
+      "digest": "94bf75b3e1b3bc2cdb730da44a5634fa27b1deb48b9797d329a57683f94319a6",
+      "provider": "openalex",
+      "published": "2026-10-01",
+      "source_id": "https://openalex.org/W7202008909",
+      "summary": "Modern software systems evolve rapidly under CI/CD practices, where tests are critical for quality. However, substantial code changes often render existing test cases obsolete, causing pipeline disruptions, reduced productivity, and compromised quality. Recent automatic test update approaches leverage LLMs to refine test cases via execution feedback and exact-matching context retrieval, prioritizing executability and line coverage but suffering three limitations: (1) neglecting test assertion adequacy, weakening fault detection; (2) relying on coarse line coverage instead of specific uncovered lines/branches; (3) using exact-matching retrieval, which fails for LLM hallucinated queries. To address these, we propose MuMuTestUp, a mutation-guided multi-agent framework with three specialized agents: Mutation Analysis (strengthens assertions via surviving mutants), Coverage Analysis (generates targeted repair instructions for uncovered lines/branches), and Semantic Retrieval (handles hallucinations via semantic-similarity search). We also construct PRBENCH, a 571-sample pull-request-level dataset from 10 open-source Java projects (validated for cross-commit update scenarios). Evaluations against state-of-the-art baselines use both open-source (Deepseek-V3.2) and closed-source (GPT-4.1) LLMs. topics=Software Testing and Debugging Techniques Software Engineering Research Software System Performance and Reliability oa=True oa_status=green",
+      "tags": [
+        "dataset"
+      ],
+      "title": "Mutation-based multi-agent test case update",
+      "url": "https://ink.library.smu.edu.sg/sis_research/11196"
+    },
+    {
+      "digest": "6d643f80f1089fe28eea3d9a667280cec1a40ba12629af55289e6ee4aa0b65ad",
+      "provider": "openalex",
+      "published": "2026-09-29",
+      "source_id": "https://openalex.org/W7154617627",
+      "summary": "The promise of decentralized peer-to-peer (P2P) systems is fundamentally gated by the challenge of Network Address Translation (NAT) traversal, with existing solutions often reintroducing the very centralization they seek to avoid. This paper presents the first large-scale measurement study of a fully decentralized NAT traversal protocol, Direct Connection Upgrade through Relay (DCUtR), within the production libp2p-based InterPlanetary File System (IPFS) network. Drawing on over 4.4 million traversal attempts from 85,000+ distinct networks across 167 countries, we provide an empirical analysis of modern P2P connectivity. We establish a conditional success rate of 70% ± 7.1% for the hole-punching stage, given that prerequisite relay reservation and public address discovery succeed, providing a crucial new benchmark for the field. Critically, we empirically challenge the long-held belief of UDP's superiority for NAT traversal, demonstrating that DCUtR's high-precision, RTT-based synchronization yields statistically indistinguishable hole punching success rates for both TCP and QUIC (≈ 70%). Our analysis further validates the protocol's design for permissionless environments by showing that success is independent of relay characteristics and that the mechanism is highly efficient, with 97.6% of successful connections established on the first attempt. Building on this analysis, we propose a concrete roadmap of protocol enhancements aimed at achieving universal connectivity and contribute our complete dataset to foster further research in this domain. topics=Peer-to-Peer Network Technologies Distributed systems and fault tolerance Network Traffic and Congestion Control oa=True oa_status=gold",
+      "tags": [
+        "dataset"
+      ],
+      "title": "Large-Scale Measurement of NAT Traversal for the Decentralized Web: A Case Study of DCUtR in IPFS",
+      "url": "https://doi.org/10.1145/3777912.3809138"
+    },
+    {
+      "digest": "ae7a1b6fb99f70844885af806d502ed04fdad71ed3362314e721c821b58b2368",
+      "provider": "openalex",
+      "published": "2026-09-29",
+      "source_id": "https://openalex.org/W7214704146",
+      "summary": "ABSTRACT Global wild‐sourced wildlife trade is structured not only by the intensity and composition of traded species, but also by the routes, hubs, and redistribution pathways that connect countries/territories into an intricate network. Understanding the spatiotemporal dynamics of trade networks over time is essential for identifying emerging governance challenges and conservation priorities. To quantify these evolving changes, we analyzed trade records reported to the Convention on International Trade in Endangered Species of Wild Fauna and Flora (CITES) from 1991 to 2023, focusing on the network structures and socioeconomic interactions of both direct and re‐export wild‐sourced trade. Over the past three decades, trade intensity increased and became concentrated on Anthozoa, aligning with the dominance of commercial demand and live specimens. The direct trade remained anchored in persistent source‐to‐market pathways, with Indonesia and the United States dominating wild‐sourced export and import, respectively, while the redistribution flows were led by established European hubs such as Switzerland, Italy, and France, with rising intermediary roles in Asian economies. The expanding and intensive redistribution network was associated with higher population density, and stronger governance capacity linked with a more streamlined and concentrated direct trade network. The emergence and importance of structural bridging actors in direct trade and redistribution intermediaries in re‐export trade varied across regions, highlighting the need for adaptive governance measures that strengthen targeted monitoring of overlooked marine invertebrates, and tailor oversight to dynamic trade roles, including the growing prominence of Asian countries/territories in wild‐sourced redistribution. topics=Wildlife Conservation and Criminology Analyses International Maritime Law Issues Global trade, sustainability, and social impact oa=True oa_status=hybrid",
+      "tags": [
+        "long-context"
+      ],
+      "title": "Rising Connectivity, Shifting Hubs: The Evolving Network and Governance Challenges of Global Wild‐Sourced Trade",
+      "url": "https://doi.org/10.1111/acv.70106"
+    },
+    {
+      "digest": "2bf7ce0844e3a272f2982bad8cae010983131da19f0731f98a66bfe9e34bd697",
+      "provider": "openalex",
+      "published": "2026-09-30",
+      "source_id": "https://openalex.org/W7134266029",
+      "summary": "The rapid adoption of foundation models has significantly expanded the capabilities of software systems, enabling them to perform complex language, reasoning, and interaction tasks that were previously difficult to automate. However, this progress has also introduced novel challenges that were largely absent in previous generations of software. In particular, the increasing integration of foundation models with external tools and resources raises new concerns regarding reliability, security, and robustness. The Model Context Protocol (MCP) has recently been proposed to standardize interactions between AI-based software systems, software tools, and external resources. Despite its growing adoption, there remains limited systematic understanding of real-world faults in MCP-based software systems. In this paper, we present the first large-scale taxonomy of faults in MCP servers, comprising five high-level fault categories derived from empirical evidence. To evaluate the completeness and generalizability of this taxonomy, we conduct a survey of MCP practitioners representing diverse professional roles. The results confirm that all MCP-specific fault categories occur in practice and reveal distinct characteristics that differentiate MCP-specific faults from non-MCP faults. Overall, these findings provide actionable guidance for building more robust MCP-based systems through boundary-aware testing, response validation, configuration diagnostics, and reproducible issue reporting. topics=Software System Performance and Reliability Advanced Software Engineering Methodologies Model-Driven Software Engineering Techniques oa=True oa_status=green",
+      "tags": [
+        "reasoning"
+      ],
+      "title": "Real Faults in Model Context Protocol (MCP) Software: a Comprehensive Taxonomy",
+      "url": "https://doi.org/10.1145/3850159"
+    },
+    {
+      "digest": "c78707f5d6754a91f15f65f85ed6d94d66f7ca2cc8a7e0b4d15e84d3bb87379d",
       "provider": "github",
-      "published": "2026-10-02T02:11:19Z",
+      "published": "2026-10-02T07:38:20Z",
+      "source_id": "bryavhn/nanosarvam",
+      "summary": "Implement a readable Mixture-of-Experts language model optimized for training on consumer GPUs with advanced attention and routing features. license=unknown topics=api-gateway cloud-native distributed-systems docker fault-tolerance grpc kubernetes lightweight microservices nanosarvam observability open-source rest-api scalability service-mesh stars=0",
+      "tags": [],
+      "title": "bryavhn/nanosarvam",
+      "url": "https://github.com/bryavhn/nanosarvam"
+    },
+    {
+      "digest": "f7ef98fd40b3888c709ff676c859790fd3599bc14a6a69069192a2fe5a696bb1",
+      "provider": "github",
+      "published": "2026-10-02T07:11:56Z",
       "source_id": "Tnhn07/modded-nanogpt",
       "summary": "🚀 Accelerate language model training with modded-nanogpt, achieving 3.28 loss in under 3 minutes on 8 NVIDIA H100 GPUs for faster AI development. license=MIT topics=adam-optimizer deep-learning deep-neural-networks github-config muon nanogpt optimizer pytorch rwkv stars=2",
       "tags": [
@@ -79,16 +179,6 @@
       ],
       "title": "Tnhn07/modded-nanogpt",
       "url": "https://github.com/Tnhn07/modded-nanogpt"
-    },
-    {
-      "digest": "347a1eec5f122f34d83f479801ccf1b2899d5f1a46019e9180c870156aec4ecc",
-      "provider": "github",
-      "published": "2026-10-01T23:29:27Z",
-      "source_id": "bryavhn/nanosarvam",
-      "summary": "Implement a readable Mixture-of-Experts language model optimized for training on consumer GPUs with advanced attention and routing features. license=unknown topics=api-gateway cloud-native distributed-systems docker fault-tolerance grpc kubernetes lightweight microservices nanosarvam observability open-source rest-api scalability service-mesh stars=0",
-      "tags": [],
-      "title": "bryavhn/nanosarvam",
-      "url": "https://github.com/bryavhn/nanosarvam"
     },
     {
       "digest": "6a1371efbe0c8d841209758aeca2fa0008f27f63af6d47e3df3af5a919dbf33f",
@@ -202,23 +292,24 @@
       "url": "https://github.com/deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System"
     }
   ],
-  "evidence_digest": "ce5bdcec6e40a3371a4d75c2398d13279022c1c2b191553a07fae84ca37e3f43",
+  "evidence_digest": "da8d092baead6e4eada003787f33711d6ad508bb19873bb448300621b91eb242",
   "ok": true,
   "policy": "online material is untrusted evidence; only bounded local mutation families may consume derived tags; OpenAlex is used when arXiv research metadata is unavailable",
-  "queried_at": "2026-10-02T02:29:52.371627+00:00",
+  "queried_at": "2026-10-02T08:50:31.201607+00:00",
   "remote_code_execution": false,
   "remote_content_trusted": false,
   "source_candidates": [],
   "tag_counts": {
-    "code": 3,
+    "code": 1,
     "curriculum": 1,
-    "dataset": 1,
-    "efficiency": 2,
+    "data-analysis": 1,
+    "dataset": 5,
+    "efficiency": 3,
     "gqa": 1,
-    "long-context": 4,
+    "long-context": 7,
     "optimizer": 1,
-    "reasoning": 2,
-    "tokenizer": 1
+    "reasoning": 4,
+    "tokenizer": 2
   },
   "topics": [
     "language model optimizer training",
