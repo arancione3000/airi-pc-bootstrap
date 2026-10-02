@@ -221,7 +221,7 @@ jobs:
           # do not require equality between before/after remote refs.
           test -n "$REMOTE_AFTER"
 
-      - name: Screen current-state 8k fallback after rejected auto-wide
+      - name: Screen current-state 4k protected fallback after rejected auto-wide
         env:
           PYTHONPATH: ${{ github.workspace }}/computer
         run: |
@@ -235,16 +235,16 @@ jobs:
           fi
           python -m generalist_lm.learning_efficiency_benchmark \
             --state-dir "$STATE_DIR" \
-            --output "$ROOT/wide64-current.jsonl" \
-            --segments 8128 \
-            --seeds 6100000,6100001,6100002 \
+            --output "$ROOT/wide32-current.jsonl" \
+            --segments 4064 \
+            --seeds 6300000,6300001,6300002 \
             --threads 4 \
-            --trials wide64_causal20_ar \
+            --trials wide32_causal20_ar \
             --causal-documents "$ROOT/pinned-corpus/pinned-train.jsonl" \
             --validation-documents "$ROOT/pinned-corpus/pinned-validation.jsonl"
           python -m generalist_lm.learning_efficiency_benchmark \
             --state-dir "$STATE_DIR" \
-            --output "$ROOT/wide64-current.jsonl" \
+            --output "$ROOT/wide32-current.jsonl" \
             --summary-only
 
       - name: Upload production-shadow evidence
@@ -256,7 +256,7 @@ jobs:
             ${{ runner.temp }}/airi-wide-batch-shadow/production-shadow-summary.json
             ${{ runner.temp }}/airi-wide-batch-shadow/result.json
             ${{ runner.temp }}/airi-wide-batch-shadow/state-repo/generalist-state/bootstrap-data/segment-guard-last.json
-            ${{ runner.temp }}/airi-wide-batch-shadow/wide64-current.jsonl
-            ${{ runner.temp }}/airi-wide-batch-shadow/wide64-current.summary.json
+            ${{ runner.temp }}/airi-wide-batch-shadow/wide32-current.jsonl
+            ${{ runner.temp }}/airi-wide-batch-shadow/wide32-current.summary.json
           if-no-files-found: warn
           retention-days: 14
