@@ -2768,6 +2768,46 @@ def test_phase5_explicit_wide_flag_still_matches_validated_candidate():
     assert candidate["wide_batch_effective_batch_size"] == 128
 
 
+def test_phase5_auto_wide_recovery_stays_scoped_to_validated_topology():
+    wrong_context = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=256,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=8,
+        recovery_hold=True,
+        last_segment_accepted=False,
+        success_streak=0,
+        language_fragile=True,
+    )
+    assert wrong_context["auto_wide_batch_recovery"] is False
+    assert wrong_context["wide_batch_recovery"] is False
+
+    wrong_capacity = _phase5_recovery_plan(
+        1_000_000,
+        parameters=20_000_000,
+        context_length=128,
+        persisted_lr_scale=1.0 / 64.0,
+        consecutive_rejections=8,
+        recovery_hold=True,
+        last_segment_accepted=False,
+        success_streak=0,
+        language_fragile=True,
+    )
+    assert wrong_capacity["auto_wide_batch_recovery"] is False
+    assert wrong_capacity["wide_batch_recovery"] is False
+
+
+def test_phase5_workflow_validates_auto_wide_recovery_before_persisting():
+    workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(
+        encoding="utf-8"
+    )
+    assert 'guard_wide="$(jq -r \'.wide_batch_recovery // false\' "${guard}")"' in workflow
+    assert 'if [[ "${guard_wide}" == "true" ]]; then' in workflow
+    assert "Wide-batch recovery accepted by the unchanged language guard." in workflow
+    assert "Wide-batch recovery rolled back; ending this run after one rejected proposal." in workflow
+    assert 'persist_state "target ${TARGET_TOKENS} segment ${segment}"' in workflow
+
 def test_phase5_wide_batch_protected_plan_matches_validated_candidate():
     before = {
         "repetition_rate": 0.23615752577876778,
