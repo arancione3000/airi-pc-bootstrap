@@ -322,7 +322,7 @@ def test_phase5_language_fragility_reuses_existing_protected_boundary():
     ) is True
 
 
-def test_phase5_two_acceptances_do_not_leave_4k_while_language_is_fragile():
+def test_phase5_fragile_50m_stays_on_validated_wide_recovery_until_headroom_returns():
     common = {
         "parameters": 50_041_536,
         "context_length": 128,
@@ -346,7 +346,10 @@ def test_phase5_two_acceptances_do_not_leave_4k_while_language_is_fragile():
 
     assert fragile["trust_region_recovery"] is True
     assert fragile["language_fragile"] is True
-    assert fragile["effective_budget_tokens"] == 4_000
+    assert fragile["auto_wide_batch_recovery"] is True
+    assert fragile["wide_batch_recovery"] is True
+    assert fragile["effective_budget_tokens"] == 16_256
+    assert fragile["wide_batch_effective_batch_size"] == 128
     assert fragile["reset_optimizer"] is True
 
     assert healthy["trust_region_recovery"] is False
@@ -373,7 +376,7 @@ def test_phase5_sustained_50m_stall_enters_elementary_trust_region():
     assert plan["forced_stage"] == "B_short_sentence_completion"
 
 
-def test_phase5_trust_region_requires_two_acceptances_before_8k_ladder():
+def test_phase5_trust_region_uses_wide_first_followup_then_normal_8k_ladder():
     first_followup = _phase5_recovery_plan(
         1_000_000,
         parameters=50_041_536,
@@ -385,7 +388,10 @@ def test_phase5_trust_region_requires_two_acceptances_before_8k_ladder():
         success_streak=1,
     )
     assert first_followup["trust_region_recovery"] is True
-    assert first_followup["effective_budget_tokens"] == 4_000
+    assert first_followup["auto_wide_batch_recovery"] is True
+    assert first_followup["wide_batch_recovery"] is True
+    assert first_followup["effective_budget_tokens"] == 16_256
+    assert first_followup["wide_batch_effective_batch_size"] == 128
     assert first_followup["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
     assert first_followup["reset_optimizer"] is True
 
