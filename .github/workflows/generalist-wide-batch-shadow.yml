@@ -221,6 +221,32 @@ jobs:
           # do not require equality between before/after remote refs.
           test -n "$REMOTE_AFTER"
 
+      - name: Screen current-state 8k fallback after rejected auto-wide
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/airi-wide-batch-shadow"
+          STATE_DIR="$ROOT/state-repo/generalist-state"
+          GUARD="$STATE_DIR/bootstrap-data/segment-guard-last.json"
+          if [[ "$(jq -r '.accepted // false' "$GUARD")" == "true" ]]; then
+            echo "16k auto-wide passed; no fallback screen needed."
+            exit 0
+          fi
+          python -m generalist_lm.learning_efficiency_benchmark \
+            --state-dir "$STATE_DIR" \
+            --output "$ROOT/wide64-current.jsonl" \
+            --segments 8128 \
+            --seeds 6100000,6100001,6100002 \
+            --threads 4 \
+            --trials wide64_causal20_ar \
+            --causal-documents "$ROOT/pinned-corpus/pinned-train.jsonl" \
+            --validation-documents "$ROOT/pinned-corpus/pinned-validation.jsonl"
+          python -m generalist_lm.learning_efficiency_benchmark \
+            --state-dir "$STATE_DIR" \
+            --output "$ROOT/wide64-current.jsonl" \
+            --summary-only
+
       - name: Upload production-shadow evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -230,5 +256,7 @@ jobs:
             ${{ runner.temp }}/airi-wide-batch-shadow/production-shadow-summary.json
             ${{ runner.temp }}/airi-wide-batch-shadow/result.json
             ${{ runner.temp }}/airi-wide-batch-shadow/state-repo/generalist-state/bootstrap-data/segment-guard-last.json
+            ${{ runner.temp }}/airi-wide-batch-shadow/wide64-current.jsonl
+            ${{ runner.temp }}/airi-wide-batch-shadow/wide64-current.summary.json
           if-no-files-found: warn
           retention-days: 14
