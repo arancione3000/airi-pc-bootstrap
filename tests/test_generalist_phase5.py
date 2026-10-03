@@ -2814,6 +2814,88 @@ def test_phase5_workflow_validates_auto_wide_recovery_before_persisting():
     assert "Wide-batch recovery rolled back; ending this run after one rejected proposal." in workflow
     assert 'persist_state "target ${TARGET_TOKENS} segment ${segment}"' in workflow
 
+
+def test_phase5_wide_recovery_ladder_downshifts_after_rejections():
+    common = dict(
+        requested_tokens=1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=8,
+        recovery_hold=True,
+        last_segment_accepted=False,
+        success_streak=0,
+        language_fragile=True,
+    )
+    after_16k_reject = _phase5_recovery_plan(
+        **common,
+        previous_wide_attempted=True,
+        previous_wide_accepted=False,
+        previous_wide_batch_size=128,
+    )
+    assert after_16k_reject["wide_batch_recovery"] is True
+    assert after_16k_reject["wide_batch_effective_batch_size"] == 64
+    assert after_16k_reject["effective_budget_tokens"] == 8_128
+
+    after_8k_reject = _phase5_recovery_plan(
+        **common,
+        previous_wide_attempted=True,
+        previous_wide_accepted=False,
+        previous_wide_batch_size=64,
+    )
+    assert after_8k_reject["wide_batch_effective_batch_size"] == 32
+    assert after_8k_reject["effective_budget_tokens"] == 4_064
+
+    after_4k_reject = _phase5_recovery_plan(
+        **common,
+        previous_wide_attempted=True,
+        previous_wide_accepted=False,
+        previous_wide_batch_size=32,
+    )
+    assert after_4k_reject["wide_batch_effective_batch_size"] == 32
+    assert after_4k_reject["effective_budget_tokens"] == 4_064
+
+
+def test_phase5_wide_recovery_ladder_climbs_only_after_acceptance():
+    common = dict(
+        requested_tokens=1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=1,
+        recovery_hold=True,
+        last_segment_accepted=True,
+        success_streak=1,
+        language_fragile=True,
+    )
+    after_4k_accept = _phase5_recovery_plan(
+        **common,
+        previous_wide_attempted=True,
+        previous_wide_accepted=True,
+        previous_wide_batch_size=32,
+    )
+    assert after_4k_accept["wide_batch_effective_batch_size"] == 64
+    assert after_4k_accept["effective_budget_tokens"] == 8_128
+
+    after_8k_accept = _phase5_recovery_plan(
+        **common,
+        previous_wide_attempted=True,
+        previous_wide_accepted=True,
+        previous_wide_batch_size=64,
+    )
+    assert after_8k_accept["wide_batch_effective_batch_size"] == 128
+    assert after_8k_accept["effective_budget_tokens"] == 16_256
+
+    after_16k_accept = _phase5_recovery_plan(
+        **common,
+        previous_wide_attempted=True,
+        previous_wide_accepted=True,
+        previous_wide_batch_size=128,
+    )
+    assert after_16k_accept["wide_batch_effective_batch_size"] == 128
+    assert after_16k_accept["effective_budget_tokens"] == 16_256
+
+
 def test_phase5_wide_batch_protected_plan_matches_validated_candidate():
     before = {
         "repetition_rate": 0.23615752577876778,
