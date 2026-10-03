@@ -27,7 +27,7 @@ jobs:
           python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --disable-pip-version-check 'datasets>=3.6,<5'
 
-      - name: Screen 8k and 4k protected candidates on current live checkpoint
+      - name: Screen low-LR protected recovery on current live checkpoint
         env:
           PYTHONPATH: ${{ github.workspace }}/computer
           GH_TOKEN: ${{ github.token }}
@@ -52,32 +52,17 @@ jobs:
 
           python -m generalist_lm.learning_efficiency_benchmark \
             --state-dir "$STATE_DIR" \
-            --output "$ROOT/wide64.jsonl" \
-            --segments 8128 \
-            --seeds 7100000,7100001,7100002 \
-            --threads 4 \
-            --trials wide64_causal20_ar \
-            --causal-documents "$TRAIN" \
-            --validation-documents "$VALIDATION"
-
-          python -m generalist_lm.learning_efficiency_benchmark \
-            --state-dir "$STATE_DIR" \
-            --output "$ROOT/wide64.jsonl" \
-            --summary-only
-
-          python -m generalist_lm.learning_efficiency_benchmark \
-            --state-dir "$STATE_DIR" \
-            --output "$ROOT/wide32.jsonl" \
+            --output "$ROOT/low-lr.jsonl" \
             --segments 4064 \
-            --seeds 7200000,7200001,7200002 \
+            --seeds 7300000,7300001,7300002 \
             --threads 4 \
-            --trials wide32_causal20_ar \
+            --trials wide32_causal20_ar_lr05,wide32_causal20_ar_lr025,wide32_causal20_ar_lr0125 \
             --causal-documents "$TRAIN" \
             --validation-documents "$VALIDATION"
 
           python -m generalist_lm.learning_efficiency_benchmark \
             --state-dir "$STATE_DIR" \
-            --output "$ROOT/wide32.jsonl" \
+            --output "$ROOT/low-lr.jsonl" \
             --summary-only
 
           ROOT="$ROOT" python - <<'PY'
@@ -86,42 +71,36 @@ jobs:
           from pathlib import Path
 
           root = Path(os.environ["ROOT"])
+          rows = [
+              json.loads(line)
+              for line in (root / "low-lr.jsonl").read_text().splitlines()
+              if line.strip()
+          ]
+          grouped = {}
+          for row in rows:
+              grouped.setdefault(row["trial"]["name"], []).append(row)
           result = {}
-          for label in ("wide64", "wide32"):
-              rows = [
-                  json.loads(line)
-                  for line in (root / f"{label}.jsonl").read_text().splitlines()
-                  if line.strip()
-              ]
-              result[label] = {
-                  "accepted": sum(bool(r["accepted"]) for r in rows),
-                  "attempted": len(rows),
-                  "rows": [
-                      {
-                          "seed": r["seed"],
-                          "accepted": r["accepted"],
-                          "repetition_before": r["before"]["repetition_rate"],
-                          "repetition_after": r["after"]["repetition_rate"],
-                          "nll_before": r["before"]["language_nll"],
-                          "nll_after": r["after"]["language_nll"],
-                          "headroom_after": r["headroom_after"],
-                          "accepted_h": r["accepted_equivalent_tokens_per_hour"],
-                          "validation_before": (
-                              r["corpus_subset_validation_before"]["loss"]
-                              if r["corpus_subset_validation_before"] else None
-                          ),
-                          "validation_after": (
-                              r["corpus_subset_validation_after"]["loss"]
-                              if r["corpus_subset_validation_after"] else None
-                          ),
-                      }
-                      for r in rows
-                  ],
+          for name, group in grouped.items():
+              result[name] = {
+                  "accepted": sum(bool(r["accepted"]) for r in group),
+                  "attempted": len(group),
+                  "mean_repetition_after": sum(
+                      r["after"]["repetition_rate"] for r in group
+                  ) / len(group),
+                  "mean_nll_after": sum(
+                      r["after"]["language_nll"] for r in group
+                  ) / len(group),
+                  "mean_headroom_after": sum(
+                      r["headroom_after"] for r in group
+                  ) / len(group),
+                  "mean_accepted_h": sum(
+                      r["accepted_equivalent_tokens_per_hour"] for r in group
+                  ) / len(group),
               }
-          (root / "comparison.json").write_text(
+          (root / "low-lr-comparison.json").write_text(
               json.dumps(result, indent=2, sort_keys=True) + "\n"
           )
-          print("CURRENT_FALLBACK_COMPARISON")
+          print("LOW_LR_CURRENT_COMPARISON")
           print(json.dumps(result, indent=2, sort_keys=True))
           PY
 
@@ -131,10 +110,8 @@ jobs:
         with:
           name: AIRI-current-fallback-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/airi-current-fallback/wide64.jsonl
-            ${{ runner.temp }}/airi-current-fallback/wide64.summary.json
-            ${{ runner.temp }}/airi-current-fallback/wide32.jsonl
-            ${{ runner.temp }}/airi-current-fallback/wide32.summary.json
-            ${{ runner.temp }}/airi-current-fallback/comparison.json
+            ${{ runner.temp }}/airi-current-fallback/low-lr.jsonl
+            ${{ runner.temp }}/airi-current-fallback/low-lr.summary.json
+            ${{ runner.temp }}/airi-current-fallback/low-lr-comparison.json
           if-no-files-found: warn
           retention-days: 14
