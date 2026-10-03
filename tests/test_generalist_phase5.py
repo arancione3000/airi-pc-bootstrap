@@ -49,6 +49,8 @@ from generalist_lm.bootstrap_training import (
     _phase5_causal_replay_selection,
     _phase5_memory_safe_batch_plan,
     _phase5_language_fragile,
+    _phase5_growth_ready,
+    _phase5_growth_acceptance_streak,
     _phase5_parameter_segment_cap,
     _phase5_recovery_plan,
     _phase5_recovery_segment_budget,
@@ -2962,3 +2964,126 @@ def test_phase5_wide_batch_mode_rejects_invalid_causal_replay_fraction():
             token_fraction=0.0,
             causal_tokens=100,
         )
+
+
+@pytest.mark.parametrize('previous,streak,expected', [
+    (16256, 0, 16256), (16256, 2, 16256), (16256, 3, 32512),
+    (32512, 1, 32512), (32512, 3, 65024), (65024, 3, 65024),
+])
+def test_protected_transaction_growth_keeps_batch_lr_and_replay(previous, streak, expected):
+    plan = _phase5_recovery_plan(
+        1_000_000, parameters=50_041_536, context_length=128,
+        persisted_lr_scale=1/128, consecutive_rejections=0,
+        last_segment_accepted=True, success_streak=8,
+        previous_wide_attempted=True, previous_wide_accepted=True,
+        previous_wide_batch_size=128, previous_wide_segment_tokens=previous,
+        previous_growth_streak=streak, growth_ready=True,
+    )
+    assert plan['effective_budget_tokens'] == expected
+    assert plan['wide_batch_effective_batch_size'] == 128
+    assert plan['learning_rate_scale'] == 1/128
+    assert plan['reset_optimizer'] is True
+    protected = _protected_continual_plan(
+        {'repetition_rate': .18, 'multiword_output_rate': 1},
+        {'repetition_rate': .16}, consecutive_rejections=0,
+        success_streak=8, trust_region_recovery=True, wide_batch_recovery=True,
+    )
+    assert protected['replay_fraction'] == .20
+    assert protected['autoregressive_unlikelihood_weight'] == .1
+
+
+@pytest.mark.parametrize('change,expected', [
+    ({'growth_ready': False, 'language_fragile': True}, 16256),
+    ({'recovery_hold': True, 'language_fragile': True}, 16256),
+    ({'last_segment_accepted': False, 'previous_wide_accepted': False,
+      'consecutive_rejections': 1}, 8128),
+    ({'requested_tokens': 8128}, 8128),
+])
+def test_growth_returns_to_protection_without_success_or_headroom(change, expected):
+    args = dict(requested_tokens=1_000_000, parameters=50_041_536,
+        context_length=128, persisted_lr_scale=1/128,
+        consecutive_rejections=0, last_segment_accepted=True, success_streak=8,
+        previous_wide_attempted=True, previous_wide_accepted=True,
+        previous_wide_batch_size=128, previous_wide_segment_tokens=65024,
+        previous_growth_streak=3, growth_ready=True)
+    args.update(change)
+    assert _phase5_recovery_plan(**args)['effective_budget_tokens'] == expected
+
+
+def test_growth_headroom_fails_closed():
+    anchor = dict(language_nll=2.0, repetition_rate=.16,
+        multiword_output_rate=1.0, generation_similarity=.1,
+        non_empty_rate=1.0, token_entropy=3.0, pathological_repetition=False)
+    assert _phase5_growth_ready(anchor, anchor)
+    assert _phase5_growth_ready({**anchor, 'repetition_rate': .195}, anchor)
+    for key, value in [('repetition_rate', .205), ('language_nll', float('nan')),
+                       ('multiword_output_rate', .5), ('pathological_repetition', True)]:
+        assert not _phase5_growth_ready({**anchor, key: value}, anchor)
+    assert not _phase5_growth_ready({}, anchor)
+
+
+def test_calendar_throughput_includes_gaps_and_excludes_unknown_first_start(monkeypatch):
+    clock = [1000]
+    monkeypatch.setattr(bootstrap_training.time, 'time', lambda: clock[0])
+    progress = {'tokens_processed': 1000}
+    def record(accepted, tokens):
+        return _record_learning_efficiency(progress, accepted=accepted,
+            attempted_tokens=tokens, replay_tokens=100, elapsed_training_seconds=10,
+            checkpoint_persist_seconds=1,
+            before={'language_nll': 2.4, 'repetition_rate': .2},
+            after={'language_nll': 2.3, 'repetition_rate': .2},
+            protected_plan={'replay_fraction': .2, 'reference_kl_weight': .5},
+            optimizer_report={}, unique_corpus_target_tokens=32_000_000,
+            target_tokens=100_000_000)
+    first = record(True, 500000)
+    assert first['calendar_accepted_tokens_per_hour'] is None
+    assert first['target_calendar_rate_measured'] is False
+    clock[0] += 1800
+    record(False, 100000)
+    clock[0] += 1800
+    final = record(True, 50000)
+    assert final['calendar_window_seconds'] == 3600
+    assert final['calendar_attempted_tokens_per_hour'] == 150000
+    assert final['calendar_accepted_tokens_per_hour'] == 50000
+    assert final['target_calendar_rate_measured'] is False
+    assert final['compute_accepted_tokens_per_hour'] > 100000
+    clock[0] += 1
+    final = record(True, 100000)
+    assert final['target_calendar_rate_measured'] is True
+
+
+def test_workflow_accepts_every_protected_batch_and_rejects_bad_contract():
+    import re
+    import shutil
+    import subprocess
+    if not shutil.which('jq'):
+        pytest.skip('jq needed to execute the actual workflow contract')
+    workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/generalist-bootstrap.yml').read_text()
+    expression = re.search(r"jq -e '([^']*)' \"\$\{guard\}\"", workflow, re.S).group(1)
+    for batch in [32, 64, 128]:
+        guard = dict(wide_batch_recovery=True, effective_batch_size=batch,
+            replay_format='causal', actual_replay_token_fraction=.2,
+            autoregressive_unlikelihood_weight=.1)
+        for bad in [{}, {'effective_batch_size': 256}, {'replay_format': 'sft'},
+                    {'actual_replay_token_fraction': .01}]:
+            result = subprocess.run(['jq', '-e', expression],
+                input=json.dumps({**guard, **bad}), text=True, capture_output=True)
+            assert (result.returncode == 0) == (not bad)
+
+
+
+def test_growth_proof_streak_resets_for_rollback_drift_and_new_rung():
+    anchor = dict(language_nll=2., repetition_rate=.16, multiword_output_rate=1.,
+        generation_similarity=.1, non_empty_rate=1., token_entropy=3.,
+        pathological_repetition=False)
+    guard = dict(accepted=True, wide_batch_recovery=True, recovery_mode=False,
+        after_anchor_violations=[], validation_before=anchor,
+        validation_after={**anchor, 'language_nll': 1.99}, anchor=anchor,
+        before_quality=0., after_quality=.01, transaction_budget_tokens=16256)
+    previous = {**guard, 'growth_acceptance_streak': 2}
+    assert _phase5_growth_acceptance_streak(previous, guard) == 3
+    assert _phase5_growth_acceptance_streak(previous, {**guard, 'transaction_budget_tokens': 32512}) == 1
+    for change in [dict(accepted=False), dict(after_quality=0.),
+                   dict(recovery_mode=True), dict(after_anchor_violations=['regression']),
+                   dict(validation_after={**anchor, 'language_nll': 2.001})]:
+        assert _phase5_growth_acceptance_streak(previous, {**guard, **change}) == 0
