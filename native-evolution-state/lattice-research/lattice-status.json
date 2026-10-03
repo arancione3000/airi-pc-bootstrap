@@ -15,7 +15,7 @@
       "max_reasoning_steps": 1,
       "memory_bands": 2,
       "memory_decay_max": 0.9975,
-      "memory_decay_min": 0.2,
+      "memory_decay_min": 0.16000000000000003,
       "n_cells": 1,
       "n_experts": 2,
       "predictive_error_memory": false,
@@ -26,14 +26,14 @@
       "tokenizer_version": "byte-v1",
       "vocab_size": 264
     },
-    "generation": 27,
-    "genome_id": "lattice-27-c29e06c51e49",
+    "generation": 28,
+    "genome_id": "lattice-28-76eb8734a992",
     "learning_rate": 0.00162,
     "min_learning_rate": 0.00013612500000000004,
-    "parent_id": "lattice-26-e88d910a7b4f",
+    "parent_id": "lattice-27-c29e06c51e49",
     "weight_decay": 0.00625
   },
-  "cycle": 64,
+  "cycle": 65,
   "empirical_candidates": 1,
   "generated_candidates": 8,
   "ok": true,
@@ -44,12 +44,12 @@
     "math_prefilter_is_not_promotion": true,
     "research_only": true
   },
-  "promoted": false,
-  "promotion_reason": "no Lattice candidate passed every independent scratch benchmark",
+  "promoted": true,
+  "promotion_reason": "candidate beat matched scratch Transformer on every requested seed",
   "repeat_seeds": 1,
   "trials": [
     {
-      "all_seed_wins": false,
+      "all_seed_wins": true,
       "genome": {
         "config": {
           "active_experts": 1,
@@ -65,7 +65,7 @@
           "max_reasoning_steps": 1,
           "memory_bands": 2,
           "memory_decay_max": 0.9975,
-          "memory_decay_min": 0.2,
+          "memory_decay_min": 0.16000000000000003,
           "n_cells": 1,
           "n_experts": 2,
           "predictive_error_memory": false,
@@ -77,22 +77,23 @@
           "vocab_size": 264
         },
         "generation": 28,
-        "genome_id": "lattice-28-7405341b3386",
-        "learning_rate": 0.001215,
-        "min_learning_rate": 0.00010209375000000003,
+        "genome_id": "lattice-28-76eb8734a992",
+        "learning_rate": 0.00162,
+        "min_learning_rate": 0.00013612500000000004,
         "parent_id": "lattice-27-c29e06c51e49",
         "weight_decay": 0.00625
       },
-      "mean_candidate_loss": 5.57935893535614,
+      "mean_candidate_loss": 5.557359933853149,
       "mutation": {
         "changes": {
-          "learning_rate": 0.001215,
-          "min_learning_rate": 0.00010209375000000003
+          "memory_decay_min": 0.16000000000000003
         },
-        "family": "optimizer",
-        "mathesis_tags": [],
-        "name": "optimizer-lr-down",
-        "rationale": "favor stability if rapid updates damage held-out loss"
+        "family": "memory",
+        "mathesis_tags": [
+          "reasoning"
+        ],
+        "name": "memory-faster-fast-band",
+        "rationale": "make fast memory more reactive while preserving deep memory"
       },
       "reports": [
         {
@@ -119,25 +120,25 @@
             "parameters": 20064,
             "state_bytes_at_context": 2048,
             "training": {
-              "best_train_loss": 5.556909561157227,
+              "best_train_loss": 5.518020153045654,
               "final": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.5765209794044495
+                  "code": 5.584592223167419
                 },
-                "loss": 5.5765209794044495
+                "loss": 5.584592223167419
               },
               "initial": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.577240347862244
+                  "code": 5.584632098674774
                 },
-                "loss": 5.577240347862244
+                "loss": 5.584632098674774
               },
               "steps": 1,
-              "tokens_per_second": 21267.793084805435,
+              "tokens_per_second": 21198.307181233537,
               "tokens_processed": 64,
-              "train_seconds": 0.0030092449999301607
+              "train_seconds": 0.0030191090002062992
             }
           },
           "candidate": {
@@ -156,7 +157,7 @@
               "max_reasoning_steps": 1,
               "memory_bands": 2,
               "memory_decay_max": 0.9975,
-              "memory_decay_min": 0.2,
+              "memory_decay_min": 0.16000000000000003,
               "n_cells": 1,
               "n_experts": 2,
               "predictive_error_memory": false,
@@ -171,59 +172,59 @@
             "parameters": 23144,
             "state_bytes_at_context": 256,
             "training": {
-              "best_train_loss": 5.573780059814453,
+              "best_train_loss": 5.480566024780273,
               "final": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.57935893535614
+                  "code": 5.557359933853149
                 },
-                "loss": 5.57935893535614,
+                "loss": 5.557359933853149,
                 "model_stats": {
                   "mean_reasoning_steps": 1.0,
-                  "mean_surprise": 0.4783242680132389
+                  "mean_surprise": 0.5048635639250278
                 }
               },
               "initial": {
                 "blocks": 8,
                 "domain_loss": {
-                  "code": 5.579707682132721
+                  "code": 5.558269381523132
                 },
-                "loss": 5.579707682132721,
+                "loss": 5.558269381523132,
                 "model_stats": {
                   "mean_reasoning_steps": 1.0,
-                  "mean_surprise": 0.47836635634303093
+                  "mean_surprise": 0.5049507170915604
                 }
               },
               "steps": 1,
-              "tokens_per_second": 415.03336715821507,
+              "tokens_per_second": 366.8329164910358,
               "tokens_processed": 64,
-              "train_seconds": 0.1542044690002058
+              "train_seconds": 0.1744663499998751
             }
           },
-          "candidate_wins": false,
+          "candidate_wins": true,
           "corpus_digest": "3e2285acb1c90379f9993f5ddb24aa572883f3bfedec31a9807da31be064fa71",
-          "decision": "Lattice did not beat the matched Transformer loss margin",
+          "decision": "Lattice beat matched Transformer under the research gate",
           "external_pretrained": false,
           "lab": {
             "batch_size": 1,
             "device": "cpu",
             "grad_clip": 1.0,
-            "learning_rate": 0.001215,
+            "learning_rate": 0.00162,
             "max_active_parameter_ratio": 1.2,
             "max_domain_regression": 0.08,
             "max_eval_blocks": 8,
-            "min_learning_rate": 0.00010209375000000003,
+            "min_learning_rate": 0.00013612500000000004,
             "minimum_loss_gain": 0.001,
-            "seed": 706465,
+            "seed": 706566,
             "steps": 1,
             "validation_fraction": 0.2,
             "weight_decay": 0.00625
           },
           "ok": true,
           "research_only": true,
-          "train_blocks": 4828,
+          "train_blocks": 4332,
           "train_documents": 19,
-          "validation_blocks": 790,
+          "validation_blocks": 1286,
           "validation_documents": 5,
           "version": "airi-lattice-lab-v0"
         }
@@ -231,5 +232,51 @@
     }
   ],
   "version": "airi-lattice-research-state-v0",
-  "winner": null
+  "winner": {
+    "genome": {
+      "config": {
+        "active_experts": 1,
+        "architecture_version": "airi-lattice-v0",
+        "context_length": 64,
+        "d_expert": 32,
+        "d_model": 32,
+        "deep_write_power": 1.564,
+        "dropout": 0.0,
+        "init_std": 0.02,
+        "lattice_mix": 0.10000000000000003,
+        "local_recurrence": false,
+        "max_reasoning_steps": 1,
+        "memory_bands": 2,
+        "memory_decay_max": 0.9975,
+        "memory_decay_min": 0.16000000000000003,
+        "n_cells": 1,
+        "n_experts": 2,
+        "predictive_error_memory": false,
+        "rms_eps": 1e-06,
+        "surprise_power": 1.2463125,
+        "surprise_threshold": 0.2,
+        "tie_embeddings": true,
+        "tokenizer_version": "byte-v1",
+        "vocab_size": 264
+      },
+      "generation": 28,
+      "genome_id": "lattice-28-76eb8734a992",
+      "learning_rate": 0.00162,
+      "min_learning_rate": 0.00013612500000000004,
+      "parent_id": "lattice-27-c29e06c51e49",
+      "weight_decay": 0.00625
+    },
+    "mean_candidate_loss": 5.557359933853149,
+    "mutation": {
+      "changes": {
+        "memory_decay_min": 0.16000000000000003
+      },
+      "family": "memory",
+      "mathesis_tags": [
+        "reasoning"
+      ],
+      "name": "memory-faster-fast-band",
+      "rationale": "make fast memory more reactive while preserving deep memory"
+    }
+  }
 }
