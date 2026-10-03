@@ -2510,8 +2510,8 @@
   ],
   "curriculum_stage": "B_short_sentence_completion",
   "data_preparation": {
-    "elapsed_seconds": 2.9726891440000145,
-    "reviewed_bundle_cache_hit": true
+    "elapsed_seconds": 699.7752224800001,
+    "reviewed_bundle_cache_hit": false
   },
   "dead_capacity_revival": {
     "before_max_new_down": 0.0,
@@ -4782,42 +4782,27 @@
   "last_train_loss": 1.461288258433342,
   "last_validation_loss": 2.0889199065665403,
   "learning_efficiency": {
-    "acceptance_rate": 0.16143497757847533,
+    "acceptance_rate": 0.16119402985074627,
     "accepted_segments": 108,
     "accepted_tokens": 646176,
-    "accepted_tokens_per_hour": 130584.15134407327,
-    "attempted_segments": 669,
-    "attempted_tokens": 4584072,
-    "attempted_tokens_per_hour": 933064.8672438522,
+    "accepted_tokens_per_hour": 130292.90533662945,
+    "attempted_segments": 670,
+    "attempted_tokens": 4592200,
+    "attempted_tokens_per_hour": 932619.5458952119,
     "calendar_accepted_tokens": 227584,
-    "calendar_accepted_tokens_per_hour": 10619.603370058328,
-    "calendar_attempted_tokens": 524256,
-    "calendar_attempted_tokens_per_hour": 24463.01490602722,
+    "calendar_accepted_tokens_per_hour": 10624.285491986098,
+    "calendar_attempted_tokens": 528320,
+    "calendar_attempted_tokens_per_hour": 24663.519892110588,
     "calendar_language_quality_gain": 0.0028480043456927673,
     "calendar_window_events": 63,
-    "calendar_window_seconds": 77150,
+    "calendar_window_seconds": 77116,
     "checkpoint_persist_seconds": 127.54969014499716,
-    "compute_accepted_tokens_per_hour": 130584.15134407327,
-    "compute_attempted_tokens_per_hour": 933064.8672438522,
+    "compute_accepted_tokens_per_hour": 130292.90533662945,
+    "compute_attempted_tokens_per_hour": 932619.5458952119,
     "cumulative_language_quality_gain": 0.036286096476253804,
     "effective_new_tokens": 646176,
-    "elapsed_training_seconds": 17686.507958172973,
+    "elapsed_training_seconds": 17726.328032435973,
     "history": [
-      {
-        "accepted": false,
-        "accepted_tokens": 0,
-        "attempted_tokens": 4064,
-        "checkpoint_persist_seconds": 0.0,
-        "elapsed_training_seconds": 15.311767926999892,
-        "language_nll_delta": -0.000470872597186478,
-        "language_quality_gain": 0.0,
-        "multiword_delta": 0.0,
-        "reference_kl_weight": 0.5,
-        "repetition_delta": 0.019014550264550262,
-        "replay_fraction": 0.8,
-        "replay_tokens": 40,
-        "updated_at_unix": 1790966959
-      },
       {
         "accepted": false,
         "accepted_tokens": 0,
@@ -5762,6 +5747,21 @@
         "replay_fraction": 0.2,
         "replay_tokens": 4064,
         "updated_at_unix": 1791044109
+      },
+      {
+        "accepted": false,
+        "accepted_tokens": 0,
+        "attempted_tokens": 8128,
+        "checkpoint_persist_seconds": 0.0,
+        "elapsed_training_seconds": 39.820074262999924,
+        "language_nll_delta": -3.481730562704399e-05,
+        "language_quality_gain": 0.0,
+        "multiword_delta": 0.0,
+        "reference_kl_weight": 0.5,
+        "repetition_delta": 0.017998436748436764,
+        "replay_fraction": 0.2,
+        "replay_tokens": 2032,
+        "updated_at_unix": 1791045614
       }
     ],
     "learning_gain_per_100k_tokens": 0.0056155128751692734,
@@ -5811,14 +5811,14 @@
     },
     "reference_kl_weight": 0.5,
     "replay_fraction": 0.2,
-    "replay_tokens": 218550,
-    "rollback_rate": 0.8385650224215246,
-    "rollback_segments": 561,
+    "replay_tokens": 220582,
+    "rollback_rate": 0.8388059701492537,
+    "rollback_segments": 562,
     "started_tokens_processed": 32815853,
     "target_calendar_accepted_tokens_per_hour": 100000,
     "target_calendar_rate_measured": false,
     "unique_data_fraction": 0.32,
-    "updated_at_unix": 1791044109,
+    "updated_at_unix": 1791045614,
     "version": "phase5-learning-efficiency-v1"
   },
   "learning_rate": 4.5377273473825855e-07,
@@ -6438,12 +6438,12 @@
       "trust_region_recovery": true
     }
   ],
-  "segment_guard_consecutive_rejections": 1,
-  "segment_guard_effective_budget_tokens": 16256,
+  "segment_guard_consecutive_rejections": 2,
+  "segment_guard_effective_budget_tokens": 8128,
   "segment_guard_language_fragile": true,
   "segment_guard_last_accepted": false,
   "segment_guard_last_attempted_steps": 1,
-  "segment_guard_last_attempted_tokens": 16256,
+  "segment_guard_last_attempted_tokens": 8128,
   "segment_guard_lr_scale": 0.0078125,
   "segment_guard_optimizer_reset_for_stall": true,
   "segment_guard_recovery_accept_streak": 0,
@@ -6451,18 +6451,6 @@
   "segment_guard_recovery_hold": false,
   "segment_guard_recovery_mode": false,
   "segment_guard_rejections": [
-    {
-      "after_quality": -0.8484594978182627,
-      "attempted_steps": 1,
-      "attempted_tokens": 4064,
-      "before_quality": -0.765712182558901,
-      "learning_rate_scale": 0.0078125,
-      "reasons": [
-        "repetition rate exceeds durable anchor by more than 0.08"
-      ],
-      "recovery_mode": false,
-      "tokens_processed": 33234445
-    },
     {
       "after_quality": -0.8156978057804573,
       "attempted_steps": 1,
@@ -6831,6 +6819,18 @@
       "attempted_steps": 1,
       "attempted_tokens": 16256,
       "before_quality": -0.762863576757895,
+      "learning_rate_scale": 0.0078125,
+      "reasons": [
+        "repetition rate exceeds durable anchor by more than 0.08"
+      ],
+      "recovery_mode": false,
+      "tokens_processed": 33462029
+    },
+    {
+      "after_quality": -0.8017770697616289,
+      "attempted_steps": 1,
+      "attempted_tokens": 8128,
+      "before_quality": -0.7628633528649641,
       "learning_rate_scale": 0.0078125,
       "reasons": [
         "repetition rate exceeds durable anchor by more than 0.08"
@@ -18967,7 +18967,7 @@
     "wide_batch_recovery": true
   },
   "unique_corpus_target_tokens": 32000000,
-  "updated_at_unix": 1791044109,
+  "updated_at_unix": 1791045614,
   "valid_tokens_processed": 33467683,
   "version": "phase5-language-bootstrap-v3"
 }
