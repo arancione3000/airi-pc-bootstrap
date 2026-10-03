@@ -3497,12 +3497,14 @@ def run_segment(
 
     previous_manifest = _load_json(manifest_path) if manifest_path.is_file() else None
     corpus_target_tokens = _bootstrap_corpus_target(target_tokens)
+    data_preparation_started = time.perf_counter()
     bundle = build_bootstrap_bundle(
         champion_runtime.tokenizer,
         cache_dir=cache,
         target_tokens=int(corpus_target_tokens),
         previous_manifest=previous_manifest,
     )
+    data_preparation_seconds = time.perf_counter() - data_preparation_started
     if int(bundle.manifest.get("actual_selected_tokens", 0) or 0) < int(corpus_target_tokens * 0.95):
         raise RuntimeError(
             "bootstrap corpus coverage is below 95% of reviewed unique-corpus target: "
@@ -3536,6 +3538,10 @@ def run_segment(
         "sft_completed_rungs": [],
     })
     progress["schema"] = 1
+    progress["data_preparation"] = {
+        "elapsed_seconds": data_preparation_seconds,
+        "reviewed_bundle_cache_hit": bool(bundle.cache_hit),
+    }
     progress["version"] = PHASE5_BOOTSTRAP_VERSION
     progress["accepted_rehabilitation_tokens"] = int(
         progress.get("accepted_rehabilitation_tokens", 0) or 0
