@@ -2869,6 +2869,7 @@ def test_phase5_wide_recovery_ladder_climbs_only_after_acceptance():
         last_segment_accepted=True,
         success_streak=1,
         language_fragile=True,
+        previous_wide_stability_streak=2,
     )
     after_4k_accept = _phase5_recovery_plan(
         **common,
@@ -2896,6 +2897,55 @@ def test_phase5_wide_recovery_ladder_climbs_only_after_acceptance():
     )
     assert after_16k_accept["wide_batch_effective_batch_size"] == 128
     assert after_16k_accept["effective_budget_tokens"] == 16_256
+
+
+def test_phase5_wide_recovery_holds_batch_after_one_tolerated_acceptance():
+    for previous_batch in (32, 64):
+        plan = _phase5_recovery_plan(
+            1_000_000, parameters=50_041_536, context_length=128,
+            persisted_lr_scale=1/512, consecutive_rejections=0,
+            last_segment_accepted=True, success_streak=1, language_fragile=True,
+            previous_wide_attempted=True, previous_wide_accepted=True,
+            previous_wide_batch_size=previous_batch,
+            previous_wide_stability_streak=1,
+        )
+        assert plan["wide_batch_effective_batch_size"] == previous_batch
+        assert plan["learning_rate_scale"] == pytest.approx(1/512)
+
+
+def test_phase5_wide_recovery_can_reduce_the_actual_update_below_old_floor():
+    for scale, expected in ((1/256, 1/256), (1/512, 1/512),
+                            (1/1024, 1/1024), (1/2048, 1/2048),
+                            (1/4096, 1/2048)):
+        plan = _phase5_recovery_plan(
+            1_000_000, parameters=50_041_536, context_length=128,
+            persisted_lr_scale=scale, consecutive_rejections=4,
+            language_fragile=True, previous_wide_attempted=True,
+            previous_wide_batch_size=32,
+        )
+        assert plan["learning_rate_scale"] == pytest.approx(expected)
+        assert plan["reset_optimizer"] is True
+        assert plan["effective_budget_tokens"] == 4064
+
+
+def test_phase5_wide_stability_streak_requires_non_regressing_same_regime():
+    from generalist_lm.bootstrap_training import _phase5_wide_stability_streak
+    guard = dict(accepted=True, wide_batch_recovery=True,
+                 effective_batch_size=32, learning_rate_scale=1/512,
+                 after_anchor_violations=[],
+                 validation_before=dict(language_nll=2.0, repetition_rate=0.23),
+                 validation_after=dict(language_nll=1.99, repetition_rate=0.23))
+    previous = {**guard, "wide_stability_acceptance_streak": 1}
+    assert _phase5_wide_stability_streak(previous, guard) == 2
+    assert _phase5_wide_stability_streak({**previous, "effective_batch_size": 64}, guard) == 1
+    assert _phase5_wide_stability_streak({**previous, "learning_rate_scale": 1/128}, guard) == 1
+    for changed in (
+        {"accepted": False}, {"after_anchor_violations": ["repetition"]},
+        {"validation_after": dict(language_nll=2.01, repetition_rate=0.23)},
+        {"validation_after": dict(language_nll=1.99, repetition_rate=0.24)},
+        {"validation_after": dict(language_nll=float("nan"), repetition_rate=0.23)},
+    ):
+        assert _phase5_wide_stability_streak(previous, {**guard, **changed}) == 0
 
 
 def test_phase5_wide_batch_protected_plan_matches_validated_candidate():

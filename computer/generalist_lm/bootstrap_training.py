@@ -1210,6 +1210,35 @@ def _phase5_growth_acceptance_streak(previous: dict[str, Any], guard: dict[str, 
     return int(previous.get("growth_acceptance_streak", 0) or 0) + 1 if same_rung else 1
 
 
+def _phase5_wide_stability_streak(previous: dict[str, Any], guard: dict[str, Any]) -> int:
+    """Require repeatable, non-regressing successes before widening a rescue."""
+    before = guard.get("validation_before") or {}
+    after = guard.get("validation_after") or {}
+    try:
+        values = [
+            float(report[key]) for report in (before, after)
+            for key in ("language_nll", "repetition_rate")
+        ]
+    except (KeyError, TypeError, ValueError):
+        return 0
+    if not (
+        guard.get("accepted") and guard.get("wide_batch_recovery")
+        and not guard.get("after_anchor_violations")
+        and all(math.isfinite(value) for value in values)
+        and values[2] <= values[0] and values[3] <= values[1]
+    ):
+        return 0
+    same_batch = (
+        previous.get("accepted") and previous.get("wide_batch_recovery")
+        and previous.get("effective_batch_size") == guard.get("effective_batch_size")
+        and previous.get("learning_rate_scale") == guard.get("learning_rate_scale")
+    )
+    return (
+        int(previous.get("wide_stability_acceptance_streak", 0) or 0) + 1
+        if same_batch else 1
+    )
+
+
 def _phase5_recovery_plan(
     requested_tokens: int,
     *,
@@ -1227,6 +1256,7 @@ def _phase5_recovery_plan(
     previous_wide_batch_size: int = 0,
     previous_wide_segment_tokens: int = 0,
     previous_growth_streak: int = 0,
+    previous_wide_stability_streak: int = 0,
     growth_ready: bool = False,
 ) -> dict[str, Any]:
     """Return a bounded rescue plan that cannot livelock at the old LR floor.
@@ -1281,8 +1311,12 @@ def _phase5_recovery_plan(
     if parameter_cap is not None:
         segment_budget = min(int(segment_budget), int(parameter_cap))
 
+    # Once the protected regime has actually run, let rollback halve the real
+    # update. The old 1/128 floor silently undid this halving, and acceptance
+    # snapped reduced scales straight back up. Bound adaptation to 1/2048;
+    # preserve the historical entry floor for unvalidated legacy training.
     recovery_lr_floor = (
-        1.0 / 128.0
+        (1.0 / 2048.0 if previous_wide_attempted else 1.0 / 128.0)
         if 40_000_000 <= int(parameters) < 64_000_000
         else 1.0 / 64.0
     )
@@ -1345,7 +1379,9 @@ def _phase5_recovery_plan(
         previous_batch = max(0, int(previous_wide_batch_size or 0))
         if bool(previous_wide_attempted) and previous_batch > 0:
             if bool(previous_wide_accepted):
-                if previous_batch <= 32:
+                if previous_wide_stability_streak < 2:
+                    wide_batch_size = min(128, max(32, previous_batch))
+                elif previous_batch <= 32:
                     wide_batch_size = 64
                 elif previous_batch <= 64:
                     wide_batch_size = 128
@@ -1383,7 +1419,8 @@ def _phase5_recovery_plan(
             if wide_batch_recovery:
                 # Health-aware protected ladder. A rejected 16k proposal
                 # shrinks to 8k, then to a protected 4k proposal. Accepted
-                # proposals climb back 4k -> 8k -> 16k. All rungs preserve the
+                # proposals need two non-regressing successes at the same
+                # batch/LR before climbing 4k -> 8k -> 16k. All rungs preserve the
                 # same causal replay / autoregressive protection and unchanged
                 # language guard.
                 micro_cap = int(wide_batch_size) * max(
@@ -1454,6 +1491,8 @@ def _phase5_recovery_plan(
         "growth_ready": bool(growth_ready),
         "growth_rungs_tokens": growth_rungs if wide_batch_recovery else [],
         "growth_required_acceptances": 3,
+        "wide_stability_required_acceptances": 2,
+        "learning_rate_floor": recovery_lr_floor,
         # The measured trust-region regime was validated with fresh AdamW
         # state on every proposal.  Keep that property even immediately after
         # an accepted ~4k segment; outside trust-region recovery preserve the
@@ -4193,6 +4232,9 @@ def run_segment(
         previous_growth_streak=int(
             previous_segment_guard.get("growth_acceptance_streak", 0) or 0
         ),
+        previous_wide_stability_streak=int(
+            previous_segment_guard.get("wide_stability_acceptance_streak", 0) or 0
+        ),
         growth_ready=_phase5_growth_ready(segment_language_before, guard_anchor),
     )
     previous_protected_version = str(
@@ -4649,6 +4691,10 @@ def run_segment(
     segment_guard["growth_acceptance_streak"] = _phase5_growth_acceptance_streak(
         previous_segment_guard, segment_guard,
     )
+    segment_guard["wide_stability_acceptance_streak"] = _phase5_wide_stability_streak(
+        previous_segment_guard, segment_guard,
+    )
+    segment_guard["wide_stability_required_acceptances"] = 2
     _atomic_json(segment_guard_path, segment_guard)
 
     if not segment_accepted:
@@ -4681,6 +4727,7 @@ def run_segment(
                 progress_before_segment.get("segment_guard_recovery_hold", False)
             ),
             last_segment_accepted=False,
+            previous_wide_attempted=bool(segment_guard.get("wide_batch_recovery")),
         )
         progress["segment_guard_lr_scale"] = float(
             next_plan["learning_rate_scale"]
@@ -4779,7 +4826,7 @@ def run_segment(
     if bool(recovery_plan.get("trust_region_recovery", False)):
         progress["segment_guard_lr_scale"] = min(
             1.0 / 128.0,
-            max(1.0 / 128.0, float(segment_lr_scale)),
+            max(float(recovery_plan["learning_rate_floor"]), float(segment_lr_scale)),
         )
     elif recovery_hold:
         # Hold the exact conservative regime that just produced measurable
