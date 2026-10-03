@@ -199,10 +199,13 @@ jobs:
           PREV_WIDE="$(jq -r '.wide_batch_recovery // false' "$ROOT/previous-segment-guard.json")"
           PREV_ACCEPTED="$(jq -r '.accepted // false' "$ROOT/previous-segment-guard.json")"
           PREV_BATCH="$(jq -r '.effective_batch_size // 0' "$ROOT/previous-segment-guard.json")"
+          PREV_STABLE="$(jq -r '.wide_stability_acceptance_streak // 0' "$ROOT/previous-segment-guard.json")"
           EXPECTED_BATCH=128
           if [[ "$PREV_WIDE" == "true" && "$PREV_BATCH" -gt 0 ]]; then
             if [[ "$PREV_ACCEPTED" == "true" ]]; then
-              if (( PREV_BATCH <= 32 )); then
+              if (( PREV_STABLE < 2 )); then
+                EXPECTED_BATCH="$PREV_BATCH"
+              elif (( PREV_BATCH <= 32 )); then
                 EXPECTED_BATCH=64
               else
                 EXPECTED_BATCH=128
@@ -228,6 +231,13 @@ jobs:
           frac = float(row["actual_replay_fraction"])
           if not 0.18 <= frac <= 0.22:
               raise SystemExit(f"physical replay fraction outside validated band: {frac}")
+          state = root / "state-repo" / "generalist-state" / "bootstrap-data"
+          guard = json.loads((state / "segment-guard-last.json").read_text())
+          progress = json.loads((state / "progress.json").read_text())
+          used_scale = float(guard["learning_rate_scale"])
+          expected_scale = used_scale if row["accepted"] else max(1/2048, used_scale/2)
+          if abs(float(progress["segment_guard_lr_scale"]) - expected_scale) > 1e-12:
+              raise SystemExit("protected rollback/acceptance lost the adaptive learning rate")
           if row["accepted"]:
               minimum = int(row["effective_batch_size"]) * 127
               if row["segment_processed"] < minimum:
