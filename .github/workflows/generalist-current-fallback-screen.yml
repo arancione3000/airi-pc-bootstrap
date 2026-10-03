@@ -1,0 +1,140 @@
+name: AIRI current fallback screen
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/generalist-current-fallback-screen.yml'
+      - '.github/workflows/generalist-wide-batch-shadow.yml'
+      - 'computer/generalist_lm/learning_efficiency_benchmark.py'
+
+permissions:
+  contents: read
+
+jobs:
+  fallback-screen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Phase-5 benchmark runtime
+        run: |
+          python -m pip install --disable-pip-version-check 'torch>=2.7,<3' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check 'datasets>=3.6,<5'
+
+      - name: Screen 8k and 4k protected candidates on current live checkpoint
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/airi-current-fallback"
+          STATE_REPO="$ROOT/state-repo"
+          STATE_DIR="$STATE_REPO/generalist-state"
+          mkdir -p "$ROOT"
+
+          git clone --quiet --depth 1 --branch generalist-state --single-branch \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$STATE_REPO"
+
+          python \
+            reports/generalist-learning-efficiency-v3/resume-2026-10-01/recover_pinned_corpus.py \
+            --state-dir "$STATE_DIR" \
+            --output-dir "$ROOT/pinned-corpus"
+
+          TRAIN="$ROOT/pinned-corpus/pinned-train.jsonl"
+          VALIDATION="$ROOT/pinned-corpus/pinned-validation.jsonl"
+
+          python -m generalist_lm.learning_efficiency_benchmark \
+            --state-dir "$STATE_DIR" \
+            --output "$ROOT/wide64.jsonl" \
+            --segments 8128 \
+            --seeds 7100000,7100001,7100002 \
+            --threads 4 \
+            --trials wide64_causal20_ar \
+            --causal-documents "$TRAIN" \
+            --validation-documents "$VALIDATION"
+
+          python -m generalist_lm.learning_efficiency_benchmark \
+            --state-dir "$STATE_DIR" \
+            --output "$ROOT/wide64.jsonl" \
+            --summary-only
+
+          python -m generalist_lm.learning_efficiency_benchmark \
+            --state-dir "$STATE_DIR" \
+            --output "$ROOT/wide32.jsonl" \
+            --segments 4064 \
+            --seeds 7200000,7200001,7200002 \
+            --threads 4 \
+            --trials wide32_causal20_ar \
+            --causal-documents "$TRAIN" \
+            --validation-documents "$VALIDATION"
+
+          python -m generalist_lm.learning_efficiency_benchmark \
+            --state-dir "$STATE_DIR" \
+            --output "$ROOT/wide32.jsonl" \
+            --summary-only
+
+          ROOT="$ROOT" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["ROOT"])
+          result = {}
+          for label in ("wide64", "wide32"):
+              rows = [
+                  json.loads(line)
+                  for line in (root / f"{label}.jsonl").read_text().splitlines()
+                  if line.strip()
+              ]
+              result[label] = {
+                  "accepted": sum(bool(r["accepted"]) for r in rows),
+                  "attempted": len(rows),
+                  "rows": [
+                      {
+                          "seed": r["seed"],
+                          "accepted": r["accepted"],
+                          "repetition_before": r["before"]["repetition_rate"],
+                          "repetition_after": r["after"]["repetition_rate"],
+                          "nll_before": r["before"]["language_nll"],
+                          "nll_after": r["after"]["language_nll"],
+                          "headroom_after": r["headroom_after"],
+                          "accepted_h": r["accepted_equivalent_tokens_per_hour"],
+                          "validation_before": (
+                              r["corpus_subset_validation_before"]["loss"]
+                              if r["corpus_subset_validation_before"] else None
+                          ),
+                          "validation_after": (
+                              r["corpus_subset_validation_after"]["loss"]
+                              if r["corpus_subset_validation_after"] else None
+                          ),
+                      }
+                      for r in rows
+                  ],
+              }
+          (root / "comparison.json").write_text(
+              json.dumps(result, indent=2, sort_keys=True) + "\n"
+          )
+          print("CURRENT_FALLBACK_COMPARISON")
+          print(json.dumps(result, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload fallback evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AIRI-current-fallback-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/airi-current-fallback/wide64.jsonl
+            ${{ runner.temp }}/airi-current-fallback/wide64.summary.json
+            ${{ runner.temp }}/airi-current-fallback/wide32.jsonl
+            ${{ runner.temp }}/airi-current-fallback/wide32.summary.json
+            ${{ runner.temp }}/airi-current-fallback/comparison.json
+          if-no-files-found: warn
+          retention-days: 14
