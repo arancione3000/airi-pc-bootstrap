@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 from .phase5_diagnostics import protected_bootstrap_texts
 from .pretraining import CorpusDocument
 from .training import SFTExample
+from .bootstrap_bundle_cache import load_reviewed_bundle, save_reviewed_bundle
 
 
 BOOTSTRAP_DATA_VERSION = "phase5-bootstrap-data-v1"
@@ -110,6 +111,7 @@ class BootstrapDataBundle:
     sft_train: list[SFTExample]
     sft_validation: list[SFTExample]
     manifest: dict[str, Any]
+    cache_hit: bool = False
 
 
 @dataclass
@@ -866,6 +868,10 @@ def build_bootstrap_bundle(
 ) -> BootstrapDataBundle:
     target_tokens = max(100_000, int(target_tokens))
     cache = Path(cache_dir).expanduser().resolve()
+    cache.mkdir(parents=True, exist_ok=True)
+    prepared = load_reviewed_bundle(tokenizer, cache, target_tokens, previous_manifest)
+    if prepared is not None:
+        return prepared
     previous_sources = {
         str(row.get("id")): row
         for row in (previous_manifest or {}).get("sources", [])
@@ -1074,10 +1080,12 @@ def build_bootstrap_bundle(
         json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
 
-    return BootstrapDataBundle(
+    bundle = BootstrapDataBundle(
         train_documents=train_docs,
         validation_documents=val_docs,
         sft_train=sft_train,
         sft_validation=sft_validation,
         manifest=manifest,
     )
+    save_reviewed_bundle(bundle, tokenizer, cache, target_tokens)
+    return bundle
