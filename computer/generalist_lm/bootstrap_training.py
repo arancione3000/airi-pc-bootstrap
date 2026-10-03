@@ -1167,6 +1167,49 @@ def _phase5_language_fragile(
     )
 
 
+def _phase5_growth_ready(before: dict[str, Any], anchor: dict[str, Any]) -> bool:
+    """Require measured language headroom before increasing transaction size."""
+    try:
+        repetition = float(before["repetition_rate"])
+        anchor_repetition = float(anchor["repetition_rate"])
+        multiword = float(before["multiword_output_rate"])
+        nll = float(before["language_nll"])
+        anchor_nll = float(anchor["language_nll"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return bool(
+        all(math.isfinite(v) for v in (repetition, anchor_repetition, multiword, nll, anchor_nll))
+        and 0 <= repetition <= anchor_repetition + 0.04
+        and 0 <= anchor_repetition <= 1
+        and 0.80 <= multiword <= 1
+        and not before.get("pathological_repetition", True)
+        and not _language_guard_violations(anchor, before)
+    )
+
+
+def _phase5_growth_acceptance_streak(previous: dict[str, Any], guard: dict[str, Any]) -> int:
+    before = guard.get("validation_before") or {}
+    after = guard.get("validation_after") or {}
+    growth_success = bool(
+        guard.get("accepted", False)
+        and guard.get("wide_batch_recovery", False)
+        and not guard.get("recovery_mode", True)
+        and not guard.get("after_anchor_violations")
+        and _phase5_growth_ready(after, guard.get("anchor") or {})
+        and guard["after_quality"] > guard["before_quality"]
+        and float(after["language_nll"]) <= float(before["language_nll"])
+    )
+    if not growth_success:
+        return 0
+    same_rung = bool(
+        previous.get("accepted", False)
+        and previous.get("wide_batch_recovery", False)
+        and int(previous.get("transaction_budget_tokens", 0) or 0)
+        == int(guard.get("transaction_budget_tokens", 0) or 0)
+    )
+    return int(previous.get("growth_acceptance_streak", 0) or 0) + 1 if same_rung else 1
+
+
 def _phase5_recovery_plan(
     requested_tokens: int,
     *,
@@ -1182,6 +1225,9 @@ def _phase5_recovery_plan(
     previous_wide_attempted: bool = False,
     previous_wide_accepted: bool = False,
     previous_wide_batch_size: int = 0,
+    previous_wide_segment_tokens: int = 0,
+    previous_growth_streak: int = 0,
+    growth_ready: bool = False,
 ) -> dict[str, Any]:
     """Return a bounded rescue plan that cannot livelock at the old LR floor.
 
@@ -1254,6 +1300,9 @@ def _phase5_recovery_plan(
     trust_region_recovery = bool(
         40_000_000 <= int(parameters) < 64_000_000
         and (
+            (previous_wide_attempted and (last_segment_accepted or rejected > 0)
+             and persisted_scale <= (1.0 / 128.0))
+            or
             rejected >= 4
             or (
                 persisted_scale <= (1.0 / 128.0)
@@ -1274,6 +1323,8 @@ def _phase5_recovery_plan(
         and int(context_length) <= 128
         and persisted_scale <= (1.0 / 128.0)
         and (
+            (previous_wide_attempted and (last_segment_accepted or rejected > 0))
+            or
             rejected >= 2
             or bool(recovery_hold)
             or bool(language_fragile)
@@ -1350,6 +1401,28 @@ def _phase5_recovery_plan(
             micro_cap = 32_000
         segment_budget = min(int(segment_budget), micro_cap)
 
+    # Grow the transaction, not the accumulated batch or LR. Three improving
+    # acceptances at each rung and durable headroom are required before trying
+    # another optimizer update inside the same guarded transaction. Any
+    # rejection immediately returns to the existing 16k -> 8k -> 4k ladder.
+    growth_rungs = [128 * max(1, int(context_length) - 1) * n for n in (1, 2, 4)]
+    if wide_batch_recovery:
+        segment_budget = min(requested, int(wide_batch_size) * max(1, int(context_length) - 1))
+        if (
+            wide_batch_size == 128 and previous_wide_attempted
+            and previous_wide_accepted and last_segment_accepted
+            and rejected == 0 and not recovery_hold and growth_ready
+        ):
+            previous_rung = max(
+                (r for r in growth_rungs if r <= int(previous_wide_segment_tokens)),
+                default=growth_rungs[0],
+            )
+            rung_index = growth_rungs.index(previous_rung)
+            if int(previous_growth_streak) >= 3:
+                rung_index = min(rung_index + 1, len(growth_rungs) - 1)
+            segment_budget = min(requested, growth_rungs[rung_index])
+            parameter_cap = max(int(parameter_cap or 0), segment_budget)
+
     if rejected <= 0:
         lr_scale = persisted_scale
     else:
@@ -1378,6 +1451,9 @@ def _phase5_recovery_plan(
         "previous_wide_accepted": bool(previous_wide_accepted),
         "previous_wide_batch_size": int(previous_wide_batch_size or 0),
         "language_fragile": bool(language_fragile),
+        "growth_ready": bool(growth_ready),
+        "growth_rungs_tokens": growth_rungs if wide_batch_recovery else [],
+        "growth_required_acceptances": 3,
         # The measured trust-region regime was validated with fresh AdamW
         # state on every proposal.  Keep that property even immediately after
         # an accepted ~4k segment; outside trust-region recovery preserve the
@@ -1849,6 +1925,31 @@ def _record_learning_efficiency(
     history = list(state.get("history") or [])
     history.append(event)
     state["history"] = history[-64:]
+    # Existing rates measure compute only. Use consecutive event timestamps
+    # for a separate recent calendar rate, including setup, queue and export
+    # gaps. Exclude the first event because its start is unknown.
+    recent = state["history"]
+    calendar_seconds = max(0, int(recent[-1]["updated_at_unix"]) - int(recent[0]["updated_at_unix"]))
+    calendar_attempted = sum(int(row["attempted_tokens"]) for row in recent[1:])
+    calendar_accepted = sum(int(row["accepted_tokens"]) for row in recent[1:])
+    calendar_gain = sum(float(row["language_quality_gain"]) for row in recent[1:])
+    state.update({
+        "compute_accepted_tokens_per_hour": state["accepted_tokens_per_hour"],
+        "compute_attempted_tokens_per_hour": state["attempted_tokens_per_hour"],
+        "calendar_window_seconds": calendar_seconds,
+        "calendar_window_events": max(0, len(recent) - 1),
+        "calendar_attempted_tokens": calendar_attempted,
+        "calendar_accepted_tokens": calendar_accepted,
+        "calendar_attempted_tokens_per_hour": calendar_attempted * 3600.0 / calendar_seconds if calendar_seconds else None,
+        "calendar_accepted_tokens_per_hour": calendar_accepted * 3600.0 / calendar_seconds if calendar_seconds else None,
+        "calendar_language_quality_gain": calendar_gain,
+        "target_calendar_accepted_tokens_per_hour": 100_000,
+        "target_calendar_rate_measured": bool(
+            calendar_seconds >= 3600
+            and calendar_accepted * 3600.0 / calendar_seconds >= 100_000
+            and calendar_gain > 0
+        ),
+    })
     progress["learning_efficiency"] = state
     return state
 
@@ -4080,6 +4181,13 @@ def run_segment(
         previous_wide_batch_size=int(
             previous_segment_guard.get("effective_batch_size", 0) or 0
         ),
+        previous_wide_segment_tokens=int(
+            previous_segment_guard.get("attempted_tokens", 0) or 0
+        ),
+        previous_growth_streak=int(
+            previous_segment_guard.get("growth_acceptance_streak", 0) or 0
+        ),
+        growth_ready=_phase5_growth_ready(segment_language_before, guard_anchor),
     )
     previous_protected_version = str(
         (progress.get("protected_continual_training") or {}).get("version") or ""
@@ -4527,7 +4635,14 @@ def run_segment(
         "reference_kl_weight": float(protected_plan["reference_kl_weight"]),
         "protected_causal_version": PHASE5_PROTECTED_CAUSAL_VERSION,
         "optimizer": optimizer_report,
+        "transaction_budget_tokens": int(segment_budget),
+        "growth_ready": bool(recovery_plan.get("growth_ready", False)),
+        "growth_rungs_tokens": recovery_plan.get("growth_rungs_tokens", []),
+        "growth_required_acceptances": 3,
     })
+    segment_guard["growth_acceptance_streak"] = _phase5_growth_acceptance_streak(
+        previous_segment_guard, segment_guard,
+    )
     _atomic_json(segment_guard_path, segment_guard)
 
     if not segment_accepted:
