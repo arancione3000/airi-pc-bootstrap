@@ -1179,6 +1179,9 @@ def _phase5_recovery_plan(
     success_streak: int = 0,
     language_fragile: bool = False,
     wide_batch_recovery_enabled: bool = False,
+    previous_wide_attempted: bool = False,
+    previous_wide_accepted: bool = False,
+    previous_wide_batch_size: int = 0,
 ) -> dict[str, Any]:
     """Return a bounded rescue plan that cannot livelock at the old LR floor.
 
@@ -1285,6 +1288,25 @@ def _phase5_recovery_plan(
         and trust_region_recovery
         and int(context_length) <= 128
     )
+    wide_batch_size = None
+    if wide_batch_recovery:
+        wide_batch_size = 128
+        previous_batch = max(0, int(previous_wide_batch_size or 0))
+        if bool(previous_wide_attempted) and previous_batch > 0:
+            if bool(previous_wide_accepted):
+                if previous_batch <= 32:
+                    wide_batch_size = 64
+                elif previous_batch <= 64:
+                    wide_batch_size = 128
+                else:
+                    wide_batch_size = 128
+            else:
+                if previous_batch >= 128:
+                    wide_batch_size = 64
+                elif previous_batch >= 64:
+                    wide_batch_size = 32
+                else:
+                    wide_batch_size = 32
     stall_recovery = rejected >= 2 or sticky_recovery or trust_region_recovery
     if stall_recovery:
         # 50M CPU retries previously sat at ~62.5k forever.  Halving the
@@ -1308,12 +1330,14 @@ def _phase5_recovery_plan(
         stable_fast_lane = False
         if trust_region_recovery:
             if wide_batch_recovery:
-                # Learning-efficiency v3 validates one 128-example accumulated
-                # update (~16,256 supervised labels at context 128), rather
-                # than four noisy 32-example optimizer updates over the same
-                # amount of data. The quality gate and durable anchor remain
-                # unchanged and rejected work is still rolled back.
-                micro_cap = 128 * max(1, int(context_length) - 1)
+                # Health-aware protected ladder. A rejected 16k proposal
+                # shrinks to 8k, then to a protected 4k proposal. Accepted
+                # proposals climb back 4k -> 8k -> 16k. All rungs preserve the
+                # same causal replay / autoregressive protection and unchanged
+                # language guard.
+                micro_cap = int(wide_batch_size) * max(
+                    1, int(context_length) - 1
+                )
             else:
                 # Legacy trust-region fallback retained as the default until
                 # wide-batch recovery is explicitly enabled by rollout.
@@ -1347,7 +1371,12 @@ def _phase5_recovery_plan(
         "trust_region_recovery": bool(trust_region_recovery),
         "wide_batch_recovery": bool(wide_batch_recovery),
         "auto_wide_batch_recovery": bool(auto_wide_batch_recovery),
-        "wide_batch_effective_batch_size": 128 if wide_batch_recovery else None,
+        "wide_batch_effective_batch_size": (
+            int(wide_batch_size) if wide_batch_recovery else None
+        ),
+        "previous_wide_attempted": bool(previous_wide_attempted),
+        "previous_wide_accepted": bool(previous_wide_accepted),
+        "previous_wide_batch_size": int(previous_wide_batch_size or 0),
         "language_fragile": bool(language_fragile),
         # The measured trust-region regime was validated with fresh AdamW
         # state on every proposal.  Keep that property even immediately after
@@ -4024,6 +4053,11 @@ def run_segment(
         guard_anchor,
         consecutive_rejections=consecutive_rejections,
     )
+    previous_segment_guard = (
+        _load_json(segment_guard_path, {})
+        if segment_guard_path.is_file()
+        else {}
+    )
     recovery_plan = _phase5_recovery_plan(
         segment_tokens,
         parameters=int(parameter_count(runtime.model)),
@@ -4037,6 +4071,15 @@ def run_segment(
         success_streak=success_streak,
         language_fragile=language_fragile,
         wide_batch_recovery_enabled=bool(enable_wide_batch_recovery),
+        previous_wide_attempted=bool(
+            previous_segment_guard.get("wide_batch_recovery", False)
+        ),
+        previous_wide_accepted=bool(
+            previous_segment_guard.get("accepted", False)
+        ),
+        previous_wide_batch_size=int(
+            previous_segment_guard.get("effective_batch_size", 0) or 0
+        ),
     )
     previous_protected_version = str(
         (progress.get("protected_continual_training") or {}).get("version") or ""

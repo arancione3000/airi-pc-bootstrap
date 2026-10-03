@@ -54,6 +54,7 @@ jobs:
           TARGET="$(jq -r '.target_tokens // 100000000' "$STATE_DIR/bootstrap-data/progress.json")"
           BEFORE_TOKENS="$(jq -r '.tokens_processed // 0' "$STATE_DIR/bootstrap-data/progress.json")"
           BEFORE_MODEL_SHA="$(sha256sum "$STATE_DIR/bootstrap-data/candidate/model.pt" | awk '{print $1}')"
+          cp "$STATE_DIR/bootstrap-data/segment-guard-last.json" "$ROOT/previous-segment-guard.json"
 
           # The live manifest intentionally pins rolling Tatoeba bytes. A PR
           # runner cannot depend on an ephemeral historical Actions cache, so
@@ -193,8 +194,31 @@ jobs:
             }' | tee "$ROOT/production-shadow-summary.json"
 
           test "$WIDE" = "true"
-          test "$BATCH" = "128"
           test "$REPLAY_FORMAT" = "causal"
+
+          PREV_WIDE="$(jq -r '.wide_batch_recovery // false' "$ROOT/previous-segment-guard.json")"
+          PREV_ACCEPTED="$(jq -r '.accepted // false' "$ROOT/previous-segment-guard.json")"
+          PREV_BATCH="$(jq -r '.effective_batch_size // 0' "$ROOT/previous-segment-guard.json")"
+          EXPECTED_BATCH=128
+          if [[ "$PREV_WIDE" == "true" && "$PREV_BATCH" -gt 0 ]]; then
+            if [[ "$PREV_ACCEPTED" == "true" ]]; then
+              if (( PREV_BATCH <= 32 )); then
+                EXPECTED_BATCH=64
+              else
+                EXPECTED_BATCH=128
+              fi
+            else
+              if (( PREV_BATCH >= 128 )); then
+                EXPECTED_BATCH=64
+              elif (( PREV_BATCH >= 64 )); then
+                EXPECTED_BATCH=32
+              else
+                EXPECTED_BATCH=32
+              fi
+            fi
+          fi
+          echo "previous wide=$PREV_WIDE accepted=$PREV_ACCEPTED batch=$PREV_BATCH expected_next_batch=$EXPECTED_BATCH actual_batch=$BATCH"
+          test "$BATCH" = "$EXPECTED_BATCH"
 
           python - <<'PY'
           import json, os
@@ -205,8 +229,12 @@ jobs:
           if not 0.18 <= frac <= 0.22:
               raise SystemExit(f"physical replay fraction outside validated band: {frac}")
           if row["accepted"]:
-              if row["segment_processed"] < 16000:
-                  raise SystemExit(f"accepted wide-batch segment too small: {row['segment_processed']}")
+              minimum = int(row["effective_batch_size"]) * 127
+              if row["segment_processed"] < minimum:
+                  raise SystemExit(
+                      f"accepted protected segment too small: "
+                      f"{row['segment_processed']} < {minimum}"
+                  )
               if row["repetition_after"] > row["repetition_before"] + 0.08:
                   raise SystemExit("accepted candidate violates unchanged repetition bound")
           else:
@@ -256,6 +284,7 @@ jobs:
             ${{ runner.temp }}/airi-wide-batch-shadow/production-shadow-summary.json
             ${{ runner.temp }}/airi-wide-batch-shadow/result.json
             ${{ runner.temp }}/airi-wide-batch-shadow/state-repo/generalist-state/bootstrap-data/segment-guard-last.json
+            ${{ runner.temp }}/airi-wide-batch-shadow/previous-segment-guard.json
             ${{ runner.temp }}/airi-wide-batch-shadow/wide32-current.jsonl
             ${{ runner.temp }}/airi-wide-batch-shadow/wide32-current.summary.json
           if-no-files-found: warn
