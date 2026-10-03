@@ -141,7 +141,6 @@ jobs:
               segment_tokens=1_000_000,
               batch_size=32,
               base_learning_rate=3e-4,
-              enable_wide_batch_recovery=True,
           )
           print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
           PY
@@ -222,6 +221,32 @@ jobs:
           # do not require equality between before/after remote refs.
           test -n "$REMOTE_AFTER"
 
+      - name: Screen current-state 4k protected fallback after rejected auto-wide
+        env:
+          PYTHONPATH: ${{ github.workspace }}/computer
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/airi-wide-batch-shadow"
+          STATE_DIR="$ROOT/state-repo/generalist-state"
+          GUARD="$STATE_DIR/bootstrap-data/segment-guard-last.json"
+          if [[ "$(jq -r '.accepted // false' "$GUARD")" == "true" ]]; then
+            echo "16k auto-wide passed; no fallback screen needed."
+            exit 0
+          fi
+          python -m generalist_lm.learning_efficiency_benchmark \
+            --state-dir "$STATE_DIR" \
+            --output "$ROOT/wide32-current.jsonl" \
+            --segments 4064 \
+            --seeds 6300000,6300001,6300002 \
+            --threads 4 \
+            --trials wide32_causal20_ar \
+            --causal-documents "$ROOT/pinned-corpus/pinned-train.jsonl" \
+            --validation-documents "$ROOT/pinned-corpus/pinned-validation.jsonl"
+          python -m generalist_lm.learning_efficiency_benchmark \
+            --state-dir "$STATE_DIR" \
+            --output "$ROOT/wide32-current.jsonl" \
+            --summary-only
+
       - name: Upload production-shadow evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -231,5 +256,7 @@ jobs:
             ${{ runner.temp }}/airi-wide-batch-shadow/production-shadow-summary.json
             ${{ runner.temp }}/airi-wide-batch-shadow/result.json
             ${{ runner.temp }}/airi-wide-batch-shadow/state-repo/generalist-state/bootstrap-data/segment-guard-last.json
+            ${{ runner.temp }}/airi-wide-batch-shadow/wide32-current.jsonl
+            ${{ runner.temp }}/airi-wide-batch-shadow/wide32-current.summary.json
           if-no-files-found: warn
           retention-days: 14

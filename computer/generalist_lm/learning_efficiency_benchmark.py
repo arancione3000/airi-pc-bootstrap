@@ -90,6 +90,18 @@ def trial_matrix(segment_tokens=4064):
         ("wide64", {"effective_batch_size": 64}),
         ("wide128", {"effective_batch_size": 128}),
         (
+            "wide32_causal20_ar",
+            {
+                "effective_batch_size": 32,
+                "replay_format": "causal",
+                "replay_examples": 8,
+                "replay_token_fraction": 0.20,
+                "replay_weight": 0.25,
+                "autoregressive_ul_weight": 0.1,
+                "autoregressive_prefixes": 8,
+            },
+        ),
+        (
             "wide64_embeddings",
             {"effective_batch_size": 64, "parameter_policy": "embeddings"},
         ),

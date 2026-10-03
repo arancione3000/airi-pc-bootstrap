@@ -336,9 +336,10 @@ jobs:
             rehabilitation_accepted="$(jq -r '.rehabilitation_accepted // false' /tmp/phase5-segment.json)"
             segment_rejected="$(jq -r '.segment_rejected // false' /tmp/phase5-segment.json)"
 
-            if [[ "${WIDE_BATCH_RECOVERY:-false}" == "true" ]]; then
-              guard="${STATE_DIR}/bootstrap-data/segment-guard-last.json"
-              test -s "${guard}"
+            guard="${STATE_DIR}/bootstrap-data/segment-guard-last.json"
+            test -s "${guard}"
+            guard_wide="$(jq -r '.wide_batch_recovery // false' "${guard}")"
+            if [[ "${guard_wide}" == "true" ]]; then
               jq -e '
                 (.wide_batch_recovery == true)
                 and (.effective_batch_size == 128)
@@ -349,12 +350,12 @@ jobs:
               ' "${guard}" >/dev/null
               if [[ "${segment_rejected}" != "true" ]]; then
                 if (( segment_tokens_processed < 16000 )); then
-                  echo "Accepted wide-batch canary processed too few causal tokens: ${segment_tokens_processed}" >&2
+                  echo "Accepted wide-batch recovery processed too few causal tokens: ${segment_tokens_processed}" >&2
                   exit 1
                 fi
-                echo "Wide-batch canary accepted by the unchanged language guard."
+                echo "Wide-batch recovery accepted by the unchanged language guard."
               else
-                echo "Wide-batch canary rejected safely; rollback telemetry will be persisted."
+                echo "Wide-batch recovery rejected safely; rollback telemetry will be persisted."
               fi
             fi
 
@@ -362,6 +363,11 @@ jobs:
             # succeed. A malformed/misconfigured canary therefore cannot write
             # candidate state to the authoritative generalist-state branch.
             persist_state "target ${TARGET_TOKENS} segment ${segment}"
+
+            if [[ "${guard_wide}" == "true" && "${segment_rejected}" == "true" ]]; then
+              echo "Wide-batch recovery rolled back; ending this run after one rejected proposal."
+              break
+            fi
 
             # Rejected rehabilitation attempts are rolled back. Persist their
             # recovery counters, but do not burn another runner exporting an

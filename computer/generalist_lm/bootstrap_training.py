@@ -1266,8 +1266,22 @@ def _phase5_recovery_plan(
             )
         )
     )
+    auto_wide_batch_recovery = bool(
+        trust_region_recovery
+        and int(context_length) <= 128
+        and persisted_scale <= (1.0 / 128.0)
+        and (
+            rejected >= 2
+            or bool(recovery_hold)
+            or bool(language_fragile)
+            or (
+                bool(last_segment_accepted)
+                and 0 < accepted_streak <= 1
+            )
+        )
+    )
     wide_batch_recovery = bool(
-        wide_batch_recovery_enabled
+        (wide_batch_recovery_enabled or auto_wide_batch_recovery)
         and trust_region_recovery
         and int(context_length) <= 128
     )
@@ -1332,6 +1346,7 @@ def _phase5_recovery_plan(
         "micro_recovery": micro_recovery,
         "trust_region_recovery": bool(trust_region_recovery),
         "wide_batch_recovery": bool(wide_batch_recovery),
+        "auto_wide_batch_recovery": bool(auto_wide_batch_recovery),
         "wide_batch_effective_batch_size": 128 if wide_batch_recovery else None,
         "language_fragile": bool(language_fragile),
         # The measured trust-region regime was validated with fresh AdamW

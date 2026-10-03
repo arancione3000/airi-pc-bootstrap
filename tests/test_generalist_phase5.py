@@ -322,7 +322,7 @@ def test_phase5_language_fragility_reuses_existing_protected_boundary():
     ) is True
 
 
-def test_phase5_two_acceptances_do_not_leave_4k_while_language_is_fragile():
+def test_phase5_fragile_50m_stays_on_validated_wide_recovery_until_headroom_returns():
     common = {
         "parameters": 50_041_536,
         "context_length": 128,
@@ -346,7 +346,10 @@ def test_phase5_two_acceptances_do_not_leave_4k_while_language_is_fragile():
 
     assert fragile["trust_region_recovery"] is True
     assert fragile["language_fragile"] is True
-    assert fragile["effective_budget_tokens"] == 4_000
+    assert fragile["auto_wide_batch_recovery"] is True
+    assert fragile["wide_batch_recovery"] is True
+    assert fragile["effective_budget_tokens"] == 16_256
+    assert fragile["wide_batch_effective_batch_size"] == 128
     assert fragile["reset_optimizer"] is True
 
     assert healthy["trust_region_recovery"] is False
@@ -373,7 +376,7 @@ def test_phase5_sustained_50m_stall_enters_elementary_trust_region():
     assert plan["forced_stage"] == "B_short_sentence_completion"
 
 
-def test_phase5_trust_region_requires_two_acceptances_before_8k_ladder():
+def test_phase5_trust_region_uses_wide_first_followup_then_normal_8k_ladder():
     first_followup = _phase5_recovery_plan(
         1_000_000,
         parameters=50_041_536,
@@ -385,7 +388,10 @@ def test_phase5_trust_region_requires_two_acceptances_before_8k_ladder():
         success_streak=1,
     )
     assert first_followup["trust_region_recovery"] is True
-    assert first_followup["effective_budget_tokens"] == 4_000
+    assert first_followup["auto_wide_batch_recovery"] is True
+    assert first_followup["wide_batch_recovery"] is True
+    assert first_followup["effective_budget_tokens"] == 16_256
+    assert first_followup["wide_batch_effective_batch_size"] == 128
     assert first_followup["learning_rate_scale"] == pytest.approx(1.0 / 128.0)
     assert first_followup["reset_optimizer"] is True
 
@@ -2708,7 +2714,7 @@ def test_response_filter_never_reassigns_excluded_training_rows_to_validation():
     assert report["validation_rows_changed"] == 0
 
 
-def test_phase5_wide_batch_recovery_is_opt_in_and_preserves_legacy_default():
+def test_phase5_wide_batch_recovery_auto_activates_for_fragile_50m_regime():
     kwargs = dict(
         requested_tokens=1_000_000,
         parameters=50_041_536,
@@ -2720,16 +2726,9 @@ def test_phase5_wide_batch_recovery_is_opt_in_and_preserves_legacy_default():
         success_streak=0,
         language_fragile=True,
     )
-    legacy = _phase5_recovery_plan(**kwargs)
-    assert legacy["wide_batch_recovery"] is False
-    assert legacy["effective_budget_tokens"] == 4_000
-    assert legacy["wide_batch_effective_batch_size"] is None
-
-    candidate = _phase5_recovery_plan(
-        **kwargs,
-        wide_batch_recovery_enabled=True,
-    )
+    candidate = _phase5_recovery_plan(**kwargs)
     assert candidate["trust_region_recovery"] is True
+    assert candidate["auto_wide_batch_recovery"] is True
     assert candidate["wide_batch_recovery"] is True
     assert candidate["effective_budget_tokens"] == 16_256
     assert candidate["wide_batch_effective_batch_size"] == 128
@@ -2737,6 +2736,83 @@ def test_phase5_wide_batch_recovery_is_opt_in_and_preserves_legacy_default():
     assert candidate["reset_optimizer"] is True
     assert candidate["forced_stage"] == "B_short_sentence_completion"
 
+
+def test_phase5_auto_wide_recovery_exits_after_language_headroom_recovers():
+    plan = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=0,
+        recovery_hold=False,
+        last_segment_accepted=True,
+        success_streak=3,
+        language_fragile=False,
+    )
+    assert plan["trust_region_recovery"] is False
+    assert plan["auto_wide_batch_recovery"] is False
+    assert plan["wide_batch_recovery"] is False
+    assert plan["wide_batch_effective_batch_size"] is None
+
+
+def test_phase5_explicit_wide_flag_still_matches_validated_candidate():
+    candidate = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=128,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=1,
+        recovery_hold=False,
+        last_segment_accepted=False,
+        success_streak=0,
+        language_fragile=True,
+        wide_batch_recovery_enabled=True,
+    )
+    assert candidate["trust_region_recovery"] is True
+    assert candidate["wide_batch_recovery"] is True
+    assert candidate["effective_budget_tokens"] == 16_256
+    assert candidate["wide_batch_effective_batch_size"] == 128
+
+
+def test_phase5_auto_wide_recovery_stays_scoped_to_validated_topology():
+    wrong_context = _phase5_recovery_plan(
+        1_000_000,
+        parameters=50_041_536,
+        context_length=256,
+        persisted_lr_scale=1.0 / 128.0,
+        consecutive_rejections=8,
+        recovery_hold=True,
+        last_segment_accepted=False,
+        success_streak=0,
+        language_fragile=True,
+    )
+    assert wrong_context["auto_wide_batch_recovery"] is False
+    assert wrong_context["wide_batch_recovery"] is False
+
+    wrong_capacity = _phase5_recovery_plan(
+        1_000_000,
+        parameters=20_000_000,
+        context_length=128,
+        persisted_lr_scale=1.0 / 64.0,
+        consecutive_rejections=8,
+        recovery_hold=True,
+        last_segment_accepted=False,
+        success_streak=0,
+        language_fragile=True,
+    )
+    assert wrong_capacity["auto_wide_batch_recovery"] is False
+    assert wrong_capacity["wide_batch_recovery"] is False
+
+
+def test_phase5_workflow_validates_auto_wide_recovery_before_persisting():
+    workflow = Path(".github/workflows/generalist-bootstrap.yml").read_text(
+        encoding="utf-8"
+    )
+    assert 'guard_wide="$(jq -r \'.wide_batch_recovery // false\' "${guard}")"' in workflow
+    assert 'if [[ "${guard_wide}" == "true" ]]; then' in workflow
+    assert "Wide-batch recovery accepted by the unchanged language guard." in workflow
+    assert "Wide-batch recovery rolled back; ending this run after one rejected proposal." in workflow
+    assert 'persist_state "target ${TARGET_TOKENS} segment ${segment}"' in workflow
 
 def test_phase5_wide_batch_protected_plan_matches_validated_candidate():
     before = {
