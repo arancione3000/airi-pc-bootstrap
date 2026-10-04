@@ -2510,8 +2510,8 @@
   ],
   "curriculum_stage": "B_short_sentence_completion",
   "data_preparation": {
-    "elapsed_seconds": 3.055772369999886,
-    "reviewed_bundle_cache_hit": true
+    "elapsed_seconds": 705.011121949,
+    "reviewed_bundle_cache_hit": false
   },
   "dead_capacity_revival": {
     "before_max_new_down": 0.0,
@@ -4782,42 +4782,27 @@
   "last_train_loss": 1.385160706937313,
   "last_validation_loss": 2.088232710957527,
   "learning_efficiency": {
-    "acceptance_rate": 0.22835633626097868,
+    "acceptance_rate": 0.22807017543859648,
     "accepted_segments": 182,
     "accepted_tokens": 1109472,
-    "accepted_tokens_per_hour": 185860.20209642363,
-    "attempted_segments": 797,
-    "attempted_tokens": 5344040,
-    "attempted_tokens_per_hour": 904128.6685701887,
+    "accepted_tokens_per_hour": 185631.55283397884,
+    "attempted_segments": 798,
+    "attempted_tokens": 5348104,
+    "attempted_tokens_per_hour": 903692.0721716059,
     "calendar_accepted_tokens": 178816,
-    "calendar_accepted_tokens_per_hour": 12853.928635610311,
+    "calendar_accepted_tokens_per_hour": 12658.295152885656,
     "calendar_attempted_tokens": 308864,
-    "calendar_attempted_tokens_per_hour": 22202.24037059963,
+    "calendar_attempted_tokens_per_hour": 21864.32799134795,
     "calendar_language_quality_gain": 0.000114111152985652,
     "calendar_window_events": 63,
-    "calendar_window_seconds": 50081,
+    "calendar_window_seconds": 50855,
     "checkpoint_persist_seconds": 211.25679146399762,
-    "compute_accepted_tokens_per_hour": 185860.20209642363,
-    "compute_attempted_tokens_per_hour": 904128.6685701887,
+    "compute_accepted_tokens_per_hour": 185631.55283397884,
+    "compute_attempted_tokens_per_hour": 903692.0721716059,
     "cumulative_language_quality_gain": 0.04011267299005017,
     "effective_new_tokens": 1109472,
-    "elapsed_training_seconds": 21278.546592736966,
+    "elapsed_training_seconds": 21305.016379897967,
     "history": [
-      {
-        "accepted": true,
-        "accepted_tokens": 4064,
-        "attempted_tokens": 4064,
-        "checkpoint_persist_seconds": 1.198449408999977,
-        "elapsed_training_seconds": 25.171343669999942,
-        "language_nll_delta": -3.292962038248248e-05,
-        "language_quality_gain": 3.486632015259339e-05,
-        "multiword_delta": 0.0,
-        "reference_kl_weight": 0.5,
-        "repetition_delta": 0.0,
-        "replay_fraction": 0.2,
-        "replay_tokens": 1016,
-        "updated_at_unix": 1791103172
-      },
       {
         "accepted": false,
         "accepted_tokens": 0,
@@ -5762,6 +5747,21 @@
         "replay_fraction": 0.2,
         "replay_tokens": 1016,
         "updated_at_unix": 1791153253
+      },
+      {
+        "accepted": false,
+        "accepted_tokens": 0,
+        "attempted_tokens": 4064,
+        "checkpoint_persist_seconds": 0.0,
+        "elapsed_training_seconds": 26.469787160999886,
+        "language_nll_delta": 6.502026954180451e-06,
+        "language_quality_gain": 0.0,
+        "multiword_delta": 0.0,
+        "reference_kl_weight": 0.5,
+        "repetition_delta": 0.014625850340136054,
+        "replay_fraction": 0.2,
+        "replay_tokens": 1016,
+        "updated_at_unix": 1791154837
       }
     ],
     "learning_gain_per_100k_tokens": 0.003615474116521207,
@@ -5811,14 +5811,14 @@
     },
     "reference_kl_weight": 0.5,
     "replay_fraction": 0.2,
-    "replay_tokens": 408542,
-    "rollback_rate": 0.7716436637390214,
-    "rollback_segments": 615,
+    "replay_tokens": 409558,
+    "rollback_rate": 0.7719298245614035,
+    "rollback_segments": 616,
     "started_tokens_processed": 32815853,
     "target_calendar_accepted_tokens_per_hour": 100000,
     "target_calendar_rate_measured": false,
     "unique_data_fraction": 0.32,
-    "updated_at_unix": 1791153253,
+    "updated_at_unix": 1791154837,
     "version": "phase5-learning-efficiency-v1"
   },
   "learning_rate": 2.814630595368633e-08,
@@ -6438,31 +6438,19 @@
       "trust_region_recovery": true
     }
   ],
-  "segment_guard_consecutive_rejections": 0,
+  "segment_guard_consecutive_rejections": 1,
   "segment_guard_effective_budget_tokens": 4064,
   "segment_guard_language_fragile": true,
-  "segment_guard_last_accepted": true,
+  "segment_guard_last_accepted": false,
   "segment_guard_last_attempted_steps": 1,
   "segment_guard_last_attempted_tokens": 4064,
   "segment_guard_lr_scale": 0.00048828125,
-  "segment_guard_optimizer_reset_for_stall": false,
+  "segment_guard_optimizer_reset_for_stall": true,
   "segment_guard_recovery_accept_streak": 0,
   "segment_guard_recovery_budget_active": true,
   "segment_guard_recovery_hold": false,
   "segment_guard_recovery_mode": false,
   "segment_guard_rejections": [
-    {
-      "after_quality": -0.8000093588383509,
-      "attempted_steps": 1,
-      "attempted_tokens": 4064,
-      "before_quality": -0.7591416913334186,
-      "learning_rate_scale": 0.00048828125,
-      "reasons": [
-        "repetition rate exceeds durable anchor by more than 0.08"
-      ],
-      "recovery_mode": false,
-      "tokens_processed": 33726189
-    },
     {
       "after_quality": -0.799917752195599,
       "attempted_steps": 1,
@@ -6834,13 +6822,25 @@
       ],
       "recovery_mode": false,
       "tokens_processed": 33921261
+    },
+    {
+      "after_quality": -0.7865172480660243,
+      "attempted_steps": 1,
+      "attempted_tokens": 4064,
+      "before_quality": -0.7590372216303498,
+      "learning_rate_scale": 0.00048828125,
+      "reasons": [
+        "repetition rate exceeds durable anchor by more than 0.08"
+      ],
+      "recovery_mode": false,
+      "tokens_processed": 33925325
     }
   ],
   "segment_guard_requested_budget_tokens": 1000000,
   "segment_guard_rescue_stage": "B_short_sentence_completion",
   "segment_guard_stable_fast_lane": false,
   "segment_guard_stall_recovery_active": true,
-  "segment_guard_success_streak": 1,
+  "segment_guard_success_streak": 0,
   "sft_accepted_rungs": [
     20000000
   ],
@@ -18964,7 +18964,7 @@
     "wide_batch_recovery": true
   },
   "unique_corpus_target_tokens": 32000000,
-  "updated_at_unix": 1791153253,
+  "updated_at_unix": 1791154837,
   "valid_tokens_processed": 33930979,
   "version": "phase5-language-bootstrap-v3"
 }
