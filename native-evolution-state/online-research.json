@@ -1,92 +1,184 @@
 {
-  "academic_fallback": null,
-  "errors": [],
+  "academic_fallback": "openalex",
+  "errors": [
+    {
+      "error": "HTTPError:HTTP Error 429: Too Many Requests",
+      "provider": "arxiv"
+    }
+  ],
   "evidence": [
     {
-      "digest": "4ad2b3ae819b7a6a2eaaba3dad8549e7d91c41a4bc06d2f64918d90372f395a7",
-      "provider": "arxiv",
-      "published": "2026-10-01T17:59:59Z",
-      "source_id": "http://arxiv.org/abs/2610.02210v1",
-      "summary": "I don't think I have ever done anything as peculiar in my life. Among other things, it shows a young man looking with interest at a print on the wall of an exhibition that features himself. How can this be? Perhaps I am not far removed from Einstein's curved universe.'' So wrote M.C. Escher about his 1956 lithograph Print Gallery. Nearly half a century later, a mathematical analysis related its geometry to an untwisted source image through a conformal power map $z \\mapsto z^α$, $α\\in \\mathbb{C}$. Building on this construction, we use a frozen text-to-image diffusion model to generate new self-referential scenes. Prompting alone does not enforce the recursion, while a post-hoc transformation can leave structures poorly connected. Applying the transformation during sampling is also insufficient: the denoiser may \"repair\" the intended distortion or drift out of the prescribed geometry. We construct a generalized inverse $T^\\dagger$ of the non-invertible image transformation $T$, adapted to its recursive constraint. In the idealized formulation, the Penrose identity $TT^\\dagger T = T$ makes $TT^\\dagger$ an idempotent projection onto geometrically admissible images. Yet denoising only the transformed image remains an out-of-distribution task, even with projection. We therefore braid denoising steps with $T$ and $T^\\dagger$: source-space steps develop the untwisted scene, while transformed-space steps refine its appearance and connections in the final geometry. We generate Print Gallery-like compositions and explore further transformations. Rather than distorting a finished image, we let the scene and its distortion develop together.",
-      "tags": [],
-      "title": "Moore, Escher, Penrose: A Conformal Golden Braid",
-      "url": "https://arxiv.org/abs/2610.02210v1"
-    },
-    {
-      "digest": "4cd18f5d0061376a49d499a26900e674040236b740c0b816da0eee317ea7f7ff",
-      "provider": "arxiv",
-      "published": "2026-10-01T17:59:58Z",
-      "source_id": "http://arxiv.org/abs/2610.02208v1",
-      "summary": "Sphere Encoder is an autoencoder that generates images by decoding random points from a high-dimensional latent sphere. We identify two limitations of the original formulation that reduce its generation quality. First, random points concentrate near the equator relative to the pole on an encoded latent, but the training rotation never reaches this region, leaving a gap that limits one-step generation. Second, training for generation with pixel-wise reconstruction loss encourages the decoder to average over plausible images, producing blurry images that lack high-frequency details. We present Sphere Encoder 2 to address both limitations, substantially improving image generation quality while maintaining the speed and simplicity of a autoencoder. Models are released at \\href{https://github.com/kaiyuyue/sphere2}{github.com/kaiyuyue/sphere2}.",
-      "tags": [
-        "code"
-      ],
-      "title": "Sphere Encoder 2",
-      "url": "https://arxiv.org/abs/2610.02208v1"
-    },
-    {
-      "digest": "a832746cc75f331f98e1e1c4d2784079ec3e4f7ec6e50d8276a7ab369f334f6f",
-      "provider": "arxiv",
-      "published": "2026-10-01T17:59:58Z",
-      "source_id": "http://arxiv.org/abs/2610.02207v1",
-      "summary": "3D Gaussian avatars support fast rendering, however, their real-time animation is often challenged by the costly neural inference. We address this bottleneck and show that the animation of pretrained avatar models can be closely approximated by a linear combination of identity-independent blendshapes. Building on this finding, we introduce GALA (Gaussian Animation via Linear Approximation), a distillation method that replaces per-frame heavy neural decoding with a shallow coefficient predictor and a linear blend. To improve fidelity and reduce memory requirements, we propose to construct the basis using block-local PCA under a rendering-aware metric and a memory budget. Our method learns a shallow MLP network to predict blendshape coefficients and applies to various animation architectures without retraining original models. We validate GALA by accelerating the inference of three distinct avatar models for 3D animation of facial expressions and full-bodies with clothing dynamics. Across these models, our distillation generalizes to held-out identities and reduces CPU animation cost by up to three orders of magnitude while preserving most of the rendering quality. Excellent results of our method confirm the shared linear structure of learned avatar representations and enable highly efficient and accurate animation at frame rates reaching up to 60fps on mobile devices. Project page: https://ramazan793.github.io/gala/",
-      "tags": [
-        "code"
-      ],
-      "title": "One Basis to Animate Them All: Gaussian Blendshape Distillation for Real-Time Avatars",
-      "url": "https://arxiv.org/abs/2610.02207v1"
-    },
-    {
-      "digest": "eff88d35a663ddf930e0a0e8587bc245f27d1e6f9f1f88fcad920812f3315d2a",
-      "provider": "arxiv",
-      "published": "2026-10-01T17:59:55Z",
-      "source_id": "http://arxiv.org/abs/2610.02206v1",
-      "summary": "LLMs are increasingly applied to cybersecurity workflows, where they are expected to translate analysts' intent into tool invocations. However, existing evaluations focus on knowledge-based assessments or end-to-end agentic tasks, and do not directly measure LLMs' ability to generate executable commands for real-world cybersecurity tools. This gap is critical because cybersecurity operations rely on strict command-line interfaces (CLIs), where minor syntax errors, incorrect flag--value bindings, or argument misordering can invalidate execution. We introduce KaliBench, a fine-grained benchmark and dataset for natural-language--to--CLI translation on Kali Linux, comprising 8,504 query--command pairs spanning 1,642 tools across 23 capability dimensions and 5 security phases. KaliBench is constructed via a manuscript-grounded pipeline with deterministic canonicalization and alias-aware evaluation, enabling precise and reproducible assessment of tool selection and argument construction. To ensure both semantic correctness and practical executability, we develop a multi-stage verification pipeline that combines LLM-based validation, sandboxed terminal execution, and human-in-the-loop refinement. Building on these fine-grained, deterministic signals, KaliBench further enables runtime-free verifiable rewards for training. Across three evaluation modes and 24 configurations of general-purpose and security-focused open-weight models, no open-weight model exceeds 42% exact-command accuracy in the unrestricted setting, highlighting the difficulty of accurate CLI-based cybersecurity tool use without explicit tool hints. We further show that supervised fine-tuning and reinforcement learning with verifiable rewards derived from KaliBench significantly improve an 8B model and achieve performance comparable to a 685B MoE model.",
+      "digest": "54503246a54bfa5b3173653f73769b66eb06a38be8f2720bcb5cd8ef450c644e",
+      "provider": "openalex",
+      "published": "2026-12-31",
+      "source_id": "https://openalex.org/W7162095276",
+      "summary": "Online neural learning requires models that update after each incoming example, remain calibrated under distributional change, and avoid brittle gradient transmission. The original version of this work used a small static benchmark, a shallow model, few random seeds, and no significance tests. This revision reformulates the problem as genuine prequential online learning and introduces Smooth Online Activation Routing (SOAR), a Hedge-style routing algorithm over smooth activation experts trained by singleinstance adaptive updates. SOAR links activation smoothness with online regret through a prediction-with-expert-advice bound: the mixture incurs only logarithmic-exponential-weight overhead relative to the best activation expert in hindsight, while each expert uses diagonal adaptive online gradients. We evaluate two-hidden-layer online neural networks on eight streams, fourteen methods, thirteen comparators, and eight random seeds, yielding 896 fully reproducible runs. The benchmark includes four real scikit-learn data sets and four synthetic streaming tasks with stationary, nonlinear, gradual-drift, and sudden-drift regimes. Across all dataset-seed blocks, SOAR obtains the best mean final accuracy ( $92.56 \\%$ ), best mean negative log-likelihood ( 0.199 ), and best prequential accuracy ( $86.83 \\%$ ). Paired Wilcoxon and Holm-corrected tests show significant improvements over ReLU, LeakyReLU, ELU, Softplus, Adam, SGD, and the compact ablation; improvements over the strongest fixed TeLU activation are positive but not statistically significant. The results support a nuanced conclusion: adaptive smooth activation routing is a robust online-learning mechanism and the best overall method in this controlled benchmark suite, but fixed smooth activations remain highly competitive on small static data. topics=Data Stream Mining Techniques Domain Adaptation and Few-Shot Learning Stochastic Gradient Optimization Techniques oa=True oa_status=gold",
       "tags": [
         "dataset"
       ],
-      "title": "KaliBench: A Fine-Grained Benchmark for Cybersecurity Tool Use on Kali Linux with Runtime-Free Verifiable Rewards",
-      "url": "https://arxiv.org/abs/2610.02206v1"
+      "title": "SOAR: Smooth Online Activation Routing for Stable Neural Learning from Evolving Streams",
+      "url": "https://pub.respai.de/articles/1-2/3sniu.html"
     },
     {
-      "digest": "96b998599d69b2ff8bba80435cb2e60d6b9b39cc650d1b7c6835aadc7f8cf424",
-      "provider": "arxiv",
-      "published": "2026-10-01T17:59:53Z",
-      "source_id": "http://arxiv.org/abs/2610.02205v1",
-      "summary": "Programmable world models separate executable dynamics from visual generation, offering a promising foundation for next-generation game engines. However, their visual adherence to explicit rules and interactions remains insufficiently evaluated. Existing benchmarks assess visual quality, controllability, and instruction or physical adherence, but rarely test fidelity to fine-grained, program-specified world events. We introduce PROWBench, comprising 170 programmatically constructed episodes and 600 proxy videos covering diverse scenes and interactions. PROWBench logs entity states and timestamped events, including those outside the camera's field of view, as replayable world records, from which it renders synchronized views and proxy representations. This enables generated videos to be checked against the observable consequences of program execution. An extensible framework constructs scenes, controls behaviors, and can render each camera view in different representations, such as coarse 3D, and bounding boxes. The benchmark covers first- and third-person perspectives, with synchronized multi-view observations available for a subset of episodes. Grounded in these records, PROWBench evaluates entity control, long-horizon memory, and, with two VLM-based metrics, Logic-Render Alignment and Interaction Success Rate, adherence to the prescribed timeline and the visual realization of timestamped engine-recorded events.",
+      "digest": "784184d3e830a08fb87e432cb71a909a2b29f9a03a4abc5dde126cda4cc6a379",
+      "provider": "openalex",
+      "published": "2026-12-31",
+      "source_id": "https://openalex.org/W7164183113",
+      "summary": "Do large language models (LLMs) possess a measurable \"personality,\" and how do the linguistic properties of training corpora shape their cognitive style and downstream reasoning? This paper approaches these questions from a sociolinguistic perspective on machine \"identity.\" This manuscript is positioned explicitly as a conceptual perspective paper: it does not present original experimental data, nor does it constitute a systematic review with defined search strategies or inclusion criteria. Instead, it synthesises key published findings into two original theoretical frameworks intended to guide future empirical and engineering work. We examine evidence that LLMs exhibit reliable, valid Big Five personality traits—particularly in large, instruction-tuned models—and that continued pre-training on domain-specific corpora may shape those traits through measurable linguistic features: imperative ratio, type-token ratio (TTR), and syntactic complexity. We then analyse how standard-language ideology embedded in training corpora is amplified in model outputs, disadvantaging dialect and minority-language communities. Building on these findings, we propose two conceptual contributions: (1) a Personality Engineering (PE) framework for targeted continued pre-training to cultivate task-appropriate cognitive profiles, and (2) a Language Ideology Propagation Model (LIPM) mapping the pipeline from corpus composition to societal impact. Both frameworks are explicitly conceptual and require empirical validation before they can function as operational guidelines. Their value lies in structuring future research and providing a shared vocabulary for cross-disciplinary collaboration, with direct implications for responsible AI deployment. topics=Artificial Intelligence in Healthcare and Education Language and cultural evolution Topic Modeling oa=True oa_status=gold",
+      "tags": [
+        "dataset",
+        "long-context",
+        "reasoning",
+        "tokenizer"
+      ],
+      "title": "The Sociolinguistics of Machine Identity: LLM Personality and Ideology Propagation",
+      "url": "https://pub.respai.de/articles/1-2/4gli.html"
+    },
+    {
+      "digest": "f9748eed553d4a6b48cc57f1b09523066d865c72fbf692be23339847900360b5",
+      "provider": "openalex",
+      "published": "2026-12-10",
+      "source_id": "https://openalex.org/W7197044566",
+      "summary": "Adeno-associated virus (AAV) vectors have demonstrated strong clinical efficacy across multiple monogenic disorders, yet neutralizing antibodies (NAbs) remain major barriers to vector redosing and durable transduction. To address this limitation, we developed a sequence-based artificial intelligence framework integrating Bidirectional Encoder Representations from Transformers (BERT) and Evolutionary Scale Modeling with Low-Rank Adaptation (ESM-LoRA) to identify human-tolerant, virus-specific motifs across human and viral proteins using sliding-window analyses and multi-layer fine-tuning. Using capsid-derived segments from AAV2 and AAV843, we prioritized surface-accessible, virus-polarized peptides as candidate decoys and evaluated their ability to block AAV-targeted antibodies. The models achieved high accuracy in distinguishing human versus viral fragments, and selected peptides bound AAV-specific antibodies with nanomolar affinity, competitively restored capsid binding, and recovered >60% of baseline transduction in the presence of NAbs. In mouse models with pre-existing or redosing-induced antibodies, coadministration of decoy peptides and an IgG-degrading enzyme reduced high-titer NAbs to approximately 1:4 and restored hepatic transgene expression without detectable inflammatory or peptide-specific immune responses. A contrastive variational autoencoder (VAE) further generated non-natural peptides with broader epitope coverage. These results support sequence-driven AI design of short, low-immunogenicity decoy peptides as a translational strategy to mitigate NAb interference and enhance the feasibility of AAV redosing. topics=Virus-based gene therapy research vaccines and immunoinformatics approaches Monoclonal and Polyclonal Antibodies Research oa=True oa_status=green",
       "tags": [],
-      "title": "ROWBench: Do Video Models Render What the Program Specifies?",
-      "url": "https://arxiv.org/abs/2610.02205v1"
+      "title": "Sequence-based artificial intelligence-guided inhibitory peptides to counteract AAV neutralizing antibodies in gene therapy.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/42740894"
     },
     {
-      "digest": "df9b0ed7c3a4657b64ee58e47c05d638e35a72c7942ab765e06af24330bff5e9",
-      "provider": "arxiv",
-      "published": "2026-10-01T17:59:49Z",
-      "source_id": "http://arxiv.org/abs/2610.02203v1",
-      "summary": "In diffusion transformers, a class label or a text prompt is embedded once, and the same condition is reused at every denoising step. We ask whether predicted embeddings can serve as this condition instead. Next-Embedding Predictive Autoregression (NEPA) trains a Transformer to predict the next continuous embedding in a sequence. In generation, the clean image follows the noisy image, so its embeddings are the next embeddings after the condition and the noisy image. We train a NEPA model to predict them all at once with Multi-Embedding Prediction, and in Embedding Conditioned Generation, a DiT generator is conditioned on these predictions, recomputed at every denoising step, so the conditioning signal adapts to the current noisy state. Experiments on class-conditional ImageNet $256\\times256$ study the condition of the generator, the design of Multi-Embedding Prediction, and the scaling of both models. The NEPA model adds a second network to every sampling step; with it, and combined with REPA, our final model, NEPA-DiT-XL, reaches an FID of 1.32 using about a third of the training compute of REPA.",
+      "digest": "b63cf6db6f62bb354b311d991517d60de9220386b2b7e3c0e789bf0c803dfc93",
+      "provider": "openalex",
+      "published": "2026-10-02",
+      "source_id": "https://openalex.org/W4399795445",
+      "summary": "topics=Advanced Graph Neural Networks Graph Theory and Algorithms Topic Modeling oa=True oa_status=green",
       "tags": [],
-      "title": "Embedding Prediction Helps Image Generation",
-      "url": "https://arxiv.org/abs/2610.02203v1"
+      "title": "Cross-Document Neural Re-ranking via Query-Induced Subgraphs",
+      "url": "https://doi.org/10.1007/978-3-032-40774-0_20"
     },
     {
-      "digest": "93fdf2ff5def57208c5f58917dfbc425ecd6882dc2ade1aa8f2c557cfa4e5f6a",
+      "digest": "b93ed543e6b42ac4785244276f5c0b0c115cd6bece1db7956dac9ecb9640136b",
+      "provider": "openalex",
+      "published": "2026-10-01",
+      "source_id": "https://openalex.org/W7166714119",
+      "summary": "topics=Topic Modeling Natural Language Processing Techniques Text Readability and Simplification oa=True oa_status=green",
+      "tags": [],
+      "title": "BERTomelo: Your Portuguese Encoder Best Friend",
+      "url": "https://doi.org/10.1007/978-3-032-39892-5_12"
+    },
+    {
+      "digest": "257aa635ce35164671ccd86910e80cfa409aecd11429348d3c77885bb2ef0dd0",
+      "provider": "openalex",
+      "published": "2026-10-01",
+      "source_id": "https://openalex.org/W7215033094",
+      "summary": "Most engineering curricula lack forensic engineering content, particularly the role of science in investigation and assessment, engineering failures and cause-and-effect analysis, and jurisprudence as it relates to engineering. Forensic Engineering for Academia addresses these and other important aspects of forensic engineering education. Mainly structured as two parts: (1) Forensic Engineering (FE) and Jurisprudence, and (2) FE Practice, the first introduces the practice of forensic engineering, presents investigation methods and analysis, describes the expert witness and how to become one, introduces the legal system regarding FE, and discusses reporting and communication liability. The second part covers a variety of practical applications for different FE disciplines through specific examples and experiences. Student solutions will be compared to industry practices with consideration for liability and loss prevention. Further, the book explains the importance of standard of care and performance evaluation as they relate to design and failure, and how to avoid becoming a defendant. • Includes a summary table of concepts, terminology, and exercises, and practical case studies in each chapter. • Discusses the importance of professional ethics in the field of forensic engineering. • Includes Digital Learning Resources: adaptable lecture slides, test and quiz banks, and links to additional resources. topics=Construction Engineering and Safety Engineering Education and Curriculum Development Engineering Education and Pedagogy oa=True oa_status=gold",
+      "tags": [
+        "curriculum"
+      ],
+      "title": "Forensic Engineering for Academia",
+      "url": "https://doi.org/10.1201/9781003623311"
+    },
+    {
+      "digest": "dd9f636405994a59c13b465482f57e6052eadbfc38f45376051a2a811b24c0c2",
+      "provider": "openalex",
+      "published": "2026-10-02",
+      "source_id": "https://openalex.org/W7215750474",
+      "summary": "Adaptive learning systems personalize instruction by tracking what each student knows and adjusting content to match their current knowledge state. Knowledge Tracing (KT) is the main technique used for this purpose. It has evolved from probabilistic models to deep learning architectures that use attention mechanisms to interpret a student's answer history and predict future performance. These models perform well only after training on large volumes of interaction data. A platform built for a new course, subject, student group, or national curriculum usually starts with little or no recorded history of student attempts. This is called the cold start problem. This review brings together recent work on knowledge tracing, transfer learning, and synthetic data generation to examine how these methods address data scarcity in adaptive learning. The review followed a systematic search and screening process across five academic databases, applied explicit inclusion and exclusion criteria, and used a structured quality appraisal completed independently by three reviewers. Seventy-nine records were identified; twenty-six were retained for the final synthesis (N = 26). The findings show that transfer learning techniques, particularly domain adaptation and cross-disciplinary knowledge transfer, can reduce the local data needed to reach acceptable prediction accuracy. However, none of the reviewed methods eliminate the cold start penalty; they only reduce it. The review also finds that most published work comes from a small number of research groups in the United States and China. Of the 26 included studies, 19 (73%) drew benchmark data or model architecture from these countries, leaving a gap for curricula, subjects, and languages elsewhere. Synthetic and simulated interaction data offer a complementary route: a new platform can begin with a working model before real student data accumulates. This research paper closes with guidance for researchers and developers building adaptive learning tools in data-scarce settings and directions for future study. topics=Intelligent Tutoring Systems and Adaptive Learning Online Learning and Analytics Innovative Teaching and Learning Methods oa=True oa_status=hybrid",
+      "tags": [
+        "curriculum"
+      ],
+      "title": "Data scarcity in adaptive learning: Challenges and opportunities with transfer learning and knowledge tracing",
+      "url": "https://doi.org/10.4038/jmtr.v11i4.468"
+    },
+    {
+      "digest": "090c730b5e272b63d1d8bc5ef6c30d6a0b4a15cc9a4be3a25106836a8627a61f",
+      "provider": "openalex",
+      "published": "2026-10-02",
+      "source_id": "https://openalex.org/W7216418702",
+      "summary": "This study examines Khmer temple denomination in Southwestern Vietnam through a corpus of 446 officially recognized temples. It argues that institutional temple denomination in this minority–majority setting is best interpreted as a stratified institutional equilibrium rather than as a linear process of assimilation or isolated resistance. All temple names in the corpus conform to the bipartite generic–specific template characteristic of Theravāda naming systems, indicating macro-structural continuity across mainland Southeast Asia. At the same time, lexical-origin stratification, motivational bifocality, and institutional polyonymy reveal systematic multilingual layering. Khmer-dominant specific elements remain prevalent, accounting for 71.7% of the corpus, whereas Vietnamese-including forms are significantly associated with parallel denominations, OR = 1.74, 95% CI [1.16, 2.61], p = .007. Ecological–geographical and religious–symbolic motivations coexist, with modest but significant covariance across lexical strata. Taken together, the findings suggest that institutional temple denomination operates as a governance-structured semiotic system in which linguistic form, cultural memory, environmental anchoring, and ethnolinguistic negotiation cohere within a relatively stable institutional configuration. The study therefore offers a stratified governance framework as an alternative to linear assimilation models for analyzing sacred denomination in multilingual polities. topics=Southeast Asian Sociopolitical Studies Vietnamese History and Culture Studies Indian and Buddhist Studies oa=True oa_status=diamond",
+      "tags": [
+        "dataset"
+      ],
+      "title": "Stratified Institutional Equilibrium in Sacred Naming: Khmer Temple Denomination Under Minority–Majority Governance in Southwestern Vietnam",
+      "url": "https://doi.org/10.17507/tpls.1610.16"
+    },
+    {
+      "digest": "0be43635984e6be55ecc31daec90a1e0871628d0f17e9ec7e740305684d5cb46",
+      "provider": "openalex",
+      "published": "2026-10-02",
+      "source_id": "https://openalex.org/W7213372532",
+      "summary": "Quranic text is distributed in two orthographic forms that are byte-level distinct: the Uthmani script used in every printed mushaf, and the Standard (Imla'i) Arabic form that every mainstream Arabic NLP tool is built for. The gap is concentrated in one Unicode character, U+0670 (superscript alef), which appears in some of the most frequently recited words in the Quran and is silently mishandled by general-purpose Arabic normalizers. We release a 2,290-pair, corpus-aligned Uthmani-to-Standard word mapping constructed by aligning the complete 6,236-verse Quran across both orthographic forms, together with a seven-step text normalization pipeline built on it. Normalizing both forms of all 6,236 verses through that pipeline yields identical strings for 90.9% of verses, and we characterize the residual divergence rather than assert that it is closed. On top of the normalized text, we build a deterministic, LLM-free Quranic recitation validator using a four-layer verse-matching search (exact, morphological, relaxed, fuzzy) and word-error-rate-graded feedback across five severity tiers. The validator scores 98.4% (122/124) on a 124-case suite emitted by the released test harness, and both failures share one mechanism: a single substitution error can make a different verse an exact match. A full-corpus census additionally quantifies an inherent text-only ambiguity affecting 16.5% of verses, and on 34 recitation transcripts drawn from a deployed Arabic ASR system the validator identifies the correct verse in every case. We release the mapping, the script that builds it, the validator, and the evaluation harness under open licenses; every number in this paper except the deployment measurement, whose transcripts are not ours to publish, is reproduced by running them. topics=Natural Language Processing Techniques Topic Modeling Handwritten Text Recognition Techniques oa=True oa_status=green",
+      "tags": [
+        "dataset"
+      ],
+      "title": "A Corpus-Aligned Uthmani-to-Standard Quranic Word Mapping and a Deterministic Recitation Validator",
+      "url": "https://doi.org/10.66977/xsci.2610.000b"
+    },
+    {
+      "digest": "ab1403346d66413e5a90b6434fd10f14262de1c35bb2716f44c2e0484766ddfd",
+      "provider": "openalex",
+      "published": "2026-10-02",
+      "source_id": "https://openalex.org/W7216072693",
+      "summary": "Abstract Earth’s oceans cover 70% of the planet yet remain among the least observed regions. Underwater acoustics is a primary sensing modality, but recordings span biological, anthropogenic and natural sounds while labels remain sparse. We present an unknownness-aware monitoring framework for underwater acoustic sensing platforms: it adapts a pre-trained audio representation model to underwater soundscapes, defines an embedding-space unknownness score, and couples it with detector outputs in a Detect–Group–Promote–Union (DGPU) loop tuned under false positives per hour (FP/h) constraints: Detect surfaces candidate events from continuous audio; Group clusters unknown candidates in embedding space; Promote trains lightweight classifiers from sparse expert labels on selected clusters; and Union combines baseline and promoted detectors. Across a 56-class underwater Sound Event Detection (SED) benchmark and two cetacean field datasets, the framework attains a dataset-level bandwidth-matched out-of-distribution AUROC of 1.000 on Hawaiian survey data (HICEAS), raises right-whale upcall detection recall on continuous recordings (FRDR) from 0.027 to 0.390 at FP/h ≈ 10 with a supervised Promoter, with 300 labelled events (~ 32% of training-fold labels) reaching 0.37 (95% of the full-label recall), and classifies seven HICEAS cetacean species with the Promoter classifier alone (AUC 0.924–0.992 within-day and 0.51–0.97 cross-day with a fixed classifier), supporting stethoscope-like ocean monitoring. topics=Marine animal studies overview Animal Vocal Communication and Behavior Underwater Acoustics Research oa=True oa_status=gold",
+      "tags": [
+        "dataset"
+      ],
+      "title": "Discovery and promotion of unknown sounds into operational detection targets for underwater passive acoustic monitoring under false alarm constraints",
+      "url": "https://doi.org/10.1038/s41598-026-73751-w"
+    },
+    {
+      "digest": "5b02bedad2e01444331eb8155705daea9a3086c9780780524cf32050596b8d30",
+      "provider": "openalex",
+      "published": "2026-10-02",
+      "source_id": "https://openalex.org/W7155507307",
+      "summary": "Situated dialogue requires speakers to maintain a reliable representation of shared context rather than reasoning only over isolated utterances. Current conversational agents often struggle with this requirement, especially when the common ground must be preserved beyond the immediate context window. In such settings, fine-grained distinctions are frequently compressed into purely textual representations, leading to a critical failure mode we call representational blur, in which similar but distinct entities collapse into interchangeable descriptions. This semantic flattening creates an illusion of grounding, where agents appear locally coherent but fail to track shared context persistently over time. Inspired by the role of mental imagery in human reasoning, and based on the increased availability of multimodal models, we explore whether conversational agents can be given an analogous ability to construct some depictive intermediate representations during dialogue to address these limitations. Thus, we introduce an active visual scaffolding framework that incrementally converts dialogue state into a persistent visual history that can later be retrieved for grounded response generation. Evaluation on the IndiRef benchmark shows that incremental externalization itself improves over full-dialog reasoning, while visual scaffolding provides additional gains by reducing representational blur and enforcing concrete scene commitments. At the same time, textual representations remain advantageous for non-depictable information, and a hybrid multimodal setting yields the best overall performance. Together, these findings suggest that conversational agents benefit from an explicitly multimodal representation of common ground that integrates depictive and propositional information. topics=Multimodal Machine Learning Applications Speech and dialogue systems Social Robot Interaction and HRI oa=True oa_status=gold",
+      "tags": [
+        "reasoning"
+      ],
+      "title": "Using Machine Mental Imagery for Representing Common Ground in Situated Dialogue",
+      "url": "https://doi.org/10.1145/3776574.3831160"
+    },
+    {
+      "digest": "18c9435b3ce0908a86245e6e898d668df9dac4159845429dc1aa9293c35e267e",
+      "provider": "openalex",
+      "published": "2026-10-02",
+      "source_id": "https://openalex.org/W7168888062",
+      "summary": "In human dialogue, we achieve smooth communication by expressing nonverbal cues such as eye contact, nodding, and facial expressions with precise timing. It is expected for conversational avatars to express these cues appropriately to realize natural and human-like interactions. This study focuses on nodding, which is crucial for demonstrating active listening and encouraging further user utterances. We propose a model that predicts both timing and kinematic parameters representing the motion features of listener nodding in real time. The proposed model consists of a timing prediction module and a kinematic parameter prediction module. Each implements a dyadic attention network over the speaker and listener channels based on the technique of Voice Activity Projection (VAP). Unlike conventional models, this approach enables real-time prediction of kinematic parameters based on the specific context of the dialogue rather than just predicting the timing. Furthermore, we demonstrate the effectiveness of fine-tuning the kinematic parameter prediction module initialized from the trained timing prediction module. The proposed model is lightweight and capable of real-time operation, and it has been integrated into an avatar dialogue system. Subjective evaluation experiments shows that our proposed method significantly outperforms both a baseline with stochastic timing and another with fixed-motion nodding. The code and trained models are available at https://github.com/MaAI-Kyoto/MaAI. topics=Social Robot Interaction and HRI Speech and dialogue systems Gaze Tracking and Assistive Technology oa=True oa_status=gold",
+      "tags": [],
+      "title": "Real-time Generation of Listener Nodding via Prediction of Kinematic Parameters for Avatar Dialogue Systems",
+      "url": "https://doi.org/10.1145/3776574.3831145"
+    },
+    {
+      "digest": "d626495226bea2086532420f459ecd52a7da99512d83f4d81171412792fbfb22",
+      "provider": "openalex",
+      "published": "2026-10-02",
+      "source_id": "https://openalex.org/W4417031025",
+      "summary": "This study proposes a method to enhance neural network performance when training data and application data are not very similar, e.g., out of distribution problems, as well as pattern and regime shifts. In contrast to previous approaches to out of distribution problems, which alter the inputs and outputs of an operator, our approach alters the operator itself. Here, we especially aim to alter the weights and biases of a neural network to mitigate the out of distribution problem. The method consists of three main steps: (1) Fine-tune a trained neural network towards reasonable subsets of the training data set and note down the resulting weight anomalies. (2) Choose reasonable predictors and derive a regression between the predictors and the noted weight anomalies. (3) Extrapolate the weights, and thereby the neural network, to the application data. We show and discuss this method in three nonlinear use cases from the climate sciences, which include successful temporal, spatial, and cross-regime extrapolations of neural networks. topics=Hydrological Forecasting Using AI Neural Networks and Applications Climate variability and models oa=True oa_status=gold",
+      "tags": [
+        "dataset"
+      ],
+      "title": "Conditional updates of neural network weights for increased out of training performance",
+      "url": "https://doi.org/10.5194/npg-33-503-2026"
+    },
+    {
+      "digest": "6b9099b22b4e958b8c62b32d66a18509599f422a215a59af146e5e0f40af2909",
       "provider": "github",
-      "published": "2026-10-03T04:44:42Z",
-      "source_id": "notduey/llm-from-scratch",
-      "summary": "Building and training a small language model from scratch, then optimizing it for CPU inference license=unknown topics= stars=0",
-      "tags": [],
-      "title": "notduey/llm-from-scratch",
-      "url": "https://github.com/notduey/llm-from-scratch"
-    },
-    {
-      "digest": "c78707f5d6754a91f15f65f85ed6d94d66f7ca2cc8a7e0b4d15e84d3bb87379d",
-      "provider": "github",
-      "published": "2026-10-02T07:38:20Z",
+      "published": "2026-10-04T09:00:28Z",
       "source_id": "bryavhn/nanosarvam",
       "summary": "Implement a readable Mixture-of-Experts language model optimized for training on consumer GPUs with advanced attention and routing features. license=unknown topics=api-gateway cloud-native distributed-systems docker fault-tolerance grpc kubernetes lightweight microservices nanosarvam observability open-source rest-api scalability service-mesh stars=0",
       "tags": [],
       "title": "bryavhn/nanosarvam",
       "url": "https://github.com/bryavhn/nanosarvam"
+    },
+    {
+      "digest": "50aec6827d054043e909c2c3f87f7b4dfdb93955a3f4bab13ae093d47fa23aa9",
+      "provider": "github",
+      "published": "2026-10-04T08:39:46Z",
+      "source_id": "Tnhn07/modded-nanogpt",
+      "summary": "🚀 Accelerate language model training with modded-nanogpt, achieving 3.28 loss in under 3 minutes on 8 NVIDIA H100 GPUs for faster AI development. license=MIT topics=adam-optimizer deep-learning deep-neural-networks github-config muon nanogpt optimizer pytorch rwkv stars=2",
+      "tags": [
+        "optimizer"
+      ],
+      "title": "Tnhn07/modded-nanogpt",
+      "url": "https://github.com/Tnhn07/modded-nanogpt"
     },
     {
       "digest": "6a1371efbe0c8d841209758aeca2fa0008f27f63af6d47e3df3af5a919dbf33f",
@@ -199,21 +291,23 @@
       "url": "https://github.com/deepaksaranay/PhysRLHF-RLHF-Based-Physics-Reasoning-and-LaTeX-Equation-Generation-System"
     }
   ],
-  "evidence_digest": "755fea5fe10771d551113ccfa46ab371c468f19e4d952fbeaf0313da09d39ac0",
+  "evidence_digest": "05be70951d7580a146667ae3f8c996659cac54241aa51e5a6db46ef33a57171d",
   "ok": true,
   "policy": "online material is untrusted evidence; only bounded local mutation families may consume derived tags; OpenAlex is used when arXiv research metadata is unavailable",
-  "queried_at": "2026-10-04T02:55:33.365807+00:00",
+  "queried_at": "2026-10-04T10:16:02.699317+00:00",
   "remote_code_execution": false,
   "remote_content_trusted": false,
   "source_candidates": [],
   "tag_counts": {
-    "code": 3,
-    "curriculum": 1,
-    "dataset": 1,
+    "code": 1,
+    "curriculum": 3,
+    "dataset": 6,
     "efficiency": 3,
     "gqa": 1,
-    "long-context": 3,
-    "reasoning": 2
+    "long-context": 4,
+    "optimizer": 1,
+    "reasoning": 4,
+    "tokenizer": 1
   },
   "topics": [
     "language model optimizer training",
